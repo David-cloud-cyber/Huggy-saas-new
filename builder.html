@@ -217,6 +217,22 @@
 
       <!-- FILES -->
       <div class="tab-content hidden" id="tab-files">
+        <div class="file-upload-section">
+          <div class="upload-dropzone" id="upload-dropzone">
+            <input type="file" id="file-input" multiple class="hidden-input">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+            <div class="upload-text">
+              <span class="primary">Click to upload</span>
+              <span class="secondary">or drag and drop files</span>
+            </div>
+          </div>
+          <div class="upload-actions hidden" id="upload-actions">
+            <div class="selected-files" id="selected-files-list"></div>
+            <button class="btn-primary-upload" id="btn-do-upload">Upload Files</button>
+          </div>
+        </div>
         <div class="file-tree" id="file-tree">
           <!-- injected by JS -->
         </div>
@@ -233,24 +249,26 @@
     <!-- ── PREVIEW PANEL ─────────────────────────────── -->
     <aside class="preview-panel" id="preview-panel">
       <div class="preview-toolbar">
-        <button class="device-btn active" data-device="desktop" title="Desktop">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="2" y="4" width="20" height="14" rx="1.5"/>
-            <path d="M8 22h8M12 18v4" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="device-btn" data-device="tablet" title="Tablet">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="5" y="2" width="14" height="20" rx="2"/>
-            <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
-          </svg>
-        </button>
-        <button class="device-btn" data-device="mobile" title="Mobile">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="7" y="2" width="10" height="20" rx="3"/>
-            <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
-          </svg>
-        </button>
+        <div class="device-group">
+          <button class="device-btn active" data-device="desktop" title="Desktop">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="2" y="4" width="20" height="14" rx="1.5"/>
+              <path d="M8 22h8M12 18v4" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="device-btn" data-device="tablet" title="Tablet">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="5" y="2" width="14" height="20" rx="2"/>
+              <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
+            </svg>
+          </button>
+          <button class="device-btn" data-device="mobile" title="Mobile">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="7" y="2" width="10" height="20" rx="3"/>
+              <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
 
         <div class="preview-address">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round">

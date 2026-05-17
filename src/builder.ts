@@ -131,6 +131,60 @@ function initBuilder() {
     renderTree(structure, fileTree);
   }
 
+  // ── UPLOAD LOGIC ───────────────────────────────────────────────
+  const fileInput = document.getElementById('file-input') as HTMLInputElement;
+  const uploadActions = document.getElementById('upload-actions');
+  const selectedFilesList = document.getElementById('selected-files-list');
+  const btnDoUpload = document.getElementById('btn-do-upload');
+  let pendingFiles: File[] = [];
+
+  fileInput?.addEventListener('change', () => {
+    if (fileInput.files) {
+      pendingFiles = Array.from(fileInput.files);
+      if (pendingFiles.length > 0) {
+        uploadActions?.classList.remove('hidden');
+        if (selectedFilesList) {
+          selectedFilesList.innerHTML = '';
+          pendingFiles.forEach(file => {
+            const item = document.createElement('div');
+            item.className = 'sel-file-item';
+            item.innerHTML = `<span>${file.name}</span><span>${(file.size / 1024).toFixed(1)}kb</span>`;
+            selectedFilesList.appendChild(item);
+          });
+        }
+      }
+    }
+  });
+
+  btnDoUpload?.addEventListener('click', () => {
+    if (pendingFiles.length === 0) return;
+    
+    showToast(`Uploading ${pendingFiles.length} files...`);
+    
+    // Add to structure (Mock)
+    pendingFiles.forEach(file => {
+      structure.push({
+        type: 'file',
+        name: file.name,
+        size: `${(file.size / 1024).toFixed(1)}kb`
+      });
+    });
+
+    // Re-render tree
+    if (fileTree) {
+      fileTree.innerHTML = '';
+      renderTree(structure, fileTree);
+    }
+
+    addToHistory(`Uploaded ${pendingFiles.length} files`);
+
+    // Reset
+    pendingFiles = [];
+    fileInput.value = '';
+    uploadActions?.classList.add('hidden');
+    if (selectedFilesList) selectedFilesList.innerHTML = '';
+  });
+
   // ── VIEW TABS ──────────────────────────────────────────────────
   const mainPanel = document.getElementById('main-panel') as HTMLElement;
   const handleR = document.getElementById('handle-right') as HTMLElement;
@@ -198,37 +252,56 @@ function initBuilder() {
   });
 
   // ── SUB TABS ──────────────────────────────────────────────────
-  document.querySelectorAll('.sub-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      const sub = (tab as HTMLElement).dataset.sub;
-      const tabChat = document.getElementById('tab-chat');
-      const tabCode = document.getElementById('tab-code');
-      const tabFiles = document.getElementById('tab-files');
-      
-      addToHistory(`Switched to ${sub} tab`);
+  const savedSubTab = localStorage.getItem('huggy-sub-tab') || 'chat';
+  const subTabs = document.querySelectorAll('.sub-tab');
+  
+  function setSubTab(sub: string) {
+    subTabs.forEach(t => t.classList.toggle('active', (t as HTMLElement).dataset.sub === sub));
+    const tabChat = document.getElementById('tab-chat');
+    const tabCode = document.getElementById('tab-code');
+    const tabFiles = document.getElementById('tab-files');
+    
+    if (tabChat) tabChat.classList.toggle('hidden', sub !== 'chat');
+    if (tabCode) tabCode.classList.toggle('hidden', sub !== 'code');
+    if (tabFiles) tabFiles.classList.toggle('hidden', sub !== 'files');
+    localStorage.setItem('huggy-sub-tab', sub);
+  }
 
-      if (tabChat) tabChat.classList.toggle('hidden', sub !== 'chat');
-      if (tabCode) tabCode.classList.toggle('hidden', sub !== 'code');
-      if (tabFiles) tabFiles.classList.toggle('hidden', sub !== 'files');
+  subTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const sub = (tab as HTMLElement).dataset.sub || 'chat';
+      setSubTab(sub);
+      addToHistory(`Switched to ${sub} tab`);
     });
   });
+
+  // Initial tab
+  setSubTab(savedSubTab);
 
   // ── DEVICE SWITCHER ──────────────────────────────────────────
+  const savedDevice = localStorage.getItem('huggy-preview-device') || 'desktop';
   const previewFrame = document.getElementById('preview-frame');
-  document.querySelectorAll('.device-btn').forEach(btn => {
+  const deviceBtns = document.querySelectorAll('.device-btn');
+
+  function setDevice(device: string) {
+    deviceBtns.forEach(b => b.classList.toggle('active', (b as HTMLElement).dataset.device === device));
+    if (previewFrame) {
+      previewFrame.className = 'preview-frame';
+      if (device !== 'desktop') previewFrame.classList.add(device);
+    }
+    localStorage.setItem('huggy-preview-device', device);
+  }
+
+  deviceBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.device-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      if (previewFrame) {
-        previewFrame.className = 'preview-frame';
-        const d = (btn as HTMLElement).dataset.device;
-        if (d !== 'desktop') previewFrame.classList.add(d!);
-        addToHistory(`Toggle device: ${d}`);
-      }
+      const d = (btn as HTMLElement).dataset.device || 'desktop';
+      setDevice(d);
+      addToHistory(`Toggle device: ${d}`);
     });
   });
+
+  // Initial device
+  setDevice(savedDevice);
 
   // ── CONSOLE TOGGLE ──────────────────────────────────────────
   const consolePanel = document.getElementById('console-panel');
