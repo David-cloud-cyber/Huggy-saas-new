@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Huggy Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/src/builder.css">
+</head>
+<body>
+  <div id="curtain-overlay"></div>
+
+  <div class="app-layout">
+
+    <!-- ── TOPBAR ───────────────────────────────────── -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <a href="/" class="logo">
+          <div class="logo-mark">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="32" height="32" rx="8" fill="var(--text)"/>
+              <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+              <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+              <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+            </svg>
+          </div>
+          <span class="logo-text">Huggy</span>
+        </a>
+        <div class="topbar-sep"></div>
+        <span id="project-name" contenteditable="true" spellcheck="false">my-dashboard-app</span>
+      </div>
+
+      <div class="topbar-center">
+        <div class="action-group">
+          <button class="action-btn" id="btn-undo" title="Undo (Cmd+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+          </button>
+          <button class="action-btn" id="btn-redo" title="Redo (Cmd+Shift+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
+          </button>
+        </div>
+        <div class="topbar-sep"></div>
+        <button class="tab-btn" data-view="code">Code</button>
+        <button class="tab-btn active" data-view="split">Split</button>
+        <button class="tab-btn" data-view="preview">Preview</button>
+      </div>
+
+      <div class="topbar-right">
+        <button class="btn-theme-builder" id="btn-theme-builder" title="Toggle theme">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="btn-upgrade" id="btn-upgrade">Upgrade</button>
+        <button class="btn-deploy">Deploy</button>
+      </div>
+    </header>
+
+    <!-- ── MAIN PANEL ────────────────────────────────── -->
+    <main class="main-panel" id="main-panel">
+      <div class="sub-tabs">
+        <button class="collapse-btn" id="btn-collapse-chat" title="Toggle Chat/Editor">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
+        <button class="sub-tab active" data-sub="chat" data-sub-short="C">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          <span>Chat</span>
+        </button>
+        <button class="sub-tab" data-sub="code" data-sub-short="E">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          <span>Code</span>
+        </button>
+        <button class="sub-tab" data-sub="files" data-sub-short="F">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+          <span>Files</span>
+        </button>
+      </div>
+
+      <!-- CHAT -->
+      <div class="tab-content" id="tab-chat">
+        <div class="chat-container" id="chat-container">
+          <!-- user message -->
+          <div class="msg-user">
+            <div class="msg-user-bubble">Build me a dashboard app with metrics cards, a sidebar, and a data table with filtering. Use a dark theme and TypeScript.</div>
+            <div class="msg-time">just now</div>
+          </div>
+
+          <div class="msg-system">── pipeline complete ──</div>
+        </div>
+
+        <div class="chat-input-area">
+          <div class="input-wrapper">
+            <textarea id="ai-textarea" placeholder="Ask a question or request a change..."></textarea>
+            <div class="input-actions">
+              <div class="actions-left">
+                <button class="icon-btn" data-tooltip="Upload files">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+                <button class="icon-btn" data-tooltip="Search snippets">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="7"></circle>
+                    <line x1="12" y1="2" x2="12" y2="5"></line>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                    <line x1="2" y1="12" x2="5" y2="12"></line>
+                    <line x1="19" y1="12" x2="22" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
+              <div class="actions-right">
+                <div class="model-select" id="model-select-btn">
+                  <span class="model-label-prefix">Model</span>
+                  <span id="current-model-label">Sonnet 4.5</span>
+                  <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                  <div class="dropdown" id="model-dropdown">
+                    <div class="dropdown-header">Choose AI Engine</div>
+                    <div class="model-option active" data-name="Sonnet 4.5">
+                      <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
+                      <div class="opt-meta">
+                        <span class="opt-name">Sonnet 4.5</span>
+                        <span class="opt-desc">Intelligence + Speed</span>
+                      </div>
+                    </div>
+                    <div class="model-option" data-name="Opus 4.5">
+                      <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
+                      <div class="opt-meta">
+                        <span class="opt-name">Opus 4.5</span>
+                        <span class="opt-desc">Deep Reasoning</span>
+                      </div>
+                    </div>
+                    <div class="model-option" data-name="Gemini 2.0">
+                      <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
+                      <div class="opt-meta">
+                        <span class="opt-name">Gemini 2.0</span>
+                        <span class="opt-desc">Multimodal Guru</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="submit-wrapper">
+                  <button class="submit-btn" id="btn-send-builder" title="Send (Enter)">
+                    <span>Send</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="19" x2="12" y2="5"></line>
+                      <polyline points="5 12 12 5 19 12"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CODE -->
+      <div class="tab-content hidden" id="tab-code">
+        <div class="code-editor">
+          <div class="file-tabs-bar">
+            <div class="file-tab active">
+              <span class="lang-dot" style="background:#60A5FA"></span>Dashboard.tsx
+            </div>
+            <div class="file-tab">
+              <span class="lang-dot" style="background:#A78BFA"></span>styles.css
+            </div>
+            <div class="file-tab">
+              <span class="lang-dot" style="background:#34D399"></span>useData.ts
+            </div>
+          </div>
+          <div class="code-area" id="code-area">
+            <!-- injected by JS -->
+          </div>
+          <div class="code-statusbar">
+            <span class="code-stat">Ln 24</span>
+            <span class="code-stat">Col 38</span>
+            <span class="code-stat">TypeScript React</span>
+            <span class="code-stat">UTF-8</span>
+            <button class="btn-copy" id="btn-copy">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILES -->
+      <div class="tab-content hidden" id="tab-files">
+        <div class="file-tree" id="file-tree">
+          <!-- injected by JS -->
+        </div>
+        <div class="file-tree-footer">
+          <span>14 files</span>
+          <span>12.3 kb total</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── DRAG RIGHT ────────────────────────────────── -->
+    <div class="drag-handle handle-right" id="handle-right"></div>
+
+    <!-- ── PREVIEW PANEL ─────────────────────────────── -->
+    <aside class="preview-panel" id="preview-panel">
+      <div class="preview-toolbar">
+        <button class="device-btn active" data-device="desktop" title="Desktop">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="2" y="4" width="20" height="14" rx="1.5"/>
+            <path d="M8 22h8M12 18v4" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="device-btn" data-device="tablet" title="Tablet">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="5" y="2" width="14" height="20" rx="2"/>
+            <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="device-btn" data-device="mobile" title="Mobile">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="7" y="2" width="10" height="20" rx="3"/>
+            <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <div class="preview-address">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          localhost:3000
+        </div>
+
+        <button class="btn-refresh" title="Refresh">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8"/>
+            <path d="M21 3v5h-5"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="preview-frame-wrapper">
+        <div class="preview-frame" id="preview-frame">
+          <!-- mini app -->
+          <div class="mini-navbar">
+            <span class="mini-logo-text">DASHBOARD</span>
+            <div class="mini-dots">
+              <div class="mini-dot" style="background:#4ADE80"></div>
+              <div class="mini-dot" style="background:#FBBF24"></div>
+              <div class="mini-dot" style="background:#F87171"></div>
+            </div>
+          </div>
+          <div class="mini-body">
+            <div class="mini-sidebar">
+              <div class="mini-nav-item active"><div class="mini-nav-dot" style="background:#60A5FA"></div>Overview</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Analytics</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Users</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Reports</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Settings</div>
+            </div>
+            <div class="mini-main">
+              <div class="mini-grid">
+                <div class="mini-card">
+                  <div class="mini-card-val">$48.2k</div>
+                  <div class="mini-card-label">Revenue</div>
+                  <div class="mini-card-trend up">↑ 12%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">2,491</div>
+                  <div class="mini-card-label">Users</div>
+                  <div class="mini-card-trend up">↑ 8%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">94.1%</div>
+                  <div class="mini-card-label">Uptime</div>
+                  <div class="mini-card-trend down">↓ 0.3%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">1.2s</div>
+                  <div class="mini-card-label">Avg Load</div>
+                  <div class="mini-card-trend up">↑ fast</div>
+                </div>
+              </div>
+              <div class="mini-chart">
+                <div class="mini-bar" style="height:40%"></div>
+                <div class="mini-bar" style="height:60%"></div>
+                <div class="mini-bar" style="height:45%"></div>
+                <div class="mini-bar active" style="height:80%"></div>
+                <div class="mini-bar" style="height:55%"></div>
+                <div class="mini-bar" style="height:70%"></div>
+                <div class="mini-bar" style="height:90%"></div>
+                <div class="mini-bar" style="height:65%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-footer">
+        <button class="console-toggle" id="console-toggle">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+          Console · 0 errors · 2 warnings
+        </button>
+        <span class="preview-stats">FCP 0.8s · 420 × 640</span>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── CONSOLE ──────────────────────────────────────── -->
+  <div class="console-panel" id="console-panel">
+    <div class="console-header">
+      <button class="console-sub-tab active">Output</button>
+      <button class="console-sub-tab">Errors</button>
+      <button class="console-sub-tab">Warnings</button>
+      <button class="console-sub-tab btn-console-close" id="console-close">✕</button>
+    </div>
+    <div class="console-log-area">
+      <div class="log-line"><span class="log-ts">[00:01.2]</span><span class="log-success">✓ Architect agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:03.6]</span><span class="log-success">✓ Designer agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:06.8]</span><span class="log-success">✓ Builder agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:09.0]</span><span class="log-success">✓ Integrator agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:10.6]</span><span class="log-warning">⚠ useEffect dependency array may be incomplete</span></div>
+      <div class="log-line"><span class="log-ts">[00:10.7]</span><span class="log-warning">⚠ Image alt text missing on logo element</span></div>
+      <div class="log-line"><span class="log-ts">[00:12.2]</span><span class="log-success">✓ Optimizer agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:13.6]</span><span class="log-success">✓ Deployer agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:14.8]</span><span class="log-info">→ Build complete. 42kb gzipped.</span></div>
+      <div class="log-line"><span class="log-ts">[00:16.0]</span><span class="log-success">✓ Reviewer agent complete. Score: 94/100</span></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/builder.ts"></script>
+</body>
+</html>

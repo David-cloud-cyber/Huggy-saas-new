@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Saas builder1",
+  "description": "AI App Builder SaaS landing page featuring a minimalist Void × Chalk aesthetic and a multi-agent generation pipeline.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

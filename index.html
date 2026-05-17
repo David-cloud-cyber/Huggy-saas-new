@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Huggy — AI App Builder</title>
+    <script>
+        // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
+        (function() {
+            try {
+                let currentFetch = window.fetch;
+                Object.defineProperty(window, 'fetch', {
+                    get: () => currentFetch,
+                    set: (v) => { currentFetch = v; },
+                    configurable: true,
+                    enumerable: true
+                });
+            } catch (e) {
+                // If it's not configurable, we can't do much about direct assignments to window.fetch
+                // But we can try to intercept if it's a global variable assignment
+                try {
+                    window.fetch = window.fetch; 
+                } catch (e2) {}
+            }
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+</head>
+<body>
+    <div id="curtain"></div>
+    <div class="navbar-line"></div>
+
+    <nav class="navbar">
+        <a href="/" class="logo">
+            <div class="logo-mark">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="var(--text)"/>
+                    <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+                    <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+                    <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+                </svg>
+            </div>
+            <span class="logo-text">Huggy</span>
+        </a>
+        <div class="nav-actions">
+            <button class="theme-toggle" id="theme-btn">
+                <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+                <svg id="sun-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </button>
+            <button class="sign-in-btn" onclick="window.location.href='/builder.html'">Sign In</button>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <div class="badge">
+                <div class="badge-dot"></div>
+                <span class="badge-text">AI-POWERED APP BUILDER</span>
+            </div>
+            <h1>
+                <span class="line1">Build any <span id="rotating-word">SaaS</span></span>
+                <span class="line2 neon-highlight neon-glow">instantly.</span>
+            </h1>
+            <p class="hero-subtitle">8 AI agents working together to create stunning React apps</p>
+
+            <div class="input-wrapper">
+                <textarea id="ai-textarea" placeholder="Describe the app you want to build..."></textarea>
+                <div class="input-actions">
+                    <div class="actions-left">
+                        <button class="icon-btn" data-tooltip="Upload files">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="icon-btn" data-tooltip="Search snippets">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="7"></circle>
+                                <line x1="12" y1="2" x2="12" y2="5"></line>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                                <line x1="2" y1="12" x2="5" y2="12"></line>
+                                <line x1="19" y1="12" x2="22" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="icon-btn" data-tooltip="Voice input">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="actions-right">
+                        <div class="model-select" id="model-select-btn" data-tooltip="Switch AI engine">
+                            <span class="model-label-prefix">Model</span>
+                            <span id="current-model-label">Sonnet 4.5</span>
+                            <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            <div class="dropdown" id="model-dropdown">
+                                <div class="dropdown-header">Choose AI Engine</div>
+                                <div class="model-option active" data-name="Sonnet 4.5">
+                                    <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Sonnet 4.5</span>
+                                        <span class="opt-desc">Intelligence + Speed</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Opus 4.5">
+                                    <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Opus 4.5</span>
+                                        <span class="opt-desc">Deep Reasoning</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Haiku 4.5">
+                                    <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Haiku 4.5</span>
+                                        <span class="opt-desc">Ultra lightweight</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="o1">
+                                    <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">o1</span>
+                                        <span class="opt-desc">PhD Level Reasoning</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Gemini 2.0">
+                                    <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Gemini 2.0</span>
+                                        <span class="opt-desc">Multimodal Guru</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="submit-wrapper">
+                            <button class="submit-btn" id="submit-btn" title="Build now">
+                                <span>Build <span class="neon-glow">now</span></span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                                    <polyline points="5 12 12 5 19 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="import-row">
+                <span class="import-label">or import from</span>
+                <div class="import-btn-group">
+                    <button class="import-btn" data-tooltip="Import Figma component">
+                        <svg viewBox="0 0 38 57" fill="currentColor" width="12" height="12">
+                            <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"/>
+                            <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 0 1-19 0z"/>
+                            <path d="M19 0v19h9.5a9.5 9.5 0 0 0 0-19H19z"/>
+                            <path d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"/>
+                            <path d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"/>
+                        </svg>
+                        <span>Figma</span>
+                    </button>
+                    <button class="import-btn" data-tooltip="Read from GitHub repo">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466 -.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647 .35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848 -2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.746 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+                        </svg>
+                        <span>GitHub</span>
+                    </button>
+                    <button class="import-btn" data-tooltip="Upload screenshot">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <span>Image</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="partners-section reveal">
+        <div class="partners-bg"></div>
+        <div class="partners-track">
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M24 22.525H0L12 1.475L24 22.525Z"/></svg>
+                <span>Vercel</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21.362 9.354H12V.5L2.638 14.646H12v8.854L21.362 9.354z"/></svg>
+                <span>Supabase</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="40" height="24" viewBox="0 0 40 24" fill="currentColor"><path d="M11.66 11.65c0-1.85 1.55-2.73 4.14-2.73 3.19 0 5.6 1.05 5.6 1.05v-2.8s-2.3-1.01-5.6-1.01c-4.48 0-7.39 2.21-7.39 6.22 0 6.01 8.24 5.04 8.24 7.6 0 1.95-1.74 2.89-4.51 2.89-3.47 0-6.72-1.39-6.72-1.39v2.96s2.96 1.34 6.72 1.34c4.69 0 7.76-2.16 7.76-6.42 0-6.19-8.24-5.11-8.24-7.71zm13.12-2.31h3.19v2.24h-3.19v7.71c0 1.25.5 1.83 1.51 1.83.67 0 1.15-.08 1.15-.08l.12 2.37s-.86.29-2.07.29c-2.48 0-3.9-1.25-3.9-3.96v-8.16h-2.14v-2.24h2.14v-4.14l3.19-.94v5.08zm8.68-2.61h-3.13v2.24h3.13v15.34h-3.13v-15.34zm6.54 0c4.15 0 6.94 2.91 6.94 7.42 0 4.54-2.79 7.47-6.94 7.47-4.13 0-6.94-2.93-6.94-7.47 0-4.51 2.81-7.42 6.94-7.42z"/></svg>
+                <span>Stripe</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 3.23a.75.75 0 0 0-.74 0l-9.5 5.5a.75.75 0 0 0 0 1.3l.88.5v11.72a.75.75 0 0 0 .75.75H19.74a.75.75 0 0 0 .75-.75V10.53l.88-.5a.75.75 0 0 0 0-1.3l-8.5-4.92V3.23zM5.13 9.38l6.87-3.98 6.87 3.98v10.87H5.13V9.38zM12 11.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>
+                <span>Linear</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L0 12l12 12 12-12L12 0zm0 4l8 8-8 8-8-8 8-8z"/></svg>
+                <span>Prisma</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 0h16v8h-8l-8 8V0zm0 24V16h8l8-8v16H4z"/></svg>
+                <span>Framer</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20C7.58172 20 4 16.4183 4 12C4 7.58172 7.58172 4 12 4ZM8 9.5C8 8.67157 8.67157 8 9.5 8C10.3284 8 11 8.67157 11 9.5C11 10.3284 10.3284 11 9.5 11C8.67157 11 8 10.3284 8 9.5ZM13 9.5C13 8.67157 13.6716 8 14.5 8C15.3284 8 16 8.67157 16 9.5C16 10.3284 15.3284 11 14.5 11C13.6716 11 13 10.3284 13 9.5ZM9.5 13C8.67157 13 8 13.6716 8 14.5C8 15.3284 8.67157 16 9.5 16C11.5 16 13 15.5 14.5 16C15.3284 16 16 15.3284 16 14.5C16 13.6716 15.3284 13 14.5 13C13.5 13 11 13 9.5 13Z"/></svg>
+                <span>Clerk</span>
+            </div>
+            <!-- Duplicated logos for infinite scroll -->
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M24 22.525H0L12 1.475L24 22.525Z"/></svg>
+                <span>Vercel</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21.362 9.354H12V.5L2.638 14.646H12v8.854L21.362 9.354z"/></svg>
+                <span>Supabase</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="40" height="24" viewBox="0 0 40 24" fill="currentColor"><path d="M11.66 11.65c0-1.85 1.55-2.73 4.14-2.73 3.19 0 5.6 1.05 5.6 1.05v-2.8s-2.3-1.01-5.6-1.01c-4.48 0-7.39 2.21-7.39 6.22 0 6.01 8.24 5.04 8.24 7.6 0 1.95-1.74 2.89-4.51 2.89-3.47 0-6.72-1.39-6.72-1.39v2.96s2.96 1.34 6.72 1.34c4.69 0 7.76-2.16 7.76-6.42 0-6.19-8.24-5.11-8.24-7.71zm13.12-2.31h3.19v2.24h-3.19v7.71c0 1.25.5 1.83 1.51 1.83.67 0 1.15-.08 1.15-.08l.12 2.37s-.86.29-2.07.29c-2.48 0-3.9-1.25-3.9-3.96v-8.16h-2.14v-2.24h2.14v-4.14l3.19-.94v5.08zm8.68-2.61h-3.13v2.24h3.13v15.34h-3.13v-15.34zm6.54 0c4.15 0 6.94 2.91 6.94 7.42 0 4.54-2.79 7.47-6.94 7.47-4.13 0-6.94-2.93-6.94-7.47 0-4.51 2.81-7.42 6.94-7.42z"/></svg>
+                <span>Stripe</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12.87 3.23a.75.75 0 0 0-.74 0l-9.5 5.5a.75.75 0 0 0 0 1.3l.88.5v11.72a.75.75 0 0 0 .75.75H19.74a.75.75 0 0 0 .75-.75V10.53l.88-.5a.75.75 0 0 0 0-1.3l-8.5-4.92V3.23zM5.13 9.38l6.87-3.98 6.87 3.98v10.87H5.13V9.38zM12 11.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>
+                <span>Linear</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L0 12l12 12 12-12L12 0zm0 4l8 8-8 8-8-8 8-8z"/></svg>
+                <span>Prisma</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 0h16v8h-8l-8 8V0zm0 24V16h8l8-8v16H4z"/></svg>
+                <span>Framer</span>
+            </div>
+            <div class="partner-logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2ZM12 4C16.4183 4 20 7.58172 20 12C20 16.4183 16.4183 20 12 20C7.58172 20 4 16.4183 4 12C4 7.58172 7.58172 4 12 4ZM8 9.5C8 8.67157 8.67157 8 9.5 8C10.3284 8 11 8.67157 11 9.5C11 10.3284 10.3284 11 9.5 11C8.67157 11 8 10.3284 8 9.5ZM13 9.5C13 8.67157 13.6716 8 14.5 8C15.3284 8 16 8.67157 16 9.5C16 10.3284 15.3284 11 14.5 11C13.6716 11 13 10.3284 13 9.5ZM9.5 13C8.67157 13 8 13.6716 8 14.5C8 15.3284 8.67157 16 9.5 16C11.5 16 13 15.5 14.5 16C15.3284 16 16 15.3284 16 14.5C16 13.6716 15.3284 13 14.5 13C13.5 13 11 13 9.5 13Z"/></svg>
+                <span>Clerk</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="enterprise-section reveal">
+        <div class="enterprise-container">
+            <div class="enterprise-badge">ENTERPRISE GRADE</div>
+            <h2>Infrastructure built for the world's most demanding teams.</h2>
+            <p>From day one, Huggy provides <span class="neon-highlight">security and scale</span> that usually takes months to build. Secure by default, scalable by design.</p>
+            
+            <div class="enterprise-stats stagger-grid">
+                <div class="stat-item reveal">
+                    <div class="stat-number">99.99%</div>
+                    <div class="stat-label">Uptime SLA</div>
+                </div>
+                <div class="stat-item reveal">
+                    <div class="stat-number">256-bit</div>
+                    <div class="stat-label">AES Encryption</div>
+                </div>
+                <div class="stat-item reveal">
+                    <div class="stat-number">SOC2</div>
+                    <div class="stat-label">Type II Compliant</div>
+                </div>
+                <div class="stat-item reveal">
+                    <div class="stat-number">GDPR</div>
+                    <div class="stat-label">Ready Environment</div>
+                </div>
+            </div>
+            
+            <div class="enterprise-features stagger-grid">
+                <div class="ent-feat reveal">
+                    <div class="ent-feat-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    </div>
+                    <div>
+                        <h4>Isolated Execution</h4>
+                        <p>Every single build runs in a completely isolated, ephemeral micro-container for maximum security.</p>
+                    </div>
+                </div>
+                <div class="ent-feat reveal">
+                    <div class="ent-feat-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                    </div>
+                    <div>
+                        <h4>Advanced RBAC</h4>
+                        <p>Granular permissions for teams of any size. Control exactly who can prompt, build, and deploy.</p>
+                    </div>
+                </div>
+                <div class="ent-feat reveal">
+                    <div class="ent-feat-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21L15 15"/><circle cx="10" cy="10" r="7"/><path d="M7 10h6"/></svg>
+                    </div>
+                    <div>
+                        <h4>Full Audit Logs</h4>
+                        <p>Every prompt and every code change is tracked and versioned. Complete visibility into your AI workflow.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features-bento" class="bento-section reveal">
+        <div class="section-header">
+            <h2>Everything you need to <span class="neon-highlight neon-static">build</span></h2>
+            <p>Powerful features that help you ship production-grade apps in record time.</p>
+        </div>
+        <div class="bento-grid stagger-grid">
+            <div class="bento-item large reveal">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                <h3>Real-time Collaboration</h3>
+                <p>Edit code, design interfaces, and chat with your agents in real-time. Experience a new level of multi-agent orchestration.</p>
+                <div class="bento-visual">
+                    <svg width="200" height="120" viewBox="0 0 200 120" fill="none" opacity="0.2">
+                        <rect x="10" y="10" width="180" height="100" rx="4" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="50" cy="40" r="15" fill="currentColor"/>
+                        <circle cx="100" cy="40" r="15" fill="currentColor" fill-opacity="0.5"/>
+                        <circle cx="150" cy="40" r="15" fill="currentColor" fill-opacity="0.2"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="bento-item tall reveal">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <h3>Firestore Integration</h3>
+                <p>Native support for Firestore. Huggy automatically generates your database schema and security rules based on your app's needs.</p>
+            </div>
+            <div class="bento-item reveal">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </div>
+                <h3>Tailwind Native</h3>
+                <p>Style with the power of utility-first CSS. Built-in themes and auto-completion.</p>
+            </div>
+            <div class="bento-item reveal">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                </div>
+                <h3>Auto-Mobile</h3>
+                <p>Every app is automatically optimized for all screen sizes. Mobile-first by design.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features-grid reveal stagger-grid">
+        <div class="feature-card reveal">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </div>
+            <h3>Autonomous Agents</h3>
+            <p>Multiple specialized agents work in parallel to handle backend, frontend, and design separately.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h3>Enterprise Security</h3>
+            <p>Hardware-grade encryption and isolated execution environments for every build.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3>One-Click Deploy</h3>
+            <p>Instantly publish your application to a global edge network with custom domains.</p>
+        </div>
+    </section>
+
+    <section id="testimonials" class="testimonials-grid reveal stagger-grid">
+        <div class="section-header">
+            <h2>Loved by builders</h2>
+            <p>See why developers are switching to the first AI-native development platform.</p>
+        </div>
+        <div class="testimonial-card reveal">
+            <p class="testimonial-text">"Huggy changed how I think about building apps. I can go from idea to a functional React dashboard in minutes, not days."</p>
+            <div class="testimonial-author">
+                <div class="author-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="Felix">
+                </div>
+                <div class="author-info">
+                    <h4>Felix Henderson</h4>
+                    <p>Founder at ScaleFlow</p>
+                </div>
+            </div>
+        </div>
+        <div class="testimonial-card reveal">
+            <p class="testimonial-text">"The production engine is magic. Seeing the code update in real-time as the AI builds is like having a team of engineers working at light speed."</p>
+            <div class="testimonial-author">
+                <div class="author-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah" alt="Sarah">
+                </div>
+                <div class="author-info">
+                    <h4>Sarah Chen</h4>
+                    <p>CTO at Zenith</p>
+                </div>
+            </div>
+        </div>
+        <div class="testimonial-card reveal">
+            <p class="testimonial-text">"Finally, an AI tool that doesn't just write snippets, but understands the whole project context. Pure productivity gold."</p>
+            <div class="testimonial-author">
+                <div class="author-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Marc" alt="Marc">
+                </div>
+                <div class="author-info">
+                    <h4>Marc Dupont</h4>
+                    <p>Independent Developer</p>
+                </div>
+            </div>
+        </div>
+        <div class="testimonial-card reveal">
+            <p class="testimonial-text">"The speed from prompt to production-ready React code is unlike anything we've ever used in our stack. It's a game changer."</p>
+            <div class="testimonial-author">
+                <div class="author-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=James" alt="James">
+                </div>
+                <div class="author-info">
+                    <h4>James Wilson</h4>
+                    <p>VP Engineering at CloudScale</p>
+                </div>
+            </div>
+        </div>
+        <div class="testimonial-card reveal">
+            <p class="testimonial-text">"The AI actually understands our high-level architecture. It's not just generating code; it's building systems that scale."</p>
+            <div class="testimonial-author">
+                <div class="author-avatar">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Elena" alt="Elena">
+                </div>
+                <div class="author-info">
+                    <h4>Elena Rodriguez</h4>
+                    <p>Fullstack Lead at FinTech Global</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="pricing" class="pricing-section reveal">
+        <div class="section-header">
+            <h2>Simple, transparent pricing</h2>
+            <p>Everything you need to build, scale, and manage your apps.</p>
+        </div>
+        <div class="pricing-grid stagger-grid">
+            <div class="pricing-card reveal">
+                <div class="price-name">Personal</div>
+                <div class="price-value">$0<span>/mo</span></div>
+                <ul class="pricing-features">
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 5 projects</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Standard agents</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Community support</li>
+                </ul>
+                <button class="pricing-btn">Get Started</button>
+            </div>
+            <div class="pricing-card featured reveal">
+                <div class="price-name neon-highlight neon-glow">Pro</div>
+                <div class="price-value">$29<span>/mo</span></div>
+                <ul class="pricing-features">
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited projects</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Priority agent access</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Custom domains</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Analytics & SEO</li>
+                </ul>
+                <button class="pricing-btn primary">Start Free Trial</button>
+            </div>
+            <div class="pricing-card reveal">
+                <div class="price-name">Expert</div>
+                <div class="price-value">$99<span>/mo</span></div>
+                <ul class="pricing-features">
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 5 team seats</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Premium agents</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 24/7 dedicated support</li>
+                </ul>
+                <button class="pricing-btn">Contact Sales</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="vision-section reveal">
+        <div class="vision-content">
+            <h2 class="vision-quote">"We believe the future of software isn't just about code—it's about making creation accessible to everyone who has a story to tell."</h2>
+            <div class="founder-info">
+                <div class="founder-avatar">
+                    <img src="https://api.dicebear.com/7.x/micah/svg?seed=founder&backgroundColor=b6e3f4" alt="Founder" style="width:100%; border-radius:50%;">
+                </div>
+                <div class="founder-name">Alex Thorne</div>
+                <div class="founder-title">Founder & CEO, Huggy</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="faq-section reveal">
+        <div class="section-header">
+            <h2>Common <span class="neon-highlight neon-static">questions</span></h2>
+            <p>Everything you need to know about the platform.</p>
+        </div>
+        <div class="faq-item">
+            <button class="faq-question">
+                <h4>How does the AI work?</h4>
+                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer">
+                Huggy uses a multi-agent orchestration layer that breaks down your requirements into technical specifications, which are then implemented by specialized sub-models for code, design, and infrastructure.
+            </div>
+        </div>
+        <div class="faq-item">
+            <button class="faq-question">
+                <h4>Can I export my code?</h4>
+                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer">
+                Yes, you own 100% of the code produced. You can export to GitHub, download a ZIP file, or deploy directly to your own infrastructure at any time.
+            </div>
+        </div>
+        <div class="faq-item">
+            <button class="faq-question">
+                <h4>Is my data secure?</h4>
+                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer">
+                We take security seriously. All build environments are ephemeral and isolated. We never use your private data or proprietary code to train our base models.
+            </div>
+        </div>
+    </section>
+
+    <a href="/builder.html" class="sticky-cta" id="sticky-cta">
+        Build with Huggy
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </a>
+
+    <footer class="footer">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="/" class="logo">
+                    <div class="logo-mark">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                            <rect width="32" height="32" rx="8" fill="var(--text)"/>
+                            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+                            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+                            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+                        </svg>
+                    </div>
+                    <span class="logo-text">Huggy</span>
+                </a>
+                <p>The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
+            </div>
+                <div class="footer-col">
+                <h5>Product</h5>
+                <ul class="footer-links">
+                    <li><a href="/features.html">Features</a></li>
+                    <li><a href="/showcase.html">Showcase</a></li>
+                    <li><a href="/pricing.html">Pricing</a></li>
+                    <li><a href="/enterprise.html">Enterprise</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Resources</h5>
+                <ul class="footer-links">
+                    <li><a href="/documentation.html">Documentation</a></li>
+                    <li><a href="/api-reference.html">API Reference</a></li>
+                    <li><a href="/blog.html">Blog</a></li>
+                    <li><a href="/community.html">Community</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Company</h5>
+                <ul class="footer-links">
+                    <li><a href="/about.html">About</a></li>
+                    <li><a href="/careers.html">Careers</a></li>
+                    <li><a href="/privacy.html">Privacy</a></li>
+                    <li><a href="/security.html">Security</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>© 2026 Huggy Inc.</span>
+            <div style="display:flex;gap:20px;">
+                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
+                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <button id="modal-close" class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
