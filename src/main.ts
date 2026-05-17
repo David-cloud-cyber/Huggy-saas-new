@@ -20,6 +20,10 @@ function init() {
     const sunIcon = getElement<SVGElement>('sun-icon');
 
     // 0. Persistence & Initial Theme
+    window.addEventListener('load', () => {
+        if (curtain) curtain.classList.add('rising');
+    });
+
     const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     if (moonIcon && sunIcon) {
@@ -212,9 +216,7 @@ function init() {
             
             // Sweep transition before redirect
             if (curtain) {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                curtain.style.background = currentTheme === 'light' ? '#060606' : '#F8F5F0';
-                curtain.style.transformOrigin = 'left';
+                curtain.style.transformOrigin = 'top';
                 curtain.classList.add('falling');
                 
                 setTimeout(() => {

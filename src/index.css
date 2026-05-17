@@ -739,6 +739,7 @@ h1 {
     transform-origin: top;
     transform: scaleY(0);
     will-change: transform;
+    background: var(--bg);
 }
 
 #curtain::after {
@@ -755,8 +756,9 @@ h1 {
 }
 
 #curtain.falling {
-    transition: transform 600ms cubic-bezier(0.85, 0, 0.15, 1);
+    transition: transform 600ms cubic-bezier(0.82, 0, 0.18, 1);
     transform: scaleY(1);
+    pointer-events: all;
 }
 
 #curtain.falling::after {
@@ -764,9 +766,10 @@ h1 {
 }
 
 #curtain.rising {
-    transition: transform 600ms cubic-bezier(0.85, 0, 0.15, 1);
+    transition: transform 600ms cubic-bezier(0.82, 0, 0.18, 1);
     transform: scaleY(0);
     transform-origin: bottom;
+    pointer-events: none;
 }
 
 #curtain.rising::after {

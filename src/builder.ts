@@ -478,7 +478,30 @@ function initBuilder() {
 
   // ── THEME TOGGLE ─────────────────────────────────────────────
   const html = document.documentElement;
-  const curtain = document.getElementById('curtain-overlay');
+  const curtain = document.getElementById('curtain');
+  
+  window.addEventListener('load', () => {
+    if (curtain) curtain.classList.add('rising');
+  });
+
+  function navigate(url: string) {
+    if (curtain) {
+      curtain.classList.remove('rising');
+      curtain.classList.add('falling');
+      setTimeout(() => {
+        window.location.href = url;
+      }, 600);
+    } else {
+      window.location.href = url;
+    }
+  }
+
+  // Intercept logo click
+  document.querySelector('.logo')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigate('/');
+  });
+
   document.getElementById('btn-theme-builder')?.addEventListener('click', () => {
     const isDark = html.getAttribute('data-theme') === 'dark';
     const newTheme = isDark ? 'light' : 'dark';
@@ -486,12 +509,19 @@ function initBuilder() {
     
     if (curtain) {
       curtain.style.background = isDark ? '#F8F5F0' : '#060606';
-      curtain.classList.remove('sweep');
-      void curtain.offsetWidth; // reflow
-      curtain.classList.add('sweep');
+      curtain.style.transformOrigin = 'top';
+      curtain.classList.add('falling');
       setTimeout(() => {
         html.setAttribute('data-theme', newTheme);
-      }, 250);
+        curtain.classList.remove('falling');
+        requestAnimationFrame(() => {
+          curtain.style.transformOrigin = 'bottom';
+          curtain.classList.add('rising');
+          setTimeout(() => {
+            curtain.classList.remove('rising');
+          }, 620);
+        });
+      }, 600);
     }
   });
 

@@ -26,6 +26,12 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <script>
+        (function() {
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 </head>
 <body>
@@ -639,5 +645,35 @@
     <div id="toast-container"></div>
 
     <script type="module" src="/src/main.ts"></script>
+    <script>
+        // Global navigation helper using standardized curtain
+        function navigate(url) {
+            const curtain = document.getElementById('curtain');
+            if (curtain) {
+                curtain.classList.remove('rising');
+                curtain.classList.add('falling');
+                setTimeout(() => {
+                    window.location.href = url;
+                }, 600);
+            } else {
+                window.location.href = url;
+            }
+        }
+
+        // Rising curtain on load
+        window.addEventListener('load', () => {
+            const curtain = document.getElementById('curtain');
+            if (curtain) curtain.classList.add('rising');
+        });
+
+        // Intercept links for smooth exit
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+                e.preventDefault();
+                navigate(link.href);
+            }
+        });
+    </script>
 </body>
 </html>

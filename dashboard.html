@@ -6,6 +6,12 @@
   <title>Huggy — Espace de travail</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <script>
+    (function() {
+      const theme = localStorage.getItem('huggy-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <style>
     :root[data-theme="dark"] {
@@ -814,17 +820,50 @@
 
     /* CURTAIN */
     #curtain {
-      position: fixed; inset: 0; z-index: 20000;
-      pointer-events: none;
-      transform-origin: top; transform: scaleY(0);
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        pointer-events: none;
+        transform-origin: top;
+        transform: scaleY(0);
+        will-change: transform;
+        background: var(--bg);
     }
+
+    #curtain::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: var(--accent);
+        box-shadow: 0 0 40px var(--accent);
+        opacity: 0;
+        transition: opacity 300ms;
+    }
+
     #curtain.falling {
-      transition: transform 500ms cubic-bezier(0.76,0,0.24,1);
-      transform: scaleY(1);
+        transition: transform 600ms cubic-bezier(0.82, 0, 0.18, 1);
+        transform: scaleY(1);
+        pointer-events: all;
     }
+
+    #curtain.falling::after {
+        opacity: 0.4;
+    }
+
     #curtain.rising {
-      transition: transform 500ms cubic-bezier(0.76,0,0.24,1);
-      transform: scaleY(0);
+        transition: transform 600ms cubic-bezier(0.82, 0, 0.18, 1);
+        transform: scaleY(0);
+        transform-origin: bottom;
+        pointer-events: none;
+    }
+
+    #curtain.rising::after {
+        opacity: 0.4;
+        top: 0;
+        bottom: auto;
     }
 
     .hidden { display: none !important; }
@@ -1406,12 +1445,39 @@
     });
 
     // 7. Navigation logic - Link to builder
+    const curtain = document.getElementById('curtain');
+    window.addEventListener('load', () => {
+        if (curtain) curtain.classList.add('rising');
+    });
+
+    function navigate(url) {
+        if (curtain) {
+            curtain.classList.remove('rising');
+            curtain.classList.add('falling');
+            setTimeout(() => {
+                window.location.href = url;
+            }, 600);
+        } else {
+            window.location.href = url;
+        }
+    }
+
     document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar').forEach(el => {
       el.addEventListener('click', (e) => {
         // Only trigger if active (for submit-btn)
         if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
-        window.location.href = 'builder.html';
+        navigate('builder.html');
       });
+    });
+
+    // Intercept internal links
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+            if (link.closest('.dropdown')) return; // Allow dropdown links if they exist
+            e.preventDefault();
+            navigate(link.href);
+        }
     });
   </script>
 </body>

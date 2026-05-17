@@ -6,11 +6,17 @@
   <title>Huggy Builder</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <script>
+    (function() {
+      const theme = localStorage.getItem('huggy-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="/src/builder.css">
 </head>
 <body>
-  <div id="curtain-overlay"></div>
+  <div id="curtain"></div>
 
   <div class="app-layout">
 
