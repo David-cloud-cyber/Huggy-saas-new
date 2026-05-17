@@ -220,10 +220,10 @@ function init() {
                 curtain.classList.add('falling');
                 
                 setTimeout(() => {
-                    window.location.href = '/auth.html';
+                    window.location.href = '/dashboard.html';
                 }, 600);
             } else {
-                window.location.href = '/auth.html';
+                window.location.href = '/dashboard.html';
             }
         }, 1200);
     }
@@ -283,19 +283,23 @@ function init() {
 
     // Sign in flow
     document.querySelectorAll('.sign-in-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            // Prevent if it's a direct HTML link already handled by index.html onclick
-            // but for safety we redirect here too if JS takes over
-            e.preventDefault();
-            if (curtain) {
-                curtain.style.transformOrigin = 'top';
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = '/auth.html';
-                }, 600);
-            } else {
-                window.location.href = '/auth.html';
-            }
+        btn.addEventListener('click', () => {
+            openModal(`
+                <div style="text-align: center;">
+                    <h2 style="margin-bottom: 32px; font-weight: 700;">Welcome back</h2>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <button class="import-btn" style="padding: 12px; justify-content: center;">Continue with Google</button>
+                        <button class="import-btn" style="padding: 12px; justify-content: center;">Continue with GitHub</button>
+                    </div>
+                    <div style="margin: 24px 0; display: flex; align-items: center; gap: 12px;">
+                        <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                        <span style="font-size: 11px; color: var(--text-sub);">OR</span>
+                        <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                    </div>
+                    <input type="email" placeholder="Email address" style="width: 100%; padding: 12px; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 12px; color: var(--text);">
+                    <button class="sign-in-btn" style="width: 100%; justify-content: center; padding: 12px;">Send Magic Link</button>
+                </div>
+            `);
         });
     });
 
