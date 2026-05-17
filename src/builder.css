@@ -511,7 +511,45 @@ body {
   padding: 8px 12px 12px;
 }
 
-.actions-left { display: flex; gap: 4px; }
+.actions-left { display: flex; align-items: center; gap: 4px; }
+
+.mode-compact {
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-input);
+  border: 1px solid var(--border-mid);
+  border-radius: 6px;
+  height: 28px;
+  transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.mode-compact:hover { border-color: var(--border-focus); background: var(--accent-dim); color: var(--text); }
+.mode-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.mode-dot.agent { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.mode-dot.plan { background: var(--agent-1); box-shadow: 0 0 8px var(--agent-1); }
+
+.mode-dropdown {
+  left: 0; right: auto;
+  min-width: 180px;
+}
+.mode-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 6px;
+  cursor: pointer; transition: all 150ms;
+}
+.mode-opt:hover { background: var(--accent-dim); }
+.mode-opt.active { background: var(--accent-hover); }
+.mode-opt .dot { width: 8px; height: 8px; flex-shrink: 0; }
 
 .icon-btn {
   width: 24px; height: 24px; border-radius: 5px;
@@ -521,38 +559,41 @@ body {
 }
 .icon-btn:hover { border-color: var(--border-focus); color: var(--text-muted); }
 
-.actions-right { display: flex; align-items: center; gap: 8px; }
+/* .actions-right inherited from flex layout, no specific styles needed now */
 
 .model-select {
-  display: flex; align-items: center; gap: 4px;
-  padding: 1px 7px; border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 9px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px; border-radius: 6px;
+  border: 1px solid var(--border-mid);
+  height: 28px;
+  font-size: 11px; color: var(--text-muted);
   user-select: none; position: relative;
-  transition: all 200ms; cursor: pointer;
+  transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1); cursor: pointer;
   background: var(--bg-input);
+  font-weight: 600;
 }
-.model-label-prefix {
-  font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.05em; font-size: 7px;
-  opacity: 0.6; padding-right: 3px;
-  border-right: 1px solid var(--border);
-}
-#current-model-label { font-family: "JetBrains Mono"; font-weight: 500; }
+#current-model-label { font-family: inherit; }
 .model-select:hover { border-color: var(--border-focus); background: var(--accent-dim); color: var(--text); }
 
 .dropdown {
-  position: absolute; bottom: calc(100% + 8px); right: -4px;
+  position: absolute; top: calc(100% + 8px); right: -4px;
   background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: 12px; padding: 6px;
   min-width: 220px; z-index: 100;
   box-shadow: 0 12px 32px rgba(0,0,0,0.4);
   opacity: 0; visibility: hidden;
-  transform: translateY(8px) scale(0.96);
+  transform: translateY(-8px) scale(0.96);
   transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none; backdrop-filter: blur(10px);
 }
 .dropdown.open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); pointer-events: auto; }
+
+/* Invert for input area dropdowns */
+.chat-input-area .dropdown {
+  top: auto; bottom: calc(100% + 8px);
+  transform: translateY(8px) scale(0.96);
+}
+.chat-input-area .dropdown.open { transform: translateY(0) scale(1); }
 
 .dropdown-header {
   font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
@@ -736,14 +777,15 @@ body {
 .device-btn {
   width: 28px; height: 28px; border-radius: 4px;
   border: 1px solid var(--border); background: transparent;
-  color: var(--text-sub); cursor: pointer;
+  color: var(--text-muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 120ms;
+  flex-shrink: 0;
 }
 .device-btn:hover { color: var(--text); border-color: var(--border-focus); }
 .device-btn.active {
   background: var(--accent-dim);
-  border-color: var(--border-mid); color: var(--text);
+  border-color: var(--border-mid); color: var(--accent);
 }
 .preview-address {
   flex: 1;
@@ -752,15 +794,20 @@ body {
   border: 1px solid var(--border);
   background: var(--bg-input);
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px; color: var(--text-sub);
+  font-size: 11px; color: var(--text-muted);
   margin: 0 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .btn-refresh {
   width: 28px; height: 28px; border-radius: 4px;
   border: 1px solid var(--border); background: transparent;
-  color: var(--text-sub); cursor: pointer;
+  color: var(--text-muted); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 150ms;
+  flex-shrink: 0;
 }
 .btn-refresh:hover { color: var(--text); }
 .btn-refresh:hover svg { animation: spinOnce 0.4s ease; }
@@ -775,19 +822,22 @@ body {
     linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.015) 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
 }
 .preview-frame {
-  position: absolute; inset: 16px;
+  width: 100%;
+  height: 100%;
   background: var(--bg-surface);
   border-radius: 8px;
   border: 1px solid var(--border-mid);
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-  transition: all 300ms ease;
+  transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
   display: flex; flex-direction: column;
 }
-.preview-frame.tablet  { inset: 16px 60px; border-radius: 12px; }
-.preview-frame.mobile  { inset: 16px 110px; border-radius: 24px; }
+.preview-frame.tablet  { width: 768px; height: 1024px; max-width: 100%; max-height: 100%; border-radius: 20px; border-width: 8px; border-color: #000; }
+.preview-frame.mobile  { width: 375px; height: 667px; max-width: 100%; max-height: 100%; border-radius: 32px; border-width: 10px; border-color: #000; }
 
 /* mini app inside preview */
 .mini-navbar {

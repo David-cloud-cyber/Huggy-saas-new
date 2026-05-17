@@ -48,6 +48,58 @@
       </div>
 
       <div class="topbar-right">
+        <div class="mode-select mode-compact" id="mode-select-wrap">
+          <span class="mode-dot agent" id="mode-dot-indicator"></span>
+          <span id="current-mode-label-ui">Agent</span>
+          <div class="dropdown mode-dropdown" id="mode-dropdown-ui">
+            <div class="dropdown-header">Select Build Mode</div>
+            <div class="mode-opt active" data-mode="agent">
+              <span class="dot agent"></span>
+              <div class="opt-meta">
+                <span class="opt-name">Agent</span>
+                <span class="opt-desc">Autonomous implementation</span>
+              </div>
+            </div>
+            <div class="mode-opt" data-mode="plan">
+              <span class="dot plan"></span>
+              <div class="opt-meta">
+                <span class="opt-name">Plan</span>
+                <span class="opt-desc">Planning & Reasoning</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="topbar-sep"></div>
+        <div class="model-select" id="model-select-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; color: var(--accent);">
+            <path d="M12 3l1.91 5.81L20 9.8l-4.5 3.5 1.7 6.1-5.2-3.8-5.2 3.8 1.7-6.1L4 9.8l6.09-1.02L12 3z"></path>
+          </svg>
+          <span id="current-model-label">Auto</span>
+          <div class="dropdown" id="model-dropdown">
+            <div class="dropdown-header">Choose AI Engine</div>
+            <div class="model-option active" data-name="Sonnet 4.5">
+              <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
+              <div class="opt-meta">
+                <span class="opt-name">Sonnet 4.5</span>
+                <span class="opt-desc">Intelligence + Speed</span>
+              </div>
+            </div>
+            <div class="model-option" data-name="Opus 4.5">
+              <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
+              <div class="opt-meta">
+                <span class="opt-name">Opus 4.5</span>
+                <span class="opt-desc">Deep Reasoning</span>
+              </div>
+            </div>
+            <div class="model-option" data-name="Gemini 2.0">
+              <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
+              <div class="opt-meta">
+                <span class="opt-name">Gemini 2.0</span>
+                <span class="opt-desc">Multimodal Guru</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <button class="btn-theme-builder" id="btn-theme-builder" title="Toggle theme">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <circle cx="12" cy="12" r="4"/>
@@ -96,6 +148,15 @@
             <textarea id="ai-textarea" placeholder="Ask a question or request a change..."></textarea>
             <div class="input-actions">
               <div class="actions-left">
+                <button class="icon-btn" data-tooltip="Microphone (Voice)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                  </svg>
+                </button>
+                <div class="topbar-sep" style="height: 14px; margin: 0 4px;"></div>
                 <button class="icon-btn" data-tooltip="Upload files">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -112,40 +173,8 @@
                   </svg>
                 </button>
               </div>
-              <div class="actions-right">
-                <div class="model-select" id="model-select-btn">
-                  <span class="model-label-prefix">Model</span>
-                  <span id="current-model-label">Sonnet 4.5</span>
-                  <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                  <div class="dropdown" id="model-dropdown">
-                    <div class="dropdown-header">Choose AI Engine</div>
-                    <div class="model-option active" data-name="Sonnet 4.5">
-                      <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
-                      <div class="opt-meta">
-                        <span class="opt-name">Sonnet 4.5</span>
-                        <span class="opt-desc">Intelligence + Speed</span>
-                      </div>
-                    </div>
-                    <div class="model-option" data-name="Opus 4.5">
-                      <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
-                      <div class="opt-meta">
-                        <span class="opt-name">Opus 4.5</span>
-                        <span class="opt-desc">Deep Reasoning</span>
-                      </div>
-                    </div>
-                    <div class="model-option" data-name="Gemini 2.0">
-                      <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
-                      <div class="opt-meta">
-                        <span class="opt-name">Gemini 2.0</span>
-                        <span class="opt-desc">Multimodal Guru</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="submit-wrapper">
-                  <button class="submit-btn" id="btn-send-builder" title="Send (Enter)">
+              <div class="submit-wrapper">
+                <button class="submit-btn" id="btn-send-builder" title="Send (Enter)">
                     <span>Send</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="12" y1="19" x2="12" y2="5"></line>

@@ -247,29 +247,67 @@ function initBuilder() {
     });
   });
 
-  // ── CHAT SEND & MODEL SELECT ───────────────────────────────
+  // ── MODE SELECT LOGIC ────────────────────────────────────
   const chatTextarea = document.getElementById('ai-textarea') as HTMLTextAreaElement;
   const btnSend = document.getElementById('btn-send-builder') as HTMLButtonElement;
+  const modeSelectWrap = document.getElementById('mode-select-wrap');
+  const modeDropdownUI = document.getElementById('mode-dropdown-ui');
+  const currentModeLabelUI = document.getElementById('current-mode-label-ui');
+  const modeDotIndicator = document.getElementById('mode-dot-indicator');
+  const modeOptions = document.querySelectorAll('.mode-opt');
+  let currentMode = 'agent';
+
+  modeSelectWrap?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    modeDropdownUI?.classList.toggle('open');
+  });
+
+  document.addEventListener('click', () => {
+    modeDropdownUI?.classList.remove('open');
+  });
+
+  modeOptions.forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const mode = (opt as HTMLElement).dataset.mode || 'agent';
+      currentMode = mode;
+      
+      modeOptions.forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      
+      if (currentModeLabelUI) currentModeLabelUI.textContent = mode;
+      if (modeDotIndicator) {
+        modeDotIndicator.className = 'mode-dot ' + mode;
+      }
+      
+      if (currentMode === 'plan') {
+        chatTextarea.placeholder = 'Search, brainstorm or explore...';
+      } else {
+        chatTextarea.placeholder = 'Ask a question or request a change...';
+      }
+      
+      modeDropdownUI?.classList.remove('open');
+      addToHistory(`Switched to ${currentMode} mode`);
+    });
+  });
+
   const modelSelectBtn = document.getElementById('model-select-btn');
   const modelDropdown = document.getElementById('model-dropdown');
-  const chevron = document.getElementById('chevron-icon');
   const modelLabel = document.getElementById('current-model-label');
   const modelOptions = document.querySelectorAll('.model-option');
 
   // Model Selector Logic
   modelSelectBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!modelDropdown || !chevron) return;
+    if (!modelDropdown) return;
     const isOpen = modelDropdown.classList.contains('open');
     modelDropdown.classList.toggle('open', !isOpen);
-    chevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
   });
 
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     if (modelDropdown && !modelDropdown.contains(target)) {
       modelDropdown.classList.remove('open');
-      if (chevron) chevron.style.transform = 'rotate(0deg)';
     }
   });
 
@@ -278,9 +316,8 @@ function initBuilder() {
       e.stopPropagation();
       modelOptions.forEach(o => o.classList.remove('active'));
       opt.classList.add('active');
-      if (modelLabel) modelLabel.textContent = (opt as HTMLElement).dataset.name || '';
+      if (modelLabel) modelLabel.textContent = (opt as HTMLElement).dataset.name || 'Auto';
       modelDropdown?.classList.remove('open');
-      if (chevron) chevron.style.transform = 'rotate(0deg)';
     });
   });
 
@@ -301,7 +338,11 @@ function initBuilder() {
       setTimeout(() => {
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
-        sysMsg.innerHTML = '── change applied ──';
+        if (currentMode === 'plan') {
+          sysMsg.innerHTML = '── plan generated ──';
+        } else {
+          sysMsg.innerHTML = '── change applied ──';
+        }
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;
       }, 2000);
