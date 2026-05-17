@@ -365,6 +365,10 @@ export interface StreamEventEnvelope<TType extends StreamEventType = StreamEvent
   created_at: string;
 }
 
+export type AnyStreamEventEnvelope = {
+  [TType in StreamEventType]: StreamEventEnvelope<TType>;
+}[StreamEventType];
+
 export interface EmitEventInput<TType extends StreamEventType = StreamEventType> {
   organization_id: UUID;
   project_id: UUID;

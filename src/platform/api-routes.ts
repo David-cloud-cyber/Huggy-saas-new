@@ -1,4 +1,5 @@
 import type { Project, RequestContext } from './types';
+import type { CancelAgentRunInput, CreateMessageInput, CreateMessageResult, StreamRequestInput, StreamSnapshot } from './stream-api';
 import {
   AgentOrchestrator,
   BuildService,
@@ -11,6 +12,7 @@ import {
   UsageMeteringService,
   VercelService,
 } from './services';
+import { VisualStreamingApiHandlers } from './stream-api';
 
 export interface PlatformApiHandlers {
   createProject(context: RequestContext, input: { name: string; description?: string }): Promise<Project>;
@@ -18,6 +20,9 @@ export interface PlatformApiHandlers {
   buildProject(context: RequestContext, input: { project: Project; versionId: string }): Promise<unknown>;
   deployProject(context: RequestContext, input: { project: Project; prompt: string; target?: 'preview' | 'production' }): Promise<unknown>;
   addDomain(context: RequestContext, input: { project: Project; hostname: string }): Promise<unknown>;
+  postProjectMessage(context: RequestContext, input: CreateMessageInput): Promise<CreateMessageResult>;
+  getProjectStream(context: RequestContext, input: StreamRequestInput): Promise<StreamSnapshot>;
+  cancelAgentRun(context: RequestContext, input: CancelAgentRunInput): Promise<{ ok: true }>;
 }
 
 export function createPlatformApiHandlers(vercelTokenProvider: () => string | undefined): PlatformApiHandlers {
@@ -30,6 +35,7 @@ export function createPlatformApiHandlers(vercelTokenProvider: () => string | un
   const domains = new DomainService();
   const queue = new QueueWorkerService();
   const deployments = new DeploymentService(new VercelService(vercelTokenProvider));
+  const streaming = new VisualStreamingApiHandlers(undefined, queue, prompts, credits, usage);
 
   return {
     async createProject(context, input) {
@@ -73,6 +79,18 @@ export function createPlatformApiHandlers(vercelTokenProvider: () => string | un
       await credits.reserveCredits({ ...context, projectId: input.project.id }, 10, 'domain_add');
       await usage.record({ ...context, projectId: input.project.id }, 'domain_add');
       return domains.addDomain({ ...context, projectId: input.project.id }, input.project, input.hostname);
+    },
+
+    postProjectMessage(context, input) {
+      return streaming.postProjectMessage(context, input);
+    },
+
+    getProjectStream(context, input) {
+      return streaming.getProjectStream(context, input);
+    },
+
+    cancelAgentRun(context, input) {
+      return streaming.cancelAgentRun(context, input);
     },
   };
 }
