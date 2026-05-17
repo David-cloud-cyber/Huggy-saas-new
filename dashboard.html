@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Huggy — Espace de travail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root[data-theme="dark"] {
+      --bg           : #060606;
+      --bg-surface   : #0F0F0F;
+      --bg-elevated  : #161616;
+      --bg-input     : #111111;
+      --bg-panel     : #0A0A0A;
+
+      --accent       : #F0EBE3;
+      --accent-dim   : rgba(240,235,227,0.07);
+      --accent-hover : rgba(240,235,227,0.11);
+      --accent-active: rgba(240,235,227,0.16);
+
+      --text         : #F2F2F2;
+      --text-muted   : #606060;
+      --text-sub     : #2E2E2E;
+
+      --border       : rgba(255,255,255,0.06);
+      --border-mid   : rgba(255,255,255,0.09);
+      --border-focus : rgba(240,235,227,0.22);
+
+      --success      : #4ADE80;
+      --success-dim  : rgba(74,222,128,0.10);
+      --warning      : #FBBF24;
+      --warning-dim  : rgba(251,191,36,0.10);
+      --error        : #F87171;
+      --error-dim    : rgba(248,113,113,0.10);
+      --blue         : #60A5FA;
+      --blue-dim     : rgba(96,165,250,0.10);
+      --grain-opacity: 0.022;
+    }
+
+    :root[data-theme="light"] {
+      --bg           : #F8F5F0;
+      --bg-surface   : #FFFFFF;
+      --bg-elevated  : #F0EDE8;
+      --bg-input     : #FFFFFF;
+      --bg-panel     : #F4F1EC;
+
+      --accent       : #0C0C0C;
+      --accent-dim   : rgba(12,12,12,0.06);
+      --accent-hover : rgba(12,12,12,0.10);
+      --accent-active: rgba(12,12,12,0.15);
+
+      --text         : #0C0C0C;
+      --text-muted   : #888888;
+      --text-sub     : #BBBBBB;
+
+      --border       : rgba(0,0,0,0.08);
+      --border-mid   : rgba(0,0,0,0.12);
+      --border-focus : rgba(12,12,12,0.25);
+
+      --success      : #22C55E;
+      --success-dim  : rgba(34,197,94,0.08);
+      --warning      : #D97706;
+      --warning-dim  : rgba(217,119,6,0.08);
+      --error        : #DC2626;
+      --error-dim    : rgba(220,38,38,0.08);
+      --blue         : #2563EB;
+      --blue-dim     : rgba(37,99,235,0.08);
+      --grain-opacity: 0.018;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { 
+      background: var(--bg); color: var(--text); 
+      font-family: "Instrument Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "ss01","cv01";
+    }
+
+    /* GRAIN */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+      background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+      background-repeat: repeat;
+      background-size: 200px 200px;
+      opacity: var(--grain-opacity);
+    }
+
+    button { cursor: pointer; font-family: inherit; border: none; background: none; color: inherit; }
+    input, textarea { font-family: inherit; }
+    svg { display: block; flex-shrink: 0; }
+    a { text-decoration: none; color: inherit; }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-sub); }
+
+    .dashboard {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 240px; flex-shrink: 0;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      height: 48px; padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    .logo-text {
+      font-family: "Instrument Serif"; font-style: italic;
+      font-size: 18px; color: var(--text); letter-spacing: -0.01em;
+    }
+
+    .sidebar-profile {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    .profile-avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1px solid var(--border-mid);
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Instrument Sans"; font-size: 12px;
+      font-weight: 500; color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .profile-info { min-width: 0; }
+    .profile-name {
+      font-size: 13px; font-weight: 500;
+      color: var(--text); white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; max-width: 140px;
+    }
+    .profile-email {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      color: var(--text-sub); margin-top: 1px;
+    }
+
+    .sidebar-credits {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .credits-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .plan-label {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-sub);
+    }
+    .plan-badge {
+      padding: 2px 8px; border-radius: 3px;
+      font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      background: var(--accent-dim); color: var(--text-muted);
+      border: 1px solid var(--border-mid);
+    }
+    .plan-badge.pro { background: var(--warning-dim); color: var(--warning); border-color: rgba(251,191,36,0.3); }
+    .plan-badge.team { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.3); }
+
+    .credits-value-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .credits-count {
+      font-family: "JetBrains Mono"; font-size: 16px; font-weight: 500;
+      color: var(--text);
+    }
+    .credits-total {
+      font-family: "JetBrains Mono"; font-size: 11px; color: var(--text-sub);
+    }
+    .credits-track {
+      height: 3px; background: var(--border-mid);
+      border-radius: 2px; overflow: hidden;
+    }
+    .credits-fill {
+      height: 100%; width: 0;
+      background: var(--accent); border-radius: 2px;
+      transition: width 1.2s cubic-bezier(0.22,1,0.36,1);
+    }
+
+    .sidebar-nav {
+      flex: 1; overflow-y: auto; padding: 8px;
+    }
+    .nav-label {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-sub); padding: 8px 10px 4px; display: block;
+    }
+    .btn-new-project-sidebar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px;
+      width: 100%; margin-bottom: 12px;
+      border: 1px dashed var(--border-mid);
+      background: transparent; cursor: pointer;
+      transition: all 150ms;
+      text-align: left;
+    }
+    .btn-new-project-sidebar:hover {
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+    }
+    .btn-new-project-sidebar span {
+      font-family: "Instrument Sans"; font-size: 12px; font-weight: 500;
+      color: var(--text-sub);
+    }
+    .btn-new-project-sidebar:hover span { color: var(--text); }
+
+    .nav-divider { height: 1px; background: var(--border); margin: 8px 0; }
+
+    .nav-project {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px;
+      cursor: pointer; width: 100%;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: all 120ms; margin-bottom: 1px;
+      text-align: left;
+    }
+    .nav-project:hover { background: var(--accent-dim); border-color: var(--border); }
+    .nav-project.active { background: var(--accent-dim); border-color: var(--border-mid); }
+    .nav-project.active .project-dot { transform: scale(1.2); }
+
+    .project-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; transition: transform 0.2s; }
+    .project-nav-name {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-muted); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 140px; flex: 1;
+    }
+    .nav-project.active .project-nav-name { color: var(--text); }
+    .badge-builds {
+      font-family: "JetBrains Mono"; font-size: 10px; color: var(--text-sub);
+      padding: 1px 5px; border-radius: 3px;
+      background: var(--bg-elevated); border: 1px solid var(--border);
+    }
+
+    .sidebar-footer {
+      border-top: 1px solid var(--border);
+      padding: 8px;
+      display: flex; align-items: center; gap: 4px;
+      flex-shrink: 0;
+    }
+    .btn-footer {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px;
+      font-family: "Instrument Sans"; font-size: 12px;
+      color: var(--text-sub); cursor: pointer; transition: all 120ms;
+      flex: 1;
+    }
+    .btn-footer:hover { background: var(--accent-dim); color: var(--text); }
+
+    .btn-theme-toggle {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--border); background: transparent;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); transition: all 150ms; flex-shrink: 0;
+    }
+    .btn-theme-toggle:hover { border-color: var(--border-focus); color: var(--text); }
+
+    /* MAIN AREA */
+    .main-area {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; background: var(--bg);
+    }
+
+    .topbar {
+      height: 48px; padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+      z-index: 90;
+    }
+    .topbar-title {
+      font-family: "Instrument Serif"; font-style: italic;
+      font-size: 18px; color: var(--text); letter-spacing: -0.01em;
+    }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+    .search-wrapper {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg-input);
+      width: 240px; height: 32px; transition: all 150ms;
+    }
+    .search-wrapper:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-dim); }
+    .search-input {
+      font-family: "Instrument Sans"; font-size: 12px;
+      color: var(--text); background: transparent;
+      border: none; outline: none; flex: 1;
+    }
+    .search-input::placeholder { color: var(--text-sub); }
+
+    .btn-create-top {
+      height: 32px; padding: 0 14px; border-radius: 6px;
+      background: var(--accent); color: var(--bg);
+      font-family: "Instrument Sans"; font-size: 12px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity 120ms;
+    }
+    .btn-create-top:hover { opacity: 0.82; }
+
+    .content-area {
+      flex: 1; overflow-y: auto; padding: 28px;
+      display: flex; flex-direction: column; gap: 40px;
+    }
+
+    .section-label {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      letter-spacing: 0.09em; text-transform: uppercase;
+      color: var(--text-sub); margin-bottom: 16px; display: block;
+    }    /* KPI GRID */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .kpi-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px;
+      position: relative; overflow: hidden;
+      transition: all 200ms ease;
+    }
+    .kpi-card:hover { border-color: var(--border-mid); transform: translateY(-1px); }
+    .kpi-icon {
+      position: absolute; top: 18px; right: 20px;
+      color: var(--text-sub);
+    }
+    .kpi-label {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      color: var(--text-sub); margin-bottom: 12px; display: block;
+    }
+    .kpi-value {
+      font-family: "Instrument Sans"; font-size: 32px; font-weight: 500;
+      color: var(--text); line-height: 1; letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .kpi-trend {
+      font-family: "JetBrains Mono"; font-size: 11px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .trend-up { color: var(--success); }
+    .trend-down { color: var(--error); }
+
+    .kpi-mini-track {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+      background: var(--border-mid);
+    }
+    .kpi-mini-fill {
+      height: 100%; width: 0; background: var(--accent);
+      transition: width 1s cubic-bezier(0.22,1,0.36,1);
+    }
+    .quality-badge {
+      background: var(--success-dim); color: var(--success);
+      border: 1px solid rgba(74,222,128,0.2);
+      font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
+      padding: 2px 8px; border-radius: 3px; text-transform: uppercase;
+    }
+
+    /* CREATE SECTION (AI CHAT STYLE) */
+    .create-section {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .create-title {
+      font-family: "Instrument Serif"; font-style: italic;
+      font-size: 24px; color: var(--text); letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    .create-subtitle {
+      font-family: "Instrument Sans"; font-size: 14px;
+      font-weight: 300; color: var(--text-muted);
+      line-height: 1.5; margin-bottom: 24px;
+      max-width: 500px;
+    }
+
+    .input-wrapper {
+        width: 100%;
+        max-width: 720px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 20px 60px rgba(0,0,0,0.35);
+        transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
+        margin-bottom: 0;
+        position: relative;
+        overflow: visible;
+        text-align: left;
+    }
+
+    .input-wrapper::before {
+        content: "";
+        position: absolute;
+        inset: -1.5px;
+        background: conic-gradient(
+            from 0deg,
+            #4285F4,
+            #34A853,
+            #FBBC05,
+            #EA4335,
+            #4285F4
+        );
+        animation: rotate 4s linear infinite;
+        z-index: -1;
+        opacity: 0.12;
+        transition: opacity 300ms;
+        filter: blur(1.5px);
+        clip-path: inset(0 round 14px);
+    }
+
+    .input-wrapper:focus-within::before {
+        opacity: 1;
+    }
+
+    .input-wrapper::after {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        background: var(--bg-input);
+        border-radius: 11px;
+        z-index: -1;
+    }
+
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .input-wrapper:focus-within {
+        border-color: transparent;
+        box-shadow: 0 0 20px rgba(66, 133, 244, 0.15), 0 20px 60px rgba(0,0,0,0.35);
+    }
+
+    #ai-textarea {
+        width: 100%;
+        background: transparent;
+        border: none;
+        outline: none;
+        padding: 18px 18px 0;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 1.65;
+        color: var(--text);
+        caret-color: var(--accent);
+        resize: none;
+        min-height: 90px;
+        max-height: 200px;
+        display: block;
+    }
+
+    #ai-textarea::placeholder {
+        color: var(--text-sub);
+    }
+
+    .input-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 14px 14px;
+        background: transparent;
+    }
+
+    .actions-left {
+        display: flex;
+        gap: 6px;
+    }
+
+    .icon-btn {
+        width: 26px;
+        height: 26px;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-sub);
+        transition: all 150ms;
+        cursor: pointer;
+    }
+
+    .icon-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text-muted);
+        background: var(--accent-dim);
+    }
+
+    .actions-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .model-select {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--text-muted);
+        user-select: none;
+        position: relative;
+        transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+        cursor: pointer;
+        background: var(--bg-input);
+    }
+
+    .model-label-prefix {
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 9px;
+        opacity: 0.6;
+        padding-right: 4px;
+        border-right: 1px solid var(--border);
+    }
+
+    #current-model-label {
+        font-family: "JetBrains Mono";
+        font-weight: 500;
+    }
+
+    .model-select:hover {
+        border-color: var(--border-focus);
+        background: var(--accent-hover);
+        color: var(--text);
+        transform: translateY(-1px);
+    }
+
+    .dropdown {
+        position: absolute;
+        bottom: calc(100% + 12px);
+        right: -4px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 8px;
+        min-width: 260px;
+        max-height: 380px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(12px) scale(0.96);
+        transition: all 280ms cubic-bezier(0.22, 1, 0.36, 1);
+        pointer-events: none;
+        backdrop-filter: blur(14px);
+    }
+
+    .dropdown.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+
+    .dropdown-header {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding: 8px 12px 12px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 6px;
+    }
+
+    .model-option {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        transition: all 150ms;
+        position: relative;
+        text-align: left;
+    }
+
+    .model-option:hover {
+        background: var(--accent-dim);
+        transform: translateX(4px);
+    }
+
+    .model-option.active {
+        background: var(--accent-hover);
+    }
+
+    .model-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .opt-meta {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .opt-name {
+        font-size: 12px;
+        color: var(--text);
+        font-weight: 500;
+    }
+
+    .opt-desc {
+        font-size: 10px;
+        color: var(--text-muted);
+        font-family: "JetBrains Mono";
+        margin-top: 1px;
+    }
+
+    .submit-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        border-radius: 8px;
+        overflow: visible;
+        padding: 1px;
+        transition: transform 100ms;
+    }
+
+    .submit-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        color: var(--text-sub);
+        cursor: not-allowed;
+        pointer-events: none;
+        transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .submit-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .submit-btn.active {
+        background: var(--accent);
+        border-color: transparent;
+        color: var(--bg);
+        cursor: pointer;
+        pointer-events: auto;
+    }
+
+    .submit-btn.active:hover {
+        opacity: 0.9;
+        transform: scale(1.02);
+    }
+
+    .chips-row { 
+        display: flex; 
+        gap: 8px; 
+        flex-wrap: wrap; 
+        margin-top: 24px;
+        justify-content: center;
+    }
+    .chip {
+      padding: 6px 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      font-family: "JetBrains Mono"; font-size: 11px;
+      color: var(--text-sub); cursor: pointer; transition: all 120ms;
+    }
+    .chip:hover { border-color: var(--border-mid); color: var(--text-muted); background: var(--accent-dim); }
+    .chip:active { transform: scale(0.97); }
+
+    /* PROJECTS GRID */
+    .grid-header {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 18px;
+    }
+    .btn-sort {
+      padding: 4px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent;
+      font-family: "JetBrains Mono"; font-size: 11px;
+      color: var(--text-muted); cursor: pointer; transition: all 120ms;
+    }
+    .btn-sort:hover { border-color: var(--border-focus); color: var(--text); }
+
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .project-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 22px;
+      cursor: pointer; transition: all 250ms cubic-bezier(0.22,1,0.36,1);
+      display: flex; flex-direction: column; gap: 16px;
+      position: relative;
+    }
+    .project-card:hover { 
+      border-color: var(--border-mid); 
+      box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+      transform: translateY(-2px);
+    }
+
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .card-title-row { display: flex; align-items: center; gap: 10px; }
+    .card-name {
+      font-family: "Instrument Sans"; font-size: 15px; font-weight: 500;
+      color: var(--text); letter-spacing: -0.01em;
+    }
+    .status-badge {
+      background: var(--success-dim); color: var(--success);
+      border: 1px solid rgba(74,222,128,0.2);
+      font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
+      padding: 2px 7px; border-radius: 3px; text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .card-desc {
+      font-family: "Instrument Sans"; font-size: 13px;
+      color: var(--text-muted); line-height: 1.6; margin-top: -4px;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+      flex: 1;
+    }
+
+    .card-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+    .score-badge {
+      font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .score-badge.sec { background: var(--success-dim); color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
+    .score-badge.meta { background: var(--accent-dim); color: var(--text-muted); border: 1px solid var(--border-mid); }
+
+    .card-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid var(--border); padding-top: 14px;
+    }
+    .card-meta { font-family: "JetBrains Mono"; font-size: 10px; color: var(--text-sub); }
+    .btn-open-project {
+      padding: 5px 12px; border-radius: 5px;
+      background: transparent; border: 1px solid var(--border);
+      font-family: "Instrument Sans"; font-size: 12px; font-weight: 500;
+      color: var(--text-muted); transition: all 120ms;
+    }
+    .project-card:hover .btn-open-project { border-color: var(--border-focus); color: var(--text); background: var(--accent-dim); }
+
+    /* ACTIVITY LIST */
+    .activity-list {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    .activity-row {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--border);
+      transition: background 150ms;
+    }
+    .activity-row:last-child { border-bottom: none; }
+    .activity-row:hover { background: var(--accent-dim); }
+
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.success { background: var(--success); }
+    .status-dot.working { background: var(--warning); animation: dotPulse 1.2s ease-in-out infinite; }
+    .status-dot.error { background: var(--error); }
+
+    @keyframes dotPulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.5); }
+    }
+
+    .act-project {
+      font-family: "Instrument Sans"; font-size: 14px; font-weight: 500;
+      color: var(--text); min-width: 140px; flex-shrink: 0;
+    }
+    .act-desc {
+      font-family: "Instrument Sans"; font-size: 13px;
+      color: var(--text-muted); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .act-meta {
+      font-family: "JetBrains Mono"; font-size: 10px;
+      color: var(--text-sub); white-space: nowrap; margin-left: 12px;
+    }
+
+    /* CURTAIN */
+    #curtain {
+      position: fixed; inset: 0; z-index: 20000;
+      pointer-events: none;
+      transform-origin: top; transform: scaleY(0);
+    }
+    #curtain.falling {
+      transition: transform 500ms cubic-bezier(0.76,0,0.24,1);
+      transform: scaleY(1);
+    }
+    #curtain.rising {
+      transition: transform 500ms cubic-bezier(0.76,0,0.24,1);
+      transform: scaleY(0);
+    }
+
+    .hidden { display: none !important; }
+
+    /* RESPONSIVE */
+    @media (max-width: 1024px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main-area { width: 100vw; }
+    }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .search-wrapper { display: none; }
+      .content-area { padding: 20px; }
+      .create-input-row { flex-direction: column; align-items: stretch; }
+      .btn-submit { height: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="curtain"></div>
+
+  <div class="dashboard">
+
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="var(--text)"/>
+          <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+          <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+          <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+        </svg>
+        <span class="logo-text">huggy</span>
+      </div>
+
+      <div class="sidebar-profile">
+        <div class="profile-avatar">JD</div>
+        <div class="profile-info">
+          <div class="profile-name">Jean Dupont</div>
+          <div class="profile-email">jean@example.com</div>
+        </div>
+      </div>
+
+      <div class="sidebar-credits">
+        <div class="credits-header">
+          <span class="plan-label">Plan</span>
+          <span class="plan-badge">Free</span>
+        </div>
+        <div class="credits-value-row">
+          <span class="credits-count">347</span>
+          <span class="credits-total">/ 500 crédits</span>
+        </div>
+        <div class="credits-track">
+          <div class="credits-fill" data-fill="69.4%"></div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <span class="nav-label">Workspace</span>
+        <button class="btn-new-project-sidebar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nouveau projet</span>
+        </button>
+
+        <div class="nav-divider"></div>
+        <span class="nav-label">Projets récents</span>
+        <div class="nav-project active" data-id="1">
+          <span class="project-dot" style="background: #60A5FA;"></span>
+          <span class="project-nav-name">SaaS Dashboard</span>
+          <span class="badge-builds">4</span>
+        </div>
+        <div class="nav-project" data-id="2">
+          <span class="project-dot" style="background: #A78BFA;"></span>
+          <span class="project-nav-name">E-commerce App</span>
+          <span class="badge-builds">7</span>
+        </div>
+        <div class="nav-project" data-id="3">
+          <span class="project-dot" style="background: #34D399;"></span>
+          <span class="project-nav-name">Blog CMS</span>
+          <span class="badge-builds">2</span>
+        </div>
+        <div class="nav-project" data-id="4">
+          <span class="project-dot" style="background: #FBBF24;"></span>
+          <span class="project-nav-name">API Wrapper</span>
+          <span class="badge-builds">1</span>
+        </div>
+        <div class="nav-project" data-id="5">
+          <span class="project-dot" style="background: #F87171;"></span>
+          <span class="project-nav-name">Portfolio 3D</span>
+          <span class="badge-builds">3</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-footer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Paramètres</span>
+        </button>
+        <button class="btn-theme-toggle" id="theme-btn">
+          <svg id="moon-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          <svg id="sun-icon" class="hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <h1 class="topbar-title">Espace de travail</h1>
+        <div class="topbar-right">
+          <div class="search-wrapper">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-sub)" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" class="search-input" placeholder="Rechercher un projet...">
+          </div>
+          <button class="btn-create-top">Nouveau projet</button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        
+        <section>
+          <span class="section-label">Vue d'ensemble</span>
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span class="kpi-label">Projets</span>
+              <div class="kpi-value">5</div>
+              <div class="kpi-trend trend-up">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                  <polyline points="17 6 23 6 23 12"></polyline>
+                </svg>
+                +2 ce mois
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span class="kpi-label">Builds</span>
+              <div class="kpi-value">17</div>
+              <div class="kpi-trend trend-up">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                  <polyline points="17 6 23 6 23 12"></polyline>
+                </svg>
+                +5 ce mois
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              <span class="kpi-label">Crédits</span>
+              <div class="kpi-value">347</div>
+              <div class="kpi-trend">
+                69% utilisés
+              </div>
+              <div class="kpi-mini-track">
+                <div class="kpi-mini-fill" data-fill="69.4%"></div>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="8" r="7"></circle>
+                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+              </svg>
+              <span class="kpi-label">Score Qualité</span>
+              <div class="kpi-value">91%</div>
+              <div class="kpi-trend">
+                <span class="quality-badge">Excellent</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="create-section">
+          <h2 class="create-title">Nouvelle idée ?</h2>
+          <p class="create-subtitle">Décrivez votre projet. Huggy génère une application complète en quelques secondes.</p>
+          
+          <div class="input-wrapper">
+            <textarea id="ai-textarea" placeholder="Ex: Un dashboard RH avec auth, graphiques et exports CSV..."></textarea>
+            <div class="input-actions">
+                <div class="actions-left">
+                    <button class="icon-btn" title="Upload files">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" title="Voice input">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="actions-right">
+                    <div class="model-select" id="model-select-btn">
+                        <span class="model-label-prefix">Model</span>
+                        <span id="current-model-label">Sonnet 4.5</span>
+                        <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                        
+                        <div class="dropdown" id="model-dropdown">
+                            <div class="dropdown-header">Choose AI Engine</div>
+                            <div class="model-option active" data-name="Sonnet 4.5">
+                                <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Sonnet 4.5</span>
+                                    <span class="opt-desc">Intelligence + Speed</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Opus 4.5">
+                                <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Opus 4.5</span>
+                                    <span class="opt-desc">Deep Reasoning</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Haiku 4.5">
+                                <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Haiku 4.5</span>
+                                    <span class="opt-desc">Ultra lightweight</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="submit-wrapper">
+                        <button class="submit-btn" id="submit-btn">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5 12 12 5 19 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+
+          <div class="chips-row">
+            <button class="chip">Dashboard analytics</button>
+            <button class="chip">App e-commerce</button>
+            <button class="chip">Portfolio 3D</button>
+            <button class="chip">SaaS Manager</button>
+          </div>
+        </section>
+
+        <section>
+          <div class="grid-header">
+            <span class="section-label" style="margin-bottom:0">Mes projets <span style="opacity:0.5">(5)</span></span>
+            <button class="btn-sort">Récent ↓</button>
+          </div>
+          <div class="projects-grid">
+            <!-- Project 1 -->
+            <div class="project-card">
+              <div class="card-header">
+                <div class="card-title-row">
+                  <span class="project-dot" style="background: #60A5FA;"></span>
+                  <h3 class="card-name">SaaS Dashboard</h3>
+                </div>
+                <span class="status-badge">Complété</span>
+              </div>
+              <p class="card-desc">Un dashboard SaaS avec métriques temps réel, graphiques interactifs et export de données.</p>
+              <div class="card-stats">
+                <span class="score-badge sec">SEC 96</span>
+                <span class="score-badge sec">QA 91</span>
+                <span class="score-badge meta">High</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">4 builds · il y a 2 jours</span>
+                <button class="btn-open-project">Ouvrir</button>
+              </div>
+            </div>
+
+            <!-- Project 2 -->
+            <div class="project-card">
+              <div class="card-header">
+                <div class="card-title-row">
+                  <span class="project-dot" style="background: #A78BFA;"></span>
+                  <h3 class="card-name">E-commerce App</h3>
+                </div>
+                <span class="status-badge">Complété</span>
+              </div>
+              <p class="card-desc">Boutique en ligne complète avec panier, paiement Stripe et gestion des stocks.</p>
+              <div class="card-stats">
+                <span class="score-badge sec">SEC 88</span>
+                <span class="score-badge sec">QA 84</span>
+                <span class="score-badge meta">High</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">7 builds · il y a 5 jours</span>
+                <button class="btn-open-project">Ouvrir</button>
+              </div>
+            </div>
+
+            <!-- Project 3 -->
+            <div class="project-card">
+              <div class="card-header">
+                <div class="card-title-row">
+                  <span class="project-dot" style="background: #34D399;"></span>
+                  <h3 class="card-name">Blog CMS</h3>
+                </div>
+                <span class="status-badge">Complété</span>
+              </div>
+              <p class="card-desc">CMS de blog avec éditeur markdown, système de tags et commentaires.</p>
+              <div class="card-stats">
+                <span class="score-badge sec">SEC 94</span>
+                <span class="score-badge sec">QA 90</span>
+                <span class="score-badge meta">Medium</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">2 builds · il y a 1 semaine</span>
+                <button class="btn-open-project">Ouvrir</button>
+              </div>
+            </div>
+
+            <!-- Project 4 -->
+            <div class="project-card">
+              <div class="card-header">
+                <div class="card-title-row">
+                  <span class="project-dot" style="background: #FBBF24;"></span>
+                  <h3 class="card-name">API Wrapper</h3>
+                </div>
+                <span class="status-badge">Complété</span>
+              </div>
+              <p class="card-desc">Interface pour wrapper une API REST avec documentation auto-générée.</p>
+              <div class="card-stats">
+                <span class="score-badge sec">SEC 92</span>
+                <span class="score-badge sec">QA 87</span>
+                <span class="score-badge meta">Low</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">1 build · il y a 2 semaines</span>
+                <button class="btn-open-project">Ouvrir</button>
+              </div>
+            </div>
+
+            <!-- Project 5 -->
+            <div class="project-card">
+              <div class="card-header">
+                <div class="card-title-row">
+                  <span class="project-dot" style="background: #F87171;"></span>
+                  <h3 class="card-name">Portfolio 3D</h3>
+                </div>
+                <span class="status-badge">Complété</span>
+              </div>
+              <p class="card-desc">Portfolio interactif avec animations Three.js et transitions fluides.</p>
+              <div class="card-stats">
+                <span class="score-badge sec">SEC 89</span>
+                <span class="score-badge sec">QA 85</span>
+                <span class="score-badge meta">Medium</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">3 builds · il y a 3 semaines</span>
+                <button class="btn-open-project">Ouvrir</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <span class="section-label">Activité récente</span>
+          <div class="activity-list">
+            <div class="activity-row">
+              <span class="status-dot success"></span>
+              <span class="act-project">SaaS Dashboard</span>
+              <span class="act-desc">Ajout module rapports exports PDF...</span>
+              <div style="display:flex; gap:5px">
+                <span class="score-badge sec">SEC 96</span>
+                <span class="score-badge sec">QA 91</span>
+              </div>
+              <span class="act-meta">aujourd'hui 14:32</span>
+            </div>
+            <div class="activity-row">
+              <span class="status-dot success"></span>
+              <span class="act-project">E-commerce App</span>
+              <span class="act-desc">Correction tunnel paiement Stripe...</span>
+              <div style="display:flex; gap:5px">
+                <span class="score-badge sec">SEC 88</span>
+                <span class="score-badge sec">QA 84</span>
+              </div>
+              <span class="act-meta">hier 09:15</span>
+            </div>
+            <div class="activity-row">
+              <span class="status-dot working"></span>
+              <span class="act-project">Blog CMS</span>
+              <span class="act-desc">Premier build complet du CMS avec auth...</span>
+              <div style="display:flex; gap:5px">
+                <span class="score-badge sec">SEC 94</span>
+                <span class="score-badge sec">QA 90</span>
+              </div>
+              <span class="act-meta">il y a 3 jours</span>
+            </div>
+            <div class="activity-row">
+              <span class="status-dot success"></span>
+              <span class="act-project">API Wrapper</span>
+              <span class="act-desc">Génération documentation OpenAPI auto...</span>
+              <div style="display:flex; gap:5px">
+                <span class="score-badge sec">SEC 92</span>
+                <span class="score-badge sec">QA 87</span>
+              </div>
+              <span class="act-meta">il y a 2 sem.</span>
+            </div>
+            <div class="activity-row">
+              <span class="status-dot success"></span>
+              <span class="act-project">Portfolio 3D</span>
+              <span class="act-desc">Intégration animations Three.js et WebGL...</span>
+              <div style="display:flex; gap:5px">
+                <span class="score-badge sec">SEC 89</span>
+                <span class="score-badge sec">QA 85</span>
+              </div>
+              <span class="act-meta">il y a 3 sem.</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // 1. Theme Toggle Logic
+    const html = document.documentElement;
+    const curtain = document.getElementById('curtain');
+    const themeBtn = document.getElementById('theme-btn');
+    const moonIcon = document.getElementById('moon-icon');
+    const sunIcon = document.getElementById('sun-icon');
+    let isDark = true;
+    let curtainBusy = false;
+
+    function toggleTheme() {
+      if (curtainBusy) return;
+      curtainBusy = true;
+      
+      const nextTheme = isDark ? 'light' : 'dark';
+      curtain.style.background = isDark ? '#F8F5F0' : '#060606';
+      curtain.classList.add('falling');
+
+      setTimeout(() => {
+        isDark = !isDark;
+        html.dataset.theme = isDark ? 'dark' : 'light';
+        updateThemeIcon();
+        curtain.classList.remove('falling');
+        curtain.classList.add('rising');
+        setTimeout(() => {
+          curtain.classList.remove('rising');
+          curtainBusy = false;
+        }, 520);
+      }, 500);
+    }
+
+    function updateThemeIcon() {
+      moonIcon.classList.toggle('hidden', !isDark);
+      sunIcon.classList.toggle('hidden', isDark);
+    }
+
+    themeBtn.addEventListener('click', toggleTheme);
+
+    // 2. Navigation Projets Dashboard
+    document.querySelectorAll('.nav-project').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-project').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
+
+    // 3. Suggestion Chips
+    const aiTextarea = document.getElementById('ai-textarea');
+    const submitBtn = document.getElementById('submit-btn');
+    const modelSelectBtn = document.getElementById('model-select-btn');
+    const modelDropdown = document.getElementById('model-dropdown');
+    const modelLabel = document.getElementById('current-model-label');
+    const chevronIcon = document.getElementById('chevron-icon');
+
+    // Model Dropdown Toggle
+    modelSelectBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = modelDropdown.classList.contains('open');
+      if (isOpen) {
+        modelDropdown.classList.remove('open');
+        chevronIcon.style.transform = 'rotate(0deg)';
+      } else {
+        modelDropdown.classList.add('open');
+        chevronIcon.style.transform = 'rotate(180deg)';
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!modelDropdown.contains(e.target) && !modelSelectBtn.contains(e.target)) {
+        modelDropdown.classList.remove('open');
+        chevronIcon.style.transform = 'rotate(0deg)';
+      }
+    });
+
+    // Model Selection
+    document.querySelectorAll('.model-option').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.model-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        modelLabel.textContent = opt.dataset.name;
+        modelDropdown.classList.remove('open');
+        chevronIcon.style.transform = 'rotate(0deg)';
+      });
+    });
+
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        aiTextarea.value = chip.textContent;
+        aiTextarea.dispatchEvent(new Event('input'));
+        aiTextarea.focus();
+      });
+    });
+
+    // 4. Auto-resize textarea + Join state
+    aiTextarea.addEventListener('input', () => {
+      aiTextarea.style.height = 'auto';
+      aiTextarea.style.height = Math.min(aiTextarea.scrollHeight, 200) + 'px';
+      submitBtn.classList.toggle('active', aiTextarea.value.trim().length > 0);
+    });
+
+    // 5. Credits Animation
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        document.querySelectorAll('.credits-fill, .kpi-mini-fill').forEach(el => {
+          el.style.width = el.dataset.fill;
+        });
+      }, 300);
+    });
+
+    // 6. Search filtering
+    const searchInput = document.querySelector('.search-input');
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.toLowerCase();
+      document.querySelectorAll('.project-card').forEach(card => {
+        const name = card.querySelector('.card-name').textContent.toLowerCase();
+        const desc = card.querySelector('.card-desc').textContent.toLowerCase();
+        if (name.includes(query) || desc.includes(query)) {
+          card.style.display = 'flex';
+          card.style.opacity = '1';
+        } else {
+          card.style.display = 'none';
+          card.style.opacity = '0';
+        }
+      });
+    });
+
+    // 7. Navigation logic - Link to builder
+    document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar').forEach(el => {
+      el.addEventListener('click', (e) => {
+        // Only trigger if active (for submit-btn)
+        if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
+        window.location.href = 'builder.html';
+      });
+    });
+  </script>
+</body>
+</html>

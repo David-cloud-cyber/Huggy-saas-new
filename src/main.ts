@@ -218,10 +218,10 @@ function init() {
                 curtain.classList.add('falling');
                 
                 setTimeout(() => {
-                    window.location.href = '/builder.html';
+                    window.location.href = '/dashboard.html';
                 }, 600);
             } else {
-                window.location.href = '/builder.html';
+                window.location.href = '/dashboard.html';
             }
         }, 1200);
     }

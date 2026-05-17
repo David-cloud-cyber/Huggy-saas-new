@@ -33,15 +33,6 @@ svg { display: block; flex-shrink: 0; }
   --error:        #F87171;
   --error-dim:    rgba(248,113,113,0.10);
 
-  --agent-1: #60A5FA;
-  --agent-2: #A78BFA;
-  --agent-3: #34D399;
-  --agent-4: #FBBF24;
-  --agent-5: #F87171;
-  --agent-6: #22D3EE;
-  --agent-7: #FB923C;
-  --agent-8: #F0EBE3;
-
   --caret: var(--accent);
 }
 
@@ -71,15 +62,6 @@ svg { display: block; flex-shrink: 0; }
   --warning-dim:  rgba(217,119,6,0.10);
   --error:        #DC2626;
   --error-dim:    rgba(220,38,38,0.10);
-
-  --agent-1: #2563EB;
-  --agent-2: #7C3AED;
-  --agent-3: #059669;
-  --agent-4: #D97706;
-  --agent-5: #DC2626;
-  --agent-6: #0891B2;
-  --agent-7: #EA580C;
-  --agent-8: #374151;
 
   --caret: var(--accent);
 }
@@ -408,41 +390,6 @@ body {
   font-size: 11px; color: var(--text-sub);
   text-align: right; margin-top: 6px; opacity: 0.8;
 }
-.msg-agent {
-  align-self: flex-start; max-width: 85%;
-  display: flex; gap: 8px; align-items: flex-start;
-}
-.agent-avatar {
-  width: 20px; height: 20px; border-radius: 4px;
-  background: var(--accent-dim);
-  border: 1px solid var(--border-mid);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px; font-weight: 500;
-}
-.agent-bubble {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  padding: 10px 14px;
-  border-radius: 2px 10px 10px 10px;
-}
-.agent-bubble-name {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10px; font-weight: 500;
-  letter-spacing: 0.04em; margin-bottom: 5px;
-}
-.agent-bubble-text {
-  font-family: "Instrument Sans", sans-serif;
-  font-size: 13px; color: var(--text-muted); line-height: 1.55;
-}
-.agent-bubble-text code {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
-  background: var(--bg-elevated);
-  padding: 2px 5px; border-radius: 3px;
-  color: var(--accent); border: 1px solid var(--border-mid);
-}
 .msg-system {
   align-self: center;
   font-family: "JetBrains Mono", monospace;
@@ -535,8 +482,8 @@ body {
   width: 6px; height: 6px; border-radius: 50%;
   flex-shrink: 0;
 }
-.mode-dot.agent { background: var(--success); box-shadow: 0 0 8px var(--success); }
-.mode-dot.plan { background: var(--agent-1); box-shadow: 0 0 8px var(--agent-1); }
+.mode-dot.build { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.mode-dot.plan { background: #60A5FA; box-shadow: 0 0 8px #60A5FA; }
 
 .mode-dropdown {
   left: 0; right: auto;

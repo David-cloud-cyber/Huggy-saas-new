@@ -49,15 +49,15 @@
 
       <div class="topbar-right">
         <div class="mode-select mode-compact" id="mode-select-wrap">
-          <span class="mode-dot agent" id="mode-dot-indicator"></span>
-          <span id="current-mode-label-ui">Agent</span>
+          <span class="mode-dot build" id="mode-dot-indicator"></span>
+          <span id="current-mode-label-ui">Build</span>
           <div class="dropdown mode-dropdown" id="mode-dropdown-ui">
             <div class="dropdown-header">Select Build Mode</div>
-            <div class="mode-opt active" data-mode="agent">
-              <span class="dot agent"></span>
+            <div class="mode-opt active" data-mode="build">
+              <span class="dot build"></span>
               <div class="opt-meta">
-                <span class="opt-name">Agent</span>
-                <span class="opt-desc">Autonomous implementation</span>
+                <span class="opt-name">Build</span>
+                <span class="opt-desc">Direct implementation</span>
               </div>
             </div>
             <div class="mode-opt" data-mode="plan">
@@ -364,16 +364,13 @@
       <button class="console-sub-tab btn-console-close" id="console-close">✕</button>
     </div>
     <div class="console-log-area">
-      <div class="log-line"><span class="log-ts">[00:01.2]</span><span class="log-success">✓ Architect agent complete</span></div>
-      <div class="log-line"><span class="log-ts">[00:03.6]</span><span class="log-success">✓ Designer agent complete</span></div>
-      <div class="log-line"><span class="log-ts">[00:06.8]</span><span class="log-success">✓ Builder agent complete</span></div>
-      <div class="log-line"><span class="log-ts">[00:09.0]</span><span class="log-success">✓ Integrator agent complete</span></div>
+      <div class="log-line"><span class="log-ts">[00:00.1]</span><span class="log-info">→ Initializing development server...</span></div>
+      <div class="log-line"><span class="log-ts">[00:00.5]</span><span class="log-success">✓ Vite dev server running at localhost:3000</span></div>
+      <div class="log-line"><span class="log-ts">[00:01.2]</span><span class="log-info">→ Loading workspace assets...</span></div>
+      <div class="log-line"><span class="log-ts">[00:02.4]</span><span class="log-success">✓ Workspace ready</span></div>
       <div class="log-line"><span class="log-ts">[00:10.6]</span><span class="log-warning">⚠ useEffect dependency array may be incomplete</span></div>
       <div class="log-line"><span class="log-ts">[00:10.7]</span><span class="log-warning">⚠ Image alt text missing on logo element</span></div>
-      <div class="log-line"><span class="log-ts">[00:12.2]</span><span class="log-success">✓ Optimizer agent complete</span></div>
-      <div class="log-line"><span class="log-ts">[00:13.6]</span><span class="log-success">✓ Deployer agent complete</span></div>
       <div class="log-line"><span class="log-ts">[00:14.8]</span><span class="log-info">→ Build complete. 42kb gzipped.</span></div>
-      <div class="log-line"><span class="log-ts">[00:16.0]</span><span class="log-success">✓ Reviewer agent complete. Score: 94/100</span></div>
     </div>
   </div>
 
