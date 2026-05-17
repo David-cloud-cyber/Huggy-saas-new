@@ -866,6 +866,201 @@
         bottom: auto;
     }
 
+    /* SETTINGS PANEL */
+    .settings-overlay {
+      position: fixed; inset: 0; z-index: 10001;
+      background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+      opacity: 0; visibility: hidden; transition: all 350ms ease;
+    }
+    .settings-overlay.open { opacity: 1; visibility: visible; }
+    
+    .settings-panel {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 100%; max-width: 480px; z-index: 10002;
+      background: var(--bg-panel); border-left: 1px solid var(--border-mid);
+      display: flex; flex-direction: column;
+      transform: translateX(100%); transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: -16px 0 64px rgba(0,0,0,0.5);
+    }
+    .settings-panel.open { transform: translateX(0); }
+    
+    .settings-header {
+      height: 64px; padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .settings-title {
+      font-family: "Instrument Serif"; font-style: italic;
+      font-size: 20px; color: var(--text); letter-spacing: -0.01em;
+    }
+    .btn-close-settings {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); transition: all 150ms;
+    }
+    .btn-close-settings:hover { border-color: var(--border-focus); color: var(--text); background: var(--accent-dim); }
+    
+    .settings-tabs {
+      height: 44px; padding: 0 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 4px;
+      background: var(--bg-surface); flex-shrink: 0; overflow-x: auto;
+    }
+    .settings-tabs::-webkit-scrollbar { display: none; }
+    
+    .settings-tab {
+      padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 500; color: var(--text-sub);
+      white-space: nowrap; transition: all 150ms;
+    }
+    .settings-tab:hover { color: var(--text-muted); background: var(--accent-dim); }
+    .settings-tab.active { color: var(--text); background: var(--accent-dim); border: 1px solid var(--border-mid); }
+    .settings-tab.danger { color: var(--error); }
+    .settings-tab.danger.active { background: var(--error-dim); border-color: rgba(248,113,113,0.2); }
+    
+    .settings-body { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 32px; }
+    .tab-panel { display: flex; flex-direction: column; gap: 32px; }
+    
+    .settings-footer {
+      height: 72px; padding: 0 24px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg-surface); flex-shrink: 0;
+    }
+    .save-status { font-family: "JetBrains Mono"; font-size: 11px; color: var(--success); letter-spacing: 0.04em; }
+    
+    /* COMPONENTS */
+    .settings-block { display: flex; flex-direction: column; gap: 16px; }
+    .block-title {
+      font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
+      letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub);
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    
+    .form-row { display: flex; flex-direction: column; gap: 8px; }
+    .form-row.horizontal { flex-direction: row; align-items: center; justify-content: space-between; }
+    .form-label { font-size: 14px; font-weight: 500; color: var(--text); }
+    .form-sublabel { font-size: 12px; font-weight: 300; color: var(--text-muted); margin-top: 1px; }
+    
+    .settings-input {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg-input);
+      font-size: 14px; color: var(--text); transition: all 150ms;
+    }
+    .settings-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-dim); outline: none; }
+    .settings-input.mono { font-family: "JetBrains Mono"; font-size: 13px; }
+    
+    .toggle {
+      width: 40px; height: 22px; border-radius: 999px;
+      background: var(--border-mid); border: 1px solid var(--border-mid);
+      position: relative; cursor: pointer; transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .toggle.on { background: var(--accent); border-color: var(--accent); }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--bg-panel); transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .toggle.on::after { transform: translateX(18px); }
+    
+    .settings-select {
+      padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg-input); font-size: 14px; color: var(--text);
+      cursor: pointer; appearance: none; transition: all 150ms;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23606060' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .settings-select:focus { border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-dim); outline: none; }
+    
+    .avatar-editor { display: flex; align-items: center; gap: 16px; }
+    .avatar-large {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--accent-dim); border: 1px solid var(--border-mid);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; color: var(--text-muted); cursor: pointer; position: relative; overflow: hidden;
+    }
+    .avatar-large:hover::after {
+      content: "EDIT"; position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+      font-size: 10px; font-weight: 700; color: white; display: flex; align-items: center; justify-content: center;
+    }
+    
+    .btn-secondary {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+      font-size: 13px; font-weight: 500; color: var(--text-muted); transition: all 150ms;
+    }
+    .btn-secondary:hover { border-color: var(--border-focus); color: var(--text); background: var(--accent-dim); }
+    
+    .btn-primary {
+      padding: 8px 24px; border-radius: 8px; background: var(--accent);
+      font-size: 13px; font-weight: 600; color: var(--bg); transition: all 150ms;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-primary:disabled { background: var(--accent-dim); color: var(--text-sub); cursor: not-allowed; }
+    
+    .danger-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px; border-radius: 12px; border: 1px solid var(--error-dim);
+      background: var(--error-dim);
+    }
+    .btn-danger-sm {
+      padding: 6px 14px; border-radius: 6px; background: transparent;
+      border: 1px solid rgba(248,113,113,0.3); color: var(--error);
+      font-size: 12px; font-weight: 600; transition: all 150ms;
+    }
+    .btn-danger-sm:hover { background: var(--error); color: white; }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; visibility: hidden; transition: all 300ms;
+    }
+    .modal-overlay.open { opacity: 1; visibility: visible; }
+    
+    .modal-content {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px;
+      width: 100%; max-width: 400px;
+      transform: translateY(20px); transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+    }
+    .modal-overlay.open .modal-content { transform: translateY(0); }
+    
+    .modal-title {
+      font-family: "Instrument Serif"; font-style: italic;
+      font-size: 22px; color: var(--text); margin-bottom: 12px;
+    }
+    .modal-desc {
+      font-size: 14px; color: var(--text-muted); line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+    .btn-modal {
+      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      transition: all 150ms;
+    }
+    .btn-cancel { background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-cancel:hover { background: var(--accent-dim); color: var(--text); }
+    .btn-confirm-delete { background: var(--error); color: white; }
+    .btn-confirm-delete:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* CARD DELETE BTN */
+    .btn-card-delete {
+      position: absolute; top: 12px; right: 12px;
+      width: 28px; height: 28px; border-radius: 6px;
+      background: transparent; border: 1px solid transparent;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-sub); transition: all 150ms;
+      opacity: 0;
+    }
+    .project-card:hover .btn-card-delete { opacity: 1; }
+    .btn-card-delete:hover { 
+      background: var(--error-dim); border-color: rgba(248,113,113,0.2);
+      color: var(--error);
+    }
+    
     .hidden { display: none !important; }
 
     /* RESPONSIVE */
@@ -963,7 +1158,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <button class="btn-footer">
+        <button class="btn-footer" id="btn-settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -1168,6 +1363,11 @@
                 <span class="card-meta">4 builds · il y a 2 jours</span>
                 <button class="btn-open-project">Ouvrir</button>
               </div>
+              <button class="btn-card-delete" title="Supprimer le projet">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
             </div>
 
             <!-- Project 2 -->
@@ -1189,6 +1389,11 @@
                 <span class="card-meta">7 builds · il y a 5 jours</span>
                 <button class="btn-open-project">Ouvrir</button>
               </div>
+              <button class="btn-card-delete" title="Supprimer le projet">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
             </div>
 
             <!-- Project 3 -->
@@ -1210,6 +1415,11 @@
                 <span class="card-meta">2 builds · il y a 1 semaine</span>
                 <button class="btn-open-project">Ouvrir</button>
               </div>
+              <button class="btn-card-delete" title="Supprimer le projet">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
             </div>
 
             <!-- Project 4 -->
@@ -1231,6 +1441,11 @@
                 <span class="card-meta">1 build · il y a 2 semaines</span>
                 <button class="btn-open-project">Ouvrir</button>
               </div>
+              <button class="btn-card-delete" title="Supprimer le projet">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
             </div>
 
             <!-- Project 5 -->
@@ -1252,6 +1467,11 @@
                 <span class="card-meta">3 builds · il y a 3 semaines</span>
                 <button class="btn-open-project">Ouvrir</button>
               </div>
+              <button class="btn-card-delete" title="Supprimer le projet">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
             </div>
           </div>
         </section>
@@ -1462,10 +1682,12 @@
         }
     }
 
-    document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar').forEach(el => {
+    document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar, .project-card').forEach(el => {
       el.addEventListener('click', (e) => {
         // Only trigger if active (for submit-btn)
         if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
+        // If it's the card, check if we clicked a button inside first (though CSS pointer-events or stopProp handles it)
+        if (e.target.closest('.btn-card-delete')) return;
         navigate('builder.html');
       });
     });
@@ -1479,6 +1701,275 @@
             navigate(link.href);
         }
     });
+
+    // 8. Delete Project Flow
+    const deleteModal = document.getElementById('delete-modal');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalConfirm = document.getElementById('modal-confirm');
+    let projectToDelete = null;
+
+    document.addEventListener('click', (e) => {
+      const deleteBtn = e.target.closest('.btn-card-delete');
+      if (deleteBtn) {
+        e.stopPropagation();
+        projectToDelete = deleteBtn.closest('.project-card');
+        deleteModal.classList.add('open');
+      }
+    });
+
+    modalCancel.addEventListener('click', () => {
+      deleteModal.classList.remove('open');
+      projectToDelete = null;
+    });
+
+    deleteModal.addEventListener('click', (e) => {
+      if (e.target === deleteModal) {
+        deleteModal.classList.remove('open');
+        projectToDelete = null;
+      }
+    });
+
+    modalConfirm.addEventListener('click', () => {
+      if (projectToDelete) {
+        projectToDelete.style.transform = 'scale(0.9) opacity(0)';
+        projectToDelete.style.opacity = '0';
+        setTimeout(() => {
+          projectToDelete.remove();
+          projectToDelete = null;
+          // Update count UI if needed
+          const countLabel = document.querySelector('.section-label span');
+          if (countLabel) {
+            const currentCount = document.querySelectorAll('.project-card').length;
+            countLabel.textContent = `(${currentCount})`;
+          }
+        }, 300);
+      }
+      deleteModal.classList.remove('open');
+    });
+
+    // 9. Settings Logic
+    const btnSettings = document.getElementById('btn-settings');
+    const settingsPanel = document.getElementById('settings-panel');
+    const settingsOverlay = document.getElementById('settings-overlay');
+    const btnCloseSettings = document.getElementById('btn-close-settings');
+    const settingsTabs = document.querySelectorAll('.settings-tab');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+    const saveBtn = document.getElementById('save-settings');
+    const saveStatus = document.getElementById('save-status');
+
+    function openSettings() {
+      settingsOverlay.classList.add('open');
+      settingsPanel.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeSettings() {
+      settingsOverlay.classList.remove('open');
+      settingsPanel.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // Auto-open for demo
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(openSettings, 800);
+    });
+
+    btnSettings?.addEventListener('click', openSettings);
+    btnCloseSettings?.addEventListener('click', closeSettings);
+    settingsOverlay?.addEventListener('click', closeSettings);
+
+    settingsTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        settingsTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        tabPanels.forEach(panel => {
+          panel.classList.add('hidden');
+          if (panel.id === `tab-${target}`) panel.classList.remove('hidden');
+        });
+      });
+    });
+
+    saveBtn?.addEventListener('click', () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Enregistrement...';
+      
+      setTimeout(() => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Sauvegarder';
+        saveStatus.textContent = '✓ Modifications enregistrées';
+        setTimeout(() => saveStatus.textContent = '', 3000);
+      }, 1000);
+    });
+
+    // Toggle logic
+    document.querySelectorAll('.toggle').forEach(t => {
+      t.addEventListener('click', () => t.classList.toggle('on'));
+    });
   </script>
+  <div class="settings-overlay" id="settings-overlay"></div>
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-header">
+      <h2 class="settings-title">Paramètres</h2>
+      <button class="btn-close-settings" id="btn-close-settings">✕</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="profil">Profil</button>
+      <button class="settings-tab" data-tab="compte">Compte</button>
+      <button class="settings-tab" data-tab="apparence">Apparence</button>
+      <button class="settings-tab" data-tab="ia">IA</button>
+      <button class="settings-tab" data-tab="api">API</button>
+      <button class="settings-tab danger" data-tab="danger">Zone Rouge</button>
+    </div>
+    <div class="settings-body">
+      <!-- Profil -->
+      <div class="tab-panel" id="tab-profil">
+        <div class="settings-block">
+          <span class="block-title">Identité</span>
+          <div class="avatar-editor">
+            <div class="avatar-large">JD</div>
+            <div class="form-row">
+              <span class="form-label">Avatar</span>
+              <span class="form-sublabel">JPG, PNG ou GIF. Max 2 Mo.</span>
+              <button class="btn-secondary" style="margin-top:4px">Changer</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <span class="form-label">Nom d'affichage</span>
+            <input type="text" class="settings-input" value="Jean Dupont">
+          </div>
+          <div class="form-row">
+            <span class="form-label">Email</span>
+            <input type="email" class="settings-input" value="jean@example.com">
+          </div>
+        </div>
+        <div class="settings-block">
+          <span class="block-title">Bio</span>
+          <div class="form-row">
+            <textarea class="settings-input" style="height:100px; resize:none" placeholder="Décrivez-vous en quelques mots..."></textarea>
+          </div>
+        </div>
+      </div>
+      <!-- Compte -->
+      <div class="tab-panel hidden" id="tab-compte">
+        <div class="settings-block">
+          <span class="block-title">Abonnement</span>
+          <div class="danger-row" style="background:var(--bg-elevated); border-color:var(--border-mid)">
+            <div class="form-row">
+              <span class="form-label">Plan Gratuit</span>
+              <span class="form-sublabel">347 / 500 crédits restants</span>
+            </div>
+            <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Passer au Pro</button>
+          </div>
+        </div>
+        <div class="settings-block">
+          <span class="block-title">Sécurité</span>
+          <div class="form-row horizontal">
+            <div class="form-row">
+              <span class="form-label">Double authentification</span>
+              <span class="form-sublabel">Sécurisez votre compte via TOTP</span>
+            </div>
+            <div class="toggle"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Apparence -->
+      <div class="tab-panel hidden" id="tab-apparence">
+        <div class="settings-block">
+          <span class="block-title">Thème</span>
+          <div class="form-row">
+             <span class="form-label">Mode d'affichage</span>
+             <select class="settings-select">
+               <option value="dark">Sombre (défaut)</option>
+               <option value="light">Clair</option>
+               <option value="system">Système</option>
+             </select>
+          </div>
+        </div>
+        <div class="settings-block">
+          <span class="block-title">Interface</span>
+          <div class="form-row horizontal">
+            <div class="form-row">
+              <span class="form-label">Animations</span>
+              <span class="form-sublabel">Activer les transitions fluides</span>
+            </div>
+            <div class="toggle on"></div>
+          </div>
+        </div>
+      </div>
+      <!-- IA -->
+      <div class="tab-panel hidden" id="tab-ia">
+        <div class="settings-block">
+          <span class="block-title">Modèles</span>
+          <div class="form-row">
+            <span class="form-label">Modèle par défaut</span>
+            <select class="settings-select">
+              <option>Sonnet 4.5</option>
+              <option>Opus 4.5</option>
+              <option>Haiku 4.5</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-block">
+          <span class="block-title">Génération</span>
+          <div class="form-row">
+            <span class="form-label">Température</span>
+            <input type="range" class="settings-input" style="padding:0">
+          </div>
+        </div>
+      </div>
+      <!-- API -->
+      <div class="tab-panel hidden" id="tab-api">
+        <div class="settings-block">
+          <span class="block-title">Clés API</span>
+          <div class="form-row">
+            <span class="form-label">Clé principale</span>
+            <div style="display:flex; gap:8px">
+              <input type="text" class="settings-input mono" readonly value="hgy_sk_••••••••••••••••••••">
+              <button class="btn-secondary" style="padding:0 12px">Copier</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Danger -->
+      <div class="tab-panel hidden" id="tab-danger">
+        <div class="settings-block">
+          <span class="block-title">Actions irréversibles</span>
+          <div class="danger-row">
+            <div class="form-row">
+              <span class="form-label" style="color:var(--error)">Supprimer tous les projets</span>
+              <span class="form-sublabel">Cette action effacera vos 5 projets actuels.</span>
+            </div>
+            <button class="btn-danger-sm">Réinitialiser</button>
+          </div>
+          <div class="danger-row" style="border-color:var(--error)">
+            <div class="form-row">
+              <span class="form-label" style="color:var(--error)">Supprimer le compte</span>
+              <span class="form-sublabel">Toutes vos données seront supprimées définitivement.</span>
+            </div>
+            <button class="btn-danger-sm" style="background:var(--error); color:white">Supprimer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <div class="save-status" id="save-status"></div>
+      <div style="display:flex; gap:8px">
+        <button class="btn-secondary" onclick="closeSettings()">Annuler</button>
+        <button class="btn-primary" id="save-settings">Sauvegarder</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="delete-modal">
+    <div class="modal-content">
+      <h3 class="modal-title">Supprimer le projet ?</h3>
+      <p class="modal-desc">Cette action est irréversible. Toutes les données, le code et les déploiements associés seront définitivement supprimés.</p>
+      <div class="modal-actions">
+        <button class="btn-modal btn-cancel" id="modal-cancel">Annuler</button>
+        <button class="btn-modal btn-confirm-delete" id="modal-confirm">Supprimer</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

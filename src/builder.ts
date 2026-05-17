@@ -55,11 +55,65 @@ function initBuilder() {
 
   // ── FILE TREE ───────────────────────────────────────────────────
   const fileTree = document.getElementById('file-tree');
-  const extColor: Record<string, string> = { tsx: '#60A5FA', css: '#A78BFA', ts: '#34D399', json: '#FBBF24', js: '#FBBF24', html: '#F87171' };
+  const previewArea = document.getElementById('file-preview-area');
+  const previewEmpty = document.querySelector('.preview-empty');
+  const previewContent = document.getElementById('preview-content');
+  const previewCode = document.getElementById('preview-code');
+  const previewFilename = document.getElementById('preview-filename');
+
+  const extColor: Record<string, string> = { 
+    tsx: '#60A5FA', 
+    css: '#A78BFA', 
+    ts: '#34D399', 
+    json: '#FBBF24', 
+    js: '#FBBF24', 
+    html: '#F87171',
+    png: '#EC4899',
+    jpg: '#EC4899'
+  };
+
+  const fileContents: Record<string, string> = {
+    'Dashboard.tsx': `import React from 'react';\n\nexport default function Dashboard() {\n  return <div>Hello Huggy</div>;\n}`,
+    'Sidebar.tsx': `import React from 'react';\n\nexport const Sidebar = () => <aside>Sidebar Content</aside>;`,
+    'Header.tsx': `export const Header = () => <header>Logo</header>;`,
+    'MetricsCard.tsx': `export const MetricsCard = ({ val }) => <div className="card">{val}</div>;`,
+    'useData.ts': `export const useData = () => ({ data: [], loading: false });`,
+    'useTheme.ts': `export const useTheme = () => 'dark';`,
+    'utils.ts': `export const cn = (...args) => args.filter(Boolean).join(' ');`,
+    'api.ts': `export const fetchData = async () => fetch('/api');`,
+    'App.tsx': `import { Dashboard } from './components/Dashboard';\n\nexport const App = () => <Dashboard />;`,
+    'main.tsx': `import React from 'react';\nimport ReactDOM from 'react-dom';\nimport { App } from './App';\n\nReactDOM.render(<App />, document.getElementById('root'));`,
+    'index.html': `<!DOCTYPE html>\n<html>\n<head>\n  <title>App</title>\n</head>\n<body>\n  <div id="root"></div>\n</body>\n</html>`,
+    'package.json': `{\n  "name": "huggy-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "react": "^18.0.0"\n  }\n}`,
+    'tailwind.config.js': `module.exports = {\n  content: ["./src/**/*.{ts,tsx}"],\n  theme: { extend: {} }\n};`,
+    'tsconfig.json': `{\n  "compilerOptions": {\n    "target": "ESNext",\n    "module": "ESNext"\n  }\n}`
+  };
   
   function getColor(name: string) {
     const ext = name.split('.').pop() || '';
     return extColor[ext] || '#606060';
+  }
+
+  function getIcon(item: any) {
+    if (item.type === 'folder') {
+      return `<svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+    }
+    const ext = item.name.split('.').pop() || '';
+    if (['tsx', 'ts', 'js'].includes(ext)) {
+      return `<svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="${getColor(item.name)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
+    }
+    if (ext === 'css') {
+      return `<svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="${getColor(item.name)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>`;
+    }
+    return `<svg class="item-icon" viewBox="0 0 24 24" fill="none" stroke="${getColor(item.name)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
+  }
+
+  function updatePreview(name: string) {
+    if (!previewEmpty || !previewContent || !previewCode || !previewFilename) return;
+    previewEmpty.classList.add('hidden');
+    previewContent.classList.remove('hidden');
+    previewFilename.textContent = name;
+    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
   }
 
   const structure = [
@@ -98,6 +152,7 @@ function initBuilder() {
         header.className = 'folder-header open';
         header.innerHTML = `
           <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          ${getIcon(item)}
           <span class="folder-name">${item.name}/</span>`;
         const children = document.createElement('div');
         children.className = 'folder-children';
@@ -113,12 +168,13 @@ function initBuilder() {
         const fi = document.createElement('div');
         fi.className = 'file-item' + (item.active ? ' active' : '');
         fi.innerHTML = `
-          <span class="file-dot" style="background:${getColor(item.name)}"></span>
+          ${getIcon(item)}
           <span class="file-name">${item.name}</span>
           <span class="file-size">${item.size}</span>`;
         fi.addEventListener('click', () => {
           document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
           fi.classList.add('active');
+          updatePreview(item.name);
           addToHistory(`Viewed ${item.name}`);
         });
         container.appendChild(fi);
@@ -440,9 +496,29 @@ function initBuilder() {
   }
 
   // ── COPY CODE ────────────────────────────────────────────────
+  function copyToClipboard(text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Copied to clipboard!');
+    });
+  }
+
   document.getElementById('btn-copy')?.addEventListener('click', function() {
+    const code = codeLines.map(l => {
+      const temp = document.createElement('div');
+      temp.innerHTML = l[0] as string;
+      return temp.textContent || '';
+    }).join('\n');
+    copyToClipboard(code);
     this.textContent = 'Copied!';
-    addToHistory(`Copied code to clipboard`);
+    addToHistory(`Copied editor code`);
+    setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+  });
+
+  document.getElementById('btn-copy-preview')?.addEventListener('click', function() {
+    const code = previewCode?.textContent || '';
+    copyToClipboard(code);
+    this.textContent = 'Copied!';
+    addToHistory(`Copied preview code`);
     setTimeout(() => { this.textContent = 'Copy'; }, 1500);
   });
 
