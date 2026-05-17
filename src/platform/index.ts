@@ -9,3 +9,4 @@ export * from './event-bus';
 export * from './stream-api';
 export * from './stream-worker';
 export * from './stream-ui';
+export * from './stream-transport';
