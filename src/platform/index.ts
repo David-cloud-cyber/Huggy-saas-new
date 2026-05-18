@@ -11,3 +11,4 @@ export * from './stream-worker';
 export * from './stream-ui';
 export * from './stream-transport';
 export * from './billing-ai';
+export * from '../config/ai-models';

@@ -35,7 +35,11 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
    - `DATABASE_URL`
    - `OPENROUTER_API_KEY`
    - `OPENROUTER_BASE_URL`
-   - `OPENROUTER_DEFAULT_MODEL`
+   - `OPENROUTER_SITE_URL`
+   - `OPENROUTER_APP_NAME`
+   - `AI_ALLOWED_MODELS`
+   - `AI_STRICT_MODEL_ALLOWLIST`
+   - `AI_DISABLE_UNLISTED_FALLBACKS`
    - `GEMINI_API_KEY`
    - `VERCEL_API_TOKEN`
    - `STRIPE_SECRET_KEY`
@@ -46,6 +50,9 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
 
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in frontend code.
 - Never put `OPENROUTER_API_KEY` in frontend code.
+- Keep `AI_STRICT_MODEL_ALLOWLIST=true` in production.
+- Keep `AI_DISABLE_UNLISTED_FALLBACKS=true` in production.
+- Never add OpenRouter models outside `src/config/ai-models.ts`.
 - Never expose `VERCEL_API_TOKEN` to browser code.
 - Never use `user_metadata` for authorization decisions.
 - Keep all authorization decisions backed by organization membership tables and RLS.

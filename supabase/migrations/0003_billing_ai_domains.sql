@@ -574,11 +574,17 @@ on conflict (key) do update set credits = excluded.credits, price_usd = excluded
 
 insert into ai_model_catalog (model_key, provider, display_name, openrouter_model, tier, context_window, supports_streaming, supports_json_mode, supports_tool_calling, supports_vision, strengths, speed, cost_indicator, requires_confirmation)
 values
-  ('economy_fast', 'openrouter', 'Economy Fast', 'google/gemini-flash-1.5', 'economy', 1000000, true, true, true, true, array['Summary','Small edits','Vision'], 'fast', 'low', false),
-  ('standard_balanced', 'openrouter', 'Standard Balanced', 'openai/gpt-4o-mini', 'standard', 128000, true, true, true, true, array['UI','Components','Workflows'], 'fast', 'medium', false),
-  ('pro_code', 'openrouter', 'Pro Code', 'anthropic/claude-3.5-sonnet', 'pro', 200000, true, true, true, true, array['Code','Debug','Architecture'], 'medium', 'high', false),
-  ('premium_architect', 'openrouter', 'Premium Architect', 'anthropic/claude-3.7-sonnet', 'premium', 200000, true, true, true, true, array['Full app','Security','Difficult debug'], 'medium', 'very_high', true),
-  ('max_quality', 'openrouter', 'Max Quality', 'openai/o1-pro', 'max_quality', 200000, false, true, false, true, array['Complex reasoning','Architecture','Critical debugging'], 'slow', 'very_high', true)
+  ('openai/gpt-5.5', 'openrouter', 'GPT-5.5', 'openai/gpt-5.5', 'premium', 256000, true, true, true, true, array['Architecture','Full app generation','Reasoning'], 'medium', 'very_high', true),
+  ('openai/gpt-5.5-pro', 'openrouter', 'GPT-5.5 Pro', 'openai/gpt-5.5-pro', 'max_quality', 256000, true, true, true, true, array['Critical reasoning','Complex debugging','Architecture'], 'slow', 'very_high', true),
+  ('anthropic/claude-opus-4.7', 'openrouter', 'Claude Opus 4.7', 'anthropic/claude-opus-4.7', 'max_quality', 200000, true, true, true, true, array['Long context','Architecture','Security'], 'slow', 'very_high', true),
+  ('anthropic/claude-sonnet-4.6', 'openrouter', 'Claude Sonnet 4.6', 'anthropic/claude-sonnet-4.6', 'premium', 200000, true, true, true, true, array['Code','Refactoring','Planning'], 'medium', 'high', true),
+  ('google/gemini-3-pro', 'openrouter', 'Gemini 3 Pro', 'google/gemini-3-pro', 'pro', 1000000, true, true, true, true, array['Large context','Planning','Vision'], 'medium', 'high', false),
+  ('google/gemini-3-flash', 'openrouter', 'Gemini 3 Flash', 'google/gemini-3-flash', 'standard', 1000000, true, true, true, true, array['Fast edits','Summaries','Vision'], 'fast', 'medium', false),
+  ('openai/gpt-5-mini', 'openrouter', 'GPT-5 Mini', 'openai/gpt-5-mini', 'standard', 128000, true, true, true, true, array['Components','Chat','UI'], 'fast', 'medium', false),
+  ('openai/gpt-5-nano', 'openrouter', 'GPT-5 Nano', 'openai/gpt-5-nano', 'economy', 64000, true, true, true, false, array['Simple chat','Small edits','Classification'], 'fast', 'low', false),
+  ('deepseek/deepseek-coder', 'openrouter', 'DeepSeek Coder', 'deepseek/deepseek-coder', 'pro', 128000, true, true, true, false, array['Code generation','Debugging','Refactoring'], 'medium', 'medium', false),
+  ('qwen/qwen-coder', 'openrouter', 'Qwen Coder', 'qwen/qwen-coder', 'standard', 128000, true, true, true, false, array['Code generation','Fast edits','Utilities'], 'fast', 'medium', false),
+  ('mistralai/codestral', 'openrouter', 'Codestral', 'mistralai/codestral', 'pro', 128000, true, true, true, false, array['Code completion','Refactoring','Tests'], 'medium', 'medium', false)
 on conflict (model_key) do update set
   display_name = excluded.display_name,
   openrouter_model = excluded.openrouter_model,
@@ -597,11 +603,17 @@ on conflict (model_key) do update set
 insert into ai_model_pricing (model_key, input_cost_per_1m_tokens, output_cost_per_1m_tokens, cached_input_cost_per_1m_tokens, request_cost_usd, source)
 select model_key, input_cost_per_1m_tokens, output_cost_per_1m_tokens, cached_input_cost_per_1m_tokens, request_cost_usd, source
 from (values
-  ('economy_fast', 0.075, 0.30, 0.025, 0, 'seed'),
-  ('standard_balanced', 0.15, 0.60, 0.075, 0, 'seed'),
-  ('pro_code', 3.00, 15.00, 0.30, 0, 'seed'),
-  ('premium_architect', 3.00, 15.00, 0.30, 0, 'seed'),
-  ('max_quality', 15.00, 60.00, 7.50, 0, 'seed')
+  ('openai/gpt-5.5', 5, 20, 1, 0, 'seed'),
+  ('openai/gpt-5.5-pro', 15, 60, 7.5, 0, 'seed'),
+  ('anthropic/claude-opus-4.7', 15, 75, 1.5, 0, 'seed'),
+  ('anthropic/claude-sonnet-4.6', 3, 15, 0.3, 0, 'seed'),
+  ('google/gemini-3-pro', 2.5, 10, 0.25, 0, 'seed'),
+  ('google/gemini-3-flash', 0.15, 0.6, 0.075, 0, 'seed'),
+  ('openai/gpt-5-mini', 0.25, 1, 0.125, 0, 'seed'),
+  ('openai/gpt-5-nano', 0.05, 0.2, 0.025, 0, 'seed'),
+  ('deepseek/deepseek-coder', 0.14, 0.28, 0.07, 0, 'seed'),
+  ('qwen/qwen-coder', 0.2, 0.8, 0.1, 0, 'seed'),
+  ('mistralai/codestral', 0.3, 0.9, 0.15, 0, 'seed')
 ) as seed(model_key, input_cost_per_1m_tokens, output_cost_per_1m_tokens, cached_input_cost_per_1m_tokens, request_cost_usd, source)
 where not exists (
   select 1 from ai_model_pricing p where p.model_key = seed.model_key and p.source = 'seed'

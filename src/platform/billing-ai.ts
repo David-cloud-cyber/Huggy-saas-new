@@ -1,5 +1,20 @@
-import { PlatformError, requireRole } from './security';
-import type { Project, RequestContext, UUID } from './types';
+import {
+  AI_ALLOWED_MODELS,
+  AI_MODEL_CAPABILITIES,
+  AI_MODEL_FALLBACKS,
+  AI_MODEL_PLAN_ACCESS,
+  AI_MODEL_TIERS,
+  ForbiddenModelError,
+  InsufficientCreditsError,
+  ModelNotAllowedForPlanError,
+  ModelUnavailableError,
+  NegativeMarginBlockedError,
+  getAllowedFallbacks,
+  validateAllowedModel,
+  type AiAllowedModelId,
+} from '../config/ai-models.ts';
+import { PlatformError, requireRole } from './security.ts';
+import type { Project, RequestContext, UUID } from './types.ts';
 
 export type PlanKey = 'free' | 'starter' | 'pro' | 'studio' | 'business' | 'enterprise';
 export type ModelTier = 'economy' | 'standard' | 'pro' | 'premium' | 'max_quality';
@@ -355,19 +370,39 @@ export const TOPUP_PRODUCTS: TopUpProductDefinition[] = [
 ];
 
 export const AI_MODEL_CATALOG: AiModelDefinition[] = [
-  { key: 'economy_fast', provider: 'openrouter', displayName: 'Economy Fast', openRouterModel: 'google/gemini-flash-1.5', tier: 'economy', strengths: ['Summary', 'Small edits', 'Vision'], speed: 'fast', costIndicator: 'low', contextWindow: 1_000_000, supportsStreaming: true, supportsJsonMode: true, supportsToolCalling: true, supportsVision: true, requiresConfirmation: false },
-  { key: 'standard_balanced', provider: 'openrouter', displayName: 'Standard Balanced', openRouterModel: 'openai/gpt-4o-mini', tier: 'standard', strengths: ['UI', 'Components', 'Workflows'], speed: 'fast', costIndicator: 'medium', contextWindow: 128_000, supportsStreaming: true, supportsJsonMode: true, supportsToolCalling: true, supportsVision: true, requiresConfirmation: false },
-  { key: 'pro_code', provider: 'openrouter', displayName: 'Pro Code', openRouterModel: 'anthropic/claude-3.5-sonnet', tier: 'pro', strengths: ['Code', 'Debug', 'Architecture'], speed: 'medium', costIndicator: 'high', contextWindow: 200_000, supportsStreaming: true, supportsJsonMode: true, supportsToolCalling: true, supportsVision: true, requiresConfirmation: false },
-  { key: 'premium_architect', provider: 'openrouter', displayName: 'Premium Architect', openRouterModel: 'anthropic/claude-3.7-sonnet', tier: 'premium', strengths: ['Full app', 'Security', 'Difficult debug'], speed: 'medium', costIndicator: 'very_high', contextWindow: 200_000, supportsStreaming: true, supportsJsonMode: true, supportsToolCalling: true, supportsVision: true, requiresConfirmation: true },
-  { key: 'max_quality', provider: 'openrouter', displayName: 'Max Quality', openRouterModel: 'openai/o1-pro', tier: 'max_quality', strengths: ['Complex reasoning', 'Architecture', 'Critical debugging'], speed: 'slow', costIndicator: 'very_high', contextWindow: 200_000, supportsStreaming: false, supportsJsonMode: true, supportsToolCalling: false, supportsVision: true, requiresConfirmation: true },
-];
+  ...AI_ALLOWED_MODELS.map((modelId) => {
+    const capabilities = AI_MODEL_CAPABILITIES[modelId];
+    return {
+      key: modelId,
+      provider: 'openrouter' as const,
+      displayName: capabilities.displayName,
+      openRouterModel: modelId,
+      tier: AI_MODEL_TIERS[modelId] as ModelTier,
+      strengths: capabilities.strengths,
+      speed: capabilities.speed,
+      costIndicator: capabilities.costIndicator,
+      contextWindow: capabilities.maxContextTokens,
+      supportsStreaming: capabilities.supportsStreaming,
+      supportsJsonMode: capabilities.supportsJsonMode,
+      supportsToolCalling: capabilities.supportsTools,
+      supportsVision: capabilities.supportsVision,
+      requiresConfirmation: capabilities.requiresConfirmation,
+    };
+  }),
+] satisfies AiModelDefinition[];
 
 export const AI_MODEL_PRICING: Record<string, AiModelPricing> = {
-  economy_fast: { modelKey: 'economy_fast', inputCostPer1MTokens: 0.075, outputCostPer1MTokens: 0.30, cachedInputCostPer1MTokens: 0.025, requestCostUsd: 0 },
-  standard_balanced: { modelKey: 'standard_balanced', inputCostPer1MTokens: 0.15, outputCostPer1MTokens: 0.60, cachedInputCostPer1MTokens: 0.075, requestCostUsd: 0 },
-  pro_code: { modelKey: 'pro_code', inputCostPer1MTokens: 3.00, outputCostPer1MTokens: 15.00, cachedInputCostPer1MTokens: 0.30, requestCostUsd: 0 },
-  premium_architect: { modelKey: 'premium_architect', inputCostPer1MTokens: 3.00, outputCostPer1MTokens: 15.00, cachedInputCostPer1MTokens: 0.30, requestCostUsd: 0 },
-  max_quality: { modelKey: 'max_quality', inputCostPer1MTokens: 15.00, outputCostPer1MTokens: 60.00, cachedInputCostPer1MTokens: 7.50, requestCostUsd: 0 },
+  'openai/gpt-5.5': { modelKey: 'openai/gpt-5.5', inputCostPer1MTokens: 5, outputCostPer1MTokens: 20, cachedInputCostPer1MTokens: 1, requestCostUsd: 0 },
+  'openai/gpt-5.5-pro': { modelKey: 'openai/gpt-5.5-pro', inputCostPer1MTokens: 15, outputCostPer1MTokens: 60, cachedInputCostPer1MTokens: 7.5, requestCostUsd: 0 },
+  'anthropic/claude-opus-4.7': { modelKey: 'anthropic/claude-opus-4.7', inputCostPer1MTokens: 15, outputCostPer1MTokens: 75, cachedInputCostPer1MTokens: 1.5, requestCostUsd: 0 },
+  'anthropic/claude-sonnet-4.6': { modelKey: 'anthropic/claude-sonnet-4.6', inputCostPer1MTokens: 3, outputCostPer1MTokens: 15, cachedInputCostPer1MTokens: 0.3, requestCostUsd: 0 },
+  'google/gemini-3-pro': { modelKey: 'google/gemini-3-pro', inputCostPer1MTokens: 2.5, outputCostPer1MTokens: 10, cachedInputCostPer1MTokens: 0.25, requestCostUsd: 0 },
+  'google/gemini-3-flash': { modelKey: 'google/gemini-3-flash', inputCostPer1MTokens: 0.15, outputCostPer1MTokens: 0.6, cachedInputCostPer1MTokens: 0.075, requestCostUsd: 0 },
+  'openai/gpt-5-mini': { modelKey: 'openai/gpt-5-mini', inputCostPer1MTokens: 0.25, outputCostPer1MTokens: 1, cachedInputCostPer1MTokens: 0.125, requestCostUsd: 0 },
+  'openai/gpt-5-nano': { modelKey: 'openai/gpt-5-nano', inputCostPer1MTokens: 0.05, outputCostPer1MTokens: 0.2, cachedInputCostPer1MTokens: 0.025, requestCostUsd: 0 },
+  'deepseek/deepseek-coder': { modelKey: 'deepseek/deepseek-coder', inputCostPer1MTokens: 0.14, outputCostPer1MTokens: 0.28, cachedInputCostPer1MTokens: 0.07, requestCostUsd: 0 },
+  'qwen/qwen-coder': { modelKey: 'qwen/qwen-coder', inputCostPer1MTokens: 0.2, outputCostPer1MTokens: 0.8, cachedInputCostPer1MTokens: 0.1, requestCostUsd: 0 },
+  'mistralai/codestral': { modelKey: 'mistralai/codestral', inputCostPer1MTokens: 0.3, outputCostPer1MTokens: 0.9, cachedInputCostPer1MTokens: 0.15, requestCostUsd: 0 },
 };
 
 const ACTION_MINIMUM_CREDITS: Record<AiTaskType, number> = {
@@ -582,19 +617,22 @@ export class ModelCatalogService {
   }
 
   getModel(modelKey: string): AiModelDefinition {
+    validateAllowedModel(modelKey);
     const model = AI_MODEL_CATALOG.find((candidate) => candidate.key === modelKey);
     if (!model) throw new PlatformError('model_not_found', 'AI model not found.', 404);
     return model;
   }
 
   getPricing(modelKey: string): AiModelPricing {
+    validateAllowedModel(modelKey);
     const pricing = AI_MODEL_PRICING[modelKey];
     if (!pricing) throw new PlatformError('model_pricing_not_found', 'AI model pricing not found.', 404);
     return pricing;
   }
 
   allowedModelsForPlan(plan: PlanDefinition): AiModelDefinition[] {
-    return AI_MODEL_CATALOG.filter((model) => plan.allowedModelTiers.includes(model.tier));
+    const planTiers = AI_MODEL_PLAN_ACCESS[plan.key];
+    return AI_MODEL_CATALOG.filter((model) => planTiers.includes(model.tier));
   }
 }
 
@@ -605,6 +643,8 @@ export class ModelRouterService {
     const mode = input.preferences?.mode ?? 'auto';
     const candidates = this.candidatesFor(input, mode);
     const selectedModel = this.selectModel(input, candidates, mode);
+    validateAllowedModel(selectedModel.key, { organizationId: input.context.organizationId, userId: input.context.userId, source: mode === 'custom' ? 'custom' : 'auto' });
+    if (!AI_MODEL_PLAN_ACCESS[input.plan.key].includes(selectedModel.tier)) throw new ModelNotAllowedForPlanError(selectedModel.key, input.plan.key);
     const pricing = this.catalog.getPricing(selectedModel.key);
     const estimate = this.estimator.estimate({
       action: input.taskType,
@@ -617,8 +657,10 @@ export class ModelRouterService {
       premiumConfirmationRequired: selectedModel.requiresConfirmation && (input.preferences?.confirmBeforePremium ?? true),
     });
     const availableCredits = totalBalance(input.wallet);
+    if (estimate.estimatedMarginMultiplier < this.estimator.minimumMarginMultiplier) throw new NegativeMarginBlockedError(selectedModel.key, estimate.estimatedMarginMultiplier);
     const blocked = estimate.finalCredits > availableCredits;
-    const upgradeRequired = !input.plan.allowedModelTiers.includes(selectedModel.tier);
+    if (blocked) throw new InsufficientCreditsError(estimate.finalCredits, availableCredits);
+    const upgradeRequired = !AI_MODEL_PLAN_ACCESS[input.plan.key].includes(selectedModel.tier);
     const rejectedModels = AI_MODEL_CATALOG.filter((model) => !candidates.includes(model)).map((model) => ({ modelKey: model.key, reason: this.rejectionReason(input, model) }));
     return {
       id: id('route'),
@@ -635,8 +677,12 @@ export class ModelRouterService {
   }
 
   private candidatesFor(input: RoutingInput, mode: ModelRoutingMode): AiModelDefinition[] {
-    if (mode === 'custom' && input.requestedModelKey) return [this.catalog.getModel(input.requestedModelKey)];
+    if (mode === 'custom' && input.requestedModelKey) {
+      validateAllowedModel(input.requestedModelKey, { organizationId: input.context.organizationId, userId: input.context.userId, source: 'custom' });
+      return [this.catalog.getModel(input.requestedModelKey)];
+    }
     return this.catalog.allowedModelsForPlan(input.plan).filter((model) => {
+      validateAllowedModel(model.key, { organizationId: input.context.organizationId, userId: input.context.userId, source: 'auto' });
       if (input.requireVision && !model.supportsVision) return false;
       if (input.requireToolCalling && !model.supportsToolCalling) return false;
       if (mode === 'fast') return model.speed === 'fast';
@@ -657,7 +703,7 @@ export class ModelRouterService {
   }
 
   private rejectionReason(input: RoutingInput, model: AiModelDefinition): string {
-    if (!input.plan.allowedModelTiers.includes(model.tier)) return 'tier_not_allowed_by_plan';
+    if (!AI_MODEL_PLAN_ACCESS[input.plan.key].includes(model.tier)) return 'tier_not_allowed_by_plan';
     if (input.requireVision && !model.supportsVision) return 'vision_required';
     if (input.requireToolCalling && !model.supportsToolCalling) return 'tool_calling_required';
     return 'not_selected';
@@ -774,9 +820,12 @@ export class OpenRouterService {
   async complete(request: OpenRouterCompletionRequest): Promise<OpenRouterCompletionResult> {
     const apiKey = this.apiKeyProvider();
     if (!apiKey) throw new PlatformError('openrouter_api_key_missing', 'OpenRouter API key is not configured on the backend.', 500);
+    validateAllowedModel(request.model.openRouterModel, { source: 'api' });
+    const fallbackModels = getAllowedFallbacks(request.model.openRouterModel, { source: 'api' });
+    for (const fallback of fallbackModels) validateAllowedModel(fallback, { source: 'api' });
     const inputTokens = request.messages.reduce((total, message) => total + Math.ceil(message.content.length / 4), 0);
     const outputTokens = 256;
-    const pricing = this.catalog.getPricing(request.model.key);
+    const pricing = this.catalog.getPricing(request.model.openRouterModel);
     const usage: OpenRouterUsage = {
       inputTokens,
       outputTokens,
@@ -790,6 +839,21 @@ export class OpenRouterService {
       usage,
       finishReason: 'stop',
     };
+  }
+
+  async syncOpenRouterAllowedModels(modelsEndpointResponse: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }>): Promise<Array<{ modelId: AiAllowedModelId; isAvailable: boolean; inputCostPer1MTokens?: number; outputCostPer1MTokens?: number }>> {
+    const remoteModels = new Map(modelsEndpointResponse.map((model) => [model.id, model]));
+    return AI_ALLOWED_MODELS.map((modelId) => {
+      validateAllowedModel(modelId, { source: 'api' });
+      const remoteModel = remoteModels.get(modelId);
+      if (!remoteModel) return { modelId, isAvailable: false };
+      return {
+        modelId,
+        isAvailable: true,
+        inputCostPer1MTokens: remoteModel.pricing?.prompt ? Number(remoteModel.pricing.prompt) * 1_000_000 : undefined,
+        outputCostPer1MTokens: remoteModel.pricing?.completion ? Number(remoteModel.pricing.completion) * 1_000_000 : undefined,
+      };
+    });
   }
 }
 
