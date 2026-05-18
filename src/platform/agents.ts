@@ -180,7 +180,7 @@ export class DeployAgent implements Agent<DeployPlan> {
       type: 'deploy_plan',
       target: 'preview',
       vercelProjectName: projectName,
-      domains: [`${projectName}.monsaas.com`],
+      domains: process.env.APP_PUBLIC_DOMAIN ? [`${projectName}.${process.env.APP_PUBLIC_DOMAIN}`] : [],
       envVars: [],
     };
   }

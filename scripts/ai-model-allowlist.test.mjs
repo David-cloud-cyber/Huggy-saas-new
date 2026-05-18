@@ -35,6 +35,7 @@ function read(relativePath) {
 
 const config = read('src/config/ai-models.ts');
 const billing = read('src/platform/billing-ai.ts');
+const runtimeApi = read('src/platform/runtime-api.mjs');
 const migration = read('supabase/migrations/0004_strict_ai_model_allowlist.sql');
 const envExample = read('.env.example');
 
@@ -45,6 +46,7 @@ for (const model of allowedModels) {
 
 for (const model of disallowedModels) {
   assert(!billing.includes(model), `${model} must not be hardcoded in backend billing service`);
+  assert(!runtimeApi.includes(model), `${model} must not be hardcoded in runtime API`);
   assert(!migration.includes(model), `${model} must not be seeded in strict migration`);
 }
 
@@ -54,6 +56,14 @@ assert(config.includes('auditBlockedModelAttempt'), 'blocked attempts must be au
 assert(billing.includes('validateAllowedModel(request.model.openRouterModel'), 'OpenRouterService must validate model before request');
 assert(billing.includes('getAllowedFallbacks(request.model.openRouterModel'), 'OpenRouterService must validate allowed fallbacks');
 assert(billing.includes('AI_MODEL_PLAN_ACCESS'), 'ModelRouter must enforce plan access');
+assert(billing.includes("https://openrouter.ai/api/v1/models"), 'OpenRouterService must be able to sync the live OpenRouter model catalog');
+assert(billing.includes('AI_ALLOWED_MODELS.map'), 'OpenRouter catalog sync must only iterate the central allowlist');
+assert(runtimeApi.includes("readFileSync(new URL('../config/ai-models.ts'"), 'runtime API must load the central model allowlist');
+assert(runtimeApi.includes('validateRuntimeAllowedModel') && runtimeApi.includes('callOpenRouter(model'), 'runtime API must validate models before OpenRouter requests');
+assert(!runtimeApi.includes('const allowedModels = new Set(['), 'runtime API must not define a separate hardcoded model allowlist');
+for (const model of allowedModels) {
+  assert(!runtimeApi.includes(`'${model}'`), `${model} must not be duplicated in runtime API`);
+}
 assert(migration.includes('ai_blocked_model_audit_logs'), 'database must include blocked model audit logs');
 assert(migration.includes('is_allowed = (openrouter_model_id in'), 'database must enforce strict allowed check');
 assert(envExample.includes('AI_STRICT_MODEL_ALLOWLIST="true"'), 'strict allowlist env flag must be documented');

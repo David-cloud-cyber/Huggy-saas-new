@@ -815,7 +815,11 @@ export class VercelDomainService {
 }
 
 export class OpenRouterService {
-  constructor(private readonly apiKeyProvider: () => string | undefined, private readonly catalog = new ModelCatalogService()) {}
+  constructor(
+    private readonly apiKeyProvider: () => string | undefined,
+    private readonly catalog = new ModelCatalogService(),
+    private readonly fetcher: typeof fetch = fetch,
+  ) {}
 
   async complete(request: OpenRouterCompletionRequest): Promise<OpenRouterCompletionResult> {
     const apiKey = this.apiKeyProvider();
@@ -841,7 +845,19 @@ export class OpenRouterService {
     };
   }
 
-  async syncOpenRouterAllowedModels(modelsEndpointResponse: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }>): Promise<Array<{ modelId: AiAllowedModelId; isAvailable: boolean; inputCostPer1MTokens?: number; outputCostPer1MTokens?: number }>> {
+  async syncOpenRouterAllowedModels(modelsEndpointResponse?: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }>): Promise<Array<{ modelId: AiAllowedModelId; isAvailable: boolean; inputCostPer1MTokens?: number; outputCostPer1MTokens?: number }>> {
+    if (!modelsEndpointResponse) {
+      const response = await this.fetcher('https://openrouter.ai/api/v1/models', {
+        headers: {
+          ...(this.apiKeyProvider() ? { authorization: `Bearer ${this.apiKeyProvider()}` } : {}),
+        },
+      });
+      if (!response.ok) {
+        throw new PlatformError('openrouter_catalog_sync_failed', 'OpenRouter model catalog sync failed.', response.status);
+      }
+      const body = await response.json() as { data?: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }> } | Array<{ id: string; pricing?: { prompt?: string; completion?: string } }>;
+      modelsEndpointResponse = Array.isArray(body) ? body : body.data ?? [];
+    }
     const remoteModels = new Map(modelsEndpointResponse.map((model) => [model.id, model]));
     return AI_ALLOWED_MODELS.map((modelId) => {
       validateAllowedModel(modelId, { source: 'api' });

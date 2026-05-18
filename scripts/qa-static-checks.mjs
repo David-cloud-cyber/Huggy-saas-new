@@ -99,8 +99,9 @@ assert(supabaseDashboard.includes("from('projects')"), 'Dashboard must load proj
 assert(supabaseDashboard.includes("from('users_profile')"), 'Dashboard must load user profile from Supabase');
 assert(supabaseAuth.includes('signInWithMagicLink'), 'Auth shell must connect login/signup to Supabase magic link');
 
-const forbiddenUiModels = ['Sonnet 4.5', 'Opus 4.5', 'Haiku 4.5', 'Gemini 2.0', 'gpt-4o-mini', 'o1-pro'];
+const forbiddenUiModels = ['Sonnet 4.5', 'Opus 4.5', 'Haiku 4.5', 'Gemini 2.0', 'gpt-4o-mini', 'o1-pro', 'o1'];
 for (const model of forbiddenUiModels) {
+  assert(!index.includes(model), `${model} must not appear in landing model UI`);
   assert(!dashboard.includes(model), `${model} must not appear in dashboard model UI`);
   assert(!builder.includes(model), `${model} must not appear in builder model UI`);
 }

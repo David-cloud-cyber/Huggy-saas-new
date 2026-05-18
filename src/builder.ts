@@ -115,7 +115,7 @@ function initBuilder() {
     previewEmpty.classList.add('hidden');
     previewContent.classList.remove('hidden');
     previewFilename.textContent = name;
-    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
+    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// File content will appear after the next generation or sync.`;
   }
 
   const structure = [

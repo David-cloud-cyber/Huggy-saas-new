@@ -68,6 +68,10 @@ export class OrganizationService {
 }
 
 export class ProjectService {
+  private publicDomain(): string {
+    return process.env.APP_PUBLIC_DOMAIN ?? 'localhost';
+  }
+
   async createProject(context: RequestContext, input: { name: string; description?: string }): Promise<Project> {
     if (!canEdit(context.role)) {
       throw new PlatformError('forbidden', 'Editor role or higher is required to create projects.', 403);
@@ -81,7 +85,7 @@ export class ProjectService {
       slug: slugify(input.name),
       description: input.description,
       status: 'draft',
-      defaultSubdomain: `${slugify(input.name)}.monsaas.com`,
+      defaultSubdomain: `${slugify(input.name)}.${this.publicDomain()}`,
       createdAt,
       updatedAt: createdAt,
     };
@@ -574,7 +578,7 @@ export class DomainService {
     enterprise: Number.MAX_SAFE_INTEGER,
   };
 
-  constructor(private readonly vercelService = new VercelService(() => 'mock', { mock: true }), private readonly audit = new AuditLogService(), private readonly publicDomain = process.env.APP_PUBLIC_DOMAIN ?? 'monsaas.com') {}
+  constructor(private readonly vercelService = new VercelService(() => 'mock', { mock: true }), private readonly audit = new AuditLogService(), private readonly publicDomain = process.env.APP_PUBLIC_DOMAIN ?? 'localhost') {}
 
   createSaasSubdomain(project: Project): DomainRecord {
     const slug = slugify(project.slug || project.name);

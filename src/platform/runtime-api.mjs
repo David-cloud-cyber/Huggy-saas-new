@@ -1,19 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-
-const allowedModels = new Set([
-  'openai/gpt-5.5',
-  'openai/gpt-5.5-pro',
-  'anthropic/claude-opus-4.7',
-  'anthropic/claude-sonnet-4.6',
-  'google/gemini-3-pro',
-  'google/gemini-3-flash',
-  'openai/gpt-5-mini',
-  'openai/gpt-5-nano',
-  'deepseek/deepseek-coder',
-  'qwen/qwen-coder',
-  'mistralai/codestral',
-]);
 
 const planDomainLimits = {
   free: 0,
@@ -33,8 +20,58 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+let centralAllowedModelsCache;
+let runtimeAllowedModelsCache;
+
+function readCentralAllowedModels() {
+  if (centralAllowedModelsCache) return centralAllowedModelsCache;
+  const source = readFileSync(new URL('../config/ai-models.ts', import.meta.url), 'utf8');
+  const match = source.match(/export const AI_ALLOWED_MODELS = \[([\s\S]*?)\] as const/);
+  const models = [...(match?.[1] ?? '').matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
+  if (models.length === 0) throw new RuntimeApiError('ai_model_config_invalid', 'AI model allowlist could not be loaded from central config.', 500);
+  centralAllowedModelsCache = models;
+  return centralAllowedModelsCache;
+}
+
+function runtimeAllowedModels() {
+  if (runtimeAllowedModelsCache) return runtimeAllowedModelsCache;
+  const central = readCentralAllowedModels();
+  const centralSet = new Set(central);
+  const configured = (process.env.AI_ALLOWED_MODELS || '').split(',').map((value) => value.trim()).filter(Boolean);
+  const models = configured.length > 0 ? configured : central;
+  for (const model of models) {
+    if (!centralSet.has(model)) {
+      throw new RuntimeApiError('ai_model_config_forbidden', 'AI_ALLOWED_MODELS contains a model outside the central whitelist.', 500, { model });
+    }
+  }
+  runtimeAllowedModelsCache = models;
+  return runtimeAllowedModelsCache;
+}
+
+function defaultRuntimeModel() {
+  return runtimeAllowedModels()[0];
+}
+
+async function auditBlockedModelAttempt(supabase, context, requestedModel, reason, source = 'api') {
+  const metadata = { requested_model: requestedModel, reason, source };
+  console.warn('[ai-model-whitelist] blocked model attempt', metadata);
+  if (!supabase || !context?.organizationId) return;
+  await supabase.from('ai_blocked_model_audit_logs').insert({
+    organization_id: context.organizationId,
+    user_id: context.userId,
+    requested_model: requestedModel,
+    reason,
+    source,
+  }).throwOnError();
+}
+
+async function validateRuntimeAllowedModel(supabase, context, model, source = 'api') {
+  if (runtimeAllowedModels().includes(model)) return model;
+  await auditBlockedModelAttempt(supabase, context, model, 'not_in_ai_allowed_models', source);
+  throw new RuntimeApiError('forbidden_model', 'This OpenRouter model is not allowed by the backend whitelist.', 403, { model });
+}
+
 function estimateCredits(model, prompt = '') {
-  if (!allowedModels.has(model)) throw new RuntimeApiError('forbidden_model', 'This OpenRouter model is not allowed by the backend whitelist.', 403, { model });
   const baseByTier = model.includes('opus') || model.includes('gpt-5.5-pro') ? 45
     : model.includes('sonnet') || model.includes('gpt-5.5') ? 25
       : model.includes('gemini-3-pro') || model.includes('deepseek') || model.includes('codestral') ? 15
@@ -109,6 +146,10 @@ function requiredEnv(name) {
   const value = process.env[name];
   if (!value) throw new RuntimeApiError('missing_configuration', `${name} is not configured on the backend.`, 500, { name });
   return value;
+}
+
+function appPublicDomain() {
+  return requiredEnv('APP_PUBLIC_DOMAIN');
 }
 
 function supabaseAdmin() {
@@ -300,9 +341,9 @@ async function persistVersionAndFiles(supabase, context, project, files, label) 
   return version;
 }
 
-async function callOpenRouter(model, messages) {
+async function callOpenRouter(model, messages, supabase, context) {
+  await validateRuntimeAllowedModel(supabase, context, model, 'api');
   const apiKey = requiredEnv('OPENROUTER_API_KEY');
-  if (!allowedModels.has(model)) throw new RuntimeApiError('forbidden_model', 'This OpenRouter model is not allowed by the backend whitelist.', 403, { model });
   const baseUrl = (process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
   const completionsUrl = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   const response = await fetch(completionsUrl, {
@@ -531,7 +572,9 @@ export async function handleRuntimeApi(request, response, url) {
     }
 
     if (request.method === 'POST' && apiPath === '/api/platform/ai/estimate') {
-      return json(response, 200, { estimate: estimateCredits(body.model || 'google/gemini-3-flash', body.prompt || '') });
+      const context = contextFrom(workspace, user);
+      const model = await validateRuntimeAllowedModel(supabase, context, body.model || defaultRuntimeModel(), body.model ? 'custom' : 'auto');
+      return json(response, 200, { estimate: estimateCredits(model, body.prompt || '') });
     }
 
     if (request.method === 'POST' && apiPath === '/api/platform/projects') {
@@ -539,7 +582,7 @@ export async function handleRuntimeApi(request, response, url) {
       const reservation = await reserveCredits(supabase, context, 1, 'project_create');
       const name = String(body.name || 'Untitled project').trim().slice(0, 120);
       const slug = `${slugify(name)}-${Date.now().toString(36)}`;
-      const { data: project, error } = await supabase.from('projects').insert({ organization_id: context.organizationId, created_by: user.id, name, slug, description: body.description || null, status: 'draft', default_subdomain: `${slug}.${process.env.APP_PUBLIC_DOMAIN || 'example.com'}` }).select('*').single();
+      const { data: project, error } = await supabase.from('projects').insert({ organization_id: context.organizationId, created_by: user.id, name, slug, description: body.description || null, status: 'draft', default_subdomain: `${slug}.${appPublicDomain()}` }).select('*').single();
       if (error) throw error;
       const files = generatedFiles(body.prompt || body.description || name);
       const version = await persistVersionAndFiles(supabase, { ...context, projectId: project.id }, project, files, 'Initial version');
@@ -565,8 +608,7 @@ export async function handleRuntimeApi(request, response, url) {
     const context = contextFrom(workspace, user, project.id);
 
     if (request.method === 'POST' && action === 'chat') {
-      const model = body.model || 'google/gemini-3-flash';
-      if (!allowedModels.has(model)) throw new RuntimeApiError('forbidden_model', 'This OpenRouter model is not allowed by the backend whitelist.', 403, { model });
+      const model = await validateRuntimeAllowedModel(supabase, context, body.model || defaultRuntimeModel(), body.model ? 'custom' : 'auto');
       const reservation = await reserveCredits(supabase, context, 20, 'prompt_generation', { model });
       const prompt = String(body.prompt || '').trim();
       if (!prompt) throw new RuntimeApiError('prompt_required', 'Prompt is required.', 400);
@@ -579,7 +621,7 @@ export async function handleRuntimeApi(request, response, url) {
       await supabase.from('chat_messages').insert([{ organization_id: context.organizationId, project_id: project.id, conversation_id: conversation.id, agent_run_id: agentRun.id, role: 'user', content: prompt, sequence_number: 1, created_by: user.id, completed_at: new Date().toISOString() }, { organization_id: context.organizationId, project_id: project.id, conversation_id: conversation.id, agent_run_id: agentRun.id, role: 'assistant', content: '', sequence_number: 2, created_by: user.id }]);
       await supabase.from('stream_events').insert({ organization_id: context.organizationId, project_id: project.id, conversation_id: conversation.id, agent_run_id: agentRun.id, type: 'agent.run.started', payload: { model, prompt }, visibility: 'public', severity: 'info' });
 
-      const completion = await callOpenRouter(model, [{ role: 'system', content: 'You are Huggy, an expert AI SaaS app generator. Return concise implementation guidance.' }, { role: 'user', content: prompt }]);
+      const completion = await callOpenRouter(model, [{ role: 'system', content: 'You are Huggy, an expert AI SaaS app generator. Return concise implementation guidance.' }, { role: 'user', content: prompt }], supabase, context);
       const files = generatedFiles(prompt, completion.content);
       const version = await persistVersionAndFiles(supabase, context, project, files, 'AI generated version');
       await supabase.from('chat_messages').update({ content: completion.content || 'Application generated.', status: 'completed', completed_at: new Date().toISOString() }).eq('conversation_id', conversation.id).eq('role', 'assistant');

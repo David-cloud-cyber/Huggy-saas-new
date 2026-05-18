@@ -67,7 +67,8 @@ assert(server.includes('handleRuntimeApi'), 'production server must mount runtim
 assert(runtimeApi.includes('SUPABASE_SERVICE_ROLE_KEY'), 'runtime API must use Supabase service role only on the backend');
 assert(runtimeApi.includes('OPENROUTER_API_KEY'), 'runtime API must call OpenRouter from backend only');
 assert(runtimeApi.includes('VERCEL_TOKEN'), 'runtime API must call Vercel from backend only');
-assert(runtimeApi.includes('allowedModels') && runtimeApi.includes('forbidden_model'), 'runtime API must enforce strict OpenRouter whitelist');
+assert(runtimeApi.includes("readFileSync(new URL('../config/ai-models.ts'") && runtimeApi.includes('validateRuntimeAllowedModel') && runtimeApi.includes('forbidden_model'), 'runtime API must enforce the central strict OpenRouter whitelist');
+assert(!runtimeApi.includes('const allowedModels = new Set(['), 'runtime API must not duplicate a separate model allowlist');
 assert(runtimeApi.includes('credit_reservations') && runtimeApi.includes('credit_ledger'), 'runtime API must persist credit reservations and ledger entries');
 assert(runtimeApi.includes('agent_runs') && runtimeApi.includes('project_files') && runtimeApi.includes('project_versions'), 'runtime API must persist agent runs, files and versions');
 assert(runtimeApi.includes('/v13/deployments'), 'runtime API must create Vercel preview/production deployments');

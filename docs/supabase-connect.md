@@ -35,6 +35,7 @@ supabase/migrations/0002_visual_streaming.sql
 supabase/migrations/0003_billing_ai_domains.sql
 supabase/migrations/0004_strict_ai_model_allowlist.sql
 supabase/migrations/0005_deployment_preview_backend_completion.sql
+supabase/migrations/0006_auth_bootstrap_and_rls_assertions.sql
 ```
 
 If you want a single copy-paste file, use:
