@@ -40,6 +40,7 @@ const supabaseAuth = read('src/supabase-auth.ts');
 const server = read('server.js');
 const envExample = read('.env.example');
 const railway = read('railway.json');
+const nixpacks = read('nixpacks.toml');
 
 assert(dashboard.includes('btn-new-project-sidebar'), 'dashboard must expose sidebar new project CTA');
 assert(dashboard.includes('btn-create-top'), 'dashboard must expose top new project CTA');
@@ -80,7 +81,9 @@ const requiredEnv = [
 ];
 for (const variable of requiredEnv) assert(envExample.includes(variable), `${variable} must be documented in .env.example`);
 assert(railway.includes('node server.js'), 'Railway must start the production server with route rewrites');
-assert(railway.includes('npm ci --include=dev'), 'Railway build must install devDependencies required by Vite plugins even when NODE_ENV=production');
+assert(railway.includes('npm install --include=dev'), 'Railway build must install devDependencies required by Vite plugins even when NODE_ENV=production');
+assert(nixpacks.includes('nodejs_20'), 'Nixpacks must force Node 20 because Supabase and Tailwind require it');
+assert(nixpacks.includes('npm install --include=dev'), 'Nixpacks install phase must include devDependencies required by Vite plugins');
 assert(supabaseClient.includes('createClient'), 'Supabase client must use the official createClient API');
 assert(supabaseClient.includes('VITE_SUPABASE_URL'), 'Supabase client must read the public Supabase URL');
 assert(supabaseClient.includes('VITE_SUPABASE_ANON_KEY'), 'Supabase client must read the public anon key');
