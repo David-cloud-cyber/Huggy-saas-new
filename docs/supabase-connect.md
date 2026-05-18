@@ -5,7 +5,7 @@
 Open the Supabase dashboard and copy:
 
 - Project URL
-- anon public key
+- publishable key or anon public key
 - service role key
 - database connection string
 
@@ -15,6 +15,7 @@ Set these variables in Railway:
 
 ```env
 VITE_SUPABASE_URL="https://your-project-ref.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_your-public-key"
 VITE_SUPABASE_ANON_KEY="your-supabase-anon-key"
 SUPABASE_URL="https://your-project-ref.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
@@ -22,7 +23,7 @@ SUPABASE_JWT_SECRET="your-supabase-jwt-secret"
 DATABASE_URL="postgresql://postgres:password@host:5432/postgres"
 ```
 
-Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are exposed to the browser. Never expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code.
+Only `VITE_SUPABASE_URL` and either `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY` are exposed to the browser. Prefer the publishable key for new Supabase projects. Never expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code.
 
 ## 3. Apply migrations
 

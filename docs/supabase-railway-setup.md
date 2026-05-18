@@ -11,7 +11,7 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
 3. Confirm RLS is enabled on the generated tables.
 4. Copy these values from Supabase project settings:
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SUPABASE_JWT_SECRET`
@@ -28,7 +28,7 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
    - `NODE_ENV`
    - `PORT`
    - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SUPABASE_JWT_SECRET`

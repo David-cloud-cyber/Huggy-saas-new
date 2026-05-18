@@ -7,15 +7,19 @@ export interface SupabaseConfigStatus {
 
 let client: SupabaseClient | null = null;
 
-function readEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_ANON_KEY'): string | undefined {
+function readEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_ANON_KEY' | 'VITE_SUPABASE_PUBLISHABLE_KEY'): string | undefined {
   const value = import.meta.env[name];
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readSupabasePublicKey(): string | undefined {
+  return readEnv('VITE_SUPABASE_PUBLISHABLE_KEY') ?? readEnv('VITE_SUPABASE_ANON_KEY');
 }
 
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   const missing: string[] = [];
   if (!readEnv('VITE_SUPABASE_URL')) missing.push('VITE_SUPABASE_URL');
-  if (!readEnv('VITE_SUPABASE_ANON_KEY')) missing.push('VITE_SUPABASE_ANON_KEY');
+  if (!readSupabasePublicKey()) missing.push('VITE_SUPABASE_PUBLISHABLE_KEY ou VITE_SUPABASE_ANON_KEY');
   return { configured: missing.length === 0, missing };
 }
 
@@ -23,7 +27,7 @@ export function getSupabaseClient(): SupabaseClient | null {
   const status = getSupabaseConfigStatus();
   if (!status.configured) return null;
   if (!client) {
-    client = createClient(readEnv('VITE_SUPABASE_URL')!, readEnv('VITE_SUPABASE_ANON_KEY')!, {
+    client = createClient(readEnv('VITE_SUPABASE_URL')!, readSupabasePublicKey()!, {
       auth: {
         autoRefreshToken: true,
         detectSessionInUrl: true,

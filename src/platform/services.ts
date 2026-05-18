@@ -344,7 +344,7 @@ export class VercelService {
         projectId: files[0]?.projectId ?? 'project_unknown',
         organizationId: files[0]?.organizationId ?? 'org_unknown',
         path: '.env.example',
-        content: 'VITE_SUPABASE_URL=\nVITE_SUPABASE_ANON_KEY=\n',
+        content: 'VITE_SUPABASE_URL=\nVITE_SUPABASE_PUBLISHABLE_KEY=\nVITE_SUPABASE_ANON_KEY=\n',
         contentHash: 'generated-env-example',
         sizeBytes: 0,
         isBinary: false,

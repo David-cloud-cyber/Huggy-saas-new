@@ -25,7 +25,7 @@ OPENROUTER_API_KEY="your-openrouter-key"
 STRIPE_SECRET_KEY="your-stripe-secret-key"
 ```
 
-Only `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` and `VITE_APP_URL` may be exposed to frontend code.
+Only `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`, and `VITE_APP_URL` may be exposed to frontend code.
 
 ## Vercel configuration
 

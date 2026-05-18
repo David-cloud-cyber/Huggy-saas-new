@@ -68,6 +68,7 @@ for (const segment of ['editor', 'preview', 'versions', 'deployments', 'domains'
 
 const requiredEnv = [
   'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_PUBLISHABLE_KEY',
   'VITE_SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'DATABASE_URL',
@@ -91,7 +92,8 @@ assert(nixpacks.includes('nodejs_20'), 'Nixpacks must force Node 20 because Supa
 assert(nixpacks.includes('npm install --include=dev'), 'Nixpacks install phase must include devDependencies required by Vite plugins');
 assert(supabaseClient.includes('createClient'), 'Supabase client must use the official createClient API');
 assert(supabaseClient.includes('VITE_SUPABASE_URL'), 'Supabase client must read the public Supabase URL');
-assert(supabaseClient.includes('VITE_SUPABASE_ANON_KEY'), 'Supabase client must read the public anon key');
+assert(supabaseClient.includes('VITE_SUPABASE_PUBLISHABLE_KEY'), 'Supabase client must support the public publishable key');
+assert(supabaseClient.includes('VITE_SUPABASE_ANON_KEY'), 'Supabase client must support the legacy public anon key');
 assert(!supabaseClient.includes('SUPABASE_SERVICE_ROLE_KEY'), 'Frontend Supabase client must not reference service role key');
 assert(supabaseDashboard.includes("from('projects')"), 'Dashboard must load projects from Supabase');
 assert(supabaseDashboard.includes("from('users_profile')"), 'Dashboard must load user profile from Supabase');
