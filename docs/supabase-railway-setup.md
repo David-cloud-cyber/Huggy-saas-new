@@ -33,6 +33,9 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SUPABASE_JWT_SECRET`
    - `DATABASE_URL`
+   - `OPENROUTER_API_KEY`
+   - `OPENROUTER_BASE_URL`
+   - `OPENROUTER_DEFAULT_MODEL`
    - `GEMINI_API_KEY`
    - `VERCEL_API_TOKEN`
    - `STRIPE_SECRET_KEY`
@@ -42,6 +45,7 @@ Connecting the GitHub repository to Supabase or Railway only automates source sy
 ## Security rules
 
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in frontend code.
+- Never put `OPENROUTER_API_KEY` in frontend code.
 - Never expose `VERCEL_API_TOKEN` to browser code.
 - Never use `user_metadata` for authorization decisions.
 - Keep all authorization decisions backed by organization membership tables and RLS.

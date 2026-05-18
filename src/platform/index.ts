@@ -10,3 +10,4 @@ export * from './stream-api';
 export * from './stream-worker';
 export * from './stream-ui';
 export * from './stream-transport';
+export * from './billing-ai';
