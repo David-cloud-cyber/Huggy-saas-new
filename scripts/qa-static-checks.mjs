@@ -80,6 +80,7 @@ const requiredEnv = [
 ];
 for (const variable of requiredEnv) assert(envExample.includes(variable), `${variable} must be documented in .env.example`);
 assert(railway.includes('node server.js'), 'Railway must start the production server with route rewrites');
+assert(railway.includes('npm ci --include=dev'), 'Railway build must install devDependencies required by Vite plugins even when NODE_ENV=production');
 assert(supabaseClient.includes('createClient'), 'Supabase client must use the official createClient API');
 assert(supabaseClient.includes('VITE_SUPABASE_URL'), 'Supabase client must read the public Supabase URL');
 assert(supabaseClient.includes('VITE_SUPABASE_ANON_KEY'), 'Supabase client must read the public anon key');
