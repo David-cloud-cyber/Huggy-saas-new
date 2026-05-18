@@ -9,7 +9,7 @@
     "preview": "node server.js",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node scripts/ai-model-allowlist.test.mjs && node scripts/qa-static-checks.mjs",
+    "test": "node scripts/ai-model-allowlist.test.mjs && node scripts/qa-static-checks.mjs && node scripts/platform-architecture.test.mjs && node scripts/platform-e2e-mock.test.mjs",
     "test:smoke": "node scripts/smoke-http-checks.mjs"
   },
   "dependencies": {

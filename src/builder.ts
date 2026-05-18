@@ -316,10 +316,16 @@ function initBuilder() {
     const tabChat = document.getElementById('tab-chat');
     const tabCode = document.getElementById('tab-code');
     const tabFiles = document.getElementById('tab-files');
+    const tabVersions = document.getElementById('tab-versions');
+    const tabDomains = document.getElementById('tab-domains');
+    const tabBackend = document.getElementById('tab-backend');
     
     if (tabChat) tabChat.classList.toggle('hidden', sub !== 'chat');
     if (tabCode) tabCode.classList.toggle('hidden', sub !== 'code');
     if (tabFiles) tabFiles.classList.toggle('hidden', sub !== 'files');
+    if (tabVersions) tabVersions.classList.toggle('hidden', sub !== 'versions');
+    if (tabDomains) tabDomains.classList.toggle('hidden', sub !== 'domains');
+    if (tabBackend) tabBackend.classList.toggle('hidden', sub !== 'backend');
     localStorage.setItem('huggy-sub-tab', sub);
   }
 
@@ -665,6 +671,40 @@ function initBuilder() {
 
   document.getElementById('btn-upgrade')?.addEventListener('click', () => {
     showToast('Redirecting to upgrade page...');
+  });
+
+  const previewStatus = document.getElementById('preview-status');
+  const previewUrl = document.getElementById('preview-url');
+
+  function setPreviewState(status: string, url: string) {
+    if (previewStatus) previewStatus.textContent = status;
+    if (previewUrl) previewUrl.textContent = url;
+  }
+
+  document.getElementById('btn-build-preview')?.addEventListener('click', () => {
+    setPreviewState('building', 'preview queued');
+    showToast('Preview build queued');
+    setTimeout(() => setPreviewState('ready', 'my-dashboard-app-preview.vercel.app'), 900);
+  });
+
+  document.getElementById('btn-refresh-preview')?.addEventListener('click', () => {
+    setPreviewState('building', previewUrl?.textContent || 'refreshing');
+    showToast('Refreshing preview...');
+    setTimeout(() => setPreviewState('ready', 'my-dashboard-app-preview.vercel.app'), 700);
+  });
+
+  document.getElementById('btn-deploy-project')?.addEventListener('click', () => {
+    showToast('Production deploy queued via Railway backend');
+    setPreviewState('deploying', 'deployment pending');
+    setTimeout(() => setPreviewState('ready', 'my-dashboard-app.your-saas-domain.com'), 1000);
+  });
+
+  document.getElementById('btn-rollback-version')?.addEventListener('click', () => {
+    showToast('Rollback restored selected version');
+  });
+
+  document.getElementById('btn-add-domain')?.addEventListener('click', () => {
+    showToast('Domain workflow: add DNS then verify');
   });
 
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────

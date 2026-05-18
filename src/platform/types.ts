@@ -5,6 +5,11 @@ export type ProjectStatus = 'draft' | 'generating' | 'ready' | 'building' | 'dep
 export type JobStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled';
 export type DeploymentStatus = 'queued' | 'building' | 'ready' | 'error' | 'cancelled';
 export type EnvironmentType = 'preview' | 'production';
+export type PlatformPlanKey = 'free' | 'starter' | 'pro' | 'studio' | 'business' | 'enterprise';
+export type DomainType = 'saas_subdomain' | 'custom_domain';
+export type ProjectBackendMode = 'shared_tables' | 'dedicated_schema' | 'dedicated_project';
+export type ProjectBackendStatus = 'provisioning' | 'ready' | 'failed';
+export type PreviewStatus = 'building' | 'ready' | 'failed' | 'expired';
 export type AgentName =
   | 'ProductAgent'
   | 'PlannerAgent'
@@ -25,6 +30,7 @@ export interface RequestContext {
   organizationId: UUID;
   projectId?: UUID;
   role: OrgRole;
+  planKey?: PlatformPlanKey;
   ipAddress?: string;
   userAgent?: string;
 }
@@ -166,12 +172,18 @@ export interface Deployment {
   buildJobId?: UUID;
   environment: EnvironmentType;
   status: DeploymentStatus;
+  provider?: 'vercel';
+  providerProjectId?: string;
+  providerDeploymentId?: string;
   vercelProjectId?: string;
   vercelDeploymentId?: string;
+  previewUrl?: string;
+  productionUrl?: string;
   url?: string;
   createdBy?: UUID;
   errorMessage?: string;
   createdAt: string;
+  updatedAt?: string;
   readyAt?: string;
   deletedAt?: string;
 }
@@ -180,13 +192,58 @@ export interface DomainRecord {
   id: UUID;
   organizationId: UUID;
   projectId: UUID;
+  domain?: string;
   hostname: string;
-  status: 'pending' | 'verified' | 'failed' | 'removed';
+  type?: DomainType;
+  status: 'pending' | 'verified' | 'active' | 'failed' | 'removed';
+  isPrimary?: boolean;
+  verificationToken?: string;
+  providerDomainId?: string;
   vercelDomainId?: string;
+  errorMessage?: string;
   addedBy?: UUID;
+  createdBy?: UUID;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+}
+
+export interface PreviewRecord {
+  id: UUID;
+  organizationId: UUID;
+  projectId: UUID;
+  versionId: UUID;
+  deploymentId?: UUID;
+  status: PreviewStatus;
+  url?: string;
+  screenshotPath?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectBackend {
+  id: UUID;
+  organizationId: UUID;
+  projectId: UUID;
+  mode: ProjectBackendMode;
+  status: ProjectBackendStatus;
+  schemaName?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectBackendResource {
+  id: UUID;
+  organizationId: UUID;
+  projectId: UUID;
+  backendId: UUID;
+  resourceType: 'table' | 'rls_policy' | 'storage_bucket' | 'function';
+  name: string;
+  definition: Record<string, unknown>;
+  rlsEnabled: boolean;
+  createdAt: string;
 }
 
 export interface SecretDescriptor {

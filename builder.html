@@ -113,7 +113,7 @@
           </svg>
         </button>
         <button class="btn-upgrade" id="btn-upgrade">Upgrade</button>
-        <button class="btn-deploy">Deploy</button>
+        <button class="btn-deploy" id="btn-deploy-project">Deploy</button>
       </div>
     </header>
 
@@ -134,6 +134,15 @@
         <button class="sub-tab" data-sub="files" data-sub-short="F">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
           <span>Files</span>
+        </button>
+        <button class="sub-tab" data-sub="versions" data-sub-short="V">
+          <span>Versions</span>
+        </button>
+        <button class="sub-tab" data-sub="domains" data-sub-short="D">
+          <span>Domains</span>
+        </button>
+        <button class="sub-tab" data-sub="backend" data-sub-short="B">
+          <span>Backend</span>
         </button>
       </div>
 
@@ -257,6 +266,49 @@
           <span>12.3 kb total</span>
         </div>
       </div>
+
+      <div class="tab-content hidden" id="tab-versions">
+        <div class="file-upload-section">
+          <div class="upload-text">
+            <span class="primary">Version history</span>
+            <span class="secondary">Active version v3 · source project_versions · rollback enabled</span>
+          </div>
+          <button class="btn-primary-upload" id="btn-rollback-version">Rollback</button>
+        </div>
+        <div class="file-tree">
+          <div class="file-item active"><span class="file-name">v3 · latest AI generation</span><span class="file-size">ready</span></div>
+          <div class="file-item"><span class="file-name">v2 · preview build</span><span class="file-size">deployed</span></div>
+          <div class="file-item"><span class="file-name">v1 · initial scaffold</span><span class="file-size">archived</span></div>
+        </div>
+      </div>
+
+      <div class="tab-content hidden" id="tab-domains">
+        <div class="file-upload-section">
+          <div class="upload-text">
+            <span class="primary">Domains</span>
+            <span class="secondary">Primary SaaS subdomain active · custom domains follow plan limits</span>
+          </div>
+          <button class="btn-primary-upload" id="btn-add-domain">Add custom domain</button>
+        </div>
+        <div class="file-tree">
+          <div class="file-item active"><span class="file-name">my-dashboard-app.your-saas-domain.com</span><span class="file-size">primary</span></div>
+          <div class="file-item"><span class="file-name">DNS: CNAME cname.vercel-dns.com</span><span class="file-size">instructions</span></div>
+        </div>
+      </div>
+
+      <div class="tab-content hidden" id="tab-backend">
+        <div class="file-upload-section">
+          <div class="upload-text">
+            <span class="primary">Supabase backend status</span>
+            <span class="secondary">Mode shared_tables · RLS required · organization_id + project_id isolation</span>
+          </div>
+          <button class="btn-primary-upload" id="btn-build-preview">Build Preview</button>
+        </div>
+        <div class="file-tree">
+          <div class="file-item active"><span class="file-name">project_backends</span><span class="file-size">ready</span></div>
+          <div class="file-item"><span class="file-name">project_backend_resources</span><span class="file-size">RLS on</span></div>
+        </div>
+      </div>
     </main>
 
     <!-- â”€â”€ DRAG RIGHT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
@@ -291,10 +343,10 @@
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0110 0v4"/>
           </svg>
-          localhost:3000
+          <span id="preview-status">building</span> · <span id="preview-url">localhost:3000</span>
         </div>
 
-        <button class="btn-refresh" title="Refresh">
+        <button class="btn-refresh" id="btn-refresh-preview" title="Refresh">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8"/>
             <path d="M21 3v5h-5"/>

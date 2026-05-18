@@ -55,6 +55,32 @@ function safePath(relativePath) {
 
 createServer((request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  if (url.pathname === '/api/health') {
+    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
+    response.end(JSON.stringify({ ok: true, service: 'huggy-control-center', timestamp: new Date().toISOString() }));
+    return;
+  }
+  if (url.pathname === '/api/platform/status') {
+    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
+    response.end(JSON.stringify({
+      railway: true,
+      vercel: Boolean(process.env.VERCEL_TOKEN || process.env.VERCEL_API_TOKEN),
+      supabase: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_URL),
+      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+      stripe: Boolean(process.env.STRIPE_SECRET_KEY),
+    }));
+    return;
+  }
+  if (url.pathname === '/api/webhooks/vercel') {
+    if (request.method !== 'POST') {
+      response.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({ error: 'method_not_allowed' }));
+      return;
+    }
+    response.writeHead(202, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
+    response.end(JSON.stringify({ accepted: true }));
+    return;
+  }
   const relativePath = resolveRoute(url.pathname);
   const filePath = safePath(relativePath);
 

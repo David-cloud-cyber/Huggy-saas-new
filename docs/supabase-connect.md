@@ -30,9 +30,16 @@ Run the SQL files in order from Supabase SQL Editor:
 
 ```txt
 supabase/migrations/0001_platform_schema.sql
-supabase/migrations/0002_rls_policies.sql
+supabase/migrations/0002_visual_streaming.sql
 supabase/migrations/0003_billing_ai_domains.sql
 supabase/migrations/0004_strict_ai_model_allowlist.sql
+supabase/migrations/0005_deployment_preview_backend_completion.sql
+```
+
+If you want a single copy-paste file, use:
+
+```txt
+supabase/COPY_PASTE_ALL_MIGRATIONS.sql
 ```
 
 ## 4. Configure Auth redirect URLs
