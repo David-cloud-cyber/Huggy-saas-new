@@ -731,6 +731,26 @@ function initBuilder() {
     return projectId;
   }
 
+  function appendConsoleLine(message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') {
+    const logArea = document.querySelector('.console-log-area');
+    if (!logArea) return;
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    const seconds = (performance.now() / 1000).toFixed(1).padStart(4, '0');
+    line.innerHTML = `<span class="log-ts">[${seconds}]</span><span class="log-${level}">${message}</span>`;
+    logArea.appendChild(line);
+    logArea.scrollTop = logArea.scrollHeight;
+  }
+
+  async function syncProjectStream() {
+    const stream = await platformApi<{ events: { type: string; severity?: 'info' | 'success' | 'warning' | 'error'; payload?: Record<string, unknown> }[]; build_logs: { level: 'info' | 'success' | 'warning' | 'error'; message: string }[] }>(`/api/projects/${requireProjectId()}/stream`);
+    const logArea = document.querySelector('.console-log-area');
+    if (logArea) logArea.innerHTML = '';
+    stream.events.forEach((event) => appendConsoleLine(`${event.type}${event.payload?.version_id ? ` · ${event.payload.version_id}` : ''}`, event.severity || 'info'));
+    stream.build_logs.forEach((log) => appendConsoleLine(log.message, log.level || 'info'));
+    return stream;
+  }
+
   function setPreviewState(status: string, url: string) {
     if (previewStatus) previewStatus.textContent = status;
     if (previewUrl) previewUrl.textContent = url;
@@ -741,19 +761,22 @@ function initBuilder() {
     try {
       setPreviewState('building', 'build queued');
       showToast('Build job lancé');
-      await platformApi(`/api/projects/${requireProjectId()}/build`, {});
+      const buildResult = await platformApi<{ logs?: { level: 'info' | 'success' | 'warning' | 'error'; message: string }[] }>(`/api/projects/${requireProjectId()}/build`, {});
+      buildResult.logs?.forEach((log) => appendConsoleLine(log.message, log.level));
       const result = await platformApi<{ deployment: { url?: string; preview_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'preview' });
       setPreviewState('ready', result.deployment.preview_url || result.deployment.url || 'preview ready');
+      appendConsoleLine('Preview Vercel deployment created', 'success');
       showToast('Preview Vercel créé');
     } catch (error) {
       setPreviewState('failed', 'preview failed');
+      appendConsoleLine(error instanceof Error ? error.message : 'Erreur preview', 'error');
       showToast(error instanceof Error ? error.message : 'Erreur preview');
     }
   });
 
   document.getElementById('btn-refresh-preview')?.addEventListener('click', async () => {
     try {
-      const stream = await platformApi<{ events: unknown[]; build_logs: { message: string }[] }>(`/api/projects/${requireProjectId()}/stream`);
+      const stream = await syncProjectStream();
       showToast(`Logs synchronisés: ${stream.events.length} events, ${stream.build_logs.length} logs`);
       setPreviewState('ready', previewUrl?.textContent || 'stream refreshed');
     } catch (error) {
@@ -767,9 +790,11 @@ function initBuilder() {
       setPreviewState('deploying', 'deployment pending');
       const result = await platformApi<{ deployment: { url?: string; production_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'production' });
       setPreviewState('ready', result.deployment.production_url || result.deployment.url || 'production deployed');
+      appendConsoleLine('Production Vercel deployment created', 'success');
       showToast('Production Vercel déployée');
     } catch (error) {
       setPreviewState('failed', 'deployment failed');
+      appendConsoleLine(error instanceof Error ? error.message : 'Erreur déploiement', 'error');
       showToast(error instanceof Error ? error.message : 'Erreur déploiement');
     }
   });
@@ -791,7 +816,9 @@ function initBuilder() {
 
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
   window.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+    const mod = e.metaKey || e.ctrlKey;
+    const key = e.key.toLowerCase();
+    if (mod && key === 'z') {
       e.preventDefault();
       if (e.shiftKey) {
         document.getElementById('btn-redo')?.click();
@@ -799,9 +826,40 @@ function initBuilder() {
         document.getElementById('btn-undo')?.click();
       }
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+    if (mod && key === 'y') {
       e.preventDefault();
       document.getElementById('btn-redo')?.click();
+    }
+    if (mod && key === 'enter') {
+      e.preventDefault();
+      if (chatTextarea.value.trim()) void handleSend();
+    }
+    if (mod && key === 'k') {
+      e.preventDefault();
+      setSubTab('chat');
+      chatTextarea.focus();
+      showToast('Chat prêt');
+    }
+    if (mod && key === 'b') {
+      e.preventDefault();
+      document.getElementById('btn-build-preview')?.click();
+    }
+    if (mod && key === 'd') {
+      e.preventDefault();
+      document.getElementById('btn-deploy-project')?.click();
+    }
+    if (mod && e.shiftKey && key === 'p') {
+      e.preventDefault();
+      (document.querySelector('[data-view="preview"]') as HTMLButtonElement | null)?.click();
+    }
+    if (mod && e.key === '`') {
+      e.preventDefault();
+      consolePanel?.classList.toggle('open');
+    }
+    if (e.key === 'Escape') {
+      consolePanel?.classList.remove('open');
+      modelDropdown?.classList.remove('open');
+      modeDropdownUI?.classList.remove('open');
     }
   });
 

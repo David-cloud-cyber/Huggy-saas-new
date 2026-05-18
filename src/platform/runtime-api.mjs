@@ -361,10 +361,100 @@ async function loadVersionFiles(supabase, projectId, versionId) {
   return (data || []).map((file) => ({ file: file.path, data: file.content || '', encoding: 'utf-8' }));
 }
 
+async function loadProjectFileRows(supabase, projectId, versionId) {
+  const query = supabase.from('project_files').select('path,content,size_bytes,is_binary').eq('project_id', projectId).is('deleted_at', null).order('path');
+  const { data, error } = versionId ? await query.eq('version_id', versionId) : await query;
+  if (error) throw error;
+  return data || [];
+}
+
+function validateBuildFiles(files) {
+  const paths = new Set(files.map((file) => file.path));
+  const missing = [];
+  if (!paths.has('package.json')) missing.push('package.json');
+  if (!paths.has('index.html')) missing.push('index.html');
+  if (!files.some((file) => /^src\/main\.(jsx|tsx|js|ts)$/.test(file.path))) missing.push('src/main.jsx');
+  const packageFile = files.find((file) => file.path === 'package.json');
+  if (packageFile?.content) {
+    try {
+      const packageJson = JSON.parse(packageFile.content);
+      if (!packageJson?.scripts?.build) missing.push('package.json:scripts.build');
+    } catch {
+      missing.push('package.json:valid-json');
+    }
+  }
+  return missing;
+}
+
+async function appendBuildLogs(supabase, build, context, rows) {
+  const { error } = await supabase.from('build_logs').insert(rows.map((row, index) => ({
+    build_job_id: build.id,
+    organization_id: context.organizationId,
+    project_id: context.projectId,
+    sequence: index + 1,
+    level: row.level,
+    message: row.message,
+    metadata: row.metadata || {},
+  })));
+  if (error) throw error;
+}
+
+async function runBuildJob(supabase, context, project) {
+  const versionId = project.current_version_id;
+  if (!versionId) throw new RuntimeApiError('missing_active_version', 'Project has no active version to build.', 422);
+  const { data: build, error } = await supabase.from('build_jobs').insert({
+    organization_id: context.organizationId,
+    project_id: project.id,
+    version_id: versionId,
+    status: 'running',
+    command: 'npm run build',
+    started_at: new Date().toISOString(),
+  }).select('*').single();
+  if (error) throw error;
+
+  const files = await loadProjectFileRows(supabase, project.id, versionId);
+  const missing = validateBuildFiles(files);
+  const logs = [
+    { level: 'info', message: 'Build job started', metadata: { version_id: versionId } },
+    { level: 'info', message: `Loaded ${files.length} persisted files from project_files`, metadata: { file_count: files.length } },
+    { level: missing.length ? 'error' : 'success', message: missing.length ? `Build validation failed: ${missing.join(', ')}` : 'Build inputs validated for Vercel remote build', metadata: { missing } },
+  ];
+  await appendBuildLogs(supabase, build, context, logs);
+
+  if (missing.length) {
+    await supabase.from('build_jobs').update({ status: 'failed', error_message: `Missing or invalid build inputs: ${missing.join(', ')}`, finished_at: new Date().toISOString() }).eq('id', build.id);
+    throw new RuntimeApiError('build_validation_failed', 'Build validation failed before deployment.', 422, { build_id: build.id, missing });
+  }
+
+  const { data: finishedBuild, error: updateError } = await supabase.from('build_jobs').update({
+    status: 'success',
+    artifact_storage_path: `project_files/${project.id}/${versionId}`,
+    finished_at: new Date().toISOString(),
+  }).eq('id', build.id).select('*').single();
+  if (updateError) throw updateError;
+  return { build: finishedBuild, logs };
+}
+
+async function latestSuccessfulBuild(supabase, project) {
+  if (!project.current_version_id) return null;
+  const { data, error } = await supabase
+    .from('build_jobs')
+    .select('*')
+    .eq('project_id', project.id)
+    .eq('version_id', project.current_version_id)
+    .eq('status', 'success')
+    .order('finished_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function createVercelDeployment(supabase, context, project, target) {
   const versionId = project.current_version_id;
   const files = await loadVersionFiles(supabase, project.id, versionId);
   if (files.length === 0) throw new RuntimeApiError('no_project_files', 'Project has no generated files to deploy.', 422);
+  const build = await latestSuccessfulBuild(supabase, project) || (await runBuildJob(supabase, context, project)).build;
   const vercelProjectId = await ensureVercelProject(supabase, project);
   const body = await vercelRequest('/v13/deployments', {
     method: 'POST',
@@ -382,6 +472,7 @@ async function createVercelDeployment(supabase, context, project, target) {
     project_id: project.id,
     organization_id: context.organizationId,
     version_id: versionId,
+    build_job_id: build.id,
     environment: target,
     status,
     provider: 'vercel',
@@ -397,7 +488,7 @@ async function createVercelDeployment(supabase, context, project, target) {
   }).select('*').single();
   if (error) throw error;
   if (target === 'preview') {
-    await supabase.from('previews').insert({ organization_id: context.organizationId, project_id: project.id, version_id: versionId, deployment_id: deployment.id, status: status === 'error' ? 'failed' : 'building', url });
+    await supabase.from('previews').insert({ organization_id: context.organizationId, project_id: project.id, version_id: versionId, deployment_id: deployment.id, status: status === 'ready' ? 'ready' : status === 'error' ? 'failed' : 'building', url });
   }
   await audit(supabase, context.organizationId, context.userId, project.id, `deploy_${target}`, { deployment_id: deployment.id, url });
   return deployment;
@@ -452,7 +543,7 @@ export async function handleRuntimeApi(request, response, url) {
       if (error) throw error;
       const files = generatedFiles(body.prompt || body.description || name);
       const version = await persistVersionAndFiles(supabase, { ...context, projectId: project.id }, project, files, 'Initial version');
-      await supabase.from('build_jobs').insert({ organization_id: context.organizationId, project_id: project.id, version_id: version.id, status: 'success', command: 'mock:initial-build', started_at: new Date().toISOString(), finished_at: new Date().toISOString() });
+      await runBuildJob(supabase, { ...context, projectId: project.id }, { ...project, current_version_id: version.id });
       await finalizeReservation(supabase, context, reservation, 1);
       await audit(supabase, context.organizationId, user.id, project.id, 'project_create', { version_id: version.id });
       return json(response, 201, { project: { ...project, current_version_id: version.id }, version });
@@ -501,11 +592,9 @@ export async function handleRuntimeApi(request, response, url) {
 
     if (request.method === 'POST' && action === 'build') {
       const reservation = await reserveCredits(supabase, context, 10, 'build_job');
-      const { data: build, error } = await supabase.from('build_jobs').insert({ organization_id: context.organizationId, project_id: project.id, version_id: project.current_version_id, status: 'success', command: 'mock:validated-build', started_at: new Date().toISOString(), finished_at: new Date().toISOString() }).select('*').single();
-      if (error) throw error;
-      await supabase.from('build_logs').insert([{ build_job_id: build.id, organization_id: context.organizationId, project_id: project.id, sequence: 1, level: 'info', message: 'Build job started' }, { build_job_id: build.id, organization_id: context.organizationId, project_id: project.id, sequence: 2, level: 'info', message: 'Generated files validated' }, { build_job_id: build.id, organization_id: context.organizationId, project_id: project.id, sequence: 3, level: 'success', message: 'Build completed' }]);
+      const { build, logs } = await runBuildJob(supabase, context, project);
       await finalizeReservation(supabase, context, reservation, 10);
-      return json(response, 200, { build });
+      return json(response, 200, { build, logs });
     }
 
     if (request.method === 'POST' && (action === 'preview' || action === 'deploy')) {
