@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = process.cwd().endsWith('huggy-saas') ? process.cwd() : join(process.cwd(), 'huggy-saas');
+const root = process.cwd();
 
 function read(relativePath) {
   return readFileSync(join(root, relativePath), 'utf8');
@@ -38,6 +38,7 @@ const supabaseClient = read('src/lib/supabase.ts');
 const supabaseDashboard = read('src/supabase-dashboard.ts');
 const supabaseAuth = read('src/supabase-auth.ts');
 const server = read('server.js');
+const runtimeApi = read('src/platform/runtime-api.mjs');
 const envExample = read('.env.example');
 const railway = read('railway.json');
 const nixpacks = read('nixpacks.toml');
@@ -52,7 +53,11 @@ assert(!dashboard.includes('setTimeout(openSettings'), 'dashboard settings modal
 assert(!dashboard.match(/const\s+curtain[\s\S]*const\s+curtain/), 'dashboard must not redeclare curtain in one script scope');
 assert(builder.includes('id="chat-container"'), 'builder must expose chat container');
 assert(builder.includes('id="preview-frame"'), 'builder must expose preview frame');
+assert(builder.includes('<iframe class="preview-frame"'), 'builder preview must be an iframe for real preview URLs');
 assert(builder.includes('btn-deploy'), 'builder must expose deploy button');
+for (const apiRoute of ['/api/projects', '/api/deploy', '/api/domains', '/api/billing', '/api/ai/estimate']) {
+  assert(runtimeApi.includes(apiRoute), `runtime API must expose ${apiRoute}`);
+}
 
 const routeExpectations = ['/dashboard', '/projects', '/projects/new', '/billing', '/login', '/signup', '/organization/settings'];
 for (const route of routeExpectations) assert(server.includes(`'${route}'`), `production server must route ${route}`);

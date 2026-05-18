@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = process.cwd().endsWith('huggy-saas') ? process.cwd() : join(process.cwd(), 'huggy-saas');
+const root = process.cwd();
 const allowedModels = [
   'openai/gpt-5.5',
   'openai/gpt-5.5-pro',

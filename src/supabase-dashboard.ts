@@ -75,6 +75,22 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value));
 }
 
+async function platformApi<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+  const session = await getCurrentSession();
+  if (!session?.access_token) throw new Error('Session Supabase requise.');
+  const response = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      authorization: `Bearer ${session.access_token}`,
+      'content-type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Erreur API ${response.status}`);
+  return payload as T;
+}
+
 async function initSupabaseDashboard(): Promise<void> {
   const status = getSupabaseConfigStatus();
   if (!status.configured) {
@@ -112,13 +128,16 @@ async function initSupabaseDashboard(): Promise<void> {
       .limit(1)
       .maybeSingle<OrganizationMemberRow>();
 
-    const organizationId = membership?.organizations?.id;
+    let organizationId = membership?.organizations?.id;
+    let role = membership?.role;
     if (!organizationId) {
-      showNotice('Session Supabase active, mais aucune organisation liée.');
-      return;
+      const bootstrap = await platformApi<{ organization: { id: string; name: string; slug: string }; role: string }>('/api/platform/bootstrap', {});
+      organizationId = bootstrap.organization.id;
+      role = bootstrap.role;
+      showNotice('Workspace Supabase créé automatiquement.');
     }
 
-    text('.plan-badge', membership.role || 'member');
+    text('.plan-badge', role || 'member');
 
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
@@ -150,6 +169,22 @@ document.addEventListener('click', (event) => {
   if (target?.closest('[data-action="sign-out"]')) {
     event.preventDefault();
     signOut().then(() => window.location.assign('/'));
+  }
+});
+
+document.addEventListener('click', async (event) => {
+  const target = event.target as HTMLElement | null;
+  if (!target?.closest('.btn-new-project-sidebar, .btn-create-top')) return;
+  event.preventDefault();
+  const promptText = (document.getElementById('ai-textarea') as HTMLTextAreaElement | null)?.value?.trim();
+  const name = window.prompt('Nom du projet Supabase à créer', promptText ? promptText.slice(0, 48) : 'Nouveau projet Huggy');
+  if (!name) return;
+  try {
+    showNotice('Création du projet Supabase...');
+    const result = await platformApi<{ project: { id: string } }>('/api/projects', { name, prompt: promptText || name });
+    window.location.assign(`/projects/${result.project.id}/editor`);
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : 'Erreur de création projet.', 'error');
   }
 });
 

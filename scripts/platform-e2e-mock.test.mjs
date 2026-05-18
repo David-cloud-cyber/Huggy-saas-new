@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = process.cwd().endsWith('huggy-saas') ? process.cwd() : join(process.cwd(), 'huggy-saas');
+const root = process.cwd();
 
 function read(relativePath) {
   return readFileSync(join(root, relativePath), 'utf8');
@@ -27,10 +27,10 @@ assert(builder.includes('id="btn-deploy-project"'), 'e2e mock: deploy button mus
 assert(builder.includes('id="tab-domains"'), 'e2e mock: domains tab must exist');
 assert(builder.includes('id="tab-versions"'), 'e2e mock: versions tab must exist');
 assert(builder.includes('id="tab-backend"'), 'e2e mock: backend status tab must exist');
-assert(builderTs.includes('Preview build queued'), 'e2e mock: preview action must provide visible feedback');
-assert(builderTs.includes('Production deploy queued via Railway backend'), 'e2e mock: deploy action must provide visible feedback');
+assert(builderTs.includes('Preview Vercel créé'), 'e2e mock: preview action must provide visible feedback');
+assert(builderTs.includes('Production Vercel déployée'), 'e2e mock: deploy action must provide visible feedback');
 assert(builderTs.includes('Rollback restored selected version'), 'e2e mock: rollback action must provide visible feedback');
-assert(builderTs.includes('Domain workflow: add DNS then verify'), 'e2e mock: custom domain action must provide visible feedback');
+assert(builderTs.includes('Domaine custom à ajouter'), 'e2e mock: custom domain action must provide visible feedback');
 
 for (const route of ['/projects/new', 'editor', 'preview', 'domains', 'deployments', 'versions', 'settings']) {
   assert(server.includes(route), `e2e mock: server must route ${route}`);

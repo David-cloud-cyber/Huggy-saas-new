@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
+import { handleRuntimeApi } from './src/platform/runtime-api.mjs';
 
 const root = resolve('dist');
 const port = Number(process.env.PORT ?? 3000);
@@ -53,7 +54,7 @@ function safePath(relativePath) {
   return candidate;
 }
 
-createServer((request, response) => {
+createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   if (url.pathname === '/api/health') {
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
@@ -71,6 +72,7 @@ createServer((request, response) => {
     }));
     return;
   }
+  if (await handleRuntimeApi(request, response, url)) return;
   if (url.pathname === '/api/webhooks/vercel') {
     if (request.method !== 'POST') {
       response.writeHead(405, { 'content-type': 'application/json; charset=utf-8' });

@@ -1,3 +1,5 @@
+import { getCurrentSession } from './lib/supabase';
+
 function initBuilder() {
   // ── INITIAL THEME ───────────────────────────────────────────
   const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
@@ -342,7 +344,7 @@ function initBuilder() {
 
   // ── DEVICE SWITCHER ──────────────────────────────────────────
   const savedDevice = localStorage.getItem('huggy-preview-device') || 'desktop';
-  const previewFrame = document.getElementById('preview-frame');
+  const previewFrame = document.getElementById('preview-frame') as HTMLIFrameElement | null;
   const deviceBtns = document.querySelectorAll('.device-btn');
 
   function setDevice(device: string) {
@@ -456,7 +458,7 @@ function initBuilder() {
     });
   });
 
-  function handleSend() {
+  async function handleSend() {
     const text = chatTextarea.value.trim();
     if (!text) return;
     const container = document.getElementById('chat-container');
@@ -470,17 +472,48 @@ function initBuilder() {
       chatTextarea.style.height = 'auto';
       btnSend.disabled = true;
 
-      setTimeout(() => {
+      try {
+        const activeModel = document.querySelector('.model-option.active') as HTMLElement | null;
+        const modelName = activeModel?.dataset.name || 'Gemini 3 Flash';
+        const modelMap: Record<string, string> = {
+          'Claude Sonnet 4.6': 'anthropic/claude-sonnet-4.6',
+          'Claude Opus 4.7': 'anthropic/claude-opus-4.7',
+          'Gemini 3 Pro': 'google/gemini-3-pro',
+          'Gemini 3 Flash': 'google/gemini-3-flash',
+          Auto: 'google/gemini-3-flash',
+        };
+        const result = await platformApi<{ message?: string; version?: { id: string }; files?: { path: string }[] }>(`/api/projects/${requireProjectId()}/messages`, {
+          prompt: text,
+          mode: currentMode,
+          model: modelMap[modelName] || 'google/gemini-3-flash',
+        });
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
-        if (currentMode === 'plan') {
-          sysMsg.innerHTML = '── plan generated ──';
-        } else {
-          sysMsg.innerHTML = '── change applied ──';
+        sysMsg.textContent = currentMode === 'plan' ? '── plan generated from OpenRouter ──' : '── AI generation persisted ──';
+        container.appendChild(sysMsg);
+        const assistantMsg = document.createElement('div');
+        assistantMsg.className = 'msg-system';
+        assistantMsg.textContent = (result.message || 'Application generated.').slice(0, 900);
+        container.appendChild(assistantMsg);
+        if (result.files?.length) {
+          structure.length = 0;
+          result.files.forEach((file) => structure.push({ type: 'file', name: file.path, size: 'persisted' }));
+          if (fileTree) {
+            fileTree.innerHTML = '';
+            renderTree(structure, fileTree);
+          }
         }
+        container.scrollTop = container.scrollHeight;
+        showToast(`Version ${result.version?.id?.slice(0, 8) || 'active'} persistée`);
+      } catch (error) {
+        const sysMsg = document.createElement('div');
+        sysMsg.className = 'msg-system';
+        sysMsg.textContent = error instanceof Error ? error.message : 'Erreur IA backend';
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;
-      }, 2000);
+      } finally {
+        btnSend.disabled = false;
+      }
 
       addToHistory(`Chat: ${text.substring(0, 20)}...`);
     }
@@ -675,36 +708,85 @@ function initBuilder() {
 
   const previewStatus = document.getElementById('preview-status');
   const previewUrl = document.getElementById('preview-url');
+  const projectId = window.location.pathname.match(/\/projects\/([^/]+)/)?.[1];
+
+  async function platformApi<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+    const session = await getCurrentSession();
+    if (!session?.access_token) throw new Error('Session Supabase requise.');
+    const response = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        authorization: `Bearer ${session.access_token}`,
+        'content-type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error?.message || `Erreur API ${response.status}`);
+    return payload as T;
+  }
+
+  function requireProjectId(): string {
+    if (!projectId) throw new Error('Projet introuvable dans l’URL.');
+    return projectId;
+  }
 
   function setPreviewState(status: string, url: string) {
     if (previewStatus) previewStatus.textContent = status;
     if (previewUrl) previewUrl.textContent = url;
+    if (previewFrame && /^https?:\/\//.test(url)) previewFrame.src = url;
   }
 
-  document.getElementById('btn-build-preview')?.addEventListener('click', () => {
-    setPreviewState('building', 'preview queued');
-    showToast('Preview build queued');
-    setTimeout(() => setPreviewState('ready', 'my-dashboard-app-preview.vercel.app'), 900);
+  document.getElementById('btn-build-preview')?.addEventListener('click', async () => {
+    try {
+      setPreviewState('building', 'build queued');
+      showToast('Build job lancé');
+      await platformApi(`/api/projects/${requireProjectId()}/build`, {});
+      const result = await platformApi<{ deployment: { url?: string; preview_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'preview' });
+      setPreviewState('ready', result.deployment.preview_url || result.deployment.url || 'preview ready');
+      showToast('Preview Vercel créé');
+    } catch (error) {
+      setPreviewState('failed', 'preview failed');
+      showToast(error instanceof Error ? error.message : 'Erreur preview');
+    }
   });
 
-  document.getElementById('btn-refresh-preview')?.addEventListener('click', () => {
-    setPreviewState('building', previewUrl?.textContent || 'refreshing');
-    showToast('Refreshing preview...');
-    setTimeout(() => setPreviewState('ready', 'my-dashboard-app-preview.vercel.app'), 700);
+  document.getElementById('btn-refresh-preview')?.addEventListener('click', async () => {
+    try {
+      const stream = await platformApi<{ events: unknown[]; build_logs: { message: string }[] }>(`/api/projects/${requireProjectId()}/stream`);
+      showToast(`Logs synchronisés: ${stream.events.length} events, ${stream.build_logs.length} logs`);
+      setPreviewState('ready', previewUrl?.textContent || 'stream refreshed');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Erreur refresh');
+    }
   });
 
-  document.getElementById('btn-deploy-project')?.addEventListener('click', () => {
-    showToast('Production deploy queued via Railway backend');
-    setPreviewState('deploying', 'deployment pending');
-    setTimeout(() => setPreviewState('ready', 'my-dashboard-app.your-saas-domain.com'), 1000);
+  document.getElementById('btn-deploy-project')?.addEventListener('click', async () => {
+    try {
+      showToast('Déploiement production Vercel...');
+      setPreviewState('deploying', 'deployment pending');
+      const result = await platformApi<{ deployment: { url?: string; production_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'production' });
+      setPreviewState('ready', result.deployment.production_url || result.deployment.url || 'production deployed');
+      showToast('Production Vercel déployée');
+    } catch (error) {
+      setPreviewState('failed', 'deployment failed');
+      showToast(error instanceof Error ? error.message : 'Erreur déploiement');
+    }
   });
 
   document.getElementById('btn-rollback-version')?.addEventListener('click', () => {
     showToast('Rollback restored selected version');
   });
 
-  document.getElementById('btn-add-domain')?.addEventListener('click', () => {
-    showToast('Domain workflow: add DNS then verify');
+  document.getElementById('btn-add-domain')?.addEventListener('click', async () => {
+    const hostname = window.prompt('Domaine custom à ajouter');
+    if (!hostname) return;
+    try {
+      const result = await platformApi<{ dns: { type: string; name: string; value: string } }>('/api/domains', { project_id: requireProjectId(), hostname });
+      showToast(`DNS ${result.dns.type}: ${result.dns.name} → ${result.dns.value}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Erreur domaine');
+    }
   });
 
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
