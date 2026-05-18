@@ -223,31 +223,31 @@
                 <div class="actions-right">
                     <div class="model-select" id="model-select-btn">
                         <span class="model-label-prefix">Model</span>
-                        <span id="current-model-label">Sonnet 4.5</span>
+                        <span id="current-model-label">Claude Sonnet 4.6</span>
                         <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                         
                         <div class="dropdown" id="model-dropdown">
                             <div class="dropdown-header">Choose AI Engine</div>
-                            <div class="model-option active" data-name="Sonnet 4.5">
+                            <div class="model-option active" data-name="Claude Sonnet 4.6">
                                 <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Sonnet 4.5</span>
+                                    <span class="opt-name">Claude Sonnet 4.6</span>
                                     <span class="opt-desc">Intelligence + Speed</span>
                                 </div>
                             </div>
-                            <div class="model-option" data-name="Opus 4.5">
+                            <div class="model-option" data-name="Claude Opus 4.7">
                                 <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Opus 4.5</span>
+                                    <span class="opt-name">Claude Opus 4.7</span>
                                     <span class="opt-desc">Deep Reasoning</span>
                                 </div>
                             </div>
-                            <div class="model-option" data-name="Haiku 4.5">
+                            <div class="model-option" data-name="GPT-5 Nano">
                                 <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Haiku 4.5</span>
+                                    <span class="opt-name">GPT-5 Nano</span>
                                     <span class="opt-desc">Ultra lightweight</span>
                                 </div>
                             </div>
@@ -600,7 +600,6 @@
     });
 
     // 7. Navigation logic - Link to builder
-    const curtain = document.getElementById('curtain');
     window.addEventListener('load', () => {
         if (curtain) curtain.classList.add('rising');
     });
@@ -703,11 +702,6 @@
       settingsPanel.classList.remove('open');
       document.body.style.overflow = '';
     }
-
-    // Auto-open for demo
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(openSettings, 800);
-    });
 
     btnSettings?.addEventListener('click', openSettings);
     btnCloseSettings?.addEventListener('click', closeSettings);
@@ -840,9 +834,9 @@
           <div class="form-row">
             <span class="form-label">ModÃ¨le par dÃ©faut</span>
             <select class="settings-select">
-              <option>Sonnet 4.5</option>
-              <option>Opus 4.5</option>
-              <option>Haiku 4.5</option>
+              <option>Claude Sonnet 4.6</option>
+              <option>Claude Opus 4.7</option>
+              <option>GPT-5 Nano</option>
             </select>
           </div>
         </div>
@@ -908,4 +902,5 @@
   </div>
 </body>
 </html>
+
 

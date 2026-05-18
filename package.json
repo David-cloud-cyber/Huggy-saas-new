@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "preview": "node server.js",
+    "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node scripts/ai-model-allowlist.test.mjs"
+    "test": "node scripts/ai-model-allowlist.test.mjs && node scripts/qa-static-checks.mjs",
+    "test:smoke": "node scripts/smoke-http-checks.mjs"
   },
   "dependencies": {
     "vite": "^6.2.0"
