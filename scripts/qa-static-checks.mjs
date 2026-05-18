@@ -33,6 +33,10 @@ for (const page of requiredPages) assert(read(page).includes('<!DOCTYPE html>') 
 
 const dashboard = read('dashboard.html');
 const builder = read('builder.html');
+const index = read('index.html');
+const supabaseClient = read('src/lib/supabase.ts');
+const supabaseDashboard = read('src/supabase-dashboard.ts');
+const supabaseAuth = read('src/supabase-auth.ts');
 const server = read('server.js');
 const envExample = read('.env.example');
 const railway = read('railway.json');
@@ -41,6 +45,8 @@ assert(dashboard.includes('btn-new-project-sidebar'), 'dashboard must expose sid
 assert(dashboard.includes('btn-create-top'), 'dashboard must expose top new project CTA');
 assert(dashboard.includes('id="ai-textarea"'), 'dashboard must expose prompt textarea');
 assert(dashboard.includes('id="model-dropdown"'), 'dashboard must expose model selector');
+assert(dashboard.includes('/src/supabase-dashboard.ts'), 'dashboard must load Supabase dashboard integration');
+assert(index.includes('/src/supabase-auth.ts'), 'index/login/signup shell must load Supabase auth integration');
 assert(!dashboard.includes('setTimeout(openSettings'), 'dashboard settings modal must not auto-open in production');
 assert(!dashboard.match(/const\s+curtain[\s\S]*const\s+curtain/), 'dashboard must not redeclare curtain in one script scope');
 assert(builder.includes('id="chat-container"'), 'builder must expose chat container');
@@ -71,6 +77,13 @@ const requiredEnv = [
 ];
 for (const variable of requiredEnv) assert(envExample.includes(variable), `${variable} must be documented in .env.example`);
 assert(railway.includes('node server.js'), 'Railway must start the production server with route rewrites');
+assert(supabaseClient.includes('createClient'), 'Supabase client must use the official createClient API');
+assert(supabaseClient.includes('VITE_SUPABASE_URL'), 'Supabase client must read the public Supabase URL');
+assert(supabaseClient.includes('VITE_SUPABASE_ANON_KEY'), 'Supabase client must read the public anon key');
+assert(!supabaseClient.includes('SUPABASE_SERVICE_ROLE_KEY'), 'Frontend Supabase client must not reference service role key');
+assert(supabaseDashboard.includes("from('projects')"), 'Dashboard must load projects from Supabase');
+assert(supabaseDashboard.includes("from('users_profile')"), 'Dashboard must load user profile from Supabase');
+assert(supabaseAuth.includes('signInWithMagicLink'), 'Auth shell must connect login/signup to Supabase magic link');
 
 const forbiddenUiModels = ['Sonnet 4.5', 'Opus 4.5', 'Haiku 4.5', 'Gemini 2.0', 'gpt-4o-mini', 'o1-pro'];
 for (const model of forbiddenUiModels) {

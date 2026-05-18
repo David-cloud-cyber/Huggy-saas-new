@@ -13,6 +13,7 @@
     "test:smoke": "node scripts/smoke-http-checks.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
     "vite": "^6.2.0"
   },
   "devDependencies": {

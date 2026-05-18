@@ -705,6 +705,7 @@
 
     btnSettings?.addEventListener('click', openSettings);
     btnCloseSettings?.addEventListener('click', closeSettings);
+    document.getElementById('cancel-settings')?.addEventListener('click', closeSettings);
     settingsOverlay?.addEventListener('click', closeSettings);
 
     settingsTabs.forEach(tab => {
@@ -885,7 +886,7 @@
     <div class="settings-footer">
       <div class="save-status" id="save-status"></div>
       <div style="display:flex; gap:8px">
-        <button class="btn-secondary" onclick="closeSettings()">Annuler</button>
+        <button class="btn-secondary" id="cancel-settings">Annuler</button>
         <button class="btn-primary" id="save-settings">Sauvegarder</button>
       </div>
     </div>
@@ -900,6 +901,7 @@
       </div>
     </div>
   </div>
+  <script type="module" src="/src/supabase-dashboard.ts"></script>
 </body>
 </html>
 
