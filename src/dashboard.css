@@ -309,6 +309,22 @@
       border: none; cursor: pointer; transition: opacity 120ms;
     }
     .btn-create-top:hover { opacity: 0.82; }
+    .btn-auth-link {
+      min-height: 32px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: "Instrument Sans";
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      transition: opacity 120ms;
+    }
+    .btn-auth-link:hover { opacity: 0.82; }
 
     .content-area {
       flex: 1; overflow-y: auto; padding: 28px;
@@ -812,6 +828,16 @@
     }
     .activity-row:last-child { border-bottom: none; }
     .activity-row:hover { background: var(--accent-dim); }
+    .activity-empty {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 72px;
+      padding: 18px 22px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
 
     .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .status-dot.success { background: var(--success); }

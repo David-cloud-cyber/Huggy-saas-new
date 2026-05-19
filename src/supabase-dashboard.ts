@@ -41,8 +41,74 @@ function showNotice(message: string, tone: 'info' | 'error' = 'info'): void {
   notice.textContent = message;
 }
 
+function clearStaticProjectNav(): void {
+  document.querySelectorAll('.nav-project').forEach((element) => element.remove());
+}
+
+function setDashboardSummary(projects: number | string, builds: number | string, credits: number | string, quality: number | string): void {
+  const values = document.querySelectorAll('.kpi-value');
+  const summary = [projects, builds, credits, quality];
+  values.forEach((element, index) => {
+    if (summary[index] !== undefined) element.textContent = String(summary[index]);
+  });
+}
+
+function setDashboardTrendLabels(projects: string, builds: string, credits: string, quality: string): void {
+  const trends = document.querySelectorAll('.kpi-trend');
+  const labels = [projects, builds, credits, quality];
+  trends.forEach((element, index) => {
+    if (labels[index] !== undefined) element.textContent = labels[index];
+  });
+}
+
+function setCreditsSummary(credits: number, total: number): void {
+  text('.credits-count', String(credits));
+  text('.credits-total', `/ ${total} crédits`);
+  document.querySelectorAll<HTMLElement>('.credits-fill, .kpi-mini-fill').forEach((element) => {
+    element.style.width = total > 0 ? `${Math.min(100, Math.round((credits / total) * 100))}%` : '0%';
+  });
+}
+
+function renderActivityEmpty(message: string): void {
+  const list = document.querySelector('.activity-list');
+  if (!list) return;
+  list.innerHTML = `
+    <div class="activity-empty">
+      <span class="status-dot working"></span>
+      <span>${escapeHtml(message)}</span>
+    </div>
+  `;
+}
+
+function renderAuthRequiredState(message: string): void {
+  text('.section-label span', '(0)');
+  text('.profile-name', 'Workspace Huggy');
+  text('.profile-email', 'Connexion requise');
+  text('.profile-avatar', 'HU');
+  setDashboardSummary(0, 0, 0, '-');
+  setDashboardTrendLabels('Aucun projet réel', 'Aucun build réel', '0% utilisés', 'Non mesuré');
+  setCreditsSummary(0, 0);
+  renderActivityEmpty('Connecte-toi pour afficher ton activité réelle.');
+  clearStaticProjectNav();
+
+  const grid = document.querySelector('.projects-grid');
+  if (!grid) return;
+  grid.innerHTML = `
+    <div class="project-empty-state">
+      <div class="project-empty-icon">!</div>
+      <h3>Connexion Supabase requise</h3>
+      <p>${escapeHtml(message)}</p>
+      <a class="btn-auth-link" href="/">Se connecter</a>
+    </div>
+  `;
+}
+
 function renderProjects(projects: ProjectRow[]): void {
   text('.section-label span', `(${projects.length})`);
+  setDashboardSummary(projects.length, '-', '-', '-');
+  setDashboardTrendLabels('Synchronisé Supabase', 'En attente de builds', 'Voir wallet', 'En attente QA');
+  renderActivityEmpty(projects.length ? 'Activité synchronisée depuis Supabase après tes prochaines générations.' : 'Aucune activité réelle pour le moment.');
+  clearStaticProjectNav();
   const grid = document.querySelector('.projects-grid');
   if (!grid) return;
   if (projects.length === 0) {
@@ -105,6 +171,7 @@ async function platformApi<T>(path: string, body?: Record<string, unknown>): Pro
 async function initSupabaseDashboard(): Promise<void> {
   const status = getSupabaseConfigStatus();
   if (!status.configured) {
+    renderAuthRequiredState(`Supabase non configuré: ${status.missing.join(', ')}`);
     showNotice(`Supabase non configuré: ${status.missing.join(', ')}`, 'error');
     return;
   }
@@ -115,6 +182,7 @@ async function initSupabaseDashboard(): Promise<void> {
   try {
     const session = await getCurrentSession();
     if (!session) {
+      renderAuthRequiredState('Connecte-toi pour charger tes vrais projets, tes crédits et ton historique depuis Supabase.');
       showNotice('Connecte-toi pour charger tes projets Supabase.');
       return;
     }
@@ -188,6 +256,12 @@ document.addEventListener('click', async (event) => {
   if (!target?.closest('.btn-new-project-sidebar, .btn-create-top, #submit-btn')) return;
   event.preventDefault();
   event.stopPropagation();
+  const session = await getCurrentSession();
+  if (!session) {
+    renderAuthRequiredState('Connecte-toi avant de créer un projet Huggy relié à Supabase.');
+    showNotice('Connexion Supabase requise avant de créer un projet.', 'error');
+    return;
+  }
   const promptText = (document.getElementById('ai-textarea') as HTMLTextAreaElement | null)?.value?.trim();
   const name = window.prompt('Nom du projet Supabase à créer', promptText ? promptText.slice(0, 48) : 'Nouveau projet Huggy');
   if (!name) return;

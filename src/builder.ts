@@ -154,8 +154,11 @@ function initBuilder() {
         header.className = 'folder-header open';
         header.innerHTML = `
           <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-          ${getIcon(item)}
-          <span class="folder-name">${item.name}/</span>`;
+          ${getIcon(item)}`;
+        const folderName = document.createElement('span');
+        folderName.className = 'folder-name';
+        folderName.textContent = `${item.name}/`;
+        header.appendChild(folderName);
         const children = document.createElement('div');
         children.className = 'folder-children';
         renderTree(item.children, children);
@@ -169,10 +172,14 @@ function initBuilder() {
       } else {
         const fi = document.createElement('div');
         fi.className = 'file-item' + (item.active ? ' active' : '');
-        fi.innerHTML = `
-          ${getIcon(item)}
-          <span class="file-name">${item.name}</span>
-          <span class="file-size">${item.size}</span>`;
+        fi.innerHTML = getIcon(item);
+        const fileName = document.createElement('span');
+        fileName.className = 'file-name';
+        fileName.textContent = item.name;
+        const fileSize = document.createElement('span');
+        fileSize.className = 'file-size';
+        fileSize.textContent = item.size;
+        fi.append(fileName, fileSize);
         fi.addEventListener('click', () => {
           document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
           fi.classList.add('active');
@@ -206,7 +213,11 @@ function initBuilder() {
           pendingFiles.forEach(file => {
             const item = document.createElement('div');
             item.className = 'sel-file-item';
-            item.innerHTML = `<span>${file.name}</span><span>${(file.size / 1024).toFixed(1)}kb</span>`;
+            const name = document.createElement('span');
+            name.textContent = file.name;
+            const size = document.createElement('span');
+            size.textContent = `${(file.size / 1024).toFixed(1)}kb`;
+            item.append(name, size);
             selectedFilesList.appendChild(item);
           });
         }
@@ -715,6 +726,7 @@ function initBuilder() {
   const previewStatus = document.getElementById('preview-status');
   const previewUrl = document.getElementById('preview-url');
   const projectId = window.location.pathname.match(/\/projects\/([^/]+)/)?.[1];
+  const hasProjectContext = Boolean(projectId);
 
   async function platformApi<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     const session = await getCurrentSession();
@@ -733,7 +745,7 @@ function initBuilder() {
   }
 
   function requireProjectId(): string {
-    if (!projectId) throw new Error('Projet introuvable dans l’URL.');
+    if (!projectId) throw new Error('Ouvre un vrai projet depuis le dashboard avant de lancer cette action.');
     return projectId;
   }
 
@@ -743,7 +755,13 @@ function initBuilder() {
     const line = document.createElement('div');
     line.className = 'log-line';
     const seconds = (performance.now() / 1000).toFixed(1).padStart(4, '0');
-    line.innerHTML = `<span class="log-ts">[${seconds}]</span><span class="log-${level}">${message}</span>`;
+    const timestamp = document.createElement('span');
+    timestamp.className = 'log-ts';
+    timestamp.textContent = `[${seconds}]`;
+    const content = document.createElement('span');
+    content.className = `log-${level}`;
+    content.textContent = message;
+    line.append(timestamp, content);
     logArea.appendChild(line);
     logArea.scrollTop = logArea.scrollHeight;
   }
@@ -761,6 +779,15 @@ function initBuilder() {
     if (previewStatus) previewStatus.textContent = status;
     if (previewUrl) previewUrl.textContent = url;
     if (previewFrame && /^https?:\/\//.test(url)) previewFrame.src = url;
+  }
+
+  if (!hasProjectContext) {
+    setPreviewState('demo', 'open a real project');
+    appendConsoleLine('Ouvre un vrai projet depuis le dashboard pour activer le chat IA, la preview et le deploy.', 'warning');
+    ['btn-build-preview', 'btn-refresh-preview', 'btn-deploy-project', 'btn-add-domain'].forEach((id) => {
+      const button = document.getElementById(id) as HTMLButtonElement | null;
+      if (button) button.title = 'Ouvre un vrai projet depuis le dashboard pour activer cette action.';
+    });
   }
 
   document.getElementById('btn-build-preview')?.addEventListener('click', async () => {

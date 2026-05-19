@@ -53,6 +53,7 @@ assert(dashboard.includes('btn-new-project-sidebar'), 'dashboard must expose sid
 assert(dashboard.includes('btn-create-top'), 'dashboard must expose top new project CTA');
 assert(dashboard.includes('id="ai-textarea"'), 'dashboard must expose prompt textarea');
 assert(dashboard.includes('id="model-dropdown"'), 'dashboard must expose model selector');
+assert(dashboard.includes('<span id="current-model-label">Auto</span>'), 'dashboard model selector must default to Auto');
 assert(dashboard.includes('/src/supabase-dashboard.ts'), 'dashboard must load Supabase dashboard integration');
 assert(index.includes('/src/supabase-auth.ts'), 'index/login/signup shell must load Supabase auth integration');
 assert((index.match(/\/src\/main\.ts/g) || []).length === 1, 'landing must load src/main.ts exactly once');
@@ -65,6 +66,7 @@ assert(builder.includes('id="chat-container"'), 'builder must expose chat contai
 assert(builder.includes('id="preview-frame"'), 'builder must expose preview frame');
 assert(builder.includes('<iframe class="preview-frame"'), 'builder preview must be an iframe for real preview URLs');
 assert(builder.includes('btn-deploy'), 'builder must expose deploy button');
+assert(builder.includes('data-name="Auto"') && builder.includes('Best allowed model'), 'builder model selector must expose Auto as the active safe default');
 assert(!landingScript.includes('Welcome back'), 'landing sign in must not open a fake auth modal');
 assert(landingScript.includes('huggyLandingReady'), 'landing init must guard against duplicate module execution');
 assert(landingCss.includes('html:not(.js-ready) .neon-highlight::after'), 'landing reveal CSS must have a no-JS visible fallback');
@@ -74,6 +76,10 @@ assert(landingScript.includes("classList.add('reveal-armed')"), 'landing reveal 
 assert(landingScript.includes('setTimeout(() => {\n            revealElements.forEach(el => el.classList.add(\'active\'));'), 'landing reveal JS must include a timeout fallback that makes sections visible');
 assert(builderScript.includes('bubble.textContent = text'), 'builder chat must escape user prompt text instead of injecting HTML');
 assert(!builderScript.includes('msg.innerHTML = `<div class="msg-user-bubble">${text}'), 'builder chat must not render user prompt with innerHTML');
+assert(builderScript.includes('content.textContent = message'), 'builder console logs must render dynamic messages with textContent');
+assert(!builderScript.includes('<span class="file-name">${item.name}</span>'), 'builder file tree must not inject dynamic file names with innerHTML');
+assert(supabaseDashboard.includes('renderAuthRequiredState'), 'dashboard must replace mock projects with an auth-required state when Supabase session is missing');
+assert(supabaseDashboard.includes('clearStaticProjectNav'), 'dashboard must clear static project navigation when real Supabase state loads');
 for (const expectedPricingValue of ['Free', 'Starter', 'Pro', 'Studio', 'Business', 'Enterprise', '$20', '$49', '$99', '$199', '100 credits / month', '1,500 credits / month', '2,500 credits', '$400']) {
   assert(pricing.includes(expectedPricingValue), `pricing page must include ${expectedPricingValue}`);
 }
