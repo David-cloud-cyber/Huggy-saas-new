@@ -4,41 +4,7 @@ function initBuilder() {
   document.documentElement.setAttribute('data-theme', savedTheme);
 
   // ── CODE CONTENT ────────────────────────────────────────────────
-  const codeLines = [
-    [`<span class="tok-keyword">import</span> React, { useState, useEffect } <span class="tok-keyword">from</span> <span class="tok-string">'react'</span>`, false],
-    [`<span class="tok-keyword">import</span> { MetricsCard } <span class="tok-keyword">from</span> <span class="tok-string">'./MetricsCard'</span>`, false],
-    [`<span class="tok-keyword">import</span> { Sidebar } <span class="tok-keyword">from</span> <span class="tok-string">'./Sidebar'</span>`, false],
-    [`<span class="tok-keyword">import</span> { useData } <span class="tok-keyword">from</span> <span class="tok-string">'../hooks/useData'</span>`, false],
-    [``, false],
-    [`<span class="tok-keyword">interface</span> <span class="tok-function">DashboardProps</span> {`, false],
-    [`  title: <span class="tok-keyword">string</span>`, false],
-    [`  userId: <span class="tok-keyword">number</span>`, false],
-    [`}`, false],
-    [``, false],
-    [`<span class="tok-keyword">export default function</span> <span class="tok-function">Dashboard</span>({ title, userId }: <span class="tok-function">DashboardProps</span>) {`, false],
-    [`  <span class="tok-keyword">const</span> { metrics, isLoading } = <span class="tok-function">useData</span>(userId)`, false],
-    [`  <span class="tok-keyword">const</span> [activeTab, setActiveTab] = <span class="tok-function">useState</span>(<span class="tok-string">'overview'</span>)`, false],
-    [``, false],
-    [`  <span class="tok-function">useEffect</span>(() => {`, false],
-    [`    document.title = <span class="tok-string">\`\${title} — Dashboard\`</span>`, false],
-    [`  }, [title])`, false],
-    [``, false],
-    [`  <span class="tok-keyword">if</span> (isLoading) <span class="tok-keyword">return</span> <span class="tok-tag">&lt;LoadingState /&gt;</span>`, false],
-    [``, false],
-    [`  <span class="tok-keyword">return</span> (`, false],
-    [`    <span class="tok-tag">&lt;div</span> <span class="tok-attr">className</span>=<span class="tok-string">"dashboard"</span><span class="tok-tag">&gt;</span>`, false],
-    [`      <span class="tok-tag">&lt;Sidebar</span> <span class="tok-attr">activeTab</span>={activeTab} <span class="tok-attr">onTabChange</span>={setActiveTab} <span class="tok-tag">/&gt;</span>`, false],
-    [`      <span class="tok-tag">&lt;main</span> <span class="tok-attr">className</span>=<span class="tok-string">"main-content"</span><span class="tok-tag">&gt;</span>`, true],
-    [`        <span class="tok-tag">&lt;div</span> <span class="tok-attr">className</span>=<span class="tok-string">"metrics-grid"</span><span class="tok-tag">&gt;</span>`, false],
-    [`          {metrics.<span class="tok-function">map</span>(m => (`, false],
-    [`            <span class="tok-tag">&lt;MetricsCard</span> <span class="tok-attr">key</span>={m.id} {...m} <span class="tok-tag">/&gt;</span>`, false],
-    [`          ))}`, false],
-    [`        <span class="tok-tag">&lt;/div&gt;</span>`, false],
-    [`      <span class="tok-tag">&lt;/main&gt;</span>`, false],
-    [`    <span class="tok-tag">&lt;/div&gt;</span>`, false],
-    [`  )`, false],
-    [`}`, false],
-  ];
+  const codeLines: [string, boolean][] = [];
 
   const codeArea = document.getElementById('code-area');
   if (codeArea) {
@@ -72,22 +38,7 @@ function initBuilder() {
     jpg: '#EC4899'
   };
 
-  const fileContents: Record<string, string> = {
-    'Dashboard.tsx': `import React from 'react';\n\nexport default function Dashboard() {\n  return <div>Hello Huggy</div>;\n}`,
-    'Sidebar.tsx': `import React from 'react';\n\nexport const Sidebar = () => <aside>Sidebar Content</aside>;`,
-    'Header.tsx': `export const Header = () => <header>Logo</header>;`,
-    'MetricsCard.tsx': `export const MetricsCard = ({ val }) => <div className="card">{val}</div>;`,
-    'useData.ts': `export const useData = () => ({ data: [], loading: false });`,
-    'useTheme.ts': `export const useTheme = () => 'dark';`,
-    'utils.ts': `export const cn = (...args) => args.filter(Boolean).join(' ');`,
-    'api.ts': `export const fetchData = async () => fetch('/api');`,
-    'App.tsx': `import { Dashboard } from './components/Dashboard';\n\nexport const App = () => <Dashboard />;`,
-    'main.tsx': `import React from 'react';\nimport ReactDOM from 'react-dom';\nimport { App } from './App';\n\nReactDOM.render(<App />, document.getElementById('root'));`,
-    'index.html': `<!DOCTYPE html>\n<html>\n<head>\n  <title>App</title>\n</head>\n<body>\n  <div id="root"></div>\n</body>\n</html>`,
-    'package.json': `{\n  "name": "huggy-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "react": "^18.0.0"\n  }\n}`,
-    'tailwind.config.js': `module.exports = {\n  content: ["./src/**/*.{ts,tsx}"],\n  theme: { extend: {} }\n};`,
-    'tsconfig.json': `{\n  "compilerOptions": {\n    "target": "ESNext",\n    "module": "ESNext"\n  }\n}`
-  };
+  const fileContents: Record<string, string> = {};
   
   function getColor(name: string) {
     const ext = name.split('.').pop() || '';
@@ -116,32 +67,7 @@ function initBuilder() {
     previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
   }
 
-  const structure = [
-    { type: 'folder', name: 'src', children: [
-      { type: 'folder', name: 'components', children: [
-        { type: 'file', name: 'Dashboard.tsx', size: '2.4kb', active: true },
-        { type: 'file', name: 'Sidebar.tsx', size: '1.8kb' },
-        { type: 'file', name: 'Header.tsx', size: '0.9kb' },
-        { type: 'file', name: 'MetricsCard.tsx', size: '1.2kb' },
-      ]},
-      { type: 'folder', name: 'hooks', children: [
-        { type: 'file', name: 'useData.ts', size: '0.6kb' },
-        { type: 'file', name: 'useTheme.ts', size: '0.4kb' },
-      ]},
-      { type: 'folder', name: 'lib', children: [
-        { type: 'file', name: 'utils.ts', size: '0.3kb' },
-        { type: 'file', name: 'api.ts', size: '1.1kb' },
-      ]},
-      { type: 'file', name: 'App.tsx', size: '0.8kb' },
-      { type: 'file', name: 'main.tsx', size: '0.2kb' },
-    ]},
-    { type: 'folder', name: 'public', children: [
-      { type: 'file', name: 'index.html', size: '0.4kb' },
-    ]},
-    { type: 'file', name: 'package.json', size: '0.5kb' },
-    { type: 'file', name: 'tailwind.config.js', size: '0.3kb' },
-    { type: 'file', name: 'tsconfig.json', size: '0.3kb' },
-  ];
+  const structure: any[] = [];
 
   function renderTree(items: any[], container: HTMLElement) {
     items.forEach(item => {

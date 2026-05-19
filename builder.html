@@ -35,7 +35,7 @@
           <span class="logo-text">Huggy</span>
         </a>
         <div class="topbar-sep"></div>
-        <span id="project-name" contenteditable="true" spellcheck="false">my-dashboard-app</span>
+        <span id="project-name" contenteditable="true" spellcheck="false">new-project-1</span>
       </div>
 
       <div class="topbar-center">
@@ -140,13 +140,10 @@
       <!-- CHAT -->
       <div class="tab-content" id="tab-chat">
         <div class="chat-container" id="chat-container">
-          <!-- user message -->
-          <div class="msg-user">
-            <div class="msg-user-bubble">Build me a dashboard app with metrics cards, a sidebar, and a data table with filtering. Use a dark theme and TypeScript.</div>
-            <div class="msg-time">just now</div>
+          <!-- Initial greeting -->
+          <div class="msg-ai">
+            <div class="msg-ai-bubble">Hello! I'm here to help you build your application. What would you like to create today?</div>
           </div>
-
-          <div class="msg-system">── pipeline complete ──</div>
         </div>
 
         <div class="chat-input-area">
@@ -197,16 +194,8 @@
       <!-- CODE -->
       <div class="tab-content hidden" id="tab-code">
         <div class="code-editor">
-          <div class="file-tabs-bar">
-            <div class="file-tab active">
-              <span class="lang-dot" style="background:#60A5FA"></span>Dashboard.tsx
-            </div>
-            <div class="file-tab">
-              <span class="lang-dot" style="background:#A78BFA"></span>styles.css
-            </div>
-            <div class="file-tab">
-              <span class="lang-dot" style="background:#34D399"></span>useData.ts
-            </div>
+          <div class="file-tabs-bar" id="file-tabs-bar">
+            <!-- Injected by JS -->
           </div>
           <div class="code-area" id="code-area">
             <!-- injected by JS -->
@@ -304,57 +293,8 @@
 
       <div class="preview-frame-wrapper">
         <div class="preview-frame" id="preview-frame">
-          <!-- mini app -->
-          <div class="mini-navbar">
-            <span class="mini-logo-text">DASHBOARD</span>
-            <div class="mini-dots">
-              <div class="mini-dot" style="background:#4ADE80"></div>
-              <div class="mini-dot" style="background:#FBBF24"></div>
-              <div class="mini-dot" style="background:#F87171"></div>
-            </div>
-          </div>
-          <div class="mini-body">
-            <div class="mini-sidebar">
-              <div class="mini-nav-item active"><div class="mini-nav-dot" style="background:#60A5FA"></div>Overview</div>
-              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Analytics</div>
-              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Users</div>
-              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Reports</div>
-              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Settings</div>
-            </div>
-            <div class="mini-main">
-              <div class="mini-grid">
-                <div class="mini-card">
-                  <div class="mini-card-val">$48.2k</div>
-                  <div class="mini-card-label">Revenue</div>
-                  <div class="mini-card-trend up">↑ 12%</div>
-                </div>
-                <div class="mini-card">
-                  <div class="mini-card-val">2,491</div>
-                  <div class="mini-card-label">Users</div>
-                  <div class="mini-card-trend up">↑ 8%</div>
-                </div>
-                <div class="mini-card">
-                  <div class="mini-card-val">94.1%</div>
-                  <div class="mini-card-label">Uptime</div>
-                  <div class="mini-card-trend down">↓ 0.3%</div>
-                </div>
-                <div class="mini-card">
-                  <div class="mini-card-val">1.2s</div>
-                  <div class="mini-card-label">Avg Load</div>
-                  <div class="mini-card-trend up">↑ fast</div>
-                </div>
-              </div>
-              <div class="mini-chart">
-                <div class="mini-bar" style="height:40%"></div>
-                <div class="mini-bar" style="height:60%"></div>
-                <div class="mini-bar" style="height:45%"></div>
-                <div class="mini-bar active" style="height:80%"></div>
-                <div class="mini-bar" style="height:55%"></div>
-                <div class="mini-bar" style="height:70%"></div>
-                <div class="mini-bar" style="height:90%"></div>
-                <div class="mini-bar" style="height:65%"></div>
-              </div>
-            </div>
+          <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-sub); font-size:13px; font-style:italic;">
+            Wait for your first generation to see the preview
           </div>
         </div>
       </div>
@@ -379,14 +319,8 @@
       <button class="console-sub-tab">Warnings</button>
       <button class="console-sub-tab btn-console-close" id="console-close">✕</button>
     </div>
-    <div class="console-log-area">
-      <div class="log-line"><span class="log-ts">[00:00.1]</span><span class="log-info">→ Initializing development server...</span></div>
-      <div class="log-line"><span class="log-ts">[00:00.5]</span><span class="log-success">✓ Vite dev server running at localhost:3000</span></div>
-      <div class="log-line"><span class="log-ts">[00:01.2]</span><span class="log-info">→ Loading workspace assets...</span></div>
-      <div class="log-line"><span class="log-ts">[00:02.4]</span><span class="log-success">✓ Workspace ready</span></div>
-      <div class="log-line"><span class="log-ts">[00:10.6]</span><span class="log-warning">⚠ useEffect dependency array may be incomplete</span></div>
-      <div class="log-line"><span class="log-ts">[00:10.7]</span><span class="log-warning">⚠ Image alt text missing on logo element</span></div>
-      <div class="log-line"><span class="log-ts">[00:14.8]</span><span class="log-info">→ Build complete. 42kb gzipped.</span></div>
+    <div class="console-log-area" id="console-log-area">
+      <!-- Injected by generations -->
     </div>
   </div>
 

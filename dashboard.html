@@ -1128,6 +1128,16 @@
       color: var(--error);
     }
     
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 60px 40px; text-align: center; background: var(--bg-surface);
+      border: 1px dashed var(--border-mid); border-radius: 12px;
+      grid-column: 1 / -1;
+    }
+    .empty-icon { color: var(--text-sub); margin-bottom: 20px; opacity: 0.5; }
+    .empty-title { font-family: "Instrument Serif"; font-size: 20px; margin-bottom: 8px; font-style: italic;}
+    .empty-desc { font-size: 14px; color: var(--text-muted); max-width: 300px; margin-bottom: 24px; }
+
     .hidden { display: none !important; }
 
     /* RESPONSIVE */
@@ -1164,10 +1174,10 @@
       </div>
 
       <div class="sidebar-profile">
-        <div class="profile-avatar">JD</div>
+        <div class="profile-avatar">U</div>
         <div class="profile-info">
-          <div class="profile-name">John Doe</div>
-          <div class="profile-email">john@example.com</div>
+          <div class="profile-name">User Account</div>
+          <div class="profile-email">Ready to build</div>
         </div>
       </div>
 
@@ -1177,11 +1187,11 @@
           <span class="plan-badge">Free</span>
         </div>
         <div class="credits-value-row">
-          <span class="credits-count">347</span>
+          <span class="credits-count">500</span>
           <span class="credits-total">/ 500 tokens</span>
         </div>
         <div class="credits-track">
-          <div class="credits-fill" data-fill="69.4%"></div>
+          <div class="credits-fill" data-fill="0%"></div>
         </div>
       </div>
 
@@ -1203,31 +1213,9 @@
           <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Upgrade to Pro</button>
         </div>
 
-        <span class="nav-label">Recent projects</span>
-        <div class="nav-project active" data-id="1">
-          <span class="project-dot" style="background: #60A5FA;"></span>
-          <span class="project-nav-name">SaaS Dashboard</span>
-          <span class="badge-builds">4</span>
-        </div>
-        <div class="nav-project" data-id="2">
-          <span class="project-dot" style="background: #A78BFA;"></span>
-          <span class="project-nav-name">E-commerce App</span>
-          <span class="badge-builds">7</span>
-        </div>
-        <div class="nav-project" data-id="3">
-          <span class="project-dot" style="background: #34D399;"></span>
-          <span class="project-nav-name">Blog CMS</span>
-          <span class="badge-builds">2</span>
-        </div>
-        <div class="nav-project" data-id="4">
-          <span class="project-dot" style="background: #FBBF24;"></span>
-          <span class="project-nav-name">API Wrapper</span>
-          <span class="badge-builds">1</span>
-        </div>
-        <div class="nav-project" data-id="5">
-          <span class="project-dot" style="background: #F87171;"></span>
-          <span class="project-nav-name">Portfolio 3D</span>
-          <span class="badge-builds">3</span>
+        <span class="nav-label">Projects</span>
+        <div class="empty-nav-state" style="padding: 10px; font-size: 11px; color: var(--text-sub); font-style: italic;">
+          No projects yet
         </div>
       </nav>
 
@@ -1290,13 +1278,9 @@
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
               </svg>
               <span class="kpi-label">Projects</span>
-              <div class="kpi-value">5</div>
-              <div class="kpi-trend trend-up">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                  <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-                +2 this month
+              <div class="kpi-value">0</div>
+              <div class="kpi-trend">
+                Ready to start
               </div>
             </div>
 
@@ -1305,13 +1289,9 @@
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
               <span class="kpi-label">Builds</span>
-              <div class="kpi-value">17</div>
-              <div class="kpi-trend trend-up">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                  <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-                +5 this month
+              <div class="kpi-value">0</div>
+              <div class="kpi-trend">
+                Start building
               </div>
             </div>
 
@@ -1320,12 +1300,12 @@
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
               </svg>
               <span class="kpi-label">Tokens</span>
-              <div class="kpi-value">347</div>
+              <div class="kpi-value">500</div>
               <div class="kpi-trend">
-                69% used
+                100% available
               </div>
               <div class="kpi-mini-track">
-                <div class="kpi-mini-fill" data-fill="69.4%"></div>
+                <div class="kpi-mini-fill" data-fill="0%"></div>
               </div>
             </div>
 
@@ -1335,9 +1315,9 @@
                 <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
               </svg>
               <span class="kpi-label">Quality Score</span>
-              <div class="kpi-value">91%</div>
+              <div class="kpi-value">--</div>
               <div class="kpi-trend">
-                <span class="quality-badge">Excellent</span>
+                No data yet
               </div>
             </div>
           </div>
@@ -1421,138 +1401,19 @@
 
         <section>
           <div class="grid-header">
-            <span class="section-label" style="margin-bottom:0">All Projects <span style="opacity:0.5">(5)</span></span>
-            <button class="btn-sort">Recent ↓</button>
+            <span class="section-label" style="margin-bottom:0">All Projects <span style="opacity:0.5">(0)</span></span>
           </div>
           <div class="projects-grid">
-            <!-- Project 1 -->
-            <div class="project-card">
-              <div class="card-header">
-                <div class="card-title-row">
-                  <span class="project-dot" style="background: #60A5FA;"></span>
-                  <h3 class="card-name">SaaS Dashboard</h3>
-                </div>
-                <span class="status-badge">Completed</span>
-              </div>
-              <p class="card-desc">A comprehensive SaaS dashboard with real-time metrics, interactive charts, and data export features.</p>
-              <div class="card-stats">
-                <span class="score-badge sec">SEC 96</span>
-                <span class="score-badge sec">QA 91</span>
-                <span class="score-badge meta">High</span>
-              </div>
-              <div class="card-footer">
-                <span class="card-meta">4 builds · 2 days ago</span>
-                <button class="btn-open-project">Open</button>
-              </div>
-              <button class="btn-card-delete" title="Delete Project">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <div class="empty-state">
+              <div class="empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
                 </svg>
-              </button>
-            </div>
-
-            <!-- Project 2 -->
-            <div class="project-card">
-              <div class="card-header">
-                <div class="card-title-row">
-                  <span class="project-dot" style="background: #A78BFA;"></span>
-                  <h3 class="card-name">E-commerce App</h3>
-                </div>
-                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">Full-featured online store with shopping cart, Stripe payment integration, and inventory management.</p>
-              <div class="card-stats">
-                <span class="score-badge sec">SEC 88</span>
-                <span class="score-badge sec">QA 84</span>
-                <span class="score-badge meta">High</span>
-              </div>
-              <div class="card-footer">
-                <span class="card-meta">7 builds · 5 days ago</span>
-                <button class="btn-open-project">Open</button>
-              </div>
-              <button class="btn-card-delete" title="Delete Project">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
-            </div>
-
-            <!-- Project 3 -->
-            <div class="project-card">
-              <div class="card-header">
-                <div class="card-title-row">
-                  <span class="project-dot" style="background: #34D399;"></span>
-                  <h3 class="card-name">Blog CMS</h3>
-                </div>
-                <span class="status-badge">Completed</span>
-              </div>
-              <p class="card-desc">Markdown-based blog CMS with tag system and user comments implementation.</p>
-              <div class="card-stats">
-                <span class="score-badge sec">SEC 94</span>
-                <span class="score-badge sec">QA 90</span>
-                <span class="score-badge meta">Medium</span>
-              </div>
-              <div class="card-footer">
-                <span class="card-meta">2 builds · 1 week ago</span>
-                <button class="btn-open-project">Open</button>
-              </div>
-              <button class="btn-card-delete" title="Delete Project">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
-            </div>
-
-            <!-- Project 4 -->
-            <div class="project-card">
-              <div class="card-header">
-                <div class="card-title-row">
-                  <span class="project-dot" style="background: #FBBF24;"></span>
-                  <h3 class="card-name">API Wrapper</h3>
-                </div>
-                <span class="status-badge">Completed</span>
-              </div>
-              <p class="card-desc">REST API wrapper interface with auto-generated documentation and playground.</p>
-              <div class="card-stats">
-                <span class="score-badge sec">SEC 92</span>
-                <span class="score-badge sec">QA 87</span>
-                <span class="score-badge meta">Low</span>
-              </div>
-              <div class="card-footer">
-                <span class="card-meta">1 build · 2 weeks ago</span>
-                <button class="btn-open-project">Open</button>
-              </div>
-              <button class="btn-card-delete" title="Delete Project">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
-            </div>
-
-            <!-- Project 5 -->
-            <div class="project-card">
-              <div class="card-header">
-                <div class="card-title-row">
-                  <span class="project-dot" style="background: #F87171;"></span>
-                  <h3 class="card-name">Portfolio 3D</h3>
-                </div>
-                <span class="status-badge">Completed</span>
-              </div>
-              <p class="card-desc">Interactive 3D portfolio featuring Three.js animations and fluid page transitions.</p>
-              <div class="card-stats">
-                <span class="score-badge sec">SEC 89</span>
-                <span class="score-badge sec">QA 85</span>
-                <span class="score-badge meta">Medium</span>
-              </div>
-              <div class="card-footer">
-                <span class="card-meta">3 builds · 3 weeks ago</span>
-                <button class="btn-open-project">Open</button>
-              </div>
-              <button class="btn-card-delete" title="Delete Project">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-              </button>
+              <h3 class="empty-title">Your workspace is quiet</h3>
+              <p class="empty-desc">Describe your first idea above to start building something amazing.</p>
             </div>
           </div>
         </section>
@@ -1560,55 +1421,8 @@
         <section>
           <span class="section-label">Recent Activity</span>
           <div class="activity-list">
-            <div class="activity-row">
-              <span class="status-dot success"></span>
-              <span class="act-project">SaaS Dashboard</span>
-              <span class="act-desc">Added PDF export report module...</span>
-              <div style="display:flex; gap:5px">
-                <span class="score-badge sec">SEC 96</span>
-                <span class="score-badge sec">QA 91</span>
-              </div>
-              <span class="act-meta">Today 14:32</span>
-            </div>
-            <div class="activity-row">
-              <span class="status-dot success"></span>
-              <span class="act-project">E-commerce App</span>
-              <span class="act-desc">Fixed Stripe checkout funnel issue...</span>
-              <div style="display:flex; gap:5px">
-                <span class="score-badge sec">SEC 88</span>
-                <span class="score-badge sec">QA 84</span>
-              </div>
-              <span class="act-meta">Yesterday 09:15</span>
-            </div>
-            <div class="activity-row">
-              <span class="status-dot working"></span>
-              <span class="act-project">Blog CMS</span>
-              <span class="act-desc">First complete CMS build with auth...</span>
-              <div style="display:flex; gap:5px">
-                <span class="score-badge sec">SEC 94</span>
-                <span class="score-badge sec">QA 90</span>
-              </div>
-              <span class="act-meta">3 days ago</span>
-            </div>
-            <div class="activity-row">
-              <span class="status-dot success"></span>
-              <span class="act-project">API Wrapper</span>
-              <span class="act-desc">Auto-generated OpenAPI documentation...</span>
-              <div style="display:flex; gap:5px">
-                <span class="score-badge sec">SEC 92</span>
-                <span class="score-badge sec">QA 87</span>
-              </div>
-              <span class="act-meta">2 weeks ago</span>
-            </div>
-            <div class="activity-row">
-              <span class="status-dot success"></span>
-              <span class="act-project">Portfolio 3D</span>
-              <span class="act-desc">Integrated Three.js and WebGL animations...</span>
-              <div style="display:flex; gap:5px">
-                <span class="score-badge sec">SEC 89</span>
-                <span class="score-badge sec">QA 85</span>
-              </div>
-              <span class="act-meta">3 weeks ago</span>
+            <div class="empty-nav-state" style="padding: 24px; text-align: center; color: var(--text-sub); font-size: 13px;">
+              No activity recorded yet.
             </div>
           </div>
         </section>
@@ -1908,7 +1722,7 @@
         <div class="settings-block">
           <span class="block-title">Identity</span>
           <div class="avatar-editor">
-            <div class="avatar-large">JD</div>
+            <div class="avatar-large">U</div>
             <div class="form-row">
               <span class="form-label">Avatar</span>
               <span class="form-sublabel">JPG, PNG or GIF. Max 2MB.</span>
@@ -1917,11 +1731,11 @@
           </div>
           <div class="form-row">
             <span class="form-label">Display Name</span>
-            <input type="text" class="settings-input" value="John Doe">
+            <input type="text" class="settings-input" value="User Account">
           </div>
           <div class="form-row">
             <span class="form-label">Email</span>
-            <input type="email" class="settings-input" value="john@example.com">
+            <input type="email" class="settings-input" value="user@example.com">
           </div>
         </div>
         <div class="settings-block">
@@ -1938,7 +1752,7 @@
           <div class="danger-row" style="background:var(--bg-elevated); border-color:var(--border-mid)">
             <div class="form-row">
               <span class="form-label">Free Plan</span>
-              <span class="form-sublabel">347 / 500 tokens remaining</span>
+              <span class="form-sublabel">500 / 500 tokens remaining</span>
             </div>
             <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Upgrade to Pro</button>
           </div>
@@ -2019,7 +1833,7 @@
           <div class="danger-row">
             <div class="form-row">
               <span class="form-label" style="color:var(--error)">Delete all projects</span>
-              <span class="form-sublabel">This will erase your 5 current projects.</span>
+              <span class="form-sublabel">This will erase your current projects.</span>
             </div>
             <button class="btn-danger-sm">Reset</button>
           </div>

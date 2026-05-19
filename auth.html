@@ -75,7 +75,8 @@
             align-items: center;
             justify-content: center;
             margin: 0;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         /* Noise effect */
@@ -436,6 +437,21 @@
     </div>
 
     <script>
+        // Global navigation helper using standardized curtain
+        function navigate(url) {
+            const curtain = document.getElementById('curtain');
+            if (curtain) {
+                curtain.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060606';
+                curtain.classList.remove('rising');
+                curtain.classList.add('falling');
+                setTimeout(() => {
+                    window.location.href = url;
+                }, 600);
+            } else {
+                window.location.href = url;
+            }
+        }
+
         const tabLogin = document.getElementById('tab-login');
         const tabSignup = document.getElementById('tab-signup');
         const authTitle = document.getElementById('auth-title');
