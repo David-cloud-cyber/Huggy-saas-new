@@ -4,30 +4,6 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Pricing — Huggy</title>
-    <script>
-        // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
-        (function() {
-            try {
-                let currentFetch = window.fetch;
-                Object.defineProperty(window, 'fetch', {
-                    get: () => currentFetch,
-                    set: (v) => { currentFetch = v; },
-                    configurable: true,
-                    enumerable: true
-                });
-            } catch (e) {
-                try {
-                    window.fetch = window.fetch; 
-                } catch (e2) {}
-            }
-        })();
-    </script>
-    <script>
-        (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', theme);
-        })();
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -83,9 +59,9 @@
 
         .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 24px;
-            max-width: 1200px;
+            max-width: 1320px;
             margin: 0 auto 120px;
             padding: 0 24px;
         }
@@ -105,6 +81,9 @@
 
         .pricing-card:nth-child(2) { animation-delay: 0.1s; }
         .pricing-card:nth-child(3) { animation-delay: 0.2s; }
+        .pricing-card:nth-child(4) { animation-delay: 0.3s; }
+        .pricing-card:nth-child(5) { animation-delay: 0.4s; }
+        .pricing-card:nth-child(6) { animation-delay: 0.5s; }
 
         .pricing-card:hover {
             border-color: var(--border-focus);
@@ -165,6 +144,18 @@
             font-weight: 300;
         }
 
+        .credit-pill {
+            width: fit-content;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-size: 12px;
+            font-family: "JetBrains Mono";
+            margin-bottom: 18px;
+        }
+
         .feature-list {
             list-style: none;
             margin-bottom: 48px;
@@ -216,6 +207,34 @@
         .btn-solid:hover {
             opacity: 0.9;
             transform: scale(0.98);
+        }
+
+        .pricing-proof {
+            max-width: 1320px;
+            margin: -64px auto 120px;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .proof-item {
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            border-radius: 16px;
+            padding: 18px;
+        }
+
+        .proof-item strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .proof-item span {
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.5;
         }
 
         /* FAQ SECTION */
@@ -282,6 +301,11 @@
                 grid-template-columns: 1fr;
                 max-width: 500px;
             }
+
+            .pricing-proof {
+                grid-template-columns: 1fr;
+                max-width: 500px;
+            }
         }
     </style>
 </head>
@@ -323,116 +347,137 @@
     </nav>
 
     <header class="pricing-hero">
-        <h1>A plan for every<br>wave of creativity.</h1>
-        <p>Start for free, scale as you grow. No hidden fees, just pure innovation.</p>
+        <h1>Un plan pour chaque<br>vague de créativité.</h1>
+        <p>Commencez gratuitement, évoluez selon vos besoins. Pas de frais cachés, juste de l'innovation.</p>
 
         <div class="billing-toggle">
-            <button class="toggle-btn active" onclick="setBilling('monthly')">Monthly</button>
-            <button class="toggle-btn" onclick="setBilling('yearly')">Yearly — -20%</button>
+            <button class="toggle-btn active" onclick="setBilling('monthly')">Mensuel</button>
+            <button class="toggle-btn" onclick="setBilling('yearly')">Annuel — -20%</button>
         </div>
     </header>
 
     <section class="pricing-grid">
-        <!-- PLAN 1 -->
         <div class="pricing-card">
-            <span class="card-name">Exploration</span>
-            <div class="card-price">$0 <span>/mo</span></div>
-            <p class="card-desc">Perfect to discover Huggy and launch your first builds.</p>
+            <span class="card-name">Free</span>
+            <div class="card-price">$0 <span>/mois</span></div>
+            <div class="credit-pill">20 crédits/mois</div>
+            <p class="card-desc">Pour tester Huggy avec un projet public et des modèles économiques.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    3 active projects
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Standard agents
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Basic ZIP export
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 projet actif public</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 sous-domaine Huggy</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Modèles Economy uniquement</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Badge Huggy visible</li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Get started for free</button>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Commencer gratuitement</button>
         </div>
 
-        <!-- PLAN 2 -->
         <div class="pricing-card featured">
-            <span class="featured-label">Recommended</span>
-            <span class="card-name">Producer</span>
-            <div class="card-price" id="price-pro">$39 <span>/mo</span></div>
-            <p class="card-desc">Everything you need to build the future of the web.</p>
+            <span class="featured-label">Plus populaire</span>
+            <span class="card-name">Starter</span>
+            <div class="card-price" id="price-starter">$20 <span>/mois</span></div>
+            <div class="credit-pill">100 crédits/mois</div>
+            <p class="card-desc">Le meilleur point d’entrée payant: projets privés, contrôle modèle et domaine custom inclus.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Unlimited projects
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Priority AI models
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Full source export (Docker)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Custom domains
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>3 projets actifs privés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 domaine personnalisé inclus</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Auto mode + sélecteur manuel</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Economy + Standard</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Export code, badge désactivable</li>
             </ul>
-            <button class="card-cta btn-solid" onclick="navigate('/auth.html')">Go Pro</button>
+            <button class="card-cta btn-solid" onclick="navigate('/auth.html')">Choisir Starter</button>
         </div>
 
-        <!-- PLAN 3 -->
+        <div class="pricing-card">
+            <span class="card-name">Pro</span>
+            <div class="card-price" id="price-pro">$49 <span>/mois</span></div>
+            <div class="credit-pill">300 crédits/mois</div>
+            <p class="card-desc">Pour livrer plus vite avec GitHub sync, agents code/debug et builds prioritaires.</p>
+            <ul class="feature-list">
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 projets actifs</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>5 domaines personnalisés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Economy + Standard + Pro</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>GitHub sync, analytics basiques</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Historique versions 30 jours</li>
+            </ul>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Choisir Pro</button>
+        </div>
+
         <div class="pricing-card">
             <span class="card-name">Studio</span>
-            <div class="card-price" id="price-team">$149 <span>/mo</span></div>
-            <p class="card-desc">For teams collaborating on critical applications.</p>
+            <div class="card-price" id="price-studio">$99 <span>/mois</span></div>
+            <div class="credit-pill">700 crédits/mois</div>
+            <p class="card-desc">Pour studios et petites équipes qui veulent collaboration, rollback et modèles premium avec confirmation.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Everything in Pro
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Real-time collaboration
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    24/7 VIP support
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Enterprise Security (SSO)
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>30 projets actifs</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>15 domaines personnalisés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Premium avec confirmation</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Templates privés, analytics avancées</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Historique versions 90 jours</li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Contact Sales</button>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Choisir Studio</button>
         </div>
+
+        <div class="pricing-card">
+            <span class="card-name">Business</span>
+            <div class="card-price" id="price-business">$199 <span>/mois</span></div>
+            <div class="credit-pill">1 500 crédits/mois</div>
+            <p class="card-desc">Pour organisations avec rôles avancés, limites par membre, audit logs et support prioritaire.</p>
+            <ul class="feature-list">
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Projets élevés selon fair use</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>50 domaines personnalisés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Rôles avancés et limites crédits</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Audit logs, sécurité renforcée</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Historique versions 180 jours</li>
+            </ul>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Choisir Business</button>
+        </div>
+
+        <div class="pricing-card">
+            <span class="card-name">Enterprise</span>
+            <div class="card-price">Custom <span></span></div>
+            <div class="credit-pill">Volume crédits sur mesure</div>
+            <p class="card-desc">Pour conformité, SSO/SAML, SLA, modèles dédiés et facturation personnalisée.</p>
+            <ul class="feature-list">
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Domaines custom</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>SSO/SAML, SLA, conformité</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Modèles dédiés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Support dédié</li>
+            </ul>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Contacter les ventes</button>
+        </div>
+    </section>
+
+    <section class="pricing-proof">
+        <div class="proof-item"><strong>Top-ups transparents</strong><span>100 crédits $20, 250 $47, 500 $90, 1 000 $170, 2 500 $400.</span></div>
+        <div class="proof-item"><strong>Estimation avant action</strong><span>Chaque génération affiche modèle, crédits estimés et confirmation premium.</span></div>
+        <div class="proof-item"><strong>Pas de surprise billing</strong><span>Les crédits sont réservés, ajustés après exécution, puis remboursés si erreur plateforme.</span></div>
+        <div class="proof-item"><strong>Domaine custom dès Starter</strong><span>Vérification DNS, SSL Vercel automatique et historique clair des déploiements.</span></div>
     </section>
 
     <!-- FAQ -->
     <section class="faq-section">
-        <h2 class="faq-title">Frequently Asked Questions</h2>
+        <h2 class="faq-title">Questions fréquentes</h2>
         <div class="faq-list">
             <div class="faq-item">
                 <div class="faq-q">
-                    <span>Can I cancel at any time?</span>
+                    <span>Puis-je annuler mon abonnement à tout moment ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
-                <div class="faq-a">Yes, Huggy is commitment-free. You can cancel your Pro or Studio plan with a single click from your settings. You'll maintain access until the end of the current billing cycle.</div>
+                <div class="faq-a">Oui, Huggy est sans engagement. Vous pouvez annuler votre plan Pro ou Studio en un clic depuis vos paramètres. Vous conserverez l'accès jusqu'à la fin de la période de facturation en cours.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">
-                    <span>What kind of apps can I build?</span>
+                    <span>Quels types d'applications puis-je construire ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
-                <div class="faq-a">Almost anything that runs on the web: SaaS Dashboards, E-commerce, Portfolios, Blogs, API Wrappers, and more. Huggy follows React and TypeScript best practices.</div>
+                <div class="faq-a">Presque tout ce qui tourne sur le web : Dashboards SaaS, E-commerce, Portfolios, Blogs, Wrappers d'API, etc. Huggy utilise les meilleures pratiques React et TypeScript.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">
-                    <span>Is my data secure?</span>
+                    <span>Mes données sont-elles sécurisées ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
-                <div class="faq-a">Absolutely. We use end-to-end encryption for your code and API keys. Your data remains your exclusive property.</div>
+                <div class="faq-a">Absolument. Nous utilisons un chiffrement de bout en bout pour votre code et vos clés API. Vos données restent votre propriété exclusive.</div>
             </div>
         </div>
     </section>
@@ -491,11 +536,10 @@
     </footer>
 
     <script>
-        // Global navigation helper using standardized curtain
+        // Use Global navigate function defined in main scripts
         function navigate(url) {
             const curtain = document.getElementById('curtain');
             if (curtain) {
-                curtain.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060606';
                 curtain.classList.remove('rising');
                 curtain.classList.add('falling');
                 setTimeout(() => {
@@ -507,7 +551,10 @@
         }
 
         // Initialize theme
-        const html = document.documentElement;
+        (function() {
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
 
         window.addEventListener('load', () => {
             const curtain = document.getElementById('curtain');
@@ -517,18 +564,24 @@
         // Toggle Billing
         function setBilling(mode) {
             const buttons = document.querySelectorAll('.toggle-btn');
+            const priceStarter = document.getElementById('price-starter');
             const pricePro = document.getElementById('price-pro');
-            const priceTeam = document.getElementById('price-team');
+            const priceStudio = document.getElementById('price-studio');
+            const priceBusiness = document.getElementById('price-business');
 
             buttons.forEach(b => b.classList.remove('active'));
             if (mode === 'monthly') {
                 buttons[0].classList.add('active');
-                pricePro.innerHTML = '$39 <span>/mo</span>';
-                priceTeam.innerHTML = '$149 <span>/mo</span>';
+                priceStarter.innerHTML = '$20 <span>/mois</span>';
+                pricePro.innerHTML = '$49 <span>/mois</span>';
+                priceStudio.innerHTML = '$99 <span>/mois</span>';
+                priceBusiness.innerHTML = '$199 <span>/mois</span>';
             } else {
                 buttons[1].classList.add('active');
-                pricePro.innerHTML = '$31.20 <span>/mo</span>';
-                priceTeam.innerHTML = '$119.20 <span>/mo</span>';
+                priceStarter.innerHTML = '$16 <span>/mois</span>';
+                pricePro.innerHTML = '$39 <span>/mois</span>';
+                priceStudio.innerHTML = '$79 <span>/mois</span>';
+                priceBusiness.innerHTML = '$159 <span>/mois</span>';
             }
         }
 
@@ -539,60 +592,38 @@
             });
         });
 
-        // Theme Toggle Logic with Curtain Fall
+        // Theme Toggle Logic
         const themeBtn = document.getElementById('theme-btn');
-        let curtainBusy = false;
-
-        function updateIcons(theme) {
+        const html = document.documentElement;
+        themeBtn.addEventListener('click', () => {
+            const current = html.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('huggy-theme', next);
+            
+            // Update icons visibility
             const moon = document.getElementById('moon-icon');
             const sun = document.getElementById('sun-icon');
-            if (theme === 'dark') {
+            if (next === 'dark') {
                 moon.style.display = 'block';
                 sun.style.display = 'none';
             } else {
                 moon.style.display = 'none';
                 sun.style.display = 'block';
             }
-        }
-
-        themeBtn.addEventListener('click', () => {
-            if (curtainBusy) return;
-            curtainBusy = true;
-            
-            const curtain = document.getElementById('curtain');
-            const current = html.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            
-            curtain.style.background = next === 'dark' ? '#060606' : '#F8F5F0';
-            curtain.style.transformOrigin = 'top';
-            curtain.classList.add('falling');
-
-            setTimeout(() => {
-                html.setAttribute('data-theme', next);
-                localStorage.setItem('huggy-theme', next);
-                updateIcons(next);
-                
-                curtain.classList.remove('falling');
-                requestAnimationFrame(() => {
-                    curtain.style.transformOrigin = 'bottom';
-                    curtain.classList.add('rising');
-                    setTimeout(() => {
-                        curtain.classList.remove('rising');
-                        curtainBusy = false;
-                    }, 620);
-                });
-            }, 600);
         });
         
         // Finalize icons based on load theme
-        updateIcons(html.getAttribute('data-theme'));
-
-        // Intercept internal links
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
-                e.preventDefault();
-                navigate(link.href);
+        document.addEventListener('DOMContentLoaded', () => {
+            const current = html.getAttribute('data-theme');
+            const moon = document.getElementById('moon-icon');
+            const sun = document.getElementById('sun-icon');
+            if (current === 'dark') {
+                moon.style.display = 'block';
+                sun.style.display = 'none';
+            } else {
+                moon.style.display = 'none';
+                sun.style.display = 'block';
             }
         });
     </script>
