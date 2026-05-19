@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -1607,36 +1607,48 @@
     const themeBtn = document.getElementById('theme-btn');
     const moonIcon = document.getElementById('moon-icon');
     const sunIcon = document.getElementById('sun-icon');
-    let isDark = true;
     let curtainBusy = false;
 
+    function updateThemeIcons(theme) {
+      if (theme === 'dark') {
+        moonIcon?.classList.remove('hidden');
+        sunIcon?.classList.add('hidden');
+      } else {
+        moonIcon?.classList.add('hidden');
+        sunIcon?.classList.remove('hidden');
+      }
+    }
+
     function toggleTheme() {
-      if (curtainBusy) return;
+      if (curtainBusy || !curtain) return;
       curtainBusy = true;
       
-      const nextTheme = isDark ? 'light' : 'dark';
-      curtain.style.background = isDark ? '#F8F5F0' : '#060606';
+      const current = html.getAttribute('data-theme');
+      const nextTheme = current === 'dark' ? 'light' : 'dark';
+      
+      curtain.style.background = nextTheme === 'light' ? '#F8F5F0' : '#060606';
+      curtain.style.transformOrigin = 'top';
       curtain.classList.add('falling');
 
       setTimeout(() => {
-        isDark = !isDark;
-        html.dataset.theme = isDark ? 'dark' : 'light';
-        updateThemeIcon();
+        html.setAttribute('data-theme', nextTheme);
+        localStorage.setItem('huggy-theme', nextTheme);
+        updateThemeIcons(nextTheme);
+        
         curtain.classList.remove('falling');
-        curtain.classList.add('rising');
-        setTimeout(() => {
-          curtain.classList.remove('rising');
-          curtainBusy = false;
-        }, 520);
-      }, 500);
+        requestAnimationFrame(() => {
+          curtain.style.transformOrigin = 'bottom';
+          curtain.classList.add('rising');
+          setTimeout(() => {
+            curtain.classList.remove('rising');
+            curtainBusy = false;
+          }, 620);
+        });
+      }, 600);
     }
 
-    function updateThemeIcon() {
-      moonIcon.classList.toggle('hidden', !isDark);
-      sunIcon.classList.toggle('hidden', isDark);
-    }
-
-    themeBtn.addEventListener('click', toggleTheme);
+    themeBtn?.addEventListener('click', toggleTheme);
+    updateThemeIcons(html.getAttribute('data-theme'));
 
     // 2. Navigation Projets Dashboard
     document.querySelectorAll('.nav-project').forEach(item => {
@@ -1728,7 +1740,6 @@
     });
 
     // 7. Navigation logic - Link to builder
-    const curtain = document.getElementById('curtain');
     window.addEventListener('load', () => {
         if (curtain) curtain.classList.add('rising');
     });
@@ -1832,11 +1843,6 @@
       document.body.style.overflow = '';
     }
 
-    // Auto-open for demo
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(openSettings, 800);
-    });
-
     btnSettings?.addEventListener('click', openSettings);
     btnCloseSettings?.addEventListener('click', closeSettings);
     settingsOverlay?.addEventListener('click', closeSettings);
@@ -1866,9 +1872,6 @@
       }, 1000);
     });
 
-    // Toggle logic
-    document.querySelectorAll('.toggle').forEach(t => {
-      t.addEventListener('click', () => t.classList.toggle('on'));
     });
   </script>
   <div class="settings-overlay" id="settings-overlay"></div>

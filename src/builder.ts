@@ -664,7 +664,7 @@ function initBuilder() {
   });
 
   document.getElementById('btn-upgrade')?.addEventListener('click', () => {
-    showToast('Redirecting to upgrade page...');
+    navigate('/pricing.html');
   });
 
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
