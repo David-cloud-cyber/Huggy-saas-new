@@ -3,30 +3,7 @@ function initBuilder() {
   const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
-  // ── CODE CONTENT ────────────────────────────────────────────────
-  const codeLines: [string, boolean][] = [];
-
-  const codeArea = document.getElementById('code-area');
-  if (codeArea) {
-    codeArea.innerHTML = '';
-    codeLines.forEach((lineData, i) => {
-      const html = lineData[0] as string;
-      const isActive = lineData[1] as boolean;
-      const line = document.createElement('div');
-      line.className = 'code-line' + (isActive ? ' cursor-line' : '');
-      line.innerHTML = `<span class="line-num">${i + 1}</span><span class="code-content">${html}${isActive ? '<span class="cursor"></span>' : ''}</span>`;
-      codeArea.appendChild(line);
-    });
-  }
-
-  // ── FILE TREE ───────────────────────────────────────────────────
-  const fileTree = document.getElementById('file-tree');
-  const previewArea = document.getElementById('file-preview-area');
-  const previewEmpty = document.querySelector('.preview-empty');
-  const previewContent = document.getElementById('preview-content');
-  const previewCode = document.getElementById('preview-code');
-  const previewFilename = document.getElementById('preview-filename');
-
+  // ── CODE CONTENT & WORKSPACE DEFINITION ────────────────────────
   const extColor: Record<string, string> = { 
     tsx: '#60A5FA', 
     css: '#A78BFA', 
@@ -38,8 +15,263 @@ function initBuilder() {
     jpg: '#EC4899'
   };
 
-  const fileContents: Record<string, string> = {};
+  const fileContents: Record<string, string> = {
+    'Dashboard.tsx': `import React from 'react';
+import Sidebar from './Sidebar';
+import MetricCard from './MetricCard';
+import Chart from './Chart';
+import { useMetrics } from '../hooks/useMetrics';
+
+export default function Dashboard() {
+  const { data, loading, error } = useMetrics();
+
+  if (loading) return <div className="loading text-slate-400">Loading dashboard...</div>;
+  if (error) return <div className="error text-rose-500">Error loading metrics</div>;
+
+  return (
+    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto p-8">
+        <header className="flex justify-between items-center mb-8 border-b border-slate-800 pb-5">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-white">SaaS Analytics</h1>
+            <p className="text-slate-400 text-sm mt-1">Welcome back to your workspace overview.</p>
+          </div>
+          <button className="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg font-medium text-sm text-white transition-all duration-150">
+            Export CSV
+          </button>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <MetricCard title="Active Users" value={data?.activeUsers || '0'} change="+12.3%" trend="up" />
+          <MetricCard title="Monthly Recurring Revenue" value={data?.mrr || '$0'} change="+8.1%" trend="up" />
+          <MetricCard title="Churn Rate" value={data?.churnRate || '0%'} change="-1.2%" trend="down" />
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+          <h2 className="text-xl font-semibold mb-4 text-white">Growth Analysis</h2>
+          <Chart data={data?.revenueHistory || []} />
+        </div>
+      </main>
+    </div>
+  );
+}`,
+    'Sidebar.tsx': `import React from 'react';
+
+export default function Sidebar() {
+  return (
+    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+      <div className="h-16 flex items-center px-6 border-b border-slate-800">
+        <span className="text-lg font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+          Huggy Workspace
+        </span>
+      </div>
+      <nav className="flex-1 p-4 space-y-1">
+        <a href="#" className="flex items-center space-x-3 px-4 py-2.5 bg-indigo-600/10 text-indigo-400 rounded-lg font-medium">
+          <span>Overview</span>
+        </a>
+        <a href="#" className="flex items-center space-x-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800/50 rounded-lg transition-colors">
+          <span>Analytics</span>
+        </a>
+        <a href="#" className="flex items-center space-x-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800/50 rounded-lg transition-colors">
+          <span>Settings</span>
+        </a>
+      </nav>
+    </aside>
+  );
+}`,
+    'MetricCard.tsx': `import React from 'react';
+
+interface MetricProps {
+  title: string;
+  value: string | number;
+  change: string;
+  trend: 'up' | 'down';
+}
+
+export default function MetricCard({ title, value, change, trend }: MetricProps) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md hover:border-slate-700 transition">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</span>
+      <div className="flex items-baseline space-x-2 mt-2">
+        <span className="text-3xl font-bold tracking-tight text-white">{value}</span>
+        <span className={\`text-xs font-semibold \${trend === 'up' ? 'text-emerald-400' : 'text-rose-400'}\`}>
+          {change}
+        </span>
+      </div>
+    </div>
+  );
+}`,
+    'Chart.tsx': `import React from 'react';
+
+export default function Chart({ data }: { data: any[] }) {
+  return (
+    <div className="h-64 flex items-end justify-between gap-3 pt-6">
+      {data.map((item, index) => (
+        <div key={index} className="flex-1 flex flex-col items-center gap-2">
+          <div 
+            className="w-full bg-gradient-to-t from-indigo-600 to-cyan-500 rounded-t-lg shadow-lg hover:brightness-110 transition-all duration-300" 
+            style={{ height: \`\${(item.val / 120) * 100}%\` }}
+          />
+          <span className="text-[10px] text-slate-500 font-mono mt-1">{item.month}</span>
+        </div>
+      ))}
+    </div>
+  );
+}`,
+    'useMetrics.ts': `import { useState, useEffect } from 'react';
+import { fetchMetrics } from '../services/api';
+import { MetricsData } from '../types';
+
+export function useMetrics() {
+  const [data, setData] = useState<MetricsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    fetchMetrics()
+      .then(res => {
+        setData(res);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err);
+        setLoading(false);
+      });
+  }, []);
+
+  return { data, loading, error };
+}`,
+    'api.ts': `import { MetricsData } from '../types';
+
+export async function fetchMetrics(): Promise<MetricsData> {
+  await new Promise(resolve => setTimeout(resolve, 800));
   
+  return {
+    activeUsers: '14,204',
+    mrr: '$45,820',
+    churnRate: '2.4%',
+    revenueHistory: [
+      { month: 'Jan', val: 40 },
+      { month: 'Feb', val: 45 },
+      { month: 'Mar', val: 55 },
+      { month: 'Apr', val: 72 },
+      { month: 'May', val: 89 },
+      { month: 'Jun', val: 110 }
+    ]
+  };
+}`,
+    'index.ts': `export interface MetricsData {
+  activeUsers: string;
+  mrr: string;
+  churnRate: string;
+  revenueHistory: Array<{
+    month: string;
+    val: number;
+  }>;
+}`,
+    'App.tsx': `import React from 'react';
+import Dashboard from './components/Dashboard';
+
+export default function App() {
+  return (
+    <div className="app bg-slate-950 min-h-screen">
+      <Dashboard />
+    </div>
+  );
+}`,
+    'main.tsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+    'index.css': `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #020617;
+  color: #f8fafc;
+}
+
+.loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}`,
+    'package.json': `{
+  "name": "huggy-saas-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.3.1"
+  }
+}`,
+    'vite.config.ts': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 3000
+  }
+});`,
+    'tsconfig.json': `{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true
+  }
+}`,
+    'index.html': `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SaaS Dashboard</title>
+  </head>
+  <body class="bg-slate-950">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`
+  };
+
+  let openFiles: string[] = ['Dashboard.tsx', 'App.tsx', 'index.css'];
+  let activeFile = 'Dashboard.tsx';
+
+  // ── FILE TREE UI CONFIGURATION ─────────────────────────────────
+  const fileTree = document.getElementById('file-tree');
+  const previewArea = document.getElementById('file-preview-area');
+  const previewEmpty = document.querySelector('.preview-empty');
+  const previewContent = document.getElementById('preview-content');
+  const previewCode = document.getElementById('preview-code');
+  const previewFilename = document.getElementById('preview-filename');
+
   function getColor(name: string) {
     const ext = name.split('.').pop() || '';
     return extColor[ext] || '#606060';
@@ -67,7 +299,52 @@ function initBuilder() {
     previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
   }
 
-  const structure: any[] = [];
+  const structure = [
+    {
+      type: 'folder',
+      name: 'src',
+      children: [
+        {
+          type: 'folder',
+          name: 'components',
+          children: [
+            { type: 'file', name: 'Dashboard.tsx', size: '2.4kb' },
+            { type: 'file', name: 'Sidebar.tsx', size: '1.2kb' },
+            { type: 'file', name: 'MetricCard.tsx', size: '0.8kb' },
+            { type: 'file', name: 'Chart.tsx', size: '1.5kb' }
+          ]
+        },
+        {
+          type: 'folder',
+          name: 'hooks',
+          children: [
+            { type: 'file', name: 'useMetrics.ts', size: '1.1kb' }
+          ]
+        },
+        {
+          type: 'folder',
+          name: 'services',
+          children: [
+            { type: 'file', name: 'api.ts', size: '0.9kb' }
+          ]
+        },
+        {
+          type: 'folder',
+          name: 'types',
+          children: [
+            { type: 'file', name: 'index.ts', size: '0.4kb' }
+          ]
+        },
+        { type: 'file', name: 'App.tsx', size: '1.6kb' },
+        { type: 'file', name: 'main.tsx', size: '0.5kb' },
+        { type: 'file', name: 'index.css', size: '0.8kb' }
+      ]
+    },
+    { type: 'file', name: 'package.json', size: '0.6kb' },
+    { type: 'file', name: 'vite.config.ts', size: '0.3kb' },
+    { type: 'file', name: 'tsconfig.json', size: '0.2kb' },
+    { type: 'file', name: 'index.html', size: '0.3kb' }
+  ];
 
   function renderTree(items: any[], container: HTMLElement) {
     items.forEach(item => {
@@ -92,7 +369,7 @@ function initBuilder() {
         container.appendChild(group);
       } else {
         const fi = document.createElement('div');
-        fi.className = 'file-item' + (item.active ? ' active' : '');
+        fi.className = 'file-item' + (item.name === activeFile ? ' active' : '');
         fi.innerHTML = `
           ${getIcon(item)}
           <span class="file-name">${item.name}</span>
@@ -101,17 +378,106 @@ function initBuilder() {
           document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
           fi.classList.add('active');
           updatePreview(item.name);
-          addToHistory(`Viewed ${item.name}`);
+          setActiveFile(item.name);
+          setSubTab('code'); // Auto-switch to Code tab for premium editor feedback
+          addToHistory(`Viewed & Opened ${item.name}`);
         });
         container.appendChild(fi);
       }
     });
   }
 
+  function renderTabs() {
+    const tabsBar = document.getElementById('file-tabs-bar');
+    if (!tabsBar) return;
+    tabsBar.innerHTML = '';
+    
+    openFiles.forEach(file => {
+      const tab = document.createElement('div');
+      tab.className = 'file-tab' + (file === activeFile ? ' active' : '');
+      tab.innerHTML = `
+        <span class="tab-dot" style="background: ${getColor(file)}"></span>
+        <span class="tab-name">${file}</span>
+        <button class="tab-close">✕</button>
+      `;
+      
+      tab.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains('tab-close')) {
+          e.stopPropagation();
+          closeFile(file);
+        } else {
+          setActiveFile(file);
+        }
+      });
+      
+      tabsBar.appendChild(tab);
+    });
+  }
+
+  function closeFile(name: string) {
+    openFiles = openFiles.filter(f => f !== name);
+    if (activeFile === name) {
+      activeFile = openFiles[openFiles.length - 1] || '';
+    }
+    renderTabs();
+    loadCodeEditor();
+  }
+
+  function setActiveFile(name: string) {
+    if (!openFiles.includes(name)) {
+      openFiles.push(name);
+    }
+    activeFile = name;
+    renderTabs();
+    loadCodeEditor();
+  }
+
+  function loadCodeEditor() {
+    const codeArea = document.getElementById('code-area');
+    if (!codeArea) return;
+    codeArea.innerHTML = '';
+    
+    if (!activeFile) {
+      codeArea.innerHTML = `<div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-sub); font-size:13px; font-style:italic;">No files open. Select a file from the Files tab.</div>`;
+      return;
+    }
+    
+    const content = fileContents[activeFile] || `// No content for ${activeFile}`;
+    const lines = content.split('\n');
+    lines.forEach((lineText, i) => {
+      const line = document.createElement('div');
+      line.className = 'code-line';
+      
+      const escaped = lineText
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+        
+      line.innerHTML = `<span class="line-num">${i + 1}</span><span class="code-content">${escaped}</span>`;
+      codeArea.appendChild(line);
+    });
+    
+    // Update status bar
+    const stats = document.querySelectorAll('.code-statusbar .code-stat');
+    if (stats.length >= 3) {
+      stats[0].textContent = `Ln 1`;
+      stats[1].textContent = `Col 1`;
+      const ext = activeFile.split('.').pop() || '';
+      stats[2].textContent = ext.toUpperCase() === 'TSX' ? 'TypeScript React' : ext.toUpperCase() === 'TS' ? 'TypeScript' : ext.toUpperCase() === 'CSS' ? 'CSS' : 'JSON';
+    }
+  }
+
   if (fileTree) {
     fileTree.innerHTML = '';
     renderTree(structure, fileTree);
   }
+
+  // Render editor on initialization
+  renderTabs();
+  loadCodeEditor();
 
   // ── UPLOAD LOGIC ───────────────────────────────────────────────
   const fileInput = document.getElementById('file-input') as HTMLInputElement;
@@ -429,15 +795,12 @@ function initBuilder() {
   }
 
   document.getElementById('btn-copy')?.addEventListener('click', function() {
-    const code = codeLines.map(l => {
-      const temp = document.createElement('div');
-      temp.innerHTML = l[0] as string;
-      return temp.textContent || '';
-    }).join('\n');
-    copyToClipboard(code);
-    this.textContent = 'Copied!';
-    addToHistory(`Copied editor code`);
-    setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+    if (activeFile) {
+      copyToClipboard(fileContents[activeFile] || '');
+      this.textContent = 'Copied!';
+      addToHistory(`Copied editor code`);
+      setTimeout(() => { this.textContent = 'Copy'; }, 1500);
+    }
   });
 
   document.getElementById('btn-copy-preview')?.addEventListener('click', function() {

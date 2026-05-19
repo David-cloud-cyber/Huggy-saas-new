@@ -44,7 +44,7 @@ export class ModelRouter {
 
     switch (context.mode) {
       case 'Fast':
-        selectedModel = 'google/gemini-3-flash';
+        selectedModel = 'google/gemini-3.5-flash';
         break;
       case 'Premium':
         selectedModel = 'openai/gpt-5.5-pro';
@@ -62,8 +62,10 @@ export class ModelRouter {
     // 4. Final safety checks
     // Check if the selected model became unavailable after filtering (fallback to flash if allowed)
     if (!capableModels.includes(selectedModel)) {
-       selectedModel = capableModels.includes('google/gemini-3-flash') 
-        ? 'google/gemini-3-flash' 
+       selectedModel = capableModels.includes('google/gemini-3.5-flash') 
+        ? 'google/gemini-3.5-flash' 
+        : capableModels.includes('google/gemini-3-flash')
+        ? 'google/gemini-3-flash'
         : capableModels[0];
     }
 
