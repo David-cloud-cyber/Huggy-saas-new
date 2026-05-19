@@ -1,5 +1,3 @@
-import { getCurrentSession } from './lib/supabase';
-
 function initBuilder() {
   // ── INITIAL THEME ───────────────────────────────────────────
   const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
@@ -115,7 +113,7 @@ function initBuilder() {
     previewEmpty.classList.add('hidden');
     previewContent.classList.remove('hidden');
     previewFilename.textContent = name;
-    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// File content will appear after the next generation or sync.`;
+    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
   }
 
   const structure = [
@@ -154,11 +152,8 @@ function initBuilder() {
         header.className = 'folder-header open';
         header.innerHTML = `
           <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-          ${getIcon(item)}`;
-        const folderName = document.createElement('span');
-        folderName.className = 'folder-name';
-        folderName.textContent = `${item.name}/`;
-        header.appendChild(folderName);
+          ${getIcon(item)}
+          <span class="folder-name">${item.name}/</span>`;
         const children = document.createElement('div');
         children.className = 'folder-children';
         renderTree(item.children, children);
@@ -172,14 +167,10 @@ function initBuilder() {
       } else {
         const fi = document.createElement('div');
         fi.className = 'file-item' + (item.active ? ' active' : '');
-        fi.innerHTML = getIcon(item);
-        const fileName = document.createElement('span');
-        fileName.className = 'file-name';
-        fileName.textContent = item.name;
-        const fileSize = document.createElement('span');
-        fileSize.className = 'file-size';
-        fileSize.textContent = item.size;
-        fi.append(fileName, fileSize);
+        fi.innerHTML = `
+          ${getIcon(item)}
+          <span class="file-name">${item.name}</span>
+          <span class="file-size">${item.size}</span>`;
         fi.addEventListener('click', () => {
           document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
           fi.classList.add('active');
@@ -213,11 +204,7 @@ function initBuilder() {
           pendingFiles.forEach(file => {
             const item = document.createElement('div');
             item.className = 'sel-file-item';
-            const name = document.createElement('span');
-            name.textContent = file.name;
-            const size = document.createElement('span');
-            size.textContent = `${(file.size / 1024).toFixed(1)}kb`;
-            item.append(name, size);
+            item.innerHTML = `<span>${file.name}</span><span>${(file.size / 1024).toFixed(1)}kb</span>`;
             selectedFilesList.appendChild(item);
           });
         }
@@ -329,16 +316,10 @@ function initBuilder() {
     const tabChat = document.getElementById('tab-chat');
     const tabCode = document.getElementById('tab-code');
     const tabFiles = document.getElementById('tab-files');
-    const tabVersions = document.getElementById('tab-versions');
-    const tabDomains = document.getElementById('tab-domains');
-    const tabBackend = document.getElementById('tab-backend');
     
     if (tabChat) tabChat.classList.toggle('hidden', sub !== 'chat');
     if (tabCode) tabCode.classList.toggle('hidden', sub !== 'code');
     if (tabFiles) tabFiles.classList.toggle('hidden', sub !== 'files');
-    if (tabVersions) tabVersions.classList.toggle('hidden', sub !== 'versions');
-    if (tabDomains) tabDomains.classList.toggle('hidden', sub !== 'domains');
-    if (tabBackend) tabBackend.classList.toggle('hidden', sub !== 'backend');
     localStorage.setItem('huggy-sub-tab', sub);
   }
 
@@ -355,7 +336,7 @@ function initBuilder() {
 
   // ── DEVICE SWITCHER ──────────────────────────────────────────
   const savedDevice = localStorage.getItem('huggy-preview-device') || 'desktop';
-  const previewFrame = document.getElementById('preview-frame') as HTMLIFrameElement | null;
+  const previewFrame = document.getElementById('preview-frame');
   const deviceBtns = document.querySelectorAll('.device-btn');
 
   function setDevice(device: string) {
@@ -469,68 +450,31 @@ function initBuilder() {
     });
   });
 
-  async function handleSend() {
+  function handleSend() {
     const text = chatTextarea.value.trim();
     if (!text) return;
     const container = document.getElementById('chat-container');
     if (container) {
       const msg = document.createElement('div');
       msg.className = 'msg-user';
-      const bubble = document.createElement('div');
-      bubble.className = 'msg-user-bubble';
-      bubble.textContent = text;
-      const time = document.createElement('div');
-      time.className = 'msg-time';
-      time.textContent = 'just now';
-      msg.append(bubble, time);
+      msg.innerHTML = `<div class="msg-user-bubble">${text}</div><div class="msg-time">just now</div>`;
       container.appendChild(msg);
       container.scrollTop = container.scrollHeight;
       chatTextarea.value = '';
       chatTextarea.style.height = 'auto';
       btnSend.disabled = true;
 
-      try {
-        const activeModel = document.querySelector('.model-option.active') as HTMLElement | null;
-        const modelName = activeModel?.dataset.name || 'Gemini 3 Flash';
-        const modelMap: Record<string, string> = {
-          'Claude Sonnet 4.6': 'anthropic/claude-sonnet-4.6',
-          'Claude Opus 4.7': 'anthropic/claude-opus-4.7',
-          'Gemini 3 Pro': 'google/gemini-3-pro',
-          'Gemini 3 Flash': 'google/gemini-3-flash',
-          Auto: 'google/gemini-3-flash',
-        };
-        const result = await platformApi<{ message?: string; version?: { id: string }; files?: { path: string }[] }>(`/api/projects/${requireProjectId()}/messages`, {
-          prompt: text,
-          mode: currentMode,
-          model: modelMap[modelName] || 'google/gemini-3-flash',
-        });
+      setTimeout(() => {
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
-        sysMsg.textContent = currentMode === 'plan' ? '── plan generated from OpenRouter ──' : '── AI generation persisted ──';
-        container.appendChild(sysMsg);
-        const assistantMsg = document.createElement('div');
-        assistantMsg.className = 'msg-system';
-        assistantMsg.textContent = (result.message || 'Application generated.').slice(0, 900);
-        container.appendChild(assistantMsg);
-        if (result.files?.length) {
-          structure.length = 0;
-          result.files.forEach((file) => structure.push({ type: 'file', name: file.path, size: 'persisted' }));
-          if (fileTree) {
-            fileTree.innerHTML = '';
-            renderTree(structure, fileTree);
-          }
+        if (currentMode === 'plan') {
+          sysMsg.innerHTML = '── plan generated ──';
+        } else {
+          sysMsg.innerHTML = '── change applied ──';
         }
-        container.scrollTop = container.scrollHeight;
-        showToast(`Version ${result.version?.id?.slice(0, 8) || 'active'} persistée`);
-      } catch (error) {
-        const sysMsg = document.createElement('div');
-        sysMsg.className = 'msg-system';
-        sysMsg.textContent = error instanceof Error ? error.message : 'Erreur IA backend';
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;
-      } finally {
-        btnSend.disabled = false;
-      }
+      }, 2000);
 
       addToHistory(`Chat: ${text.substring(0, 20)}...`);
     }
@@ -723,135 +667,9 @@ function initBuilder() {
     showToast('Redirecting to upgrade page...');
   });
 
-  const previewStatus = document.getElementById('preview-status');
-  const previewUrl = document.getElementById('preview-url');
-  const projectId = window.location.pathname.match(/\/projects\/([^/]+)/)?.[1];
-  const hasProjectContext = Boolean(projectId);
-
-  async function platformApi<T>(path: string, body?: Record<string, unknown>): Promise<T> {
-    const session = await getCurrentSession();
-    if (!session?.access_token) throw new Error('Session Supabase requise.');
-    const response = await fetch(path, {
-      method: body ? 'POST' : 'GET',
-      headers: {
-        authorization: `Bearer ${session.access_token}`,
-        'content-type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error?.message || `Erreur API ${response.status}`);
-    return payload as T;
-  }
-
-  function requireProjectId(): string {
-    if (!projectId) throw new Error('Ouvre un vrai projet depuis le dashboard avant de lancer cette action.');
-    return projectId;
-  }
-
-  function appendConsoleLine(message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') {
-    const logArea = document.querySelector('.console-log-area');
-    if (!logArea) return;
-    const line = document.createElement('div');
-    line.className = 'log-line';
-    const seconds = (performance.now() / 1000).toFixed(1).padStart(4, '0');
-    const timestamp = document.createElement('span');
-    timestamp.className = 'log-ts';
-    timestamp.textContent = `[${seconds}]`;
-    const content = document.createElement('span');
-    content.className = `log-${level}`;
-    content.textContent = message;
-    line.append(timestamp, content);
-    logArea.appendChild(line);
-    logArea.scrollTop = logArea.scrollHeight;
-  }
-
-  async function syncProjectStream() {
-    const stream = await platformApi<{ events: { type: string; severity?: 'info' | 'success' | 'warning' | 'error'; payload?: Record<string, unknown> }[]; build_logs: { level: 'info' | 'success' | 'warning' | 'error'; message: string }[] }>(`/api/projects/${requireProjectId()}/stream`);
-    const logArea = document.querySelector('.console-log-area');
-    if (logArea) logArea.innerHTML = '';
-    stream.events.forEach((event) => appendConsoleLine(`${event.type}${event.payload?.version_id ? ` · ${event.payload.version_id}` : ''}`, event.severity || 'info'));
-    stream.build_logs.forEach((log) => appendConsoleLine(log.message, log.level || 'info'));
-    return stream;
-  }
-
-  function setPreviewState(status: string, url: string) {
-    if (previewStatus) previewStatus.textContent = status;
-    if (previewUrl) previewUrl.textContent = url;
-    if (previewFrame && /^https?:\/\//.test(url)) previewFrame.src = url;
-  }
-
-  if (!hasProjectContext) {
-    setPreviewState('demo', 'open a real project');
-    appendConsoleLine('Ouvre un vrai projet depuis le dashboard pour activer le chat IA, la preview et le deploy.', 'warning');
-    ['btn-build-preview', 'btn-refresh-preview', 'btn-deploy-project', 'btn-add-domain'].forEach((id) => {
-      const button = document.getElementById(id) as HTMLButtonElement | null;
-      if (button) button.title = 'Ouvre un vrai projet depuis le dashboard pour activer cette action.';
-    });
-  }
-
-  document.getElementById('btn-build-preview')?.addEventListener('click', async () => {
-    try {
-      setPreviewState('building', 'build queued');
-      showToast('Build job lancé');
-      const buildResult = await platformApi<{ logs?: { level: 'info' | 'success' | 'warning' | 'error'; message: string }[] }>(`/api/projects/${requireProjectId()}/build`, {});
-      buildResult.logs?.forEach((log) => appendConsoleLine(log.message, log.level));
-      const result = await platformApi<{ deployment: { url?: string; preview_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'preview' });
-      setPreviewState('ready', result.deployment.preview_url || result.deployment.url || 'preview ready');
-      appendConsoleLine('Preview Vercel deployment created', 'success');
-      showToast('Preview Vercel créé');
-    } catch (error) {
-      setPreviewState('failed', 'preview failed');
-      appendConsoleLine(error instanceof Error ? error.message : 'Erreur preview', 'error');
-      showToast(error instanceof Error ? error.message : 'Erreur preview');
-    }
-  });
-
-  document.getElementById('btn-refresh-preview')?.addEventListener('click', async () => {
-    try {
-      const stream = await syncProjectStream();
-      showToast(`Logs synchronisés: ${stream.events.length} events, ${stream.build_logs.length} logs`);
-      setPreviewState('ready', previewUrl?.textContent || 'stream refreshed');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Erreur refresh');
-    }
-  });
-
-  document.getElementById('btn-deploy-project')?.addEventListener('click', async () => {
-    try {
-      showToast('Déploiement production Vercel...');
-      setPreviewState('deploying', 'deployment pending');
-      const result = await platformApi<{ deployment: { url?: string; production_url?: string } }>('/api/deploy', { project_id: requireProjectId(), target: 'production' });
-      setPreviewState('ready', result.deployment.production_url || result.deployment.url || 'production deployed');
-      appendConsoleLine('Production Vercel deployment created', 'success');
-      showToast('Production Vercel déployée');
-    } catch (error) {
-      setPreviewState('failed', 'deployment failed');
-      appendConsoleLine(error instanceof Error ? error.message : 'Erreur déploiement', 'error');
-      showToast(error instanceof Error ? error.message : 'Erreur déploiement');
-    }
-  });
-
-  document.getElementById('btn-rollback-version')?.addEventListener('click', () => {
-    showToast('Rollback restored selected version');
-  });
-
-  document.getElementById('btn-add-domain')?.addEventListener('click', async () => {
-    const hostname = window.prompt('Domaine custom à ajouter');
-    if (!hostname) return;
-    try {
-      const result = await platformApi<{ dns: { type: string; name: string; value: string } }>('/api/domains', { project_id: requireProjectId(), hostname });
-      showToast(`DNS ${result.dns.type}: ${result.dns.name} → ${result.dns.value}`);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Erreur domaine');
-    }
-  });
-
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
   window.addEventListener('keydown', (e) => {
-    const mod = e.metaKey || e.ctrlKey;
-    const key = e.key.toLowerCase();
-    if (mod && key === 'z') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
       e.preventDefault();
       if (e.shiftKey) {
         document.getElementById('btn-redo')?.click();
@@ -859,40 +677,9 @@ function initBuilder() {
         document.getElementById('btn-undo')?.click();
       }
     }
-    if (mod && key === 'y') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
       e.preventDefault();
       document.getElementById('btn-redo')?.click();
-    }
-    if (mod && key === 'enter') {
-      e.preventDefault();
-      if (chatTextarea.value.trim()) void handleSend();
-    }
-    if (mod && key === 'k') {
-      e.preventDefault();
-      setSubTab('chat');
-      chatTextarea.focus();
-      showToast('Chat prêt');
-    }
-    if (mod && key === 'b') {
-      e.preventDefault();
-      document.getElementById('btn-build-preview')?.click();
-    }
-    if (mod && key === 'd') {
-      e.preventDefault();
-      document.getElementById('btn-deploy-project')?.click();
-    }
-    if (mod && e.shiftKey && key === 'p') {
-      e.preventDefault();
-      (document.querySelector('[data-view="preview"]') as HTMLButtonElement | null)?.click();
-    }
-    if (mod && e.key === '`') {
-      e.preventDefault();
-      consolePanel?.classList.toggle('open');
-    }
-    if (e.key === 'Escape') {
-      consolePanel?.classList.remove('open');
-      modelDropdown?.classList.remove('open');
-      modeDropdownUI?.classList.remove('open');
     }
   });
 

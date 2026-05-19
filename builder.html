@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
@@ -83,31 +83,24 @@
           <span id="current-model-label">Auto</span>
           <div class="dropdown" id="model-dropdown">
             <div class="dropdown-header">Choose AI Engine</div>
-            <div class="model-option active" data-name="Auto">
-              <div class="model-dot" style="background: #F0EBE3; box-shadow: 0 0 8px #F0EBE3;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Auto</span>
-                <span class="opt-desc">Best allowed model</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Claude Sonnet 4.6">
+            <div class="model-option active" data-name="Sonnet 4.5">
               <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
               <div class="opt-meta">
-                <span class="opt-name">Claude Sonnet 4.6</span>
+                <span class="opt-name">Sonnet 4.5</span>
                 <span class="opt-desc">Intelligence + Speed</span>
               </div>
             </div>
-            <div class="model-option" data-name="Claude Opus 4.7">
+            <div class="model-option" data-name="Opus 4.5">
               <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
               <div class="opt-meta">
-                <span class="opt-name">Claude Opus 4.7</span>
+                <span class="opt-name">Opus 4.5</span>
                 <span class="opt-desc">Deep Reasoning</span>
               </div>
             </div>
-            <div class="model-option" data-name="Gemini 3 Pro">
+            <div class="model-option" data-name="Gemini 2.0">
               <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
               <div class="opt-meta">
-                <span class="opt-name">Gemini 3 Pro</span>
+                <span class="opt-name">Gemini 2.0</span>
                 <span class="opt-desc">Multimodal Guru</span>
               </div>
             </div>
@@ -120,7 +113,7 @@
           </svg>
         </button>
         <button class="btn-upgrade" id="btn-upgrade">Upgrade</button>
-        <button class="btn-deploy" id="btn-deploy-project">Deploy</button>
+        <button class="btn-deploy">Deploy</button>
       </div>
     </header>
 
@@ -130,29 +123,17 @@
         <button class="collapse-btn" id="btn-collapse-chat" title="Toggle Chat/Editor">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
         </button>
-        <button class="sub-tab active" data-sub="chat" data-sub-short="C" aria-label="Chat" title="Chat">
+        <button class="sub-tab active" data-sub="chat" data-sub-short="C">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           <span>Chat</span>
         </button>
-        <button class="sub-tab" data-sub="code" data-sub-short="E" aria-label="Code" title="Code">
+        <button class="sub-tab" data-sub="code" data-sub-short="E">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
           <span>Code</span>
         </button>
-        <button class="sub-tab" data-sub="files" data-sub-short="F" aria-label="Files" title="Files">
+        <button class="sub-tab" data-sub="files" data-sub-short="F">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
           <span>Files</span>
-        </button>
-        <button class="sub-tab" data-sub="versions" data-sub-short="V" aria-label="Versions" title="Versions">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><path d="m5.6 5.6 2.1 2.1"></path><path d="m16.3 16.3 2.1 2.1"></path><path d="m18.4 5.6-2.1 2.1"></path><path d="m7.7 16.3-2.1 2.1"></path></svg>
-          <span>Versions</span>
-        </button>
-        <button class="sub-tab" data-sub="domains" data-sub-short="D" aria-label="Domains" title="Domains">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 0 20"></path><path d="M12 2a15.3 15.3 0 0 0 0 20"></path></svg>
-          <span>Domains</span>
-        </button>
-        <button class="sub-tab" data-sub="backend" data-sub-short="B" aria-label="Backend" title="Backend">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path></svg>
-          <span>Backend</span>
         </button>
       </div>
 
@@ -276,49 +257,6 @@
           <span>12.3 kb total</span>
         </div>
       </div>
-
-      <div class="tab-content hidden" id="tab-versions">
-        <div class="file-upload-section">
-          <div class="upload-text">
-            <span class="primary">Version history</span>
-            <span class="secondary">Active version v3 · source project_versions · rollback enabled</span>
-          </div>
-          <button class="btn-primary-upload" id="btn-rollback-version">Rollback</button>
-        </div>
-        <div class="file-tree">
-          <div class="file-item active"><span class="file-name">v3 · latest AI generation</span><span class="file-size">ready</span></div>
-          <div class="file-item"><span class="file-name">v2 · preview build</span><span class="file-size">deployed</span></div>
-          <div class="file-item"><span class="file-name">v1 · initial scaffold</span><span class="file-size">archived</span></div>
-        </div>
-      </div>
-
-      <div class="tab-content hidden" id="tab-domains">
-        <div class="file-upload-section">
-          <div class="upload-text">
-            <span class="primary">Domains</span>
-            <span class="secondary">Primary SaaS subdomain active · custom domains follow plan limits</span>
-          </div>
-          <button class="btn-primary-upload" id="btn-add-domain">Add custom domain</button>
-        </div>
-        <div class="file-tree">
-          <div class="file-item active"><span class="file-name">Sous-domaine SaaS actif</span><span class="file-size">primary</span></div>
-          <div class="file-item"><span class="file-name">DNS: CNAME cname.vercel-dns.com</span><span class="file-size">instructions</span></div>
-        </div>
-      </div>
-
-      <div class="tab-content hidden" id="tab-backend">
-        <div class="file-upload-section">
-          <div class="upload-text">
-            <span class="primary">Supabase backend status</span>
-            <span class="secondary">Mode shared_tables · RLS required · organization_id + project_id isolation</span>
-          </div>
-          <button class="btn-primary-upload" id="btn-build-preview">Build Preview</button>
-        </div>
-        <div class="file-tree">
-          <div class="file-item active"><span class="file-name">project_backends</span><span class="file-size">ready</span></div>
-          <div class="file-item"><span class="file-name">project_backend_resources</span><span class="file-size">RLS on</span></div>
-        </div>
-      </div>
     </main>
 
     <!-- ── DRAG RIGHT ────────────────────────────────── -->
@@ -353,10 +291,10 @@
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0110 0v4"/>
           </svg>
-          <span id="preview-status">building</span> · <span id="preview-url">localhost:3000</span>
+          localhost:3000
         </div>
 
-        <button class="btn-refresh" id="btn-refresh-preview" title="Refresh">
+        <button class="btn-refresh" title="Refresh">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8"/>
             <path d="M21 3v5h-5"/>
@@ -365,7 +303,60 @@
       </div>
 
       <div class="preview-frame-wrapper">
-        <iframe class="preview-frame" id="preview-frame" title="Preview Vercel" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+        <div class="preview-frame" id="preview-frame">
+          <!-- mini app -->
+          <div class="mini-navbar">
+            <span class="mini-logo-text">DASHBOARD</span>
+            <div class="mini-dots">
+              <div class="mini-dot" style="background:#4ADE80"></div>
+              <div class="mini-dot" style="background:#FBBF24"></div>
+              <div class="mini-dot" style="background:#F87171"></div>
+            </div>
+          </div>
+          <div class="mini-body">
+            <div class="mini-sidebar">
+              <div class="mini-nav-item active"><div class="mini-nav-dot" style="background:#60A5FA"></div>Overview</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Analytics</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Users</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Reports</div>
+              <div class="mini-nav-item"><div class="mini-nav-dot" style="background:#2E2E2E"></div>Settings</div>
+            </div>
+            <div class="mini-main">
+              <div class="mini-grid">
+                <div class="mini-card">
+                  <div class="mini-card-val">$48.2k</div>
+                  <div class="mini-card-label">Revenue</div>
+                  <div class="mini-card-trend up">↑ 12%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">2,491</div>
+                  <div class="mini-card-label">Users</div>
+                  <div class="mini-card-trend up">↑ 8%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">94.1%</div>
+                  <div class="mini-card-label">Uptime</div>
+                  <div class="mini-card-trend down">↓ 0.3%</div>
+                </div>
+                <div class="mini-card">
+                  <div class="mini-card-val">1.2s</div>
+                  <div class="mini-card-label">Avg Load</div>
+                  <div class="mini-card-trend up">↑ fast</div>
+                </div>
+              </div>
+              <div class="mini-chart">
+                <div class="mini-bar" style="height:40%"></div>
+                <div class="mini-bar" style="height:60%"></div>
+                <div class="mini-bar" style="height:45%"></div>
+                <div class="mini-bar active" style="height:80%"></div>
+                <div class="mini-bar" style="height:55%"></div>
+                <div class="mini-bar" style="height:70%"></div>
+                <div class="mini-bar" style="height:90%"></div>
+                <div class="mini-bar" style="height:65%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="preview-footer">
@@ -386,7 +377,7 @@
       <button class="console-sub-tab active">Output</button>
       <button class="console-sub-tab">Errors</button>
       <button class="console-sub-tab">Warnings</button>
-      <button class="console-sub-tab btn-console-close" id="console-close">×</button>
+      <button class="console-sub-tab btn-console-close" id="console-close">✕</button>
     </div>
     <div class="console-log-area">
       <div class="log-line"><span class="log-ts">[00:00.1]</span><span class="log-info">→ Initializing development server...</span></div>
@@ -402,4 +393,3 @@
   <script type="module" src="/src/builder.ts"></script>
 </body>
 </html>
-

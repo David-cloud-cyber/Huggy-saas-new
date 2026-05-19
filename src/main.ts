@@ -6,9 +6,6 @@ function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
 }
 
 function init() {
-    if (document.documentElement.dataset.huggyLandingReady === 'true') return;
-    document.documentElement.dataset.huggyLandingReady = 'true';
-
     const textarea = getElement<HTMLTextAreaElement>('ai-textarea');
     const submitBtn = getElement<HTMLButtonElement>('submit-btn');
     const modelSelectBtn = getElement<HTMLDivElement>('model-select-btn');
@@ -52,7 +49,11 @@ function init() {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
             if (submitBtn?.classList.contains('active')) {
-                handleSubmit();
+                console.log('Form submitted:', textarea.value);
+                // Reset for demo
+                textarea.value = '';
+                updateSubmit();
+                textarea.style.height = 'auto';
             }
         }
     });
@@ -209,7 +210,7 @@ function init() {
         textarea.disabled = true;
         textarea.style.opacity = '0.5';
 
-        // Give the user immediate feedback before handing the prompt to the authenticated workspace.
+        // Simulate a brief loading sequence before transition
         setTimeout(() => {
             submitBtn.querySelector('span')!.textContent = 'Redirecting...';
             
@@ -219,49 +220,26 @@ function init() {
                 curtain.classList.add('falling');
                 
                 setTimeout(() => {
-                    window.location.href = '/dashboard.html';
+                    window.location.href = '/auth.html';
                 }, 600);
             } else {
-                window.location.href = '/dashboard.html';
+                window.location.href = '/auth.html';
             }
         }, 1200);
     }
 
-    // 9. Scroll Reveal. Content stays visible unless this setup completes.
-    const revealElements = Array.from(document.querySelectorAll<HTMLElement>('.reveal'));
-    if ('IntersectionObserver' in window && revealElements.length > 0) {
-        const activateVisibleReveals = () => {
-            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-            revealElements.forEach((el) => {
-                const rect = el.getBoundingClientRect();
-                if (rect.top < viewportHeight * 0.95) {
-                    el.classList.add('active');
-                }
-            });
-        };
-
-        activateVisibleReveals();
-        document.documentElement.classList.add('reveal-armed');
-
-        const revealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('active');
-                    revealObserver.unobserve(entry.target);
-                }
-            });
-        }, { threshold: 0.05, rootMargin: '0px 0px -24px 0px' });
-
-        revealElements.forEach(el => {
-            revealObserver.observe(el);
+    // 9. Scroll Reveal
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+            }
         });
+    }, { threshold: 0.1 });
 
-        window.setTimeout(() => {
-            revealElements.forEach(el => el.classList.add('active'));
-        }, 1800);
-    } else {
-        revealElements.forEach(el => el.classList.add('active'));
-    }
+    document.querySelectorAll('.reveal').forEach(el => {
+        revealObserver.observe(el);
+    });
 
     // 10. Modals & Interactivity
     const modalOverlay = getElement<HTMLDivElement>('modal-overlay');
@@ -300,6 +278,24 @@ function init() {
                     <p style="font-size: 11px; color: var(--text-sub); margin-top: 16px;">Coming soon to Pro and Enterprise plans.</p>
                 </div>
             `);
+        });
+    });
+
+    // Sign in flow
+    document.querySelectorAll('.sign-in-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            // Prevent if it's a direct HTML link already handled by index.html onclick
+            // but for safety we redirect here too if JS takes over
+            e.preventDefault();
+            if (curtain) {
+                curtain.style.transformOrigin = 'top';
+                curtain.classList.add('falling');
+                setTimeout(() => {
+                    window.location.href = '/auth.html';
+                }, 600);
+            } else {
+                window.location.href = '/auth.html';
+            }
         });
     });
 

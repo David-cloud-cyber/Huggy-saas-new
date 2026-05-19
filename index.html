@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
@@ -30,7 +30,6 @@
         (function() {
             const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
-            document.documentElement.classList.add('js-ready');
         })();
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -68,7 +67,7 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <a class="sign-in-btn" href="/dashboard.html">Sign In</a>
+            <button class="sign-in-btn" onclick="window.location.href='/auth.html'">Sign In</button>
         </div>
     </nav>
 
@@ -115,16 +114,16 @@
                     <div class="actions-right">
                         <div class="model-select" id="model-select-btn" data-tooltip="Switch AI engine">
                             <span class="model-label-prefix">Model</span>
-                            <span id="current-model-label">Claude Sonnet 4.6</span>
+                            <span id="current-model-label">Sonnet 4.5</span>
                             <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
                             <div class="dropdown" id="model-dropdown">
                                 <div class="dropdown-header">Choose AI Engine</div>
-                                <div class="model-option active" data-name="Claude Sonnet 4.6">
+                                <div class="model-option active" data-name="Sonnet 4.5">
                                     <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
                                     <div class="opt-meta">
-                                        <span class="opt-name">Claude Sonnet 4.6</span>
+                                        <span class="opt-name">Sonnet 4.5</span>
                                         <span class="opt-desc">Intelligence + Speed</span>
                                     </div>
                                     <div class="active-check">
@@ -133,10 +132,10 @@
                                         </svg>
                                     </div>
                                 </div>
-                                <div class="model-option" data-name="Claude Opus 4.7">
+                                <div class="model-option" data-name="Opus 4.5">
                                     <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
                                     <div class="opt-meta">
-                                        <span class="opt-name">Claude Opus 4.7</span>
+                                        <span class="opt-name">Opus 4.5</span>
                                         <span class="opt-desc">Deep Reasoning</span>
                                     </div>
                                     <div class="active-check">
@@ -145,10 +144,10 @@
                                         </svg>
                                     </div>
                                 </div>
-                                <div class="model-option" data-name="GPT-5 Nano">
+                                <div class="model-option" data-name="Haiku 4.5">
                                     <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
                                     <div class="opt-meta">
-                                        <span class="opt-name">GPT-5 Nano</span>
+                                        <span class="opt-name">Haiku 4.5</span>
                                         <span class="opt-desc">Ultra lightweight</span>
                                     </div>
                                     <div class="active-check">
@@ -157,11 +156,11 @@
                                         </svg>
                                     </div>
                                 </div>
-                                <div class="model-option" data-name="GPT-5.5">
+                                <div class="model-option" data-name="o1">
                                     <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
                                     <div class="opt-meta">
-                                        <span class="opt-name">GPT-5.5</span>
-                                        <span class="opt-desc">Premium app generation</span>
+                                        <span class="opt-name">o1</span>
+                                        <span class="opt-desc">PhD Level Reasoning</span>
                                     </div>
                                     <div class="active-check">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -169,10 +168,10 @@
                                         </svg>
                                     </div>
                                 </div>
-                                <div class="model-option" data-name="Gemini 3 Pro">
+                                <div class="model-option" data-name="Gemini 2.0">
                                     <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
                                     <div class="opt-meta">
-                                        <span class="opt-name">Gemini 3 Pro</span>
+                                        <span class="opt-name">Gemini 2.0</span>
                                         <span class="opt-desc">Multimodal Guru</span>
                                     </div>
                                     <div class="active-check">
@@ -373,8 +372,8 @@
                 <div class="feature-icon">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 </div>
-                <h3>Supabase Integration</h3>
-                <p>Native support for Supabase. Huggy prepares project data, schemas, storage, and RLS-aware backend resources for generated apps.</p>
+                <h3>Firestore Integration</h3>
+                <p>Native support for Firestore. Huggy automatically generates your database schema and security rules based on your app's needs.</p>
             </div>
             <div class="bento-item reveal">
                 <div class="feature-icon">
@@ -486,41 +485,40 @@
 
     <section id="pricing" class="pricing-section reveal">
         <div class="section-header">
-            <h2>Plans that scale with your agent workload</h2>
-            <p>Transparent credits, project limits, domains and model access for each stage.</p>
+            <h2>Simple, transparent pricing</h2>
+            <p>Everything you need to build, scale, and manage your apps.</p>
         </div>
         <div class="pricing-grid stagger-grid">
             <div class="pricing-card reveal">
-                <div class="price-name">Free</div>
+                <div class="price-name">Personal</div>
                 <div class="price-value">$0<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 20 credits / month</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 1 active project</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Economy models</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 5 projects</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Standard modes</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Community support</li>
                 </ul>
                 <button class="pricing-btn">Get Started</button>
             </div>
             <div class="pricing-card featured reveal">
-                <div class="price-name neon-highlight neon-glow">Starter</div>
-                <div class="price-value">$20<span>/mo</span></div>
+                <div class="price-name neon-highlight neon-glow">Pro</div>
+                <div class="price-value">$29<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 100 credits / month</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 3 active projects</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 1 custom domain</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Economy + Standard models</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited projects</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Priority workspace access</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Custom domains</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Analytics & SEO</li>
                 </ul>
-                <button class="pricing-btn primary">Choose Starter</button>
+                <button class="pricing-btn primary">Start Free Trial</button>
             </div>
             <div class="pricing-card reveal">
-                <div class="price-name">Pro</div>
-                <div class="price-value">$49<span>/mo</span></div>
+                <div class="price-name">Expert</div>
+                <div class="price-value">$99<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 300 credits / month</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 10 active projects</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 5 custom domains</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Pro model access</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 5 team seats</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Premium engines</li>
+                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 24/7 dedicated support</li>
                 </ul>
-                <button class="pricing-btn">Choose Pro</button>
+                <button class="pricing-btn">Contact Sales</button>
             </div>
         </div>
     </section>
@@ -572,7 +570,7 @@
         </div>
     </section>
 
-    <a href="/dashboard.html" class="sticky-cta" id="sticky-cta">
+    <a href="/auth.html" class="sticky-cta" id="sticky-cta">
         Build with Huggy
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -596,7 +594,7 @@
                 </a>
                 <p>The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
             </div>
-            <div class="footer-col">
+                <div class="footer-col">
                 <h5>Product</h5>
                 <ul class="footer-links">
                     <li><a href="/features.html">Features</a></li>
@@ -646,6 +644,7 @@
     <!-- Toast Container -->
     <div id="toast-container"></div>
 
+    <script type="module" src="/src/main.ts"></script>
     <script>
         // Global navigation helper using standardized curtain
         function navigate(url) {
@@ -676,8 +675,5 @@
             }
         });
     </script>
-    <script type="module" src="/src/main.ts"></script>
-    <script type="module" src="/src/supabase-auth.ts"></script>
 </body>
 </html>
-
