@@ -1117,15 +1117,69 @@
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 900px) {
-      .sidebar { display: none; }
-      .main-area { width: 100vw; }
+      .dashboard { display: block; }
+      .sidebar {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        top: auto;
+        width: auto;
+        height: 68px;
+        z-index: 120;
+        border: 1px solid var(--border-mid);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+        backdrop-filter: blur(18px);
+        flex-direction: row;
+        align-items: center;
+        padding: 8px;
+      }
+      .sidebar-logo,
+      .sidebar-profile,
+      .sidebar-credits,
+      .sidebar-promo,
+      .nav-divider,
+      .nav-label,
+      .nav-project,
+      .sidebar-footer .btn-footer span {
+        display: none;
+      }
+      .sidebar-nav,
+      .sidebar-footer {
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        margin: 0;
+        width: auto;
+      }
+      .btn-new-project-sidebar,
+      .btn-footer,
+      .btn-theme-toggle {
+        height: 48px;
+        min-width: 48px;
+        justify-content: center;
+      }
+      .main-area { width: 100vw; min-height: 100vh; padding-bottom: 92px; }
+      .topbar { padding: 14px 16px; }
+      .topbar-right { gap: 8px; }
+      .projects-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
     }
     @media (max-width: 640px) {
       .kpi-grid { grid-template-columns: 1fr; }
       .search-wrapper { display: none; }
-      .content-area { padding: 20px; }
+      .content-area { padding: 18px 14px 100px; }
+      .topbar { align-items: flex-start; gap: 10px; flex-direction: column; }
+      .topbar-right { width: 100%; justify-content: space-between; }
+      .btn-create-top { flex: 1; }
       .create-input-row { flex-direction: column; align-items: stretch; }
       .btn-submit { height: 40px; }
+      .projects-grid { grid-template-columns: 1fr; }
+      .activity-row {
+        grid-template-columns: 14px 1fr;
+        gap: 8px;
+      }
+      .act-meta { grid-column: 2; }
     }
   </style>
 </head>
@@ -1874,6 +1928,7 @@
 
     });
   </script>
+  <script type="module" src="/src/dashboard.ts"></script>
   <div class="settings-overlay" id="settings-overlay"></div>
   <div class="settings-panel" id="settings-panel">
     <div class="settings-header">

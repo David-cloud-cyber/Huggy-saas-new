@@ -876,6 +876,12 @@ body {
   display: flex; flex-direction: column;
   flex-shrink: 0;
 }
+.sandbox-preview {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
 .preview-frame.tablet {
   width: 768px;
   height: 1024px;
@@ -970,6 +976,125 @@ body {
 .preview-stats {
   font-family: "JetBrains Mono", monospace;
   font-size: 10px; color: var(--text-sub);
+}
+
+@media (max-width: 900px) {
+  html,
+  body {
+    overflow: auto;
+  }
+
+  .app-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    height: auto;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .topbar-left,
+  .topbar-center,
+  .topbar-right {
+    width: 100%;
+    border-right: 0;
+    justify-content: space-between;
+    padding-right: 0;
+  }
+
+  .tab-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .main-panel,
+  .preview-panel {
+    min-height: calc(100vh - 150px);
+    border-right: 0;
+  }
+
+  .handle-right {
+    display: none !important;
+  }
+
+  .preview-frame-wrapper {
+    min-height: 620px;
+    padding: 12px;
+  }
+
+  .preview-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 48px;
+    padding: 8px;
+  }
+
+  .preview-address {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .logo-text,
+  #project-name,
+  .btn-upgrade {
+    display: none;
+  }
+
+  .topbar-center {
+    overflow-x: auto;
+  }
+
+  .chat-container {
+    padding: 16px;
+  }
+
+  .msg-user {
+    max-width: 100%;
+  }
+
+  .input-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .actions-left,
+  .actions-right {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .model-select,
+  .mode-compact {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .preview-frame-wrapper {
+    min-height: 560px;
+  }
+
+  .preview-frame.mobile,
+  .preview-frame.tablet {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    border-width: 6px;
+    border-radius: 24px;
+  }
 }
 
 /* ── CONSOLE ────────────────────────────────────────── */

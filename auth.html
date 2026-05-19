@@ -321,6 +321,40 @@
 
         .hidden { display: none !important; }
 
+        @media (max-width: 480px) {
+            body {
+                align-items: stretch;
+                overflow-y: auto;
+            }
+
+            .auth-container {
+                max-width: none;
+                padding: 24px 14px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-height: 100vh;
+            }
+
+            .auth-card {
+                padding: 26px 18px;
+                border-radius: 16px;
+            }
+
+            .auth-title {
+                font-size: 28px;
+            }
+
+            .social-btns {
+                grid-template-columns: 1fr;
+            }
+
+            .theme-toggle {
+                right: 16px;
+                bottom: 16px;
+            }
+        }
+
         /* Animation related */
         .slide-up {
             animation: slideUp 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -495,5 +529,6 @@
             curtain.classList.add('rising');
         });
     </script>
+    <script type="module" src="/src/auth.ts"></script>
 </body>
 </html>
