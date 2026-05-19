@@ -16,6 +16,9 @@ function json(response, status, body) {
     'content-type': 'application/json; charset=utf-8',
     'x-content-type-options': 'nosniff',
     'cache-control': 'no-store',
+    'access-control-allow-origin': process.env.VITE_APP_URL || '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type',
   });
   response.end(JSON.stringify(body));
 }

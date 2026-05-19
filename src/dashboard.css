@@ -706,6 +706,41 @@
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       gap: 16px;
     }
+    .project-empty-state {
+      grid-column: 1 / -1;
+      min-height: 280px;
+      border: 1px dashed var(--border-mid);
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--bg-surface), var(--bg-elevated));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 14px;
+      padding: 36px 24px;
+    }
+    .project-empty-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: var(--bg);
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .project-empty-state h3 {
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+    .project-empty-state p {
+      max-width: 520px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
     .project-card {
       background: var(--bg-surface);
       border: 1px solid var(--border);

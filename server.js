@@ -27,6 +27,29 @@ const dynamicRoutePatterns = [
   { pattern: /^\/projects\/[^/]+\/settings$/, file: 'builder.html' },
 ];
 
+function apiCorsHeaders(request) {
+  const headers = {
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-max-age': '86400',
+    vary: 'Origin',
+  };
+  const origin = request.headers.origin;
+  if (!origin) return headers;
+  try {
+    const hostname = new URL(origin).hostname;
+    const publicDomain = process.env.APP_PUBLIC_DOMAIN;
+    const appUrl = process.env.VITE_APP_URL ? new URL(process.env.VITE_APP_URL) : null;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isAppUrl = appUrl ? hostname === appUrl.hostname : false;
+    const isPublicDomain = publicDomain ? hostname === publicDomain || hostname.endsWith(`.${publicDomain}`) : false;
+    if (isLocal || isAppUrl || isPublicDomain) headers['access-control-allow-origin'] = origin;
+  } catch {
+    // Ignore invalid Origin headers; the browser will enforce the missing ACAO response.
+  }
+  return headers;
+}
+
 const contentTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
   ['.js', 'text/javascript; charset=utf-8'],
@@ -56,13 +79,18 @@ function safePath(relativePath) {
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
+  if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
+    response.writeHead(204, apiCorsHeaders(request));
+    response.end();
+    return;
+  }
   if (url.pathname === '/api/health') {
-    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
+    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', ...apiCorsHeaders(request) });
     response.end(JSON.stringify({ ok: true, service: 'huggy-control-center', timestamp: new Date().toISOString() }));
     return;
   }
   if (url.pathname === '/api/platform/status') {
-    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' });
+    response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff', ...apiCorsHeaders(request) });
     response.end(JSON.stringify({
       railway: true,
       vercel: Boolean(process.env.VERCEL_TOKEN || process.env.VERCEL_API_TOKEN),

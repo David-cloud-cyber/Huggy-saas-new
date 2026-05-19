@@ -44,7 +44,18 @@ function showNotice(message: string, tone: 'info' | 'error' = 'info'): void {
 function renderProjects(projects: ProjectRow[]): void {
   text('.section-label span', `(${projects.length})`);
   const grid = document.querySelector('.projects-grid');
-  if (!grid || projects.length === 0) return;
+  if (!grid) return;
+  if (projects.length === 0) {
+    grid.innerHTML = `
+      <div class="project-empty-state">
+        <div class="project-empty-icon">+</div>
+        <h3>Aucun projet pour le moment</h3>
+        <p>Decris ta premiere application et Huggy creera le projet, les fichiers, une version et une validation build.</p>
+        <button class="btn-create-top" type="button">Nouveau projet</button>
+      </div>
+    `;
+    return;
+  }
   grid.innerHTML = projects.map((project) => `
     <div class="project-card" data-project-id="${project.id}">
       <div class="card-header">
@@ -174,8 +185,9 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('click', async (event) => {
   const target = event.target as HTMLElement | null;
-  if (!target?.closest('.btn-new-project-sidebar, .btn-create-top')) return;
+  if (!target?.closest('.btn-new-project-sidebar, .btn-create-top, #submit-btn')) return;
   event.preventDefault();
+  event.stopPropagation();
   const promptText = (document.getElementById('ai-textarea') as HTMLTextAreaElement | null)?.value?.trim();
   const name = window.prompt('Nom du projet Supabase à créer', promptText ? promptText.slice(0, 48) : 'Nouveau projet Huggy');
   if (!name) return;

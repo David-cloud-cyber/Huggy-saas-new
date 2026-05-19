@@ -6,6 +6,9 @@ function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
 }
 
 function init() {
+    if (document.documentElement.dataset.huggyLandingReady === 'true') return;
+    document.documentElement.dataset.huggyLandingReady = 'true';
+
     const textarea = getElement<HTMLTextAreaElement>('ai-textarea');
     const submitBtn = getElement<HTMLButtonElement>('submit-btn');
     const modelSelectBtn = getElement<HTMLDivElement>('model-select-btn');
@@ -49,11 +52,7 @@ function init() {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
             e.preventDefault();
             if (submitBtn?.classList.contains('active')) {
-                console.log('Form submitted:', textarea.value);
-                // Reset for demo
-                textarea.value = '';
-                updateSubmit();
-                textarea.style.height = 'auto';
+                handleSubmit();
             }
         }
     });
@@ -210,7 +209,7 @@ function init() {
         textarea.disabled = true;
         textarea.style.opacity = '0.5';
 
-        // Simulate a brief loading sequence before transition
+        // Give the user immediate feedback before handing the prompt to the authenticated workspace.
         setTimeout(() => {
             submitBtn.querySelector('span')!.textContent = 'Redirecting...';
             
@@ -276,28 +275,6 @@ function init() {
                     <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 32px;">Connect your account to sync your ${platform} designs directly into your generation pipeline.</p>
                     <button class="sign-in-btn" style="width: 100%; justify-content: center; padding: 14px;">Connect Account</button>
                     <p style="font-size: 11px; color: var(--text-sub); margin-top: 16px;">Coming soon to Pro and Enterprise plans.</p>
-                </div>
-            `);
-        });
-    });
-
-    // Sign in flow
-    document.querySelectorAll('.sign-in-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            openModal(`
-                <div style="text-align: center;">
-                    <h2 style="margin-bottom: 32px; font-weight: 700;">Welcome back</h2>
-                    <div style="display: flex; flex-direction: column; gap: 12px;">
-                        <button class="import-btn" style="padding: 12px; justify-content: center;">Continue with Google</button>
-                        <button class="import-btn" style="padding: 12px; justify-content: center;">Continue with GitHub</button>
-                    </div>
-                    <div style="margin: 24px 0; display: flex; align-items: center; gap: 12px;">
-                        <div style="flex: 1; height: 1px; background: var(--border);"></div>
-                        <span style="font-size: 11px; color: var(--text-sub);">OR</span>
-                        <div style="flex: 1; height: 1px; background: var(--border);"></div>
-                    </div>
-                    <input type="email" placeholder="Email address" style="width: 100%; padding: 12px; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 12px; color: var(--text);">
-                    <button class="sign-in-btn" style="width: 100%; justify-content: center; padding: 12px;">Send Magic Link</button>
                 </div>
             `);
         });

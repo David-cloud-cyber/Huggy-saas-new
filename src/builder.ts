@@ -465,7 +465,13 @@ function initBuilder() {
     if (container) {
       const msg = document.createElement('div');
       msg.className = 'msg-user';
-      msg.innerHTML = `<div class="msg-user-bubble">${text}</div><div class="msg-time">just now</div>`;
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-user-bubble';
+      bubble.textContent = text;
+      const time = document.createElement('div');
+      time.className = 'msg-time';
+      time.textContent = 'just now';
+      msg.append(bubble, time);
       container.appendChild(msg);
       container.scrollTop = container.scrollHeight;
       chatTextarea.value = '';

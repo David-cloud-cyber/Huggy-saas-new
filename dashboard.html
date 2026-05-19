@@ -616,10 +616,8 @@
         }
     }
 
-    document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar, .project-card').forEach(el => {
+    document.querySelectorAll('.btn-open-project, .nav-project, .project-card').forEach(el => {
       el.addEventListener('click', (e) => {
-        // Only trigger if active (for submit-btn)
-        if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
         // If it's the card, check if we clicked a button inside first (though CSS pointer-events or stopProp handles it)
         if (e.target.closest('.btn-card-delete')) return;
         navigate('builder.html');

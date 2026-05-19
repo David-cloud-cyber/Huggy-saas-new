@@ -42,6 +42,9 @@ const runtimeApi = read('src/platform/runtime-api.mjs');
 const envExample = read('.env.example');
 const railway = read('railway.json');
 const nixpacks = read('nixpacks.toml');
+const landingScript = read('src/main.ts');
+const landingCss = read('src/index.css');
+const builderScript = read('src/builder.ts');
 
 assert(dashboard.includes('btn-new-project-sidebar'), 'dashboard must expose sidebar new project CTA');
 assert(dashboard.includes('btn-create-top'), 'dashboard must expose top new project CTA');
@@ -49,15 +52,27 @@ assert(dashboard.includes('id="ai-textarea"'), 'dashboard must expose prompt tex
 assert(dashboard.includes('id="model-dropdown"'), 'dashboard must expose model selector');
 assert(dashboard.includes('/src/supabase-dashboard.ts'), 'dashboard must load Supabase dashboard integration');
 assert(index.includes('/src/supabase-auth.ts'), 'index/login/signup shell must load Supabase auth integration');
+assert((index.match(/\/src\/main\.ts/g) || []).length === 1, 'landing must load src/main.ts exactly once');
+assert(index.includes('classList.add(\'js-ready\')'), 'landing must mark JS readiness before reveal animations');
+assert(!index.includes('onclick="window.location.href'), 'landing must not mix inline navigation with module listeners');
 assert(!dashboard.includes('setTimeout(openSettings'), 'dashboard settings modal must not auto-open in production');
 assert(!dashboard.match(/const\s+curtain[\s\S]*const\s+curtain/), 'dashboard must not redeclare curtain in one script scope');
+assert(!dashboard.includes("document.querySelectorAll('#submit-btn, .btn-open-project"), 'dashboard static navigation must not hijack project creation CTAs');
 assert(builder.includes('id="chat-container"'), 'builder must expose chat container');
 assert(builder.includes('id="preview-frame"'), 'builder must expose preview frame');
 assert(builder.includes('<iframe class="preview-frame"'), 'builder preview must be an iframe for real preview URLs');
 assert(builder.includes('btn-deploy'), 'builder must expose deploy button');
+assert(!landingScript.includes('Welcome back'), 'landing sign in must not open a fake auth modal');
+assert(landingScript.includes('huggyLandingReady'), 'landing init must guard against duplicate module execution');
+assert(landingCss.includes('html:not(.js-ready) .neon-highlight::after'), 'landing reveal CSS must have a no-JS visible fallback');
+assert(builderScript.includes('bubble.textContent = text'), 'builder chat must escape user prompt text instead of injecting HTML');
+assert(!builderScript.includes('msg.innerHTML = `<div class="msg-user-bubble">${text}'), 'builder chat must not render user prompt with innerHTML');
 for (const apiRoute of ['/api/projects', '/api/deploy', '/api/domains', '/api/billing', '/api/ai/estimate']) {
   assert(runtimeApi.includes(apiRoute), `runtime API must expose ${apiRoute}`);
 }
+assert(server.includes("request.method === 'OPTIONS'"), 'production server must handle CORS preflight for API routes');
+assert(server.includes('access-control-allow-origin'), 'production server must emit CORS headers for API routes');
+assert(runtimeApi.includes('access-control-allow-headers'), 'runtime API errors and JSON responses must include CORS headers');
 
 const routeExpectations = ['/dashboard', '/projects', '/projects/new', '/billing', '/login', '/signup', '/organization/settings'];
 for (const route of routeExpectations) assert(server.includes(`'${route}'`), `production server must route ${route}`);
