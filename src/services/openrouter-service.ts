@@ -14,7 +14,10 @@ export interface OpenRouterConfig {
 }
 
 export class OpenRouterService {
-  constructor(private config: OpenRouterConfig) {}
+  private config: OpenRouterConfig;
+  constructor(config: OpenRouterConfig) {
+    this.config = config;
+  }
 
   async chat(modelId: string, messages: ChatMessage[]) {
     // 1. Strict validation of primary model

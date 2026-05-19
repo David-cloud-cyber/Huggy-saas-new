@@ -66,7 +66,7 @@ app.post('/api/ai/chat', async (req, res) => {
   try {
     let selectedModelId: string;
 
-    if (customModelId) {
+    if (customModelId && customModelId !== 'auto') {
       // Strict validation for custom models
       validateAllowedModel(customModelId);
       selectedModelId = customModelId;

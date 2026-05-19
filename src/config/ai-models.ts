@@ -9,7 +9,8 @@ export const AI_ALLOWED_MODELS = [
   'openai/gpt-5-nano',
   'deepseek/deepseek-coder',
   'qwen/qwen-coder',
-  'mistralai/codestral'
+  'mistralai/codestral',
+  'auto'
 ] as const;
 
 export type AllowedModelId = (typeof AI_ALLOWED_MODELS)[number];
@@ -34,6 +35,7 @@ export const AI_MODEL_TIERS: Record<AllowedModelId, AIModelTier> = {
   'deepseek/deepseek-coder': AIModelTier.STANDARD,
   'qwen/qwen-coder': AIModelTier.STANDARD,
   'mistralai/codestral': AIModelTier.STANDARD,
+  'auto': AIModelTier.STANDARD,
 };
 
 export interface ModelCapabilities {
@@ -56,6 +58,7 @@ export const AI_MODEL_CAPABILITIES: Record<AllowedModelId, ModelCapabilities> = 
   'deepseek/deepseek-coder': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 64000 },
   'qwen/qwen-coder': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 64000 },
   'mistralai/codestral': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 32000 },
+  'auto': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 128000 },
 };
 
 export const AI_MODEL_FALLBACKS: Record<AllowedModelId, AllowedModelId[]> = {
@@ -70,6 +73,7 @@ export const AI_MODEL_FALLBACKS: Record<AllowedModelId, AllowedModelId[]> = {
   'qwen/qwen-coder': ['deepseek/deepseek-coder'],
   'mistralai/codestral': ['deepseek/deepseek-coder'],
   'google/gemini-3-flash': [],
+  'auto': ['google/gemini-3-flash'],
 };
 
 export const UserPlan = {
@@ -92,4 +96,5 @@ export const AI_MODEL_PLAN_ACCESS: Record<AllowedModelId, UserPlan> = {
   'deepseek/deepseek-coder': UserPlan.FREE,
   'qwen/qwen-coder': UserPlan.FREE,
   'mistralai/codestral': UserPlan.FREE,
+  'auto': UserPlan.FREE,
 };

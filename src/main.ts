@@ -229,6 +229,101 @@ function init() {
         }, 1200);
     }
 
+    // Logics for action buttons
+    const btnUpload = getElement<HTMLButtonElement>('btn-upload');
+    const fileInput = getElement<HTMLInputElement>('file-input');
+    const btnSearch = getElement<HTMLButtonElement>('btn-search');
+    const btnVoice = getElement<HTMLButtonElement>('btn-voice');
+
+    btnUpload?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', () => {
+        const files = fileInput.files;
+        if (files && files.length > 0) {
+            showToast(`Attached ${files.length} file(s)`);
+            if (textarea) {
+                textarea.value += `\n[Attached: ${Array.from(files).map(f => f.name).join(', ')}]`;
+                updateSubmit();
+            }
+        }
+    });
+
+    btnSearch?.addEventListener('click', () => {
+        openModal(`
+            <div style="padding: 10px;">
+                <h3 style="margin-bottom: 20px;">Search Snippets</h3>
+                <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" placeholder="Search templates..." style="background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 14px;">
+                </div>
+                <div style="display: grid; gap: 12px;">
+                    <div style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; hover:bg-white/5 transition: background 0.2s;" onclick="document.getElementById('ai-textarea').value = 'Create a dark mode dashboard for my SaaS with real-time analytics chart.'; document.getElementById('modal-overlay').click();">
+                        <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">SaaS Dashboard Template</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Responsive sidebar, dark theme, Recharts integration.</div>
+                    </div>
+                    <div style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;" onclick="document.getElementById('ai-textarea').value = 'Build a landing page for my mobile app with a hero section, features grid, and waitlist form.'; document.getElementById('modal-overlay').click();">
+                        <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">Mobile App Landing Page</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Animated hero, testimonials, and API-ready contact form.</div>
+                    </div>
+                </div>
+            </div>
+        `);
+    });
+
+    btnVoice?.addEventListener('click', () => {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            showToast("Speech recognition not supported in this browser");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        btnVoice.style.color = 'var(--accent)';
+        btnVoice.classList.add('pulse');
+        showToast("Listening...");
+
+        recognition.onresult = (event: any) => {
+            const speechResult = event.results[0][0].transcript;
+            if (textarea) {
+                textarea.value = speechResult;
+                updateSubmit();
+            }
+            btnVoice.style.color = '';
+            btnVoice.classList.remove('pulse');
+        };
+
+        recognition.onspeechend = () => {
+            recognition.stop();
+            btnVoice.style.color = '';
+            btnVoice.classList.remove('pulse');
+        };
+
+        recognition.onerror = (event: any) => {
+            console.error(event.error);
+            btnVoice.style.color = '';
+            btnVoice.classList.remove('pulse');
+            showToast("Error recording voice");
+        };
+
+        recognition.start();
+    });
+
+    // Global navigation helper
+    (window as any).navigate = (url: string) => {
+        if (curtain) {
+            curtain.style.transformOrigin = 'top';
+            curtain.classList.add('falling');
+            setTimeout(() => {
+                window.location.href = url;
+            }, 600);
+        } else {
+            window.location.href = url;
+        }
+    };
+
     // 9. Scroll Reveal
     const revealObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {

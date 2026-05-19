@@ -33,6 +33,14 @@ async function runTests() {
     console.log('✅ Success: Malicious model ID blocked.');
   }
 
+  // Test 4: Auto model
+  try {
+    validateAllowedModel('auto');
+    console.log('✅ Success: Auto model passed validation.');
+  } catch (e) {
+    console.error('❌ Failed: Auto model rejected.');
+  }
+
   console.log('Tests completed.');
 }
 
