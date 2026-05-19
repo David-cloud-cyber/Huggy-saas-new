@@ -7,10 +7,18 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
+    "start": "node --experimental-strip-types server.ts",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --experimental-strip-types test-policy.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.0",
+    "@types/express": "^5.0.6",
+    "@types/node-fetch": "^2.6.13",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2",
     "vite": "^6.2.0"
   },
   "devDependencies": {
