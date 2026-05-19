@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -116,7 +116,26 @@ app.post('/api/admin/sync-models', async (req, res) => {
 });
 
 // Static files (frontend)
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Fallback for html routes
+app.get('/:page', (req, res, next) => {
+  const page = req.params.page;
+  if (page.startsWith('api')) return next();
+  res.sendFile(path.join(__dirname, 'dist', `${page}.html`), (err) => {
+    if (err) {
+      res.sendFile(path.join(__dirname, 'dist', `${page}`), (err2) => {
+        if (err2) next();
+      });
+    }
+  });
+});
+
+// Default fallback to index.html
+app.get('*any', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
