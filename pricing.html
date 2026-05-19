@@ -334,80 +334,152 @@
         </div>
     </header>
 
-    <section class="pricing-grid">
-        <!-- PLAN 1 -->
+       <section class="pricing-grid">
+        <!-- PLAN 1: FREE -->
         <div class="pricing-card">
-            <span class="card-name">Exploration</span>
-            <div class="card-price">0€ <span>/mois</span></div>
-            <p class="card-desc">Idéal pour découvrir Huggy et lancer vos premiers builds.</p>
+            <span class="card-name">Free</span>
+            <div class="card-price">0$ <span>/mois</span></div>
+            <p class="card-desc">Idéal pour explorer la plateforme et tester vos idées.</p>
             <ul class="feature-list">
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    3 projets actifs
+                    20 crédits / mois
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Agents standards
+                    1 projet actif (public)
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Export ZIP basique
+                    Modèles Economy uniquement
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Pas de domaine personnalisé
                 </li>
             </ul>
             <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Commencer gratuitement</button>
         </div>
 
-        <!-- PLAN 2 -->
+        <!-- PLAN 2: STARTER -->
         <div class="pricing-card featured">
-            <span class="featured-label">Plus populaire</span>
-            <span class="card-name">Producteur</span>
-            <div class="card-price" id="price-pro">29€ <span>/mois</span></div>
-            <p class="card-desc">Le plan complet pour les créateurs qui bâtissent l'avenir du web.</p>
+            <span class="featured-label">Recommandé</span>
+            <span class="card-name">Starter</span>
+            <div class="card-price">20$ <span>/mois</span></div>
+            <p class="card-desc">Parfait pour lancer votre premier projet sous domaine propre.</p>
             <ul class="feature-list">
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Projets illimités
+                    100 crédits / mois
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Modèles IA prioritaires
+                    3 projets actifs (privés)
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Export source complet (Docker)
+                    1 Domaine personnalisé inclus
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Domaines personnalisés
+                    Modèles Economy + Standard
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Badge SaaS désactivable
                 </li>
             </ul>
-            <button class="card-cta btn-solid" onclick="navigate('/auth.html')">Passer au Pro</button>
+            <button class="card-cta btn-solid" onclick="navigate('/auth.html')">Choisir Starter</button>
         </div>
 
-        <!-- PLAN 3 -->
+        <!-- PLAN 3: PRO -->
         <div class="pricing-card">
-            <span class="card-name">Studio</span>
-            <div class="card-price" id="price-team">99€ <span>/mois</span></div>
-            <p class="card-desc">Pour les équipes qui collaborent sur des applications critiques.</p>
+            <span class="card-name">Pro</span>
+            <div class="card-price">49$ <span>/mois</span></div>
+            <p class="card-desc">Idéal pour les développeurs professionnels et créateurs de SaaS.</p>
             <ul class="feature-list">
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Tout du plan Pro
+                    300 crédits / mois
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Collaboration temps réel
+                    10 projets actifs
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Support VIP 24/7
+                    5 Domaines personnalisés
                 </li>
                 <li class="feature-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Sécurité Entreprise (SSO)
+                    GitHub Sync & Supabase
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Modèles Economy + Standard + Pro
                 </li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Contacter les ventes</button>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Passer au Pro</button>
+        </div>
+
+        <!-- PLAN 4: STUDIO -->
+        <div class="pricing-card">
+            <span class="card-name">Studio</span>
+            <div class="card-price">99$ <span>/mois</span></div>
+            <p class="card-desc">Pour les agences et équipes collaborant en temps réel.</p>
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    700 crédits / mois
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    30 projets actifs
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    15 Domaines personnalisés
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Modèles Premium inclus
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Rollback avancé & Templates
+                </li>
+            </ul>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Choisir Studio</button>
+        </div>
+
+        <!-- PLAN 5: BUSINESS -->
+        <div class="pricing-card">
+            <span class="card-name">Business</span>
+            <div class="card-price">199$ <span>/mois</span></div>
+            <p class="card-desc">La puissance maximale avec gouvernance et support dédié.</p>
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    1500 crédits / mois
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Projets actifs illimités
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    50 Domaines personnalisés
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Audit logs & Rôles avancés
+                </li>
+                <li class="feature-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Support prioritaire 24/7
+                </li>
+            </ul>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Choisir Business</button>
         </div>
     </section>
 
