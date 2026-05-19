@@ -199,8 +199,8 @@
       background: var(--accent-dim); color: var(--text-muted);
       border: 1px solid var(--border-mid);
     }
-    .plan-badge.pro { background: var(--warning-dim); color: var(--warning); border-color: rgba(251,191,36,0.3); }
-    .plan-badge.team { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.3); }
+    .plan-badge.pro, .plan-badge.producer { background: var(--warning-dim); color: var(--warning); border-color: rgba(251,191,36,0.3); }
+    .plan-badge.team, .plan-badge.studio { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.3); }
 
     .credits-value-row {
       display: flex; justify-content: space-between; align-items: baseline;
@@ -1184,7 +1184,7 @@
       <div class="sidebar-credits">
         <div class="credits-header">
           <span class="plan-label">Plan</span>
-          <span class="plan-badge">Free</span>
+          <span class="plan-badge">Exploration</span>
         </div>
         <div class="credits-value-row">
           <span class="credits-count">500</span>
@@ -1208,9 +1208,9 @@
         <div class="nav-divider"></div>
 
         <div class="sidebar-promo">
-          <div class="promo-badge">PRO</div>
-          <p class="promo-text">Unlock full AI power with the Pro plan.</p>
-          <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Upgrade to Pro</button>
+          <div class="promo-badge">PRODUCER</div>
+          <p class="promo-text">Unlock full AI power with the Producer plan.</p>
+          <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Upgrade Plan</button>
         </div>
 
         <span class="nav-label">Projects</span>
@@ -1507,6 +1507,7 @@
   </div>
 
   <script>
+    document.addEventListener('DOMContentLoaded', () => {
     // 1. Theme Toggle Logic
     const html = document.documentElement;
     const curtain = document.getElementById('curtain');
@@ -1942,6 +1943,7 @@
         setTimeout(() => saveStatus.textContent = '', 3000);
       }, 1000);
     });
+    });
   </script>
   <div class="settings-overlay" id="settings-overlay"></div>
   <div class="settings-panel" id="settings-panel">
@@ -1989,13 +1991,37 @@
       <!-- Compte -->
       <div class="tab-panel hidden" id="tab-compte">
         <div class="settings-block">
-          <span class="block-title">Subscription</span>
-          <div class="danger-row" style="background:var(--bg-elevated); border-color:var(--border-mid)">
-            <div class="form-row">
-              <span class="form-label">Free Plan</span>
-              <span class="form-sublabel">500 / 500 tokens remaining</span>
+          <span class="block-title">Subscription Tiers</span>
+          <div style="background:var(--bg-elevated); border:1px solid var(--border-mid); border-radius:12px; padding:16px; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-size:14px; font-weight:600; color:var(--text)">Current Plan: <span class="plan-badge">Exploration</span></div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:4px">500 / 500 tokens remaining</div>
+              </div>
+              <span class="status-badge" style="background:var(--accent-dim); color:var(--accent); border:1px solid rgba(139,92,246,0.3); padding:4px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em">Active</span>
             </div>
-            <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Upgrade to Pro</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+            <!-- Producer Tier -->
+            <div style="background:var(--bg-elevated); border:1px solid var(--border-mid); display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-radius:8px">
+              <div class="form-row" style="margin-bottom:0">
+                <span class="form-label" style="display:flex; align-items:center; gap:8px">
+                  Producer Plan <span class="plan-badge producer" style="text-transform:uppercase">Producer</span>
+                </span>
+                <span class="form-sublabel" style="font-size:12px; color:var(--text-muted)">$39/mo · Priority AI models · Unlimited projects</span>
+              </div>
+              <button class="btn-primary" onclick="navigate('/pricing.html')" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px; border-radius:6px">Upgrade</button>
+            </div>
+            <!-- Studio Tier -->
+            <div style="background:var(--bg-elevated); border:1px solid var(--border-mid); display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-radius:8px">
+              <div class="form-row" style="margin-bottom:0">
+                <span class="form-label" style="display:flex; align-items:center; gap:8px">
+                  Studio Plan <span class="plan-badge studio" style="text-transform:uppercase">Studio</span>
+                </span>
+                <span class="form-sublabel" style="font-size:12px; color:var(--text-muted)">$149/mo · Premium models · SSO & Collaboration</span>
+              </div>
+              <button class="btn-primary" onclick="navigate('/pricing.html')" style="background:var(--accent); color:white; padding:6px 14px; font-size:12px; border-radius:6px">Upgrade</button>
+            </div>
           </div>
         </div>
         <div class="settings-block">
