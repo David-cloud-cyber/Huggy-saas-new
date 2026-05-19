@@ -68,6 +68,10 @@ assert(builder.includes('btn-deploy'), 'builder must expose deploy button');
 assert(!landingScript.includes('Welcome back'), 'landing sign in must not open a fake auth modal');
 assert(landingScript.includes('huggyLandingReady'), 'landing init must guard against duplicate module execution');
 assert(landingCss.includes('html:not(.js-ready) .neon-highlight::after'), 'landing reveal CSS must have a no-JS visible fallback');
+assert(landingCss.includes('.js-ready.reveal-armed .reveal.active'), 'landing reveal CSS must only hide content after reveal setup is armed');
+assert(!landingCss.includes('.js-ready .reveal {\n    opacity: 0'), 'landing reveal CSS must not hide production sections with the broad js-ready selector');
+assert(landingScript.includes("classList.add('reveal-armed')"), 'landing reveal JS must arm animations only after reveal setup starts');
+assert(landingScript.includes('setTimeout(() => {\n            revealElements.forEach(el => el.classList.add(\'active\'));'), 'landing reveal JS must include a timeout fallback that makes sections visible');
 assert(builderScript.includes('bubble.textContent = text'), 'builder chat must escape user prompt text instead of injecting HTML');
 assert(!builderScript.includes('msg.innerHTML = `<div class="msg-user-bubble">${text}'), 'builder chat must not render user prompt with innerHTML');
 for (const expectedPricingValue of ['Free', 'Starter', 'Pro', 'Studio', 'Business', 'Enterprise', '$20', '$49', '$99', '$199', '100 credits / month', '1,500 credits / month', '2,500 credits', '$400']) {

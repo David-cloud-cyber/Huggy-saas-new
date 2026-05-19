@@ -227,18 +227,41 @@ function init() {
         }, 1200);
     }
 
-    // 9. Scroll Reveal
-    const revealObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('active');
-            }
-        });
-    }, { threshold: 0.1 });
+    // 9. Scroll Reveal. Content stays visible unless this setup completes.
+    const revealElements = Array.from(document.querySelectorAll<HTMLElement>('.reveal'));
+    if ('IntersectionObserver' in window && revealElements.length > 0) {
+        const activateVisibleReveals = () => {
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            revealElements.forEach((el) => {
+                const rect = el.getBoundingClientRect();
+                if (rect.top < viewportHeight * 0.95) {
+                    el.classList.add('active');
+                }
+            });
+        };
 
-    document.querySelectorAll('.reveal').forEach(el => {
-        revealObserver.observe(el);
-    });
+        activateVisibleReveals();
+        document.documentElement.classList.add('reveal-armed');
+
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.05, rootMargin: '0px 0px -24px 0px' });
+
+        revealElements.forEach(el => {
+            revealObserver.observe(el);
+        });
+
+        window.setTimeout(() => {
+            revealElements.forEach(el => el.classList.add('active'));
+        }, 1800);
+    } else {
+        revealElements.forEach(el => el.classList.add('active'));
+    }
 
     // 10. Modals & Interactivity
     const modalOverlay = getElement<HTMLDivElement>('modal-overlay');
