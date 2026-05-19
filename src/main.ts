@@ -1,3 +1,4 @@
+// @ts-ignore
 import './index.css';
 
 // Helper to handle potential null elements gracefully

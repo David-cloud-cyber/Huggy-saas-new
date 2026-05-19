@@ -1349,32 +1349,95 @@
                 <div class="actions-right">
                     <div class="model-select" id="model-select-btn">
                         <span class="model-label-prefix">Model</span>
-                        <span id="current-model-label">Sonnet 4.5</span>
+                        <span id="current-model-label">Sonnet 4.6</span>
                         <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                         
                         <div class="dropdown" id="model-dropdown">
                             <div class="dropdown-header">Choose AI Engine</div>
-                            <div class="model-option active" data-name="Sonnet 4.5">
+                            <div class="model-option" data-name="Auto" data-id="auto">
+                                <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Auto</span>
+                                    <span class="opt-desc">Best for the task</span>
+                                </div>
+                            </div>
+                            <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
                                 <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Sonnet 4.5</span>
+                                    <span class="opt-name">Sonnet 4.6</span>
                                     <span class="opt-desc">Intelligence + Speed</span>
                                 </div>
                             </div>
-                            <div class="model-option" data-name="Opus 4.5">
+                            <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7">
                                 <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Opus 4.5</span>
+                                    <span class="opt-name">Opus 4.7</span>
                                     <span class="opt-desc">Deep Reasoning</span>
                                 </div>
                             </div>
-                            <div class="model-option" data-name="Haiku 4.5">
+                            <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro">
+                                <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">GPT-5.5 Pro</span>
+                                    <span class="opt-desc">State of the Art</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5">
+                                <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">GPT-5.5</span>
+                                    <span class="opt-desc">Power & Performance</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro">
+                                <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Gemini 3 Pro</span>
+                                    <span class="opt-desc">Multimodal Power</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash">
+                                <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Gemini 3 Flash</span>
+                                    <span class="opt-desc">Instant & Efficient</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini">
+                                <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">GPT-5 Mini</span>
+                                    <span class="opt-desc">Fast & Smart</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano">
                                 <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
                                 <div class="opt-meta">
-                                    <span class="opt-name">Haiku 4.5</span>
-                                    <span class="opt-desc">Ultra lightweight</span>
+                                    <span class="opt-name">GPT-5 Nano</span>
+                                    <span class="opt-desc">Ultra-lightweight</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder">
+                                <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">DeepSeek Coder</span>
+                                    <span class="opt-desc">Code Expert</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder">
+                                <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Qwen Coder</span>
+                                    <span class="opt-desc">Alibaba Labs</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Codestral" data-id="mistralai/codestral">
+                                <div class="model-dot" style="background: #EC4899; box-shadow: 0 0 8px #EC4899;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name">Codestral</span>
+                                    <span class="opt-desc">Mistral AI Logic</span>
                                 </div>
                             </div>
                         </div>
@@ -1799,9 +1862,18 @@
           <div class="form-row">
             <span class="form-label">Default Model</span>
             <select class="settings-select">
-              <option>Sonnet 4.5</option>
-              <option>Opus 4.5</option>
-              <option>Haiku 4.5</option>
+              <option>Auto</option>
+              <option>Sonnet 4.6</option>
+              <option>Opus 4.7</option>
+              <option>GPT-5.5 Pro</option>
+              <option>GPT-5.5</option>
+              <option>Gemini 3 Pro</option>
+              <option>Gemini 3 Flash</option>
+              <option>GPT-5 Mini</option>
+              <option>GPT-5 Nano</option>
+              <option>DeepSeek Coder</option>
+              <option>Qwen Coder</option>
+              <option>Codestral</option>
             </select>
           </div>
         </div>

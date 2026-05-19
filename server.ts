@@ -19,7 +19,7 @@ const port = 3000;
 app.use(express.json());
 
 // Supabase Init
-let supabase: ReturnType<typeof createClient> | null = null;
+let supabase: any = null;
 function getSupabase() {
   if (!supabase) {
     const url = process.env.SUPABASE_URL;
