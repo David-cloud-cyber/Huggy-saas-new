@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Huggy — Authentication</title>
     <script>
+        // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
+        (function() {
+            try {
+                let currentFetch = window.fetch;
+                Object.defineProperty(window, 'fetch', {
+                    get: () => currentFetch,
+                    set: (v) => { currentFetch = v; },
+                    configurable: true,
+                    enumerable: true
+                });
+            } catch (e) {
+                try {
+                    window.fetch = window.fetch; 
+                } catch (e2) {}
+            }
+        })();
+    </script>
+    <script>
         (function() {
             const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
@@ -469,6 +487,7 @@
         }
 
         // Theme management
+        let curtainBusy = false;
         function updateIcons(theme) {
             if (theme === 'dark') {
                 moonIcon.classList.remove('hidden');
@@ -480,11 +499,31 @@
         }
 
         themeBtn.addEventListener('click', () => {
+            if (curtainBusy) return;
+            curtainBusy = true;
+            
             const current = html.getAttribute('data-theme');
             const next = current === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', next);
-            localStorage.setItem('huggy-theme', next);
-            updateIcons(next);
+            
+            curtain.style.background = next === 'dark' ? '#060606' : '#F8F5F0';
+            curtain.style.transformOrigin = 'top';
+            curtain.classList.add('falling');
+
+            setTimeout(() => {
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('huggy-theme', next);
+                updateIcons(next);
+                
+                curtain.classList.remove('falling');
+                requestAnimationFrame(() => {
+                    curtain.style.transformOrigin = 'bottom';
+                    curtain.classList.add('rising');
+                    setTimeout(() => {
+                        curtain.classList.remove('rising');
+                        curtainBusy = false;
+                    }, 620);
+                });
+            }, 600);
         });
 
         // Initialize icons
@@ -493,6 +532,16 @@
         // Page load
         window.addEventListener('load', () => {
             curtain.classList.add('rising');
+        });
+
+        // Intercept internal links
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+                if (link.id === 'link-signup' || link.id === 'link-login') return; // Handled by setMode
+                e.preventDefault();
+                navigate(link.href);
+            }
         });
     </script>
 </body>

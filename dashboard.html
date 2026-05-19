@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Huggy — Espace de travail</title>
+  <title>Huggy — Workspace</title>
+  <script>
+    // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
+    (function() {
+        try {
+            let currentFetch = window.fetch;
+            Object.defineProperty(window, 'fetch', {
+                get: () => currentFetch,
+                set: (v) => { currentFetch = v; },
+                configurable: true,
+                enumerable: true
+            });
+        } catch (e) {
+            try {
+                window.fetch = window.fetch; 
+            } catch (e2) {}
+        }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
@@ -1142,14 +1160,14 @@
           <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
           <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
         </svg>
-        <span class="logo-text">huggy</span>
+        <span class="logo-text">Huggy</span>
       </div>
 
       <div class="sidebar-profile">
         <div class="profile-avatar">JD</div>
         <div class="profile-info">
-          <div class="profile-name">Jean Dupont</div>
-          <div class="profile-email">jean@example.com</div>
+          <div class="profile-name">John Doe</div>
+          <div class="profile-email">john@example.com</div>
         </div>
       </div>
 
@@ -1160,7 +1178,7 @@
         </div>
         <div class="credits-value-row">
           <span class="credits-count">347</span>
-          <span class="credits-total">/ 500 crédits</span>
+          <span class="credits-total">/ 500 tokens</span>
         </div>
         <div class="credits-track">
           <div class="credits-fill" data-fill="69.4%"></div>
@@ -1169,23 +1187,23 @@
 
       <nav class="sidebar-nav">
         <span class="nav-label">Workspace</span>
-        <button class="btn-new-project-sidebar">
+        <button class="btn-new-project-sidebar" id="btn-new-project">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          <span>Nouveau projet</span>
+          <span>New project</span>
         </button>
 
         <div class="nav-divider"></div>
 
         <div class="sidebar-promo">
           <div class="promo-badge">PRO</div>
-          <p class="promo-text">Libérez toute la puissance de l'IA avec le plan Pro.</p>
-          <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Passer au Pro</button>
+          <p class="promo-text">Unlock full AI power with the Pro plan.</p>
+          <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Upgrade to Pro</button>
         </div>
 
-        <span class="nav-label">Projets récents</span>
+        <span class="nav-label">Recent projects</span>
         <div class="nav-project active" data-id="1">
           <span class="project-dot" style="background: #60A5FA;"></span>
           <span class="project-nav-name">SaaS Dashboard</span>
@@ -1219,7 +1237,7 @@
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
-          <span>Paramètres</span>
+          <span>Settings</span>
         </button>
         <button class="btn-theme-toggle" id="theme-btn">
           <svg id="moon-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1249,36 +1267,36 @@
 
     <div class="main-area">
       <header class="topbar">
-        <h1 class="topbar-title">Espace de travail</h1>
+        <h1 class="topbar-title">Workspace Overview</h1>
         <div class="topbar-right">
           <div class="search-wrapper">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-sub)" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="text" class="search-input" placeholder="Rechercher un projet...">
+            <input type="text" class="search-input" placeholder="Search projects...">
           </div>
-          <button class="btn-create-top">Nouveau projet</button>
+          <button class="btn-create-top" id="btn-create-top">New Project</button>
         </div>
       </header>
 
       <div class="content-area">
         
         <section>
-          <span class="section-label">Vue d'ensemble</span>
+          <span class="section-label">Performance Overview</span>
           <div class="kpi-grid">
             <div class="kpi-card">
               <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
               </svg>
-              <span class="kpi-label">Projets</span>
+              <span class="kpi-label">Projects</span>
               <div class="kpi-value">5</div>
               <div class="kpi-trend trend-up">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                   <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
                   <polyline points="17 6 23 6 23 12"></polyline>
                 </svg>
-                +2 ce mois
+                +2 this month
               </div>
             </div>
 
@@ -1293,7 +1311,7 @@
                   <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
                   <polyline points="17 6 23 6 23 12"></polyline>
                 </svg>
-                +5 ce mois
+                +5 this month
               </div>
             </div>
 
@@ -1301,10 +1319,10 @@
               <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
               </svg>
-              <span class="kpi-label">Crédits</span>
+              <span class="kpi-label">Tokens</span>
               <div class="kpi-value">347</div>
               <div class="kpi-trend">
-                69% utilisés
+                69% used
               </div>
               <div class="kpi-mini-track">
                 <div class="kpi-mini-fill" data-fill="69.4%"></div>
@@ -1316,7 +1334,7 @@
                 <circle cx="12" cy="8" r="7"></circle>
                 <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
               </svg>
-              <span class="kpi-label">Score Qualité</span>
+              <span class="kpi-label">Quality Score</span>
               <div class="kpi-value">91%</div>
               <div class="kpi-trend">
                 <span class="quality-badge">Excellent</span>
@@ -1326,11 +1344,11 @@
         </section>
 
         <section class="create-section">
-          <h2 class="create-title">Nouvelle idée ?</h2>
-          <p class="create-subtitle">Décrivez votre projet. Huggy génère une application complète en quelques secondes.</p>
+          <h2 class="create-title">New Idea?</h2>
+          <p class="create-subtitle">Describe your project. Huggy generates a full application in seconds.</p>
           
           <div class="input-wrapper">
-            <textarea id="ai-textarea" placeholder="Ex: Un dashboard RH avec auth, graphiques et exports CSV..."></textarea>
+            <textarea id="ai-textarea" placeholder="E.g.: An HR dashboard with auth, interactive charts and CSV exports..."></textarea>
             <div class="input-actions">
                 <div class="actions-left">
                     <button class="icon-btn" title="Upload files">
@@ -1394,17 +1412,17 @@
           </div>
 
           <div class="chips-row">
-            <button class="chip">Dashboard analytics</button>
-            <button class="chip">App e-commerce</button>
-            <button class="chip">Portfolio 3D</button>
+            <button class="chip">Analytics Dashboard</button>
+            <button class="chip">E-commerce App</button>
+            <button class="chip">3D Portfolio</button>
             <button class="chip">SaaS Manager</button>
           </div>
         </section>
 
         <section>
           <div class="grid-header">
-            <span class="section-label" style="margin-bottom:0">Mes projets <span style="opacity:0.5">(5)</span></span>
-            <button class="btn-sort">Récent ↓</button>
+            <span class="section-label" style="margin-bottom:0">All Projects <span style="opacity:0.5">(5)</span></span>
+            <button class="btn-sort">Recent ↓</button>
           </div>
           <div class="projects-grid">
             <!-- Project 1 -->
@@ -1414,19 +1432,19 @@
                   <span class="project-dot" style="background: #60A5FA;"></span>
                   <h3 class="card-name">SaaS Dashboard</h3>
                 </div>
-                <span class="status-badge">Complété</span>
+                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">Un dashboard SaaS avec métriques temps réel, graphiques interactifs et export de données.</p>
+              <p class="card-desc">A comprehensive SaaS dashboard with real-time metrics, interactive charts, and data export features.</p>
               <div class="card-stats">
                 <span class="score-badge sec">SEC 96</span>
                 <span class="score-badge sec">QA 91</span>
                 <span class="score-badge meta">High</span>
               </div>
               <div class="card-footer">
-                <span class="card-meta">4 builds · il y a 2 jours</span>
-                <button class="btn-open-project">Ouvrir</button>
+                <span class="card-meta">4 builds · 2 days ago</span>
+                <button class="btn-open-project">Open</button>
               </div>
-              <button class="btn-card-delete" title="Supprimer le projet">
+              <button class="btn-card-delete" title="Delete Project">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
@@ -1440,19 +1458,19 @@
                   <span class="project-dot" style="background: #A78BFA;"></span>
                   <h3 class="card-name">E-commerce App</h3>
                 </div>
-                <span class="status-badge">Complété</span>
+                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">Boutique en ligne complète avec panier, paiement Stripe et gestion des stocks.</p>
+              <p class="card-desc">Full-featured online store with shopping cart, Stripe payment integration, and inventory management.</p>
               <div class="card-stats">
                 <span class="score-badge sec">SEC 88</span>
                 <span class="score-badge sec">QA 84</span>
                 <span class="score-badge meta">High</span>
               </div>
               <div class="card-footer">
-                <span class="card-meta">7 builds · il y a 5 jours</span>
-                <button class="btn-open-project">Ouvrir</button>
+                <span class="card-meta">7 builds · 5 days ago</span>
+                <button class="btn-open-project">Open</button>
               </div>
-              <button class="btn-card-delete" title="Supprimer le projet">
+              <button class="btn-card-delete" title="Delete Project">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
@@ -1466,19 +1484,19 @@
                   <span class="project-dot" style="background: #34D399;"></span>
                   <h3 class="card-name">Blog CMS</h3>
                 </div>
-                <span class="status-badge">Complété</span>
+                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">CMS de blog avec éditeur markdown, système de tags et commentaires.</p>
+              <p class="card-desc">Markdown-based blog CMS with tag system and user comments implementation.</p>
               <div class="card-stats">
                 <span class="score-badge sec">SEC 94</span>
                 <span class="score-badge sec">QA 90</span>
                 <span class="score-badge meta">Medium</span>
               </div>
               <div class="card-footer">
-                <span class="card-meta">2 builds · il y a 1 semaine</span>
-                <button class="btn-open-project">Ouvrir</button>
+                <span class="card-meta">2 builds · 1 week ago</span>
+                <button class="btn-open-project">Open</button>
               </div>
-              <button class="btn-card-delete" title="Supprimer le projet">
+              <button class="btn-card-delete" title="Delete Project">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
@@ -1492,19 +1510,19 @@
                   <span class="project-dot" style="background: #FBBF24;"></span>
                   <h3 class="card-name">API Wrapper</h3>
                 </div>
-                <span class="status-badge">Complété</span>
+                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">Interface pour wrapper une API REST avec documentation auto-générée.</p>
+              <p class="card-desc">REST API wrapper interface with auto-generated documentation and playground.</p>
               <div class="card-stats">
                 <span class="score-badge sec">SEC 92</span>
                 <span class="score-badge sec">QA 87</span>
                 <span class="score-badge meta">Low</span>
               </div>
               <div class="card-footer">
-                <span class="card-meta">1 build · il y a 2 semaines</span>
-                <button class="btn-open-project">Ouvrir</button>
+                <span class="card-meta">1 build · 2 weeks ago</span>
+                <button class="btn-open-project">Open</button>
               </div>
-              <button class="btn-card-delete" title="Supprimer le projet">
+              <button class="btn-card-delete" title="Delete Project">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
@@ -1518,19 +1536,19 @@
                   <span class="project-dot" style="background: #F87171;"></span>
                   <h3 class="card-name">Portfolio 3D</h3>
                 </div>
-                <span class="status-badge">Complété</span>
+                <span class="status-badge">Completed</span>
               </div>
-              <p class="card-desc">Portfolio interactif avec animations Three.js et transitions fluides.</p>
+              <p class="card-desc">Interactive 3D portfolio featuring Three.js animations and fluid page transitions.</p>
               <div class="card-stats">
                 <span class="score-badge sec">SEC 89</span>
                 <span class="score-badge sec">QA 85</span>
                 <span class="score-badge meta">Medium</span>
               </div>
               <div class="card-footer">
-                <span class="card-meta">3 builds · il y a 3 semaines</span>
-                <button class="btn-open-project">Ouvrir</button>
+                <span class="card-meta">3 builds · 3 weeks ago</span>
+                <button class="btn-open-project">Open</button>
               </div>
-              <button class="btn-card-delete" title="Supprimer le projet">
+              <button class="btn-card-delete" title="Delete Project">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
@@ -1540,57 +1558,57 @@
         </section>
 
         <section>
-          <span class="section-label">Activité récente</span>
+          <span class="section-label">Recent Activity</span>
           <div class="activity-list">
             <div class="activity-row">
               <span class="status-dot success"></span>
               <span class="act-project">SaaS Dashboard</span>
-              <span class="act-desc">Ajout module rapports exports PDF...</span>
+              <span class="act-desc">Added PDF export report module...</span>
               <div style="display:flex; gap:5px">
                 <span class="score-badge sec">SEC 96</span>
                 <span class="score-badge sec">QA 91</span>
               </div>
-              <span class="act-meta">aujourd'hui 14:32</span>
+              <span class="act-meta">Today 14:32</span>
             </div>
             <div class="activity-row">
               <span class="status-dot success"></span>
               <span class="act-project">E-commerce App</span>
-              <span class="act-desc">Correction tunnel paiement Stripe...</span>
+              <span class="act-desc">Fixed Stripe checkout funnel issue...</span>
               <div style="display:flex; gap:5px">
                 <span class="score-badge sec">SEC 88</span>
                 <span class="score-badge sec">QA 84</span>
               </div>
-              <span class="act-meta">hier 09:15</span>
+              <span class="act-meta">Yesterday 09:15</span>
             </div>
             <div class="activity-row">
               <span class="status-dot working"></span>
               <span class="act-project">Blog CMS</span>
-              <span class="act-desc">Premier build complet du CMS avec auth...</span>
+              <span class="act-desc">First complete CMS build with auth...</span>
               <div style="display:flex; gap:5px">
                 <span class="score-badge sec">SEC 94</span>
                 <span class="score-badge sec">QA 90</span>
               </div>
-              <span class="act-meta">il y a 3 jours</span>
+              <span class="act-meta">3 days ago</span>
             </div>
             <div class="activity-row">
               <span class="status-dot success"></span>
               <span class="act-project">API Wrapper</span>
-              <span class="act-desc">Génération documentation OpenAPI auto...</span>
+              <span class="act-desc">Auto-generated OpenAPI documentation...</span>
               <div style="display:flex; gap:5px">
                 <span class="score-badge sec">SEC 92</span>
                 <span class="score-badge sec">QA 87</span>
               </div>
-              <span class="act-meta">il y a 2 sem.</span>
+              <span class="act-meta">2 weeks ago</span>
             </div>
             <div class="activity-row">
               <span class="status-dot success"></span>
               <span class="act-project">Portfolio 3D</span>
-              <span class="act-desc">Intégration animations Three.js et WebGL...</span>
+              <span class="act-desc">Integrated Three.js and WebGL animations...</span>
               <div style="display:flex; gap:5px">
                 <span class="score-badge sec">SEC 89</span>
                 <span class="score-badge sec">QA 85</span>
               </div>
-              <span class="act-meta">il y a 3 sem.</span>
+              <span class="act-meta">3 weeks ago</span>
             </div>
           </div>
         </section>
@@ -1756,12 +1774,10 @@
         }
     }
 
-    document.querySelectorAll('#submit-btn, .btn-open-project, .nav-project, .btn-create-top, .btn-new-project-sidebar, .project-card').forEach(el => {
+    document.querySelectorAll('#submit-btn, .btn-open-project, #btn-new-project, .btn-create-top').forEach(el => {
       el.addEventListener('click', (e) => {
         // Only trigger if active (for submit-btn)
         if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
-        // If it's the card, check if we clicked a button inside first (though CSS pointer-events or stopProp handles it)
-        if (e.target.closest('.btn-card-delete')) return;
         navigate('builder.html');
       });
     });
@@ -1862,79 +1878,77 @@
 
     saveBtn?.addEventListener('click', () => {
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Enregistrement...';
+      saveBtn.textContent = 'Saving...';
       
       setTimeout(() => {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Sauvegarder';
-        saveStatus.textContent = '✓ Modifications enregistrées';
+        saveBtn.textContent = 'Save Changes';
+        saveStatus.textContent = '✓ Changes saved successfully';
         setTimeout(() => saveStatus.textContent = '', 3000);
       }, 1000);
-    });
-
     });
   </script>
   <div class="settings-overlay" id="settings-overlay"></div>
   <div class="settings-panel" id="settings-panel">
     <div class="settings-header">
-      <h2 class="settings-title">Paramètres</h2>
+      <h2 class="settings-title">Settings</h2>
       <button class="btn-close-settings" id="btn-close-settings">✕</button>
     </div>
     <div class="settings-tabs">
-      <button class="settings-tab active" data-tab="profil">Profil</button>
-      <button class="settings-tab" data-tab="compte">Compte</button>
-      <button class="settings-tab" data-tab="apparence">Apparence</button>
-      <button class="settings-tab" data-tab="ia">IA</button>
+      <button class="settings-tab active" data-tab="profil">Profile</button>
+      <button class="settings-tab" data-tab="compte">Account</button>
+      <button class="settings-tab" data-tab="apparence">Appearance</button>
+      <button class="settings-tab" data-tab="ia">AI</button>
       <button class="settings-tab" data-tab="api">API</button>
-      <button class="settings-tab danger" data-tab="danger">Zone Rouge</button>
+      <button class="settings-tab danger" data-tab="danger">Danger Zone</button>
     </div>
     <div class="settings-body">
       <!-- Profil -->
       <div class="tab-panel" id="tab-profil">
         <div class="settings-block">
-          <span class="block-title">Identité</span>
+          <span class="block-title">Identity</span>
           <div class="avatar-editor">
             <div class="avatar-large">JD</div>
             <div class="form-row">
               <span class="form-label">Avatar</span>
-              <span class="form-sublabel">JPG, PNG ou GIF. Max 2 Mo.</span>
-              <button class="btn-secondary" style="margin-top:4px">Changer</button>
+              <span class="form-sublabel">JPG, PNG or GIF. Max 2MB.</span>
+              <button class="btn-secondary" style="margin-top:4px">Change</button>
             </div>
           </div>
           <div class="form-row">
-            <span class="form-label">Nom d'affichage</span>
-            <input type="text" class="settings-input" value="Jean Dupont">
+            <span class="form-label">Display Name</span>
+            <input type="text" class="settings-input" value="John Doe">
           </div>
           <div class="form-row">
             <span class="form-label">Email</span>
-            <input type="email" class="settings-input" value="jean@example.com">
+            <input type="email" class="settings-input" value="john@example.com">
           </div>
         </div>
         <div class="settings-block">
           <span class="block-title">Bio</span>
           <div class="form-row">
-            <textarea class="settings-input" style="height:100px; resize:none" placeholder="Décrivez-vous en quelques mots..."></textarea>
+            <textarea class="settings-input" style="height:100px; resize:none" placeholder="Briefly describe your focus..."></textarea>
           </div>
         </div>
       </div>
       <!-- Compte -->
       <div class="tab-panel hidden" id="tab-compte">
         <div class="settings-block">
-          <span class="block-title">Abonnement</span>
+          <span class="block-title">Subscription</span>
           <div class="danger-row" style="background:var(--bg-elevated); border-color:var(--border-mid)">
             <div class="form-row">
-              <span class="form-label">Plan Gratuit</span>
-              <span class="form-sublabel">347 / 500 crédits restants</span>
+              <span class="form-label">Free Plan</span>
+              <span class="form-sublabel">347 / 500 tokens remaining</span>
             </div>
-            <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Passer au Pro</button>
+            <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Upgrade to Pro</button>
           </div>
         </div>
         <div class="settings-block">
-          <span class="block-title">Sécurité</span>
+          <span class="block-title">Security</span>
           <div class="form-row horizontal">
             <div class="form-row">
-              <span class="form-label">Double authentification</span>
-              <span class="form-sublabel">Sécurisez votre compte via TOTP</span>
+              <span class="form-label">Two-Factor Authentication</span>
+              <span class="form-sublabel">Secure your account via TOTP</span>
             </div>
             <div class="toggle"></div>
           </div>
@@ -1943,13 +1957,13 @@
       <!-- Apparence -->
       <div class="tab-panel hidden" id="tab-apparence">
         <div class="settings-block">
-          <span class="block-title">Thème</span>
+          <span class="block-title">Theme</span>
           <div class="form-row">
-             <span class="form-label">Mode d'affichage</span>
+             <span class="form-label">Display Mode</span>
              <select class="settings-select">
-               <option value="dark">Sombre (défaut)</option>
-               <option value="light">Clair</option>
-               <option value="system">Système</option>
+               <option value="dark">Dark (default)</option>
+               <option value="light">Light</option>
+               <option value="system">System</option>
              </select>
           </div>
         </div>
@@ -1958,7 +1972,7 @@
           <div class="form-row horizontal">
             <div class="form-row">
               <span class="form-label">Animations</span>
-              <span class="form-sublabel">Activer les transitions fluides</span>
+              <span class="form-sublabel">Enable fluid transitions</span>
             </div>
             <div class="toggle on"></div>
           </div>
@@ -1967,9 +1981,9 @@
       <!-- IA -->
       <div class="tab-panel hidden" id="tab-ia">
         <div class="settings-block">
-          <span class="block-title">Modèles</span>
+          <span class="block-title">Models</span>
           <div class="form-row">
-            <span class="form-label">Modèle par défaut</span>
+            <span class="form-label">Default Model</span>
             <select class="settings-select">
               <option>Sonnet 4.5</option>
               <option>Opus 4.5</option>
@@ -1978,9 +1992,9 @@
           </div>
         </div>
         <div class="settings-block">
-          <span class="block-title">Génération</span>
+          <span class="block-title">Generation</span>
           <div class="form-row">
-            <span class="form-label">Température</span>
+            <span class="form-label">Temperature</span>
             <input type="range" class="settings-input" style="padding:0">
           </div>
         </div>
@@ -1988,12 +2002,12 @@
       <!-- API -->
       <div class="tab-panel hidden" id="tab-api">
         <div class="settings-block">
-          <span class="block-title">Clés API</span>
+          <span class="block-title">API Keys</span>
           <div class="form-row">
-            <span class="form-label">Clé principale</span>
+            <span class="form-label">Primary Key</span>
             <div style="display:flex; gap:8px">
               <input type="text" class="settings-input mono" readonly value="hgy_sk_••••••••••••••••••••">
-              <button class="btn-secondary" style="padding:0 12px">Copier</button>
+              <button class="btn-secondary" style="padding:0 12px">Copy</button>
             </div>
           </div>
         </div>
@@ -2001,20 +2015,20 @@
       <!-- Danger -->
       <div class="tab-panel hidden" id="tab-danger">
         <div class="settings-block">
-          <span class="block-title">Actions irréversibles</span>
+          <span class="block-title">Irreversible Actions</span>
           <div class="danger-row">
             <div class="form-row">
-              <span class="form-label" style="color:var(--error)">Supprimer tous les projets</span>
-              <span class="form-sublabel">Cette action effacera vos 5 projets actuels.</span>
+              <span class="form-label" style="color:var(--error)">Delete all projects</span>
+              <span class="form-sublabel">This will erase your 5 current projects.</span>
             </div>
-            <button class="btn-danger-sm">Réinitialiser</button>
+            <button class="btn-danger-sm">Reset</button>
           </div>
           <div class="danger-row" style="border-color:var(--error)">
             <div class="form-row">
-              <span class="form-label" style="color:var(--error)">Supprimer le compte</span>
-              <span class="form-sublabel">Toutes vos données seront supprimées définitivement.</span>
+              <span class="form-label" style="color:var(--error)">Delete account</span>
+              <span class="form-sublabel">All your data will be permanently deleted.</span>
             </div>
-            <button class="btn-danger-sm" style="background:var(--error); color:white">Supprimer</button>
+            <button class="btn-danger-sm" style="background:var(--error); color:white">Delete</button>
           </div>
         </div>
       </div>
@@ -2022,18 +2036,18 @@
     <div class="settings-footer">
       <div class="save-status" id="save-status"></div>
       <div style="display:flex; gap:8px">
-        <button class="btn-secondary" onclick="closeSettings()">Annuler</button>
-        <button class="btn-primary" id="save-settings">Sauvegarder</button>
+        <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+        <button class="btn-primary" id="save-settings">Save Changes</button>
       </div>
     </div>
   </div>
   <div class="modal-overlay" id="delete-modal">
     <div class="modal-content">
-      <h3 class="modal-title">Supprimer le projet ?</h3>
-      <p class="modal-desc">Cette action est irréversible. Toutes les données, le code et les déploiements associés seront définitivement supprimés.</p>
+      <h3 class="modal-title">Delete Project?</h3>
+      <p class="modal-desc">This action is irreversible. All data, code, and associated deployments will be permanently deleted.</p>
       <div class="modal-actions">
-        <button class="btn-modal btn-cancel" id="modal-cancel">Annuler</button>
-        <button class="btn-modal btn-confirm-delete" id="modal-confirm">Supprimer</button>
+        <button class="btn-modal btn-cancel" id="modal-cancel">Cancel</button>
+        <button class="btn-modal btn-confirm-delete" id="modal-confirm">Delete</button>
       </div>
     </div>
   </div>
