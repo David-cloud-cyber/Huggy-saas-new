@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /builder.html
-Disallow: /dashboard.html
-
-Sitemap: https://huggy.dev/sitemap.xml
