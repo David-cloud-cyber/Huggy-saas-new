@@ -543,8 +543,8 @@ values
   ('starter', 100, 3, 1, array['economy','standard']::ai_model_tier[], false, false, false, false, 7, false, true, false, true, true, 15),
   ('pro', 300, 10, 5, array['economy','standard','pro']::ai_model_tier[], true, true, false, false, 30, true, true, false, true, true, 35),
   ('studio', 700, 30, 15, array['economy','standard','pro','premium']::ai_model_tier[], true, true, true, true, 90, true, true, false, true, true, 75),
-  ('business', 1500, null, 50, array['economy','standard','pro','premium']::ai_model_tier[], true, true, true, true, 180, true, true, false, true, true, 150),
-  ('enterprise', 0, null, 0, array['economy','standard','pro','premium','max_quality']::ai_model_tier[], true, true, true, true, null, true, true, false, true, true, 500)
+  ('business', 1500, null, 50, array['economy','standard','pro','premium','max_quality']::ai_model_tier[], true, true, true, true, 180, true, true, false, true, true, 150),
+  ('enterprise', 0, null, 999, array['economy','standard','pro','premium','max_quality']::ai_model_tier[], true, true, true, true, null, true, true, false, true, true, 500)
 on conflict (plan_key) do update set
   monthly_credits = excluded.monthly_credits,
   active_projects_limit = excluded.active_projects_limit,

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Pricing — Huggy</title>
+    <title>Pricing - Huggy</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -25,7 +25,7 @@
             <span class="logo-text">Huggy</span>
         </a>
         <div class="nav-actions">
-            <button class="theme-toggle" id="theme-btn">
+            <button class="theme-toggle" id="theme-btn" aria-label="Toggle theme">
                 <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
@@ -41,51 +41,135 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button class="sign-in-btn">Sign In</button>
+            <a class="sign-in-btn" href="/dashboard.html">Sign In</a>
         </div>
     </nav>
 
     <header class="page-hero">
-        <h1>Simple, Transparent Pricing</h1>
-        <p class="hero-subtitle">Choose the plan that fits your ambition. Scale as you grow.</p>
+        <h1>Transparent AI credits for every stage</h1>
+        <p class="hero-subtitle">Plans, domains and model access aligned with real app generation costs.</p>
     </header>
 
     <section class="pricing-section">
-        <div class="pricing-grid">
+        <div class="pricing-grid pricing-grid-full">
             <div class="pricing-card">
-                <div class="price-name">Personal</div>
+                <div class="price-name">Free</div>
                 <div class="price-value">$0<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li>3 projects</li>
-                    <li>Community support</li>
-                    <li>Standard AI models</li>
-                    <li>Basic export</li>
+                    <li>20 credits / month</li>
+                    <li>1 active project</li>
+                    <li>0 custom domains</li>
+                    <li>Economy models</li>
+                    <li>Public projects</li>
                 </ul>
-                <button class="pricing-btn">Get Started</button>
+                <a class="pricing-btn" href="/dashboard.html">Start free</a>
             </div>
             <div class="pricing-card featured">
-                <div class="price-name">Pro</div>
-                <div class="price-value">$29<span>/mo</span></div>
+                <div class="price-name">Starter</div>
+                <div class="price-value">$20<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li>Unlimited projects</li>
-                    <li>Priority support</li>
-                    <li>Advanced AI agents</li>
-                    <li>Full source export</li>
-                    <li>Custom domains</li>
+                    <li>100 credits / month</li>
+                    <li>3 active projects</li>
+                    <li>1 custom domain</li>
+                    <li>Economy + Standard models</li>
+                    <li>7 days version history</li>
                 </ul>
-                <button class="pricing-btn primary">Upgrade to Pro</button>
+                <a class="pricing-btn primary" href="/dashboard.html">Choose Starter</a>
             </div>
             <div class="pricing-card">
-                <div class="price-name">Team</div>
+                <div class="price-name">Pro</div>
+                <div class="price-value">$49<span>/mo</span></div>
+                <ul class="pricing-features">
+                    <li>300 credits / month</li>
+                    <li>10 active projects</li>
+                    <li>5 custom domains</li>
+                    <li>Economy, Standard + Pro models</li>
+                    <li>GitHub sync and Supabase integration</li>
+                </ul>
+                <a class="pricing-btn" href="/dashboard.html">Choose Pro</a>
+            </div>
+            <div class="pricing-card">
+                <div class="price-name">Studio</div>
                 <div class="price-value">$99<span>/mo</span></div>
                 <ul class="pricing-features">
-                    <li>Unlimited projects</li>
-                    <li>Collaborative building</li>
-                    <li>Custom AI training</li>
-                    <li>Advanced security</li>
-                    <li>Dedicated support</li>
+                    <li>700 credits / month</li>
+                    <li>30 active projects</li>
+                    <li>15 custom domains</li>
+                    <li>Premium model access</li>
+                    <li>Team collaboration and audit logs</li>
                 </ul>
-                <button class="pricing-btn">Contact Sales</button>
+                <a class="pricing-btn" href="/dashboard.html">Choose Studio</a>
+            </div>
+            <div class="pricing-card">
+                <div class="price-name">Business</div>
+                <div class="price-value">$199<span>/mo</span></div>
+                <ul class="pricing-features">
+                    <li>1,500 credits / month</li>
+                    <li>Fair-use projects</li>
+                    <li>50 custom domains</li>
+                    <li>Max Quality models with confirmation</li>
+                    <li>Priority builds and organization controls</li>
+                </ul>
+                <a class="pricing-btn" href="/dashboard.html">Choose Business</a>
+            </div>
+            <div class="pricing-card">
+                <div class="price-name">Enterprise</div>
+                <div class="price-value">Custom<span></span></div>
+                <ul class="pricing-features">
+                    <li>Custom credits and limits</li>
+                    <li>Dedicated support</li>
+                    <li>Dedicated model and policy controls</li>
+                    <li>Compliance, SSO/SAML and procurement</li>
+                    <li>Custom deployment support</li>
+                </ul>
+                <a class="pricing-btn" href="/enterprise.html">Contact sales</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing-section topup-section">
+        <div class="section-header">
+            <h2>Credit top-ups</h2>
+            <p>One-time packs for extra builds, deployments and generation runs.</p>
+        </div>
+        <div class="topup-grid">
+            <div class="topup-card"><span>100 credits</span><strong>$20</strong></div>
+            <div class="topup-card"><span>250 credits</span><strong>$47</strong></div>
+            <div class="topup-card"><span>500 credits</span><strong>$90</strong></div>
+            <div class="topup-card"><span>1,000 credits</span><strong>$170</strong></div>
+            <div class="topup-card"><span>2,500 credits</span><strong>$400</strong></div>
+        </div>
+    </section>
+
+    <section class="pricing-section">
+        <div class="section-header">
+            <h2>What credits cover</h2>
+            <p>Credits pay for AI routing, previews, builds, deployments and recovery workflows.</p>
+        </div>
+        <div class="pricing-grid pricing-grid-actions">
+            <div class="pricing-card">
+                <div class="price-name">Light work</div>
+                <ul class="pricing-features">
+                    <li>Chat and planning: 0.5 - 2 credits</li>
+                    <li>Small UI edits: 0.5 - 1.5 credits</li>
+                    <li>Build preview: 0.2 - 1 credit</li>
+                </ul>
+            </div>
+            <div class="pricing-card">
+                <div class="price-name">Generation</div>
+                <ul class="pricing-features">
+                    <li>Component changes: 1 - 3 credits</li>
+                    <li>New feature: 3 - 8 credits</li>
+                    <li>MVP generation: 10 - 35 credits</li>
+                </ul>
+            </div>
+            <div class="pricing-card">
+                <div class="price-name">Production</div>
+                <ul class="pricing-features">
+                    <li>Production deploy: 1 - 3 credits</li>
+                    <li>Debug complex flows: 2 - 8 credits</li>
+                    <li>Security scan: 4 - 10 credits</li>
+                </ul>
             </div>
         </div>
     </section>
@@ -135,7 +219,7 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <span>© 2026 Huggy Inc.</span>
+            <span>&copy; 2026 Huggy Inc.</span>
             <div style="display:flex;gap:20px;">
                 <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
                 <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>

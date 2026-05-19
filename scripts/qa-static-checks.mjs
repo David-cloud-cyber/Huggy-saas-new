@@ -34,11 +34,14 @@ for (const page of requiredPages) assert(read(page).includes('<!DOCTYPE html>') 
 const dashboard = read('dashboard.html');
 const builder = read('builder.html');
 const index = read('index.html');
+const pricing = read('pricing.html');
 const supabaseClient = read('src/lib/supabase.ts');
 const supabaseDashboard = read('src/supabase-dashboard.ts');
 const supabaseAuth = read('src/supabase-auth.ts');
 const server = read('server.js');
 const runtimeApi = read('src/platform/runtime-api.mjs');
+const billingAi = read('src/platform/billing-ai.ts');
+const pricingMigration = read('supabase/migrations/0007_update_pricing_plans.sql');
 const envExample = read('.env.example');
 const railway = read('railway.json');
 const nixpacks = read('nixpacks.toml');
@@ -67,6 +70,16 @@ assert(landingScript.includes('huggyLandingReady'), 'landing init must guard aga
 assert(landingCss.includes('html:not(.js-ready) .neon-highlight::after'), 'landing reveal CSS must have a no-JS visible fallback');
 assert(builderScript.includes('bubble.textContent = text'), 'builder chat must escape user prompt text instead of injecting HTML');
 assert(!builderScript.includes('msg.innerHTML = `<div class="msg-user-bubble">${text}'), 'builder chat must not render user prompt with innerHTML');
+for (const expectedPricingValue of ['Free', 'Starter', 'Pro', 'Studio', 'Business', 'Enterprise', '$20', '$49', '$99', '$199', '100 credits / month', '1,500 credits / month', '2,500 credits', '$400']) {
+  assert(pricing.includes(expectedPricingValue), `pricing page must include ${expectedPricingValue}`);
+}
+for (const legacyPricingValue of ['>Personal<', '$29', '>Team<', '>Expert<']) {
+  assert(!pricing.includes(legacyPricingValue), `pricing page must not include legacy plan ${legacyPricingValue}`);
+}
+const businessPlanBlock = billingAi.slice(billingAi.indexOf('business:'), billingAi.indexOf('enterprise:'));
+assert(businessPlanBlock.includes("allowedModelTiers: ['economy', 'standard', 'pro', 'premium', 'max_quality']"), 'Business plan must allow Max Quality models with confirmation policy');
+assert(pricingMigration.includes("('business', 1500, null, 50, array['economy','standard','pro','premium','max_quality']::ai_model_tier[]"), 'pricing migration must grant Business Max Quality model access');
+assert(pricingMigration.includes("('credits_2500', 2500, 400"), 'pricing migration must include the 2,500 credit top-up at $400');
 for (const apiRoute of ['/api/projects', '/api/deploy', '/api/domains', '/api/billing', '/api/ai/estimate']) {
   assert(runtimeApi.includes(apiRoute), `runtime API must expose ${apiRoute}`);
 }

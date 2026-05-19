@@ -24,7 +24,7 @@ Key differentiators:
 | Starter | $20 | 100 | 3 | 1 | Economy, Standard | 7 days |
 | Pro | $49 | 300 | 10 | 5 | Economy, Standard, Pro | 30 days |
 | Studio | $99 | 700 | 30 | 15 | Economy, Standard, Pro, Premium with confirmation | 90 days |
-| Business | $199 | 1,500 | Fair use | 50 | Economy, Standard, Pro, Premium with policy | 180 days |
+| Business | $199 | 1,500 | Fair use | 50 | Economy, Standard, Pro, Premium, Max Quality with confirmation | 180 days |
 | Enterprise | Custom | Custom | Custom | Custom | Dedicated/custom | Custom |
 
 ## Top-ups

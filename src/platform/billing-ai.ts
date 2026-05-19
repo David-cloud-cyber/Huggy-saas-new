@@ -328,7 +328,7 @@ export const PLAN_CATALOG: Record<PlanKey, PlanDefinition> = {
     monthlyCredits: 1500,
     activeProjectsLimit: null,
     customDomainsLimit: 50,
-    allowedModelTiers: ['economy', 'standard', 'pro', 'premium'],
+    allowedModelTiers: ['economy', 'standard', 'pro', 'premium', 'max_quality'],
     versionHistoryDays: 180,
     badgeRemoval: true,
     exportCode: true,
