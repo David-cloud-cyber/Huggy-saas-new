@@ -5,6 +5,7 @@ export const AI_ALLOWED_MODELS = [
   'anthropic/claude-sonnet-4.6',
   'google/gemini-3-pro',
   'google/gemini-3-flash',
+  'google/gemini-3.5-flash',
   'openai/gpt-5-mini',
   'openai/gpt-5-nano',
   'deepseek/deepseek-coder',
@@ -30,6 +31,7 @@ export const AI_MODEL_TIERS: Record<AllowedModelId, AIModelTier> = {
   'anthropic/claude-sonnet-4.6': AIModelTier.PRO,
   'google/gemini-3-pro': AIModelTier.STANDARD,
   'google/gemini-3-flash': AIModelTier.STANDARD,
+  'google/gemini-3.5-flash': AIModelTier.STANDARD,
   'openai/gpt-5-mini': AIModelTier.STANDARD,
   'openai/gpt-5-nano': AIModelTier.STANDARD,
   'deepseek/deepseek-coder': AIModelTier.STANDARD,
@@ -53,6 +55,7 @@ export const AI_MODEL_CAPABILITIES: Record<AllowedModelId, ModelCapabilities> = 
   'anthropic/claude-sonnet-4.6': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 200000 },
   'google/gemini-3-pro': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 2000000 },
   'google/gemini-3-flash': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 1000000 },
+  'google/gemini-3.5-flash': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 1000000 },
   'openai/gpt-5-mini': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 128000 },
   'openai/gpt-5-nano': { supportsStreaming: true, supportsTools: false, supportsVision: false, supportsJsonMode: false, maxContextTokens: 32000 },
   'deepseek/deepseek-coder': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 64000 },
@@ -73,7 +76,8 @@ export const AI_MODEL_FALLBACKS: Record<AllowedModelId, AllowedModelId[]> = {
   'qwen/qwen-coder': ['deepseek/deepseek-coder'],
   'mistralai/codestral': ['deepseek/deepseek-coder'],
   'google/gemini-3-flash': [],
-  'auto': ['google/gemini-3-flash'],
+  'google/gemini-3.5-flash': ['google/gemini-3-flash'],
+  'auto': ['google/gemini-3.5-flash', 'google/gemini-3-flash'],
 };
 
 export const UserPlan = {
@@ -91,6 +95,7 @@ export const AI_MODEL_PLAN_ACCESS: Record<AllowedModelId, UserPlan> = {
   'anthropic/claude-sonnet-4.6': UserPlan.PRODUCER,
   'google/gemini-3-pro': UserPlan.FREE,
   'google/gemini-3-flash': UserPlan.FREE,
+  'google/gemini-3.5-flash': UserPlan.FREE,
   'openai/gpt-5-mini': UserPlan.FREE,
   'openai/gpt-5-nano': UserPlan.FREE,
   'deepseek/deepseek-coder': UserPlan.FREE,
