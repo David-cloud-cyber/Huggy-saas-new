@@ -366,12 +366,33 @@ function initBuilder() {
     }
   });
 
+  // Initialize saved model
+  const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+  let foundModel = false;
+  modelOptions.forEach(opt => {
+    if ((opt as HTMLElement).dataset.id === savedModel) {
+      modelOptions.forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      if (modelLabel) modelLabel.textContent = (opt as HTMLElement).dataset.name || 'Auto';
+      foundModel = true;
+    }
+  });
+  if (!foundModel && modelLabel) {
+    const activeOpt = document.querySelector('.model-option.active') as HTMLElement;
+    if (activeOpt) {
+      modelLabel.textContent = activeOpt.dataset.name || 'Sonnet 4.6';
+    }
+  }
+
   modelOptions.forEach(opt => {
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
       modelOptions.forEach(o => o.classList.remove('active'));
       opt.classList.add('active');
-      if (modelLabel) modelLabel.textContent = (opt as HTMLElement).dataset.name || 'Auto';
+      const modelId = (opt as HTMLElement).dataset.id || 'auto';
+      const modelName = (opt as HTMLElement).dataset.name || 'Auto';
+      localStorage.setItem('huggy-selected-model', modelId);
+      if (modelLabel) modelLabel.textContent = modelName;
       modelDropdown?.classList.remove('open');
     });
   });
