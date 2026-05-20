@@ -397,21 +397,88 @@ function initBuilder() {
     });
   });
 
+  // Chat History context
+  interface ChatMsg {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+  }
+  const chatHistory: ChatMsg[] = [
+    { role: 'assistant', content: "Hello! I'm here to help you build your application. What would you like to create today?" }
+  ];
+
   function handleSend() {
     const text = chatTextarea.value.trim();
     if (!text) return;
     const container = document.getElementById('chat-container');
     if (container) {
+      // 1. Render user message
       const msg = document.createElement('div');
       msg.className = 'msg-user';
       msg.innerHTML = `<div class="msg-user-bubble">${text}</div><div class="msg-time">just now</div>`;
       container.appendChild(msg);
       container.scrollTop = container.scrollHeight;
+      
+      chatHistory.push({ role: 'user', content: text });
       chatTextarea.value = '';
       chatTextarea.style.height = 'auto';
       btnSend.disabled = true;
 
-      setTimeout(() => {
+      // 2. Render thinking/typing indicator
+      const loader = document.createElement('div');
+      loader.className = 'msg-ai loading-ai';
+      loader.innerHTML = `
+        <div class="msg-ai-bubble" style="display:flex; align-items:center; gap:8px;">
+          <span class="spinner" style="width:12px; height:12px;"></span>
+          <span style="font-size:12px; color:var(--text-sub);">Thinking...</span>
+        </div>
+      `;
+      container.appendChild(loader);
+      container.scrollTop = container.scrollHeight;
+
+      // 3. Extract customModelId
+      const activeModelElement = document.querySelector('.model-option.active') as HTMLElement;
+      const modelId = activeModelElement ? (activeModelElement.dataset.id || 'auto') : 'auto';
+
+      // 4. API Request
+      fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: chatHistory.map(m => ({ role: m.role, content: m.content })),
+          mode: currentMode,
+          customModelId: modelId,
+          userId: 'anonymous'
+        })
+      })
+      .then(async (response) => {
+        const loadingBubble = container.querySelector('.loading-ai');
+        if (loadingBubble) loadingBubble.remove();
+
+        if (!response.ok) {
+          let errMsg = 'Request failed';
+          try {
+            const errJson = await response.json() as any;
+            errMsg = errJson.message || errJson.error || errMsg;
+          } catch(e) {}
+          throw new Error(errMsg);
+        }
+
+        const data = await response.json() as any;
+        const aiReply = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || JSON.stringify(data);
+
+        // Add to history
+        chatHistory.push({ role: 'assistant', content: aiReply });
+
+        // Render AI bubble
+        const msgAi = document.createElement('div');
+        msgAi.className = 'msg-ai';
+        msgAi.innerHTML = `<div class="msg-ai-bubble">${aiReply.replace(/\n/g, '<br>')}</div><div class="msg-time">just now</div>`;
+        container.appendChild(msgAi);
+        container.scrollTop = container.scrollHeight;
+
+        // Render system indicator
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
         if (currentMode === 'plan') {
@@ -421,7 +488,24 @@ function initBuilder() {
         }
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;
-      }, 2000);
+      })
+      .catch((error) => {
+        const loadingBubble = container.querySelector('.loading-ai');
+        if (loadingBubble) loadingBubble.remove();
+
+        const msgError = document.createElement('div');
+        msgError.className = 'msg-ai';
+        msgError.innerHTML = `
+          <div class="msg-ai-bubble" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#f87171;">
+            <strong>Error:</strong> ${error.message}
+          </div>
+        `;
+        container.appendChild(msgError);
+        container.scrollTop = container.scrollHeight;
+      })
+      .finally(() => {
+        btnSend.disabled = chatTextarea.value.trim() === '';
+      });
 
       addToHistory(`Chat: ${text.substring(0, 20)}...`);
     }
