@@ -13,54 +13,148 @@ export interface OpenRouterConfig {
   appName: string;
 }
 
+export interface ChatCompletionResult {
+  text: string;
+  model: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cached_tokens?: number;
+  };
+  cost_usd: number;
+}
+
 export class OpenRouterService {
   private config: OpenRouterConfig;
+
   constructor(config: OpenRouterConfig) {
     this.config = config;
   }
 
-  async chat(modelId: string, messages: ChatMessage[]) {
-    // 1. Strict validation of primary model
+  /**
+   * Main chat completion logic with exponential backoff retries, robust timeouts, and full token tracking.
+   */
+  async chat(modelId: string, messages: ChatMessage[], retryAttempts = 3, timeoutMs = 45000): Promise<ChatCompletionResult> {
+    // 1. Validate models against strict allowlist
     validateAllowedModel(modelId);
 
-    // 2. Resolve and validate fallbacks
     const fallbackModels = AI_MODEL_FALLBACKS[modelId as AllowedModelId] || [];
     for (const fb of fallbackModels) {
       validateAllowedModel(fb);
     }
 
-    // 3. Prepare OpenRouter request
-    // We explicitly disable OpenRouter's internal fallback system to maintain strict control
-    // if we use their internal fallback, we'd need to ensure every model in their list is in our whitelist.
-    // Instead, we handle fallbacks manually or restrict OpenRouter to our specific list.
-    
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'HTTP-Referer': this.config.siteUrl,
-        'X-Title': this.config.appName,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: messages,
-        models: [modelId, ...fallbackModels], // Only our allowed whitelist fallbacks
-        route: 'fallback' // Use our specific list for fallbacks
-      })
-    });
+    const payload = {
+      model: modelId,
+      messages: messages,
+      models: [modelId, ...fallbackModels],
+      route: 'fallback'
+    };
 
-    if (!response.ok) {
-      const errorData = await response.json() as any;
-      throw new Error(`OpenRouter Error: ${errorData?.error?.message || response.statusText}`);
+    let attempt = 0;
+    let delay = 1000; // start with 1s backoff
+
+    while (attempt < retryAttempts) {
+      attempt++;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.maskApiKey(this.config.apiKey)}`,
+            'HTTP-Referer': this.config.siteUrl,
+            'X-Title': this.config.appName,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal as any,
+          body: JSON.stringify(payload)
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errMsg = await response.text();
+          throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg || response.statusText}`);
+        }
+
+        const data: any = await response.json();
+
+        if (data?.error) {
+          throw new Error(`OpenRouter API Error: ${data.error.message || JSON.stringify(data.error)}`);
+        }
+
+        const choice = data?.choices?.[0];
+        const text = choice?.message?.content || choice?.text || '';
+        
+        // Extract token usage metrics
+        const usage = data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+        const prompt_tokens = usage.prompt_tokens || 0;
+        const completion_tokens = usage.completion_tokens || 0;
+        const total_tokens = usage.total_tokens || 0;
+        const cached_tokens = data?.usage?.prompt_tokens_details?.cached || 0;
+
+        // Custom price lookup matching OpenRouter standard rates where possible
+        // or using estimated average fallback ($10 / million tokens for standard pro models)
+        const real_or_est_cost = data?.price || this.estimateUsdCost(data?.model || modelId, prompt_tokens, completion_tokens);
+
+        return {
+          text,
+          model: data?.model || modelId,
+          usage: {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            cached_tokens
+          },
+          cost_usd: real_or_est_cost
+        };
+
+      } catch (err: any) {
+        if (attempt >= retryAttempts || err?.name === 'AbortError') {
+          throw new Error(`Failed AI response after ${attempt} attempts: ${err.message}`);
+        }
+        console.warn(`[OPENROUTER CLIENT] Attempt ${attempt} failed: ${err.message}. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; // exponential backoff
+      }
     }
 
-    return await response.json();
+    throw new Error('Fallback block unreachable state.');
   }
 
   async getCatalog() {
     const response = await fetch('https://openrouter.ai/api/v1/models');
     if (!response.ok) throw new Error('Failed to fetch OpenRouter catalog');
     return await response.json();
+  }
+
+  private maskApiKey(key: string): string {
+    // Return key, or if it looks unmasked, fetch standard configuration safely
+    if (key.includes('***')) {
+      const actualFromEnv = process.env.OPENROUTER_API_KEY || '';
+      return actualFromEnv;
+    }
+    return key;
+  }
+
+  private estimateUsdCost(model: string, prompt: number, completion: number): number {
+    let inputRate = 0.000001;  // $1.00 per million
+    let outputRate = 0.000003; // $3.00 per million
+
+    const lower = model.toLowerCase();
+    if (lower.includes('claude-3-5') || lower.includes('sonnet')) {
+      inputRate = 0.000003;  // $3.00 per million
+      outputRate = 0.000015; // $15.00 per million
+    } else if (lower.includes('claude-opus') || lower.includes('gpt-5.5-pro')) {
+      inputRate = 0.000015;  // $15.00 per million
+      outputRate = 0.000075; // $75.00 per million
+    } else if (lower.includes('flash') || lower.includes('nano')) {
+      inputRate = 0.000000075;  // $0.075 per million
+      outputRate = 0.0000003;   // $0.30 per million
+    }
+
+    return (prompt * inputRate) + (completion * outputRate);
   }
 }

@@ -1017,15 +1017,3 @@ body {
 .log-success { color: var(--success); }
 .log-warning { color: var(--warning); }
 .log-error { color: var(--error); }
-
-/* ── SPINNER ANIMATION ──────────────────────────────── */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.spinner {
-  display: inline-block;
-  border-radius: 50%;
-  border: 2px solid var(--border-mid);
-  border-top-color: var(--accent);
-  animation: spin 1s linear infinite;
-}
