@@ -349,12 +349,20 @@ function init() {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('active');
+                // Once revealed, no need to keep observing
+                revealObserver.unobserve(entry.target);
             }
         });
-    }, { threshold: 0.1 });
+    }, { threshold: 0, rootMargin: '0px 0px -50px 0px' });
 
     document.querySelectorAll('.reveal').forEach(el => {
-        revealObserver.observe(el);
+        // Immediately activate elements already fully or partially visible
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+            el.classList.add('active');
+        } else {
+            revealObserver.observe(el);
+        }
     });
 
     // 10. Modals & Interactivity
