@@ -557,11 +557,13 @@ body {
   background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: 12px; padding: 6px;
   min-width: 220px; z-index: 100;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
   opacity: 0; visibility: hidden;
+  max-height: 420px; overflow-y: auto;
   transform: translateY(-8px) scale(0.96);
   transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  pointer-events: none; backdrop-filter: blur(10px);
+  pointer-events: none; backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 .dropdown.open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); pointer-events: auto; }
 
@@ -572,6 +574,51 @@ body {
 }
 .chat-input-area .dropdown.open { transform: translateY(0) scale(1); }
 
+/* Dropdown Search UX */
+.dropdown-search-wrapper {
+  position: sticky;
+  top: -6px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  margin: -6px -6px 8px -6px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+}
+
+.dropdown-search-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px 5px 28px;
+  font-size: 11px;
+  color: var(--text);
+  outline: none;
+  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dropdown-search-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.dropdown-search-icon {
+  position: absolute;
+  left: 18px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  pointer-events: none;
+  transition: color 180ms;
+}
+
+.dropdown-search-input:focus + .dropdown-search-icon {
+  color: var(--text);
+}
+
 .dropdown-header {
   font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--text-sub);
@@ -581,13 +628,41 @@ body {
 
 .model-option {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px; border-radius: 8px;
-  transition: all 120ms; cursor: pointer;
+  padding: 8px 10px; border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1); cursor: pointer;
+  position: relative;
 }
-.model-option:hover { background: var(--accent-dim); transform: translateX(2px); }
-.model-option.active { background: var(--accent-hover); }
+.model-option:hover { background: var(--accent-dim); border-color: var(--border); transform: translateX(4px); }
+.model-option.active { background: var(--accent-hover); border-color: var(--border-focus); }
 
-.model-dot { width: 6px; height: 6px; border-radius: 50%; }
+.model-option.active:not(:has(.active-check))::after {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  margin-left: auto;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.model-dot { width: 6px; height: 6px; border-radius: 50%; transition: transform 200ms; }
+.model-option.active .model-dot {
+  animation: model-dot-pulse 2s infinite ease-in-out;
+}
+
+@keyframes model-dot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.3);
+    filter: brightness(1.2) drop-shadow(0 0 4px currentColor);
+  }
+}
+
 .opt-meta { display: flex; flex-direction: column; }
 .opt-name { font-size: 10px; color: var(--text); font-weight: 500; }
 .opt-desc { font-size: 8px; color: var(--text-muted); font-family: "JetBrains Mono"; }
@@ -1017,15 +1092,3 @@ body {
 .log-success { color: var(--success); }
 .log-warning { color: var(--warning); }
 .log-error { color: var(--error); }
-
-/* ── SPINNER ANIMATION ──────────────────────────────── */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-.spinner {
-  display: inline-block;
-  border-radius: 50%;
-  border: 2px solid var(--border-mid);
-  border-top-color: var(--accent);
-  animation: spin 1s linear infinite;
-}

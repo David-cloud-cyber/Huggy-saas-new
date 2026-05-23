@@ -138,6 +138,14 @@
       display: flex; flex-direction: column;
       overflow: hidden;
       z-index: 100;
+      transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 205ms ease, border-right-width 200ms ease;
+    }
+
+    .sidebar.collapsed {
+      width: 0px !important;
+      border-right-width: 0px !important;
+      opacity: 0 !important;
+      pointer-events: none;
     }
 
     .sidebar-logo {
@@ -1163,14 +1171,21 @@
   <div class="dashboard">
 
     <aside class="sidebar">
-      <div class="sidebar-logo">
-        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-          <rect width="32" height="32" rx="8" fill="var(--text)"/>
-          <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
-          <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
-          <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
-        </svg>
-        <span class="logo-text">Huggy</span>
+      <div class="sidebar-logo" style="display: flex; align-items: center; width: 100%;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="8" fill="var(--text)"/>
+            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+          </svg>
+          <span class="logo-text">Huggy</span>
+        </div>
+        <button id="btn-collapse-sidebar" class="btn-sidebar-toggle" title="Collapse sidebar" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; justify-content: center; border-radius: 6px; margin-left: auto; transition: background 120ms, color 120ms;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
       </div>
 
       <div class="sidebar-profile">
@@ -1191,7 +1206,7 @@
           <span class="credits-total">/ 500 tokens</span>
         </div>
         <div class="credits-track">
-          <div class="credits-fill" data-fill="0%"></div>
+          <div class="credits-fill" data-fill="100%"></div>
         </div>
       </div>
 
@@ -1214,8 +1229,10 @@
         </div>
 
         <span class="nav-label">Projects</span>
-        <div class="empty-nav-state" style="padding: 10px; font-size: 11px; color: var(--text-sub); font-style: italic;">
-          No projects yet
+        <div id="sidebar-projects-list" style="display: flex; flex-direction: column; width: 100%;">
+          <div class="empty-nav-state" style="padding: 10px; font-size: 11px; color: var(--text-sub); font-style: italic;">
+            No projects yet
+          </div>
         </div>
       </nav>
 
@@ -1255,7 +1272,17 @@
 
     <div class="main-area">
       <header class="topbar">
-        <h1 class="topbar-title">Workspace Overview</h1>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <!-- Expand Sidebar trigger -->
+          <button id="btn-expand-sidebar" title="Expand Sidebar" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: none; align-items: center; justify-content: center; border-radius: 6px; transition: background 120ms, color 120ms;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <h1 class="topbar-title">Workspace Overview</h1>
+        </div>
         <div class="topbar-right">
           <div class="search-wrapper">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-sub)" stroke-width="2">
@@ -1305,7 +1332,7 @@
                 100% available
               </div>
               <div class="kpi-mini-track">
-                <div class="kpi-mini-fill" data-fill="0%"></div>
+                <div class="kpi-mini-fill" data-fill="100%"></div>
               </div>
             </div>
 
@@ -1356,6 +1383,13 @@
                         
                         <div class="dropdown" id="model-dropdown">
                             <div class="dropdown-header">Choose AI Engine</div>
+                            <div class="dropdown-search-wrapper">
+                                <svg class="dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" class="dropdown-search-input" placeholder="Search models...">
+                            </div>
                             <div class="model-option" data-name="Auto" data-id="auto">
                                 <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
                                 <div class="opt-meta">
@@ -1625,6 +1659,27 @@
       });
     });
 
+    // Model search filtering & event isolation
+    const dropdownSearch = modelDropdown.querySelector('.dropdown-search-input');
+    dropdownSearch?.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('.model-option').forEach(opt => {
+        const name = opt.dataset.name?.toLowerCase() || '';
+        const desc = opt.querySelector('.opt-desc')?.textContent?.toLowerCase() || '';
+        if (name.includes(query) || desc.includes(query)) {
+          opt.style.display = 'flex';
+        } else {
+          opt.style.display = 'none';
+        }
+      });
+    });
+    dropdownSearch?.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+    });
+    dropdownSearch?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     document.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
         aiTextarea.value = chip.textContent;
@@ -1667,9 +1722,14 @@
     });
 
     // 7. Navigation logic - Link to builder
-    window.addEventListener('load', () => {
+    const liftCurtain = () => {
         if (curtain) curtain.classList.add('rising');
-    });
+    };
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        liftCurtain();
+    } else {
+        window.addEventListener('load', liftCurtain);
+    }
 
     function navigate(url) {
         if (curtain) {
@@ -1683,10 +1743,219 @@
         }
     }
 
-    document.querySelectorAll('#submit-btn, .btn-open-project, #btn-new-project, .btn-create-top').forEach(el => {
+    const DEFAULT_PROJECTS = [
+      {
+        id: "proj-1",
+        name: "Acme Analytics",
+        template: "dashboard",
+        theme: "dark",
+        model: "anthropic/claude-sonnet-4.6",
+        desc: "Comprehensive SaaS business monitor integrating high contrast sparklines, dynamic traffic tables, and real-time token tracking.",
+        createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
+        features: ["db", "auth", "seo"]
+      },
+      {
+        id: "proj-2",
+        name: "Storefront Kit",
+        template: "ecommerce",
+        theme: "light",
+        model: "openai/gpt-5.5",
+        desc: "Fast, response-driven e-commerce staging sandbox with responsive item listings, secure stripe checkout logic, and stateful checkout cart.",
+        createdAt: new Date(Date.now() - 12 * 3600000).toISOString(),
+        features: ["auth", "seo"]
+      }
+    ];
+
+    let projects = [];
+    try {
+      const stored = localStorage.getItem('huggy-projects');
+      if (stored) {
+        projects = JSON.parse(stored);
+      } else {
+        projects = [...DEFAULT_PROJECTS];
+        localStorage.setItem('huggy-projects', JSON.stringify(projects));
+      }
+    } catch (e) {
+      projects = [...DEFAULT_PROJECTS];
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function getThemeColor(theme) {
+      switch (theme) {
+        case 'light': return '#60A5FA';
+        case 'synthwave': return '#EC4899';
+        case 'emerald': return '#10B981';
+        default: return '#A78BFA'; // dark / default
+      }
+    }
+
+    function getTemplateLabel(template) {
+      switch (template) {
+        case 'ecommerce': return 'E-Commerce';
+        case 'saas': return 'AI SaaS';
+        case 'portfolio': return 'Portfolio';
+        default: return 'Analytics';
+      }
+    }
+
+    function getTemplateDesc(template) {
+      switch (template) {
+        case 'ecommerce': return 'Modern storefront built with interactive grids and robust checkout components.';
+        case 'saas': return 'Next-generation AI chat layout with rich response streams and modular controls.';
+        case 'portfolio': return 'High-contrast portfolio showcase with responsive bento-inspired grids.';
+        default: return 'Business-facing analytics console displaying critical application insights.';
+      }
+    }
+
+    function getModelLabel(model) {
+      if (model.includes('sonnet')) return 'Sonnet 4.6';
+      if (model.includes('gpt-5.5')) return 'GPT-5.5 Pro';
+      if (model.includes('gemini-3.5')) return 'Gemini 3.5';
+      if (model.includes('deepseek')) return 'DeepSeek';
+      return 'AI Auto';
+    }
+
+    function relativeTime(isoString) {
+      try {
+        const ms = Date.now() - new Date(isoString).getTime();
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        return '1d ago';
+      } catch (e) {
+        return 'recently';
+      }
+    }
+
+    window.openProjectWorkspace = function(id) {
+      const targetProj = projects.find(p => p.id === id);
+      if (targetProj) {
+        localStorage.setItem('huggy-current-project', JSON.stringify(targetProj));
+        navigate('builder.html');
+      }
+    };
+
+    function renderProjects() {
+      const grid = document.querySelector('.projects-grid');
+      const sidebarList = document.getElementById('sidebar-projects-list');
+      if (!grid) return;
+      
+      const totalCount = projects.length;
+      const countLabel = document.querySelector('.section-label span');
+      if (countLabel) {
+        countLabel.textContent = `(${totalCount})`;
+      }
+      
+      const kpiVal = document.querySelector('.kpi-card .kpi-value');
+      if (kpiVal) {
+        kpiVal.textContent = totalCount;
+      }
+
+      // Sidebar rendering
+      if (sidebarList) {
+        if (totalCount === 0) {
+          sidebarList.innerHTML = `
+            <div class="empty-nav-state" style="padding: 10px; font-size: 11px; color: var(--text-sub); font-style: italic;">
+              No projects yet
+            </div>
+          `;
+        } else {
+          sidebarList.innerHTML = projects.map(proj => `
+            <button class="nav-project" data-id="${proj.id}" onclick="openProjectWorkspace('${proj.id}')">
+              <div class="project-dot" style="background: ${getThemeColor(proj.theme)}"></div>
+              <span class="project-nav-name">${escapeHtml(proj.name)}</span>
+              <span class="badge-builds">v1.2</span>
+            </button>
+          `).join('');
+        }
+      }
+
+      // Grid projects rendering
+      if (totalCount === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+                <line x1="3" y1="9" x2="21" y2="9"></line>
+                <line x1="9" y1="21" x2="9" y2="9"></line>
+              </svg>
+            </div>
+            <h3 class="empty-title">Your workspace is quiet</h3>
+            <p class="empty-desc">Describe your first idea above or click 'New Project' to start building something amazing.</p>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = projects.map(proj => `
+          <div class="project-card" data-id="${proj.id}">
+            <button class="btn-card-delete" title="Delete Project">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+            <div class="card-header">
+              <div class="card-title-row">
+                <div class="project-dot" style="background: ${getThemeColor(proj.theme)}"></div>
+                <span class="card-name">${escapeHtml(proj.name)}</span>
+              </div>
+              <span class="status-badge" style="background: var(--success-dim); color: var(--success); border: 1px solid rgba(74,222,128,0.2);">Active</span>
+            </div>
+            <p class="card-desc">${escapeHtml(proj.desc || getTemplateDesc(proj.template))}</p>
+            <div class="card-stats">
+              <span class="score-badge sec" style="background: var(--accent-dim); color: var(--text-muted); border: 1px solid var(--border-mid); text-transform: uppercase;">${getTemplateLabel(proj.template)}</span>
+              <span class="score-badge meta" style="background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border); text-transform: uppercase;">${proj.theme} theme</span>
+              <span class="score-badge meta" style="background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border);">${getModelLabel(proj.model)}</span>
+            </div>
+            <div class="card-footer">
+              <span class="card-meta">Updated ${relativeTime(proj.createdAt)}</span>
+              <button class="btn-open-project" style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size:12px; color: var(--text);">Open Workspace</button>
+            </div>
+          </div>
+        `).join('');
+
+        // Re-bind workspace open triggers
+        grid.querySelectorAll('.project-card').forEach(card => {
+          const pid = card.dataset.id;
+          card.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-card-delete')) return; // handled separately
+            openProjectWorkspace(pid);
+          });
+        });
+      }
+    }
+
+    renderProjects();
+
+    document.querySelectorAll('#submit-btn, .btn-open-project').forEach(el => {
       el.addEventListener('click', (e) => {
         // Only trigger if active (for submit-btn)
         if (el.id === 'submit-btn' && !el.classList.contains('active')) return;
+        
+        if (el.id === 'submit-btn') {
+          const mainIdea = document.getElementById('ai-textarea')?.value.trim() || '';
+          if (mainIdea) {
+            const draftProj = {
+              id: 'proj-' + Math.random().toString(36).substring(2, 9),
+              name: mainIdea.split(' ').slice(0, 3).join(' ') || 'AI Generated Project',
+              template: 'saas',
+              theme: 'dark',
+              model: localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6',
+              desc: mainIdea,
+              features: ['db', 'auth', 'seo'],
+              createdAt: new Date().toISOString()
+            };
+            projects.unshift(draftProj);
+            localStorage.setItem('huggy-projects', JSON.stringify(projects));
+            localStorage.setItem('huggy-current-project', JSON.stringify(draftProj));
+          }
+        }
         navigate('builder.html');
       });
     });
@@ -1695,6 +1964,10 @@
     document.addEventListener('click', (e) => {
         const link = e.target.closest('a');
         if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+            const href = link.getAttribute('href');
+            if (href && (href.startsWith('#') || href === '')) {
+                return;
+            }
             if (link.closest('.dropdown')) return; // Allow dropdown links if they exist
             e.preventDefault();
             navigate(link.href);
@@ -1705,46 +1978,146 @@
     const deleteModal = document.getElementById('delete-modal');
     const modalCancel = document.getElementById('modal-cancel');
     const modalConfirm = document.getElementById('modal-confirm');
-    let projectToDelete = null;
+    let projectToDeleteId = null;
 
     document.addEventListener('click', (e) => {
       const deleteBtn = e.target.closest('.btn-card-delete');
       if (deleteBtn) {
         e.stopPropagation();
-        projectToDelete = deleteBtn.closest('.project-card');
-        deleteModal.classList.add('open');
+        e.preventDefault();
+        const cardObj = deleteBtn.closest('.project-card');
+        if (cardObj) {
+          projectToDeleteId = cardObj.dataset.id;
+          deleteModal.classList.add('open');
+        }
       }
     });
 
     modalCancel.addEventListener('click', () => {
       deleteModal.classList.remove('open');
-      projectToDelete = null;
+      projectToDeleteId = null;
     });
 
     deleteModal.addEventListener('click', (e) => {
       if (e.target === deleteModal) {
         deleteModal.classList.remove('open');
-        projectToDelete = null;
+        projectToDeleteId = null;
       }
     });
 
     modalConfirm.addEventListener('click', () => {
-      if (projectToDelete) {
-        projectToDelete.style.transform = 'scale(0.9) opacity(0)';
-        projectToDelete.style.opacity = '0';
-        setTimeout(() => {
-          projectToDelete.remove();
-          projectToDelete = null;
-          // Update count UI if needed
-          const countLabel = document.querySelector('.section-label span');
-          if (countLabel) {
-            const currentCount = document.querySelectorAll('.project-card').length;
-            countLabel.textContent = `(${currentCount})`;
-          }
-        }, 300);
+      if (projectToDeleteId) {
+        projects = projects.filter(p => p.id !== projectToDeleteId);
+        localStorage.setItem('huggy-projects', JSON.stringify(projects));
+        renderProjects();
+        projectToDeleteId = null;
       }
       deleteModal.classList.remove('open');
     });
+
+    // New Project Modal Flow
+    const newProjectModal = document.getElementById('new-project-modal');
+    const btnNewProjectSidebar = document.getElementById('btn-new-project');
+    const btnCreateTop = document.getElementById('btn-create-top');
+    const btnCancelNewProj = document.getElementById('btn-new-proj-cancel');
+    const btnConfirmNewProj = document.getElementById('btn-new-proj-create');
+    
+    // Inputs
+    const newProjNameInput = document.getElementById('new-proj-name');
+    const newProjTemplateSelect = document.getElementById('new-proj-template');
+    const newProjThemeSelect = document.getElementById('new-proj-theme');
+    const newProjModelSelect = document.getElementById('new-proj-model');
+
+    function openNewProjectModal() {
+      if (newProjNameInput) {
+        newProjNameInput.value = `project-${projects.length + 1}`;
+      }
+      if (newProjectModal) {
+        newProjectModal.classList.add('open');
+      }
+    }
+
+    if (btnNewProjectSidebar) {
+      btnNewProjectSidebar.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openNewProjectModal();
+      });
+    }
+
+    if (btnCreateTop) {
+      btnCreateTop.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openNewProjectModal();
+      });
+    }
+
+    if (btnCancelNewProj) {
+      btnCancelNewProj.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (newProjectModal) {
+          newProjectModal.classList.remove('open');
+        }
+      });
+    }
+
+    if (newProjectModal) {
+      newProjectModal.addEventListener('click', (e) => {
+        if (e.target === newProjectModal) {
+          newProjectModal.classList.remove('open');
+        }
+      });
+    }
+
+    if (btnConfirmNewProj) {
+      btnConfirmNewProj.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        const nameVal = newProjNameInput ? newProjNameInput.value.trim() : '';
+        if (!nameVal) {
+          alert("Please enter a valid project name.");
+          return;
+        }
+
+        const templateVal = newProjTemplateSelect ? newProjTemplateSelect.value : 'dashboard';
+        const themeVal = newProjThemeSelect ? newProjThemeSelect.value : 'dark';
+        const modelVal = newProjModelSelect ? newProjModelSelect.value : 'anthropic/claude-sonnet-4.6';
+
+        const hasDb = document.getElementById('features-db')?.checked || false;
+        const hasAuth = document.getElementById('features-auth')?.checked || false;
+        const hasExport = document.getElementById('features-export')?.checked || false;
+        const hasSeo = document.getElementById('features-seo')?.checked || false;
+
+        const configFeatures = [];
+        if (hasDb) configFeatures.push("db");
+        if (hasAuth) configFeatures.push("auth");
+        if (hasExport) configFeatures.push("export");
+        if (hasSeo) configFeatures.push("seo");
+
+        const newProj = {
+          id: 'proj-' + Math.random().toString(36).substring(2, 9),
+          name: nameVal,
+          template: templateVal,
+          theme: themeVal,
+          model: modelVal,
+          desc: getTemplateDesc(templateVal),
+          features: configFeatures,
+          createdAt: new Date().toISOString()
+        };
+
+        projects.unshift(newProj);
+        localStorage.setItem('huggy-projects', JSON.stringify(projects));
+        
+        renderProjects();
+
+        if (newProjectModal) {
+          newProjectModal.classList.remove('open');
+        }
+
+        openProjectWorkspace(newProj.id);
+      });
+    }
 
     // 9. Settings Logic
     const btnSettings = document.getElementById('btn-settings');
@@ -1795,6 +2168,90 @@
         saveStatus.textContent = '✓ Changes saved successfully';
         setTimeout(() => saveStatus.textContent = '', 3000);
       }, 1000);
+    });
+
+    // Left panel collapse and expand logic
+    const sidebar = document.querySelector('.sidebar');
+    const btnCollapseSidebar = document.getElementById('btn-collapse-sidebar');
+    const btnExpandSidebar = document.getElementById('btn-expand-sidebar');
+
+    function collapseSidebar() {
+      sidebar?.classList.add('collapsed');
+      if (btnExpandSidebar) btnExpandSidebar.style.display = 'flex';
+    }
+
+    function expandSidebar() {
+      sidebar?.classList.remove('collapsed');
+      if (btnExpandSidebar) btnExpandSidebar.style.display = 'none';
+    }
+
+    btnCollapseSidebar?.addEventListener('click', collapseSidebar);
+    btnExpandSidebar?.addEventListener('click', expandSidebar);
+
+    // Save simulation triggered by Ctrl+S / Cmd+S
+    function showSaveToast() {
+      // Remove existing toast if any
+      const existing = document.getElementById("save-success-toast");
+      if (existing) {
+        existing.remove();
+      }
+
+      const toast = document.createElement("div");
+      toast.id = "save-success-toast";
+      toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #09090b;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: 3px solid #10b981;
+        border-radius: 8px;
+        padding: 12px 16px;
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #f4f4f5;
+        font-family: inherit;
+        font-size: 13px;
+        z-index: 99999;
+        transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+        transform: translateY(20px);
+        opacity: 0;
+      `;
+
+      toast.innerHTML = `
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; flex-shrink: 0;"></div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: 500; color: #ffffff;">Project Saved</span>
+          <span style="font-size: 11px; color: #a1a1aa;">Ctrl+S simulation saved successfully</span>
+        </div>
+        <button style="background: none; border: none; padding: 4px; color: #52525b; cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
+      `;
+
+      document.body.appendChild(toast);
+
+      // Trigger entering animation
+      requestAnimationFrame(() => {
+        toast.style.transform = "translateY(0)";
+        toast.style.opacity = "1";
+      });
+
+      // Fade out and remove after 3s
+      setTimeout(() => {
+        toast.style.transform = "translateY(20px)";
+        toast.style.opacity = "0";
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 3000);
+    }
+
+    document.addEventListener("keydown", function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        showSaveToast();
+      }
     });
   </script>
   <div class="settings-overlay" id="settings-overlay"></div>
@@ -1966,6 +2423,78 @@
       <div class="modal-actions">
         <button class="btn-modal btn-cancel" id="modal-cancel">Cancel</button>
         <button class="btn-modal btn-confirm-delete" id="modal-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="new-project-modal">
+    <div class="modal-content modal-content-lg" style="max-width: 500px;">
+      <h3 class="modal-title" style="font-size: 24px;">New Project Configuration</h3>
+      <p class="modal-desc" style="margin-bottom: 20px;">Provide a project identity and select initial options to seed your development workspace.</p>
+      
+      <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; text-align: left;">
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 6px;">Project Name</label>
+          <input type="text" id="new-proj-name" class="settings-input" placeholder="e.g. My SaaS Product" style="width: 100%; box-sizing: border-box;" value="">
+        </div>
+        
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 6px;">Workspace Template</label>
+          <select id="new-proj-template" class="settings-select" style="width: 100%; box-sizing: border-box;">
+            <option value="dashboard">Analytics Dashboard (Tailwind CSS, charts & logs)</option>
+            <option value="ecommerce">E-commerce storefront (Grid system with cart mechanics)</option>
+            <option value="saas">AI Assistant Platform (Fully functional chat & sidebar)</option>
+            <option value="portfolio">Creative Developer Portfolio (Stunning visual design & grid)</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label class="form-label" style="display: block; margin-bottom: 6px;">Visual Theme</label>
+            <select id="new-proj-theme" class="settings-select" style="width: 100%; box-sizing: border-box;">
+              <option value="dark">Cosmic Dark</option>
+              <option value="light">Minimalist Light</option>
+              <option value="synthwave">Neon Synthwave</option>
+              <option value="emerald">Forest Emerald</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" style="display: block; margin-bottom: 6px;">AI Engine</label>
+            <select id="new-proj-model" class="settings-select" style="width: 100%; box-sizing: border-box;">
+              <option value="anthropic/claude-sonnet-4.6">Clara Sonnet 4.6</option>
+              <option value="openai/gpt-5.5">GPT-5.5 Pro</option>
+              <option value="google/gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="deepseek/deepseek-coder">DeepSeek Coder</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label" style="display: block; margin-bottom: 8px;">Initial Configurations</label>
+          <div style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-input); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
+              <input type="checkbox" id="features-db" checked style="accent-color: var(--accent); cursor: pointer;">
+              <span>Pre-configure persistent Storage (Supabase PostgreSQL)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
+              <input type="checkbox" id="features-auth" checked style="accent-color: var(--accent); cursor: pointer;">
+              <span>Setup Account Authentication module</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
+              <input type="checkbox" id="features-export" style="accent-color: var(--accent); cursor: pointer;">
+              <span>Include dynamic CSV/Excel Export action</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
+              <input type="checkbox" id="features-seo" checked style="accent-color: var(--accent); cursor: pointer;">
+              <span>Deploy edge SEO metatags and responsive scaling</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal btn-cancel" id="btn-new-proj-cancel">Cancel</button>
+        <button class="btn-modal" id="btn-new-proj-create" style="background: var(--accent); color: var(--bg); font-weight: 600;">Create Project</button>
       </div>
     </div>
   </div>

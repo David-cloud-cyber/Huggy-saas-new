@@ -3,6 +3,20 @@ function initBuilder() {
   const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
+  // ── LOAD ACTIVE PROJECT INFORMATION ────────────────────────
+  const currentProjStr = localStorage.getItem('huggy-current-project');
+  if (currentProjStr) {
+    try {
+      const currentProj = JSON.parse(currentProjStr);
+      const projNameEl = document.getElementById('project-name');
+      if (projNameEl && currentProj.name) {
+        projNameEl.textContent = currentProj.name;
+      }
+    } catch (e) {
+      console.error("Error setting custom project identity:", e);
+    }
+  }
+
   // ── CODE CONTENT ────────────────────────────────────────────────
   const codeLines: [string, boolean][] = [];
 
@@ -397,88 +411,42 @@ function initBuilder() {
     });
   });
 
-  // Chat History context
-  interface ChatMsg {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-  }
-  const chatHistory: ChatMsg[] = [
-    { role: 'assistant', content: "Hello! I'm here to help you build your application. What would you like to create today?" }
-  ];
+  // Model search filtering & event isolation
+  const dropdownSearch = modelDropdown?.querySelector('.dropdown-search-input') as HTMLInputElement;
+  dropdownSearch?.addEventListener('input', (e) => {
+    const query = (e.target as HTMLInputElement).value.toLowerCase().trim();
+    modelOptions.forEach(opt => {
+      const name = (opt as HTMLElement).dataset.name?.toLowerCase() || '';
+      const desc = (opt as HTMLElement).querySelector('.opt-desc')?.textContent?.toLowerCase() || '';
+      if (name.includes(query) || desc.includes(query)) {
+        (opt as HTMLElement).style.display = 'flex';
+      } else {
+        (opt as HTMLElement).style.display = 'none';
+      }
+    });
+  });
+  dropdownSearch?.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+  });
+  dropdownSearch?.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
 
   function handleSend() {
     const text = chatTextarea.value.trim();
     if (!text) return;
     const container = document.getElementById('chat-container');
     if (container) {
-      // 1. Render user message
       const msg = document.createElement('div');
       msg.className = 'msg-user';
       msg.innerHTML = `<div class="msg-user-bubble">${text}</div><div class="msg-time">just now</div>`;
       container.appendChild(msg);
       container.scrollTop = container.scrollHeight;
-      
-      chatHistory.push({ role: 'user', content: text });
       chatTextarea.value = '';
       chatTextarea.style.height = 'auto';
       btnSend.disabled = true;
 
-      // 2. Render thinking/typing indicator
-      const loader = document.createElement('div');
-      loader.className = 'msg-ai loading-ai';
-      loader.innerHTML = `
-        <div class="msg-ai-bubble" style="display:flex; align-items:center; gap:8px;">
-          <span class="spinner" style="width:12px; height:12px;"></span>
-          <span style="font-size:12px; color:var(--text-sub);">Thinking...</span>
-        </div>
-      `;
-      container.appendChild(loader);
-      container.scrollTop = container.scrollHeight;
-
-      // 3. Extract customModelId
-      const activeModelElement = document.querySelector('.model-option.active') as HTMLElement;
-      const modelId = activeModelElement ? (activeModelElement.dataset.id || 'auto') : 'auto';
-
-      // 4. API Request
-      fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages: chatHistory.map(m => ({ role: m.role, content: m.content })),
-          mode: currentMode,
-          customModelId: modelId,
-          userId: 'anonymous'
-        })
-      })
-      .then(async (response) => {
-        const loadingBubble = container.querySelector('.loading-ai');
-        if (loadingBubble) loadingBubble.remove();
-
-        if (!response.ok) {
-          let errMsg = 'Request failed';
-          try {
-            const errJson = await response.json() as any;
-            errMsg = errJson.message || errJson.error || errMsg;
-          } catch(e) {}
-          throw new Error(errMsg);
-        }
-
-        const data = await response.json() as any;
-        const aiReply = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || JSON.stringify(data);
-
-        // Add to history
-        chatHistory.push({ role: 'assistant', content: aiReply });
-
-        // Render AI bubble
-        const msgAi = document.createElement('div');
-        msgAi.className = 'msg-ai';
-        msgAi.innerHTML = `<div class="msg-ai-bubble">${aiReply.replace(/\n/g, '<br>')}</div><div class="msg-time">just now</div>`;
-        container.appendChild(msgAi);
-        container.scrollTop = container.scrollHeight;
-
-        // Render system indicator
+      setTimeout(() => {
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
         if (currentMode === 'plan') {
@@ -488,24 +456,7 @@ function initBuilder() {
         }
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;
-      })
-      .catch((error) => {
-        const loadingBubble = container.querySelector('.loading-ai');
-        if (loadingBubble) loadingBubble.remove();
-
-        const msgError = document.createElement('div');
-        msgError.className = 'msg-ai';
-        msgError.innerHTML = `
-          <div class="msg-ai-bubble" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#f87171;">
-            <strong>Error:</strong> ${error.message}
-          </div>
-        `;
-        container.appendChild(msgError);
-        container.scrollTop = container.scrollHeight;
-      })
-      .finally(() => {
-        btnSend.disabled = chatTextarea.value.trim() === '';
-      });
+      }, 2000);
 
       addToHistory(`Chat: ${text.substring(0, 20)}...`);
     }
@@ -587,9 +538,14 @@ function initBuilder() {
   const html = document.documentElement;
   const curtain = document.getElementById('curtain');
   
-  window.addEventListener('load', () => {
+  const liftCurtain = () => {
     if (curtain) curtain.classList.add('rising');
-  });
+  };
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    liftCurtain();
+  } else {
+    window.addEventListener('load', liftCurtain);
+  }
 
   function navigate(url: string) {
     if (curtain) {

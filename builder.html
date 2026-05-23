@@ -3,401 +3,1851 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Huggy Builder</title>
+  <title>Huggy — Builder & Workspace</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
     (function() {
-      const theme = localStorage.getItem('huggy-theme') || 'dark';
-      document.documentElement.setAttribute('data-theme', theme);
+      // Force dark theme as seen in the high-fidelity screenshot
+      document.documentElement.setAttribute('data-theme', 'dark');
     })();
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="/src/builder.css">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  
+  <style>
+    /* Absolute pixel-perfect UI style matches the Huggy AI Workspace layout precisely */
+    :root {
+      --bg: #09090b;
+      --bg-surface: #0c0c0e;
+      --bg-panel: #121214;
+      --bg-input: #1c1c1f;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-light: rgba(255, 255, 255, 0.04);
+      --accent: #d946ef;
+      --accent-spark: #c084fc;
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --text-sub: #52525b;
+      --text-dark: #3f3f46;
+    }
+
+    * {
+      box-sizing: border-box;
+      scrollbar-width: thin !important;
+      scrollbar-color: rgba(255, 255, 255, 0.03) transparent !important;
+    }
+
+    /* Make all vertical and horizontal scrollbars almost invisible */
+    ::-webkit-scrollbar {
+      width: 2.5px !important;
+      height: 2.5px !important;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.04) !important;
+      border-radius: 99px !important;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15) !important;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Instrument Sans", sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .app-workspace {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: var(--bg);
+    }
+
+    /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
+    .brand-topbar {
+      height: 48px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--bg);
+      user-select: none;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-title {
+      font-weight: 500;
+      font-size: 13.5px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-logo-spark {
+      background: linear-gradient(135deg, #f472b6, #db2777);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .brand-sep {
+      color: var(--text-sub);
+      font-weight: 300;
+      font-size: 13px;
+      margin: 0 2px;
+    }
+
+    .project-selector {
+      color: var(--text-muted);
+      font-size: 13.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 150ms;
+    }
+
+    .project-selector:hover {
+      color: var(--text);
+    }
+
+    .brand-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-integration {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #181c1f00;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: all 150ms;
+    }
+
+    .btn-integration:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+
+    .btn-upgrade {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: all 150ms;
+    }
+
+    .btn-upgrade:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .btn-publish {
+      background: #a855f7;
+      color: #ffffff;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 6px;
+      transition: all 150ms;
+    }
+
+    .btn-publish:hover {
+      background: #c084fc;
+    }
+
+    .avatar-circle {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f1a98c; /* Warm salmon pink peach matching screenshot */
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
+    .workspace-body {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      flex: 1;
+      overflow: hidden;
+      transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .workspace-body.sidebar-collapsed {
+      grid-template-columns: 0px 1fr;
+    }
+
+    /* ── LEFT PANEL (CHAT & DESIGN) ───────────────────────────── */
+    .sidebar-pane {
+      border-right: 1px solid var(--border);
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: visibility 200ms, opacity 200ms, width 200ms;
+    }
+
+    .workspace-body.sidebar-collapsed .sidebar-pane {
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Toast animation support */
+    @keyframes toastSlideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .pane-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 6px 16px;
+    }
+
+    .pane-header-title {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pane-header-title-spark {
+      color: var(--accent);
+    }
+
+    .pane-dots-btn {
+      color: var(--text-sub);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      transition: color 150ms;
+    }
+
+    .pane-dots-btn:hover {
+      color: var(--text);
+    }
+
+    .pane-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .pane-tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 8px;
+      font-size: 12.5px;
+      font-weight: 400;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      transition: all 150ms;
+    }
+
+    .pane-tab-btn.active {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+
+    .pane-tab-btn:hover:not(.active) {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Sidebar Conversation Flow Scroll area */
+    .sidebar-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message-card {
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 200ms ease;
+    }
+
+    /* Message card collapsible styles */
+    .message-card.collapsed > :not(.msg-header-line) {
+      display: none !important;
+    }
+    .message-card.collapsed::after {
+      content: "Message content collapsed...";
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.5;
+      font-style: italic;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    .message-card.collapsed .btn-toggle-msg-card svg {
+      transform: rotate(-90deg) !important;
+    }
+    .message-card .btn-toggle-msg-card svg {
+      transition: transform 150ms ease;
+    }
+
+    .msg-header-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .msg-sender-identity {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #e2e8f0;
+    }
+
+    .msg-sender-spark {
+      color: var(--accent);
+      font-size: 13px;
+    }
+
+    .msg-sub-text {
+      color: var(--text-sub);
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: -4px;
+    }
+
+    .msg-body-paragraph {
+      font-size: 13px;
+      line-height: 1.55;
+      color: #d4d4d8;
+      font-weight: 400;
+      margin: 0;
+    }
+
+    /* Tools used bar precisely matching */
+    .tools-pill-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      margin: 4px 0;
+    }
+
+    .tools-pill-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .tools-pill-left-spark {
+      color: var(--accent);
+    }
+
+    .btn-show-all-tools {
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+      border: none;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 4px;
+      transition: all 150ms;
+    }
+
+    .btn-show-all-tools:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Modified file container */
+    .edited-files-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 6px;
+    }
+
+    .edited-file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.02);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+    }
+
+    .edited-file-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .edited-file-icon {
+      color: var(--text-sub);
+    }
+
+    .edited-file-label {
+      color: var(--text-sub);
+    }
+
+    .edited-file-path-highlight {
+      color: var(--text);
+    }
+
+    .btn-toggle-edit-view {
+      color: var(--text-muted);
+      font-size: 11px;
+      cursor: pointer;
+      text-decoration: none;
+      background: transparent;
+      border: none;
+    }
+
+    .btn-toggle-edit-view:hover {
+      color: var(--text);
+    }
+
+    /* Key visual points listing inside Chat notes */
+    .highlights-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-left: 4px;
+      margin: 6px 0;
+    }
+
+    .highlight-card-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .highlight-bold-title {
+      font-weight: 600;
+      color: var(--text);
+      min-width: 82px;
+      display: inline-block;
+    }
+
+    /* Custom Chat input Area precisely customized */
+    .chat-input-row {
+      border-top: 1px solid var(--border-light);
+      padding: 16px;
+      background: var(--bg-panel);
+    }
+
+    /* Duplicated, Resized AI Chat component styling */
+    .chat-input-row .input-wrapper {
+      position: relative;
+    }
+    .chat-input-row .input-wrapper::before {
+        content: "";
+        position: absolute;
+        inset: -1.5px;
+        background: conic-gradient(
+            from 0deg,
+            #4285F4,
+            #34A853,
+            #FBBC05,
+            #EA4335,
+            #4285F4
+        );
+        animation: rotate 4s linear infinite;
+        z-index: -1;
+        opacity: 0.12;
+        transition: opacity 300ms;
+        filter: blur(1.5px);
+        clip-path: inset(0 round 12px);
+    }
+    .chat-input-row .input-wrapper:focus-within::before {
+        opacity: 0.8;
+    }
+    .chat-input-row .input-wrapper::after {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        background: var(--bg-input);
+        border-radius: 11px;
+        z-index: -1;
+    }
+    .chat-input-row .input-wrapper:focus-within {
+        border-color: transparent !important;
+        box-shadow: 0 0 16px rgba(66, 133, 244, 0.12), 0 10px 30px rgba(0,0,0,0.3) !important;
+    }
+    .chat-input-row .icon-btn:hover {
+        border-color: var(--border-focus);
+        color: var(--text-muted);
+        background: var(--accent-dim);
+    }
+    .chat-input-row .model-select:hover {
+        border-color: var(--border-focus);
+        background: var(--accent-hover);
+        color: var(--text);
+        transform: translateY(-1px);
+    }
+    .chat-input-row .model-option {
+      cursor: pointer;
+    }
+    .chat-input-row .model-option:hover {
+        background: var(--accent-dim);
+        transform: translateX(4px);
+    }
+    .chat-input-row .model-option.active {
+        background: var(--accent-hover);
+    }
+    .chat-input-row .submit-btn.active {
+        background: var(--accent) !important;
+        border-color: transparent !important;
+        color: var(--bg) !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+    }
+    .chat-input-row .submit-btn.active:hover {
+        opacity: 0.9;
+        transform: scale(1.02);
+    }
+    .chat-input-row .dropdown.open {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: translateY(0) scale(1) !important;
+        pointer-events: auto !important;
+    }
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* ── RIGHT COLUMN: CODE & PREVIEW WORKSPACE ─────────────── */
+    .editor-pane {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Control mini-navbar matches screenshot precisamente */
+    .sub-navbar {
+      height: 44px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--bg);
+    }
+
+    .sub-nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .collapse-sidebar-arrow {
+      color: var(--text-sub);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: color 150ms;
+    }
+
+    .collapse-sidebar-arrow svg {
+      transition: transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .workspace-body.sidebar-collapsed .collapse-sidebar-arrow svg {
+      transform: rotate(180deg);
+    }
+
+    .collapse-sidebar-arrow:hover {
+      color: var(--text-muted);
+    }
+
+    .sub-nav-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 6px;
+      padding: 2px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .sub-nav-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-radius: 4px;
+      font-weight: 500;
+      transition: all 150ms;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+
+    .sub-nav-tab.active {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+
+    .sub-nav-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .sub-nav-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sub-nav-action-btn {
+      color: var(--text-sub);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      transition: color 150ms, background-color 150ms;
+    }
+
+    .sub-nav-action-btn:hover {
+      color: var(--text);
+      background-color: rgba(255, 255, 255, 0.04);
+    }
+
+    /* Viewport Frame Holder */
+    .viewport-content-holder {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Code View double-column layout */
+    .code-screen-layout {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      flex: 1;
+      overflow: hidden;
+      transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .code-screen-layout.explorer-collapsed {
+      grid-template-columns: 0px 1fr;
+    }
+
+    /* Left pane style explorer matching precisely */
+    .explorer-column {
+      border-right: 1px solid var(--border);
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: visibility 200ms, opacity 200ms;
+    }
+
+    .code-screen-layout.explorer-collapsed .explorer-column {
+      visibility: hidden;
+      opacity: 0;
+      border-right-width: 0px;
+      pointer-events: none;
+    }
+
+    .explorer-tabs {
+      display: flex;
+      gap: 12px;
+      padding: 10px 16px 8px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .explorer-tab-link {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: color 150ms;
+      padding-bottom: 4px;
+      border-bottom: 1px solid transparent;
+    }
+
+    .explorer-tab-link.active {
+      color: var(--text);
+      border-bottom-color: var(--text);
+    }
+
+    .explorer-tree-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+    }
+
+    /* High-fidelity layout files list */
+    .tree-folder {
+      margin-bottom: 8px;
+    }
+
+    .tree-folder-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      color: #e4e4e7;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .tree-folder-title:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .tree-folder-expand-icon {
+      color: var(--text-sub);
+      font-size: 10px;
+    }
+
+    .tree-folder-children {
+      padding-left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 1px;
+    }
+
+    .tree-file {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      user-select: none;
+      transition: color 100ms, background 100ms;
+    }
+
+    .tree-file:hover {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+    }
+
+    .tree-file.selected {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+
+    .tree-file-icon {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    /* RIGHT WORKSPACE: CODE EDITOR VIEW */
+    .editor-column {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .editor-tabs-bar {
+      height: 38px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+    }
+
+    .editor-tab-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-top-left-radius: 4px;
+      border-top-right-radius: 4px;
+      padding: 6px 12px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 5px;
+    }
+
+    .editor-main-scroll {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      background: var(--bg);
+    }
+
+    .code-editor-pre {
+      margin: 0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 12.5px;
+      line-height: 1.65;
+      color: var(--text-muted);
+    }
+
+    .editor-line-row {
+      display: flex;
+    }
+
+    .editor-line-number {
+      width: 32px;
+      text-align: right;
+      padding-right: 16px;
+      color: var(--text-dark);
+      user-select: none;
+    }
+
+    .editor-line-content {
+      color: #d4d4d8;
+      white-space: pre;
+    }
+
+    /* Syntax markup highlighting for high performance styling */
+    .syn-keyword { color: var(--accent-spark); font-weight: 500; }
+    .syn-string { color: #a3e635; } 
+    .syn-comment { color: var(--text-sub); font-style: italic; }
+    .syn-call { color: #60a5fa; } 
+    .syn-type { color: #fbbf24; }
+
+    /* Preview dynamic viewport screen output */
+    .preview-screen-panel {
+      position: absolute;
+      inset: 0;
+      background: #000000;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+    }
+
+    .preview-address-row {
+      height: 34px;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+    }
+
+    .preview-address-glow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-input);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 5px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 3px 10px;
+      flex: 1;
+    }
+
+    .preview-address-live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+    }
+
+    .preview-iframe-view {
+      border: none;
+      flex: 1;
+      width: 100%;
+      background: #000000;
+    }
+
+    /* Analysis detailed report screen */
+    .analysis-screen-panel {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      padding: 32px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 5;
+    }
+
+    .analysis-title-row {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+
+    .analysis-header {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .analysis-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .analysis-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .analysis-card-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .analysis-card-val {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text);
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .analysis-card-sub {
+      font-size: 11.5px;
+      color: #22c55e;
+      margin-top: 4px;
+    }
+
+    .performance-bar-container {
+      background: var(--bg-input);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .performance-bar-fill {
+      background: linear-gradient(90deg, #d946ef, #a855f7);
+      width: 96%;
+      height: 100%;
+    }
+  </style>
 </head>
 <body>
-  <div id="curtain"></div>
 
-  <div class="app-layout">
+  <div class="app-workspace">
 
-    <!-- ── TOPBAR ───────────────────────────────────── -->
-    <header class="topbar">
-      <div class="topbar-left">
-        <a href="/" class="logo">
-          <div class="logo-mark">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="32" height="32" rx="8" fill="var(--text)"/>
-              <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
-              <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
-              <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+    <!-- ── BRANDED NAVBAR ──────────────────────────────────────── -->
+    <header class="brand-topbar">
+      <div class="brand-left">
+        <span class="brand-title" style="display: flex; align-items: center; gap: 8px;">
+          <!-- SVG logo of Huggy -->
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" class="brand-logo">
+            <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
+            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
+            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
+            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
+          </svg>
+          <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
+          <span class="brand-sep">/</span>
+          <span class="project-selector" id="project-combo-trigger">
+            Kernbase.studio 
+            <svg style="color: var(--text-sub); margin-left:2px;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"/>
             </svg>
-          </div>
-          <span class="logo-text">Huggy</span>
-        </a>
-        <div class="topbar-sep"></div>
-        <span id="project-name" contenteditable="true" spellcheck="false">new-project-1</span>
+          </span>
+        </span>
       </div>
 
-      <div class="topbar-center">
-        <div class="action-group">
-          <button class="action-btn" id="btn-undo" title="Undo (Cmd+Z)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
-          </button>
-          <button class="action-btn" id="btn-redo" title="Redo (Cmd+Shift+Z)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>
-          </button>
-        </div>
-        <div class="topbar-sep"></div>
-        <button class="tab-btn" data-view="code">Code</button>
-        <button class="tab-btn active" data-view="split">Split</button>
-        <button class="tab-btn" data-view="preview">Preview</button>
-      </div>
-
-      <div class="topbar-right">
-        <div class="mode-select mode-compact" id="mode-select-wrap">
-          <span class="mode-dot build" id="mode-dot-indicator"></span>
-          <span id="current-mode-label-ui">Build</span>
-          <div class="dropdown mode-dropdown" id="mode-dropdown-ui">
-            <div class="dropdown-header">Select Build Mode</div>
-            <div class="mode-opt active" data-mode="build">
-              <span class="dot build"></span>
-              <div class="opt-meta">
-                <span class="opt-name">Build</span>
-                <span class="opt-desc">Direct implementation</span>
-              </div>
-            </div>
-            <div class="mode-opt" data-mode="plan">
-              <span class="dot plan"></span>
-              <div class="opt-meta">
-                <span class="opt-name">Plan</span>
-                <span class="opt-desc">Planning & Reasoning</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="topbar-sep"></div>
-        <div class="model-select" id="model-select-btn">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; color: var(--accent);">
-            <path d="M12 3l1.91 5.81L20 9.8l-4.5 3.5 1.7 6.1-5.2-3.8-5.2 3.8 1.7-6.1L4 9.8l6.09-1.02L12 3z"></path>
+      <div class="brand-right">
+        <button class="btn-integration">
+          <svg style="color: var(--text-sub);" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
-          <span id="current-model-label">Sonnet 4.6</span>
-          <div class="dropdown" id="model-dropdown">
-            <div class="dropdown-header">Choose AI Engine</div>
-            <div class="model-option" data-name="Auto" data-id="auto">
-              <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Auto</span>
-                <span class="opt-desc">Best for the task</span>
-              </div>
-            </div>
-            <div class="dropdown-group-title">Anthropic</div>
-            <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
-              <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Sonnet 4.6</span>
-                <span class="opt-desc">Intelligence + Speed</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7">
-              <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Opus 4.7</span>
-                <span class="opt-desc">Deep Reasoning</span>
-              </div>
-            </div>
-            <div class="dropdown-group-title">OpenAI</div>
-            <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro">
-              <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">GPT-5.5 Pro</span>
-                <span class="opt-desc">State of the Art</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5">
-              <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">GPT-5.5</span>
-                <span class="opt-desc">Power & Performance</span>
-              </div>
-            </div>
-            <div class="dropdown-group-title">Google</div>
-            <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro">
-              <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Gemini 3 Pro</span>
-                <span class="opt-desc">Multimodal Power</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash">
-              <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Gemini 3 Flash</span>
-                <span class="opt-desc">Instant & Efficient</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash">
-              <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Gemini 3.5 Flash</span>
-                <span class="opt-desc">Advanced Instant & Efficient</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini">
-              <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">GPT-5 Mini</span>
-                <span class="opt-desc">Fast & Smart</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano">
-              <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">GPT-5 Nano</span>
-                <span class="opt-desc">Ultra-lightweight</span>
-              </div>
-            </div>
-            <div class="dropdown-group-title">Specialized / Coders</div>
-            <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder">
-              <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">DeepSeek Coder</span>
-                <span class="opt-desc">Code Expert</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder">
-              <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Qwen Coder</span>
-                <span class="opt-desc">Alibaba Labs</span>
-              </div>
-            </div>
-            <div class="model-option" data-name="Codestral" data-id="mistralai/codestral">
-              <div class="model-dot" style="background: #EC4899; box-shadow: 0 0 8px #EC4899;"></div>
-              <div class="opt-meta">
-                <span class="opt-name">Codestral</span>
-                <span class="opt-desc">Mistral AI Logic</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button class="btn-theme-builder" id="btn-theme-builder" title="Toggle theme">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="4"/>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke-linecap="round"/>
-          </svg>
+          Add integration
         </button>
-        <button class="btn-upgrade" id="btn-upgrade">Upgrade</button>
-        <button class="btn-deploy">Deploy</button>
+        <button class="btn-upgrade">Upgrade plan</button>
+        <button class="btn-publish">Publish</button>
+        <div class="avatar-circle"></div>
       </div>
     </header>
 
-    <!-- ── MAIN PANEL ────────────────────────────────── -->
-    <main class="main-panel" id="main-panel">
-      <div class="sub-tabs">
-        <button class="collapse-btn" id="btn-collapse-chat" title="Toggle Chat/Editor">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-        </button>
-        <button class="sub-tab active" data-sub="chat" data-sub-short="C">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-          <span>Chat</span>
-        </button>
-        <button class="sub-tab" data-sub="code" data-sub-short="E">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-          <span>Code</span>
-        </button>
-        <button class="sub-tab" data-sub="files" data-sub-short="F">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-          <span>Files</span>
-        </button>
-      </div>
+    <!-- ── MAIN BODY ────────────────────────────────────────────── -->
+    <main class="workspace-body">
 
-      <!-- CHAT -->
-      <div class="tab-content" id="tab-chat">
-        <div class="chat-container" id="chat-container">
-          <!-- Initial greeting -->
-          <div class="msg-ai">
-            <div class="msg-ai-bubble">Hello! I'm here to help you build your application. What would you like to create today?</div>
+      <!-- LEFT PLAN SIDEBAR (CHAT QUEUE) -->
+      <aside class="sidebar-pane">
+
+
+        <div class="pane-tabs">
+          <button class="pane-tab-btn active" id="btn-sidebar-chat">💬 Chat</button>
+          <button class="pane-tab-btn" id="btn-sidebar-design">📐 Design</button>
+        </div>
+
+        <!-- Chat feed -->
+        <div class="sidebar-scroll-area" id="sidebar-scroll-area">
+          <div class="message-card">
+            
+            <div class="msg-header-line">
+              <span class="msg-sender-identity" style="display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 32 32" fill="none">
+                  <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
+                  <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
+                  <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
+                  <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
+                </svg>
+                <span style="font-weight: 500;">Huggy AI</span>
+              </span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+                <span class="pane-dots-btn">...</span>
+              </div>
+            </div>
+
+            <div class="msg-sub-text">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Thoughts 6 sec ago
+            </div>
+
+            <p class="msg-body-paragraph">
+              I'll implement the plan by fixing button colors and creating separate page components. Let me start by checking the current color configuration and routing structure.
+            </p>
+
+            <!-- Tools details collapse row -->
+            <div class="tools-pill-group">
+              <span class="tools-pill-left">
+                <span class="tools-pill-left-spark">✦</span> 3 tools used
+              </span>
+              <button class="btn-show-all-tools">Show all</button>
+            </div>
+
+            <!-- Tools execution log list (collapsible) -->
+            <div class="tools-detail-container" style="display: none; flex-direction: column; gap: 8px; border-left: 1.5px solid rgba(255, 255, 255, 0.15); padding-left: 12px; margin-left: 6px; margin-top: 4px; margin-bottom: 8px; transition: all 200ms;">
+              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color: var(--accent); font-weight: 500;">grep -rI "chat-input"</span>
+                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
+                </div>
+                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Found 12 occurrences in 2 files</span>
+              </div>
+              
+              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color: var(--accent); font-weight: 500;">edit_file /index.html</span>
+                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
+                </div>
+                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Injected model search & selection inputs</span>
+              </div>
+              
+              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="color: var(--accent); font-weight: 500;">compile_applet</span>
+                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
+                </div>
+                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Build successfully completed</span>
+              </div>
+            </div>
+
+            <p class="msg-body-paragraph">
+              Now I can see the structure. The color configuration looks correct with HSL values. The issue might be with specific button styling. Let me check the button component colors and create the separate page components. I'll also examine the console logs for any color-related errors
+            </p>
+
+            <!-- File system changes stack -->
+            <div class="edited-files-container">
+              
+              <div class="edited-file-item">
+                <span class="edited-file-left">
+                  <span class="edited-file-icon">📄</span>
+                  <span class="edited-file-label">Edited</span>
+                  <span class="edited-file-path-highlight">src/pages/proposals.tsx</span>
+                </span>
+                <button class="btn-toggle-edit-view">Hide</button>
+              </div>
+
+              <div class="edited-file-item">
+                <span class="edited-file-left">
+                  <span class="edited-file-icon">📄</span>
+                  <span class="edited-file-label">Edited</span>
+                  <span class="edited-file-path-highlight">src/pages/templates.tsx</span>
+                </span>
+              </div>
+
+              <div class="edited-file-item">
+                <span class="edited-file-left">
+                  <span class="edited-file-icon">📄</span>
+                  <span class="edited-file-label">Edited</span>
+                  <span class="edited-file-path-highlight">src/pages/dashboard.tsx</span>
+                </span>
+              </div>
+
+              <div class="edited-file-item">
+                <span class="edited-file-left">
+                  <span class="edited-file-icon">📄</span>
+                  <span class="edited-file-label">Edited</span>
+                  <span class="edited-file-path-highlight">src/pages/dashboard.tsx</span>
+                </span>
+              </div>
+
+            </div>
+
+            <p class="msg-body-paragraph">
+              Fixed button colors and created distinct pages! Each page now has unique content:
+            </p>
+
+            <!-- Bullet indicators -->
+            <div class="highlights-list">
+              <div class="highlight-card-row">
+                <span class="highlight-bold-title">Dashboard</span>
+                <span style="color: var(--text-muted);">Overview stats, recent proposals, quick actions</span>
+              </div>
+              <div class="highlight-card-row">
+                <span class="highlight-bold-title">Proposals</span>
+                <span style="color: var(--text-muted);">Full proposal management with search/filters</span>
+              </div>
+              <div class="highlight-card-row">
+                <span class="highlight-bold-title">Templates</span>
+                <span style="color: var(--text-muted);">Template categories, popular templates, template manager</span>
+              </div>
+            </div>
+
+            <p class="msg-body-paragraph">
+              Removed custom button styling that could cause color issues and applied consistent size="sm" across all buttons using
+            </p>
+
           </div>
         </div>
 
-        <div class="chat-input-area">
-          <div class="input-wrapper">
-            <textarea id="ai-textarea" placeholder="Ask a question or request a change..."></textarea>
-            <div class="input-actions">
-              <div class="actions-left">
-                <button class="icon-btn" data-tooltip="Microphone (Voice)">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                  </svg>
-                </button>
-                <div class="topbar-sep" style="height: 14px; margin: 0 4px;"></div>
-                <button class="icon-btn" data-tooltip="Upload files">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
-                </button>
-                <button class="icon-btn" data-tooltip="Search snippets">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <circle cx="12" cy="12" r="7"></circle>
-                    <line x1="12" y1="2" x2="12" y2="5"></line>
-                    <line x1="12" y1="19" x2="12" y2="22"></line>
-                    <line x1="2" y1="12" x2="5" y2="12"></line>
-                    <line x1="19" y1="12" x2="22" y2="12"></line>
+        <!-- Chat submit block at footer -->
+        <div class="chat-input-row">
+          <div class="input-wrapper" style="width: 100%; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-input); box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px rgba(0,0,0,0.3); transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1); position: relative; overflow: visible; text-align: left;">
+            <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
+            
+            <div class="input-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 12px; background: transparent;">
+                <div class="actions-left" style="display: flex; gap: 6px;">
+                    <button class="icon-btn" title="Upload files" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <button class="icon-btn" title="Voice input" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="actions-right" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="model-select" id="model-select-btn" style="display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 10px; color: var(--text-sub); user-select: none; position: relative; transition: all 150ms; cursor: pointer; background: var(--bg-input);">
+                        <span class="model-label-prefix" style="font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 8px; opacity: 0.6; padding-right: 4px; border-right: 1px solid var(--border);">Model</span>
+                        <span id="current-model-label" style="font-family: 'JetBrains Mono'; font-weight: 500;">Sonnet 4.6</span>
+                        <svg id="chevron-icon" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 200ms;">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                        
+                        <div class="dropdown" id="model-dropdown" style="position: absolute; bottom: calc(100% + 10px); right: -4px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 6px; min-width: 220px; max-height: 280px; overflow-y: auto; z-index: 1000; box-shadow: 0 12px 32px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(8px) scale(0.97); transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1); pointer-events: none; backdrop-filter: blur(8px);">
+                            <div class="dropdown-header" style="font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 6px 8px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px;">Choose AI Engine</div>
+                            <div class="dropdown-search-wrapper" style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--bg-input);">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-sub);">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" class="dropdown-search-input" placeholder="Search models..." style="background: transparent; border: none; outline: none; font-size: 11px; color: var(--text); width: 100%;">
+                            </div>
+                            <div class="model-option" data-name="Auto" data-id="auto" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Auto</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Best for the task</span>
+                                </div>
+                            </div>
+                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Anthropic</div>
+                            <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Sonnet 4.6</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Intelligence + Speed</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Opus 4.7</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Deep Reasoning</span>
+                                </div>
+                            </div>
+                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">OpenAI</div>
+                            <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5.5 Pro</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">State of the Art</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5.5</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Power & Performance</span>
+                                </div>
+                            </div>
+                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Google</div>
+                            <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3 Pro</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Multimodal Power</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3 Flash</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Instant & Efficient</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3.5 Flash</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Advanced Instant & Efficient</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5 Mini</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Fast & Smart</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5 Nano</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Ultra-lightweight</span>
+                                </div>
+                            </div>
+                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Specialized / Coders</div>
+                            <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">DeepSeek Coder</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Code Expert</span>
+                                </div>
+                            </div>
+                            <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
+                                <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
+                                <div class="opt-meta">
+                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Qwen Coder</span>
+                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Alibaba Labs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="submit-wrapper" style="position: relative; display: flex; align-items: center; border-radius: 6px; overflow: visible; padding: 1px;">
+                        <button class="submit-btn" id="chat-submit-btn" type="button" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-sub); cursor: not-allowed; pointer-events: none; transition: all 150ms;">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="19" x2="12" y2="5"></line>
+                                <polyline points="5 12 12 5 19 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- RIGHT PANEL FOR SOURCE CODE & PLATFORM PREVIEWS -->
+      <aside class="editor-pane">
+        
+        <!-- Control tab row -->
+        <header class="sub-navbar">
+          <div class="sub-nav-left">
+            <span class="collapse-sidebar-arrow" title="Collapse left sidebar">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="11 17 6 12 11 7"/>
+                <polyline points="18 17 13 12 18 7"/>
+              </svg>
+            </span>
+            
+            <div class="sub-nav-tabs">
+              <button class="sub-nav-tab" id="tab-btn-preview">
+                🌐 Preview app
+              </button>
+              <button class="sub-nav-tab active" id="tab-btn-code">
+                &lt;&gt; Code
+              </button>
+              <button class="sub-nav-tab" id="tab-btn-analysis">
+                📊 Analysis
+              </button>
+            </div>
+          </div>
+
+          <div class="sub-nav-right">
+            <span class="sub-nav-action-btn" title="Download Codebase" id="action-download-zip">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <polyline points="19 12 12 19 5 12"/>
+              </svg>
+            </span>
+          </div>
+        </header>
+
+        <div class="viewport-content-holder">
+          
+          <!-- SCREEN LAYOUT FOR CODE VIEW -->
+          <div class="code-screen-layout" id="screen-layout-code" style="display: grid;">
+            
+            <!-- Explorer sidebar navigation -->
+            <div class="explorer-column">
+              <div class="explorer-tabs" style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 12px;">
+                <div style="display: flex; gap: 12px;">
+                  <span class="explorer-tab-link active" id="explorer-files-tab">Files</span>
+                  <span class="explorer-tab-link" id="explorer-search-tab">Search</span>
+                </div>
+                <button id="btn-collapse-explorer" title="Collapse File Hub" style="background: none; border: none; padding: 4px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: opacity 150ms, color 150ms;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
                   </svg>
                 </button>
               </div>
-              <div class="submit-wrapper">
-                <button class="submit-btn" id="btn-send-builder" title="Send (Enter)">
-                    <span>Send</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="12" y1="19" x2="12" y2="5"></line>
-                      <polyline points="5 12 12 5 19 12"></polyline>
+
+              <div class="explorer-tree-scroll">
+                
+                <div class="tree-file" data-file="eslint.config.js">
+                  <span class="tree-file-icon">📄</span>
+                  <span>eslint.config.js</span>
+                </div>
+                <div class="tree-file selected" data-file="index.html">
+                  <span class="tree-file-icon" style="color:#d946ef;">📄</span>
+                  <span>index.html</span>
+                </div>
+                <div class="tree-file" data-file="builder.html">
+                  <span class="tree-file-icon">📄</span>
+                  <span>builder.html</span>
+                </div>
+                <div class="tree-file" data-file="package.json">
+                  <span class="tree-file-icon">📄</span>
+                  <span>package.json</span>
+                </div>
+                <div class="tree-file" data-file="tailwind.config.ts">
+                  <span class="tree-file-icon">📄</span>
+                  <span>tailwind.config.ts</span>
+                </div>
+                <div class="tree-file" data-file="tsconfig.json">
+                  <span class="tree-file-icon">📄</span>
+                  <span>tsconfig.json</span>
+                </div>
+                <div class="tree-file" data-file="vite.config.ts">
+                  <span class="tree-file-icon">📄</span>
+                  <span>vite.config.ts</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Code Editor Output Panel -->
+            <div class="editor-column">
+              <div class="editor-tabs-bar" style="display: flex; align-items: center; justify-content: space-between; padding-right: 8px;">
+                <div style="display: flex; align-items: center;">
+                  <button id="btn-toggle-explorer-global" title="Toggle File Explorer" style="background: none; border: none; padding: 6px 10px; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: color 150ms; border-right: 1px solid var(--border); margin-right: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <line x1="9" y1="3" x2="9" y2="21"></line>
                     </svg>
                   </button>
+                  <div class="editor-tab-item" style="border-left: none;">
+                    <span style="color: #60a5fa;">📄</span>
+                    <span id="open-file-tab-label">index.html</span>
+                  </div>
                 </div>
+              </div>
+
+              <div class="editor-main-scroll" id="editor-source-output">
+                <!-- Highlighted React Code rendered precisely as in screenshot -->
+                <pre class="code-editor-pre" id="code-content-view-panel">
+<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-keyword">import</span> React <span class="syn-keyword">from</span> <span class="syn-string">"react"</span></span></div><div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">import</span> { Workspace } <span class="syn-keyword">from</span> <span class="syn-string">"./components/Workspace"</span></span></div><div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content"></span></div><div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content"><span class="syn-keyword">export default function</span> <span class="syn-call">App</span>() {</span></div><div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">return</span> (</span></div><div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">    &lt;<span class="syn-type">div</span> className=<span class="syn-string">"workspace-container theme-dark"</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">      &lt;<span class="syn-type">Workspace</span> viewport=<span class="syn-string">"active"</span> /&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    &lt;/<span class="syn-type">div</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">9</span><span class="editor-line-content">  )</span></div><div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">}</span></div></pre>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- CODE -->
-      <div class="tab-content hidden" id="tab-code">
-        <div class="code-editor">
-          <div class="file-tabs-bar" id="file-tabs-bar">
-            <!-- Injected by JS -->
+          <!-- SCREEN LAYOUT FOR LIVE SANDBOX PREVIEW (Toggled dynamically) -->
+          <div class="preview-screen-panel" id="screen-layout-preview" style="display: none;">
+            <div class="preview-address-row">
+              <div class="preview-address-glow">
+                <span class="preview-address-live-dot"></span>
+                <span>localhost:3000 /</span>
+              </div>
+            </div>
+            <!-- Iframed target proposals dashboard page or fallback mockup -->
+            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #09090b; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px solid rgba(255,255,255,0.03); padding: 24px; border-radius: 12px; background: #0c0c0e; } h3 { color: #f4f4f5; margin: 0 0 8px 0; font-weight: 500; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #52525b; }</style></head><body><div class='card'><h3>Workspace Sandbox Ready</h3><p>Server active on port 3000. Open a source file on the editor to compile and display the rendering live.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
           </div>
-          <div class="code-area" id="code-area">
-            <!-- injected by JS -->
-          </div>
-          <div class="code-statusbar">
-            <span class="code-stat">Ln 24</span>
-            <span class="code-stat">Col 38</span>
-            <span class="code-stat">TypeScript React</span>
-            <span class="code-stat">UTF-8</span>
-            <button class="btn-copy" id="btn-copy">Copy</button>
-          </div>
-        </div>
-      </div>
 
-      <!-- FILES -->
-      <div class="tab-content hidden" id="tab-files">
-        <div class="file-upload-section">
-          <div class="upload-dropzone" id="upload-dropzone">
-            <input type="file" id="file-input" multiple class="hidden-input">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-            </svg>
-            <div class="upload-text">
-              <span class="primary">Click to upload</span>
-              <span class="secondary">or drag and drop files</span>
+          <!-- SCREEN LAYOUT FOR CODE ANALYSIS -->
+          <div class="analysis-screen-panel" id="screen-layout-analysis" style="display: none;">
+            <div class="analysis-title-row">
+              <h1 class="analysis-header">Performance & Coverage Overview</h1>
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,0.04); border-radius: 8px; padding: 40px; text-align: center; background: rgba(0,0,0,0.1); width: 100%;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2" style="margin-bottom: 12px;">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+              <h3 style="margin: 0; font-size: 14px; font-weight: 500; color: #f4f4f5;">No Analysis History</h3>
+              <p style="margin: 6px auto 0 auto; font-size: 12px; color: #52525b; max-width: 280px; line-height: 1.6;">Run a production build or trigger testing metrics to populate analysis diagrams and performance telemetry.</p>
             </div>
           </div>
-          <div class="upload-actions hidden" id="upload-actions">
-            <div class="selected-files" id="selected-files-list"></div>
-            <button class="btn-primary-upload" id="btn-do-upload">Upload Files</button>
-          </div>
+
         </div>
-        <div class="file-tree" id="file-tree">
-          <!-- injected by JS -->
-        </div>
-        <div class="file-preview-area" id="file-preview-area">
-          <div class="preview-empty">Select a file to view a content preview</div>
-          <div class="preview-content hidden" id="preview-content">
-            <div class="preview-header">
-              <span id="preview-filename">index.html</span>
-              <button class="btn-copy-preview" id="btn-copy-preview">Copy</button>
-            </div>
-            <pre id="preview-code"></pre>
-          </div>
-        </div>
-        <div class="file-tree-footer">
-          <span>14 files</span>
-          <span>12.3 kb total</span>
-        </div>
-      </div>
+
+      </aside>
+
     </main>
 
-    <!-- ── DRAG RIGHT ────────────────────────────────── -->
-    <div class="drag-handle handle-right" id="handle-right"></div>
+  </div>
 
-    <!-- ── PREVIEW PANEL ─────────────────────────────── -->
-    <aside class="preview-panel" id="preview-panel">
-      <div class="preview-toolbar">
-        <div class="device-group">
-          <button class="device-btn active" data-device="desktop" title="Desktop">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="2" y="4" width="20" height="14" rx="1.5"/>
-              <path d="M8 22h8M12 18v4" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button class="device-btn" data-device="tablet" title="Tablet">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="5" y="2" width="14" height="20" rx="2"/>
-              <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
-            </svg>
-          </button>
-          <button class="device-btn" data-device="mobile" title="Mobile">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="7" y="2" width="10" height="20" rx="3"/>
-              <circle cx="12" cy="19" r="0.8" fill="currentColor"/>
-            </svg>
-          </button>
-        </div>
+  <script type="module">
+    document.addEventListener("DOMContentLoaded", () => {
+      const openFileTabLabel = document.getElementById("open-file-tab-label");
+      const codeContentView = document.getElementById("code-content-view-panel");
 
-        <div class="preview-address">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round">
-            <rect x="3" y="11" width="18" height="11" rx="2"/>
-            <path d="M7 11V7a5 5 0 0110 0v4"/>
-          </svg>
-          localhost:3000
-        </div>
+      const screenCode = document.getElementById("screen-layout-code");
+      const screenPreview = document.getElementById("screen-layout-preview");
+      const screenAnalysis = document.getElementById("screen-layout-analysis");
 
-        <button class="btn-refresh" title="Refresh">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8"/>
-            <path d="M21 3v5h-5"/>
-          </svg>
-        </button>
-      </div>
+      const tabBtnCode = document.getElementById("tab-btn-code");
+      const tabBtnPreview = document.getElementById("tab-btn-preview");
+      const tabBtnAnalysis = document.getElementById("tab-btn-analysis");
 
-      <div class="preview-frame-wrapper">
-        <div class="preview-frame" id="preview-frame">
-          <div style="height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-sub); font-size:13px; font-style:italic;">
-            Wait for your first generation to see the preview
+      function activateView(activeScreen, activeBtn) {
+        screenCode.style.display = "none";
+        screenPreview.style.display = "none";
+        screenAnalysis.style.display = "none";
+
+        tabBtnCode.classList.remove("active");
+        tabBtnPreview.classList.remove("active");
+        tabBtnAnalysis.classList.remove("active");
+
+        activeScreen.style.display = activeScreen === screenCode ? "grid" : "flex";
+        activeBtn.classList.add("active");
+      }
+
+      tabBtnCode.addEventListener("click", () => activateView(screenCode, tabBtnCode));
+      tabBtnPreview.addEventListener("click", () => activateView(screenPreview, tabBtnPreview));
+      tabBtnAnalysis.addEventListener("click", () => activateView(screenAnalysis, tabBtnAnalysis));
+
+      // Sidebar action buttons
+      const sidebarChatTab = document.getElementById("btn-sidebar-chat");
+      const sidebarDesignTab = document.getElementById("btn-sidebar-design");
+
+      sidebarChatTab.addEventListener("click", () => {
+        sidebarChatTab.classList.add("active");
+        sidebarDesignTab.classList.remove("active");
+      });
+
+      sidebarDesignTab.addEventListener("click", () => {
+        sidebarDesignTab.classList.add("active");
+        sidebarChatTab.classList.remove("active");
+      });
+
+      // Interactive file explorer clicks
+      const treeFiles = document.querySelectorAll(".tree-file");
+      treeFiles.forEach(file => {
+        file.addEventListener("click", () => {
+          treeFiles.forEach(f => f.classList.remove("selected"));
+          file.classList.add("selected");
+
+          const fileName = file.getAttribute("data-file");
+          openFileTabLabel.innerText = fileName;
+
+          if (fileName === "index.html") {
+            codeContentView.innerHTML = `
+<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-keyword">import</span> React <span class="syn-keyword">from</span> <span class="syn-string">"react"</span></span></div><div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">import</span> { Workspace } <span class="syn-keyword">from</span> <span class="syn-string">"./components/Workspace"</span></span></div><div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content"></span></div><div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content"><span class="syn-keyword">export default function</span> <span class="syn-call">App</span>() {</span></div><div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">return</span> (</span></div><div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">    &lt;<span class="syn-type">div</span> className=<span class="syn-string">"workspace-container theme-dark"</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">      &lt;<span class="syn-type">Workspace</span> viewport=<span class="syn-string">"active"</span> /&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    &lt;/<span class="syn-type">div</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">  )</span></div><div class="editor-line-row"><span class="editor-line-number">11</span><span class="editor-line-content">}</span></div>`;
+          } else if (fileName === "package.json") {
+            codeContentView.innerHTML = `
+<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content">{</span></div>
+<div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content">  <span class="syn-keyword">"name"</span>: <span class="syn-string">"santora-saas"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content">  <span class="syn-keyword">"private"</span>: <span class="syn-keyword">true</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content">  <span class="syn-keyword">"version"</span>: <span class="syn-string">"1.0.0"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">"type"</span>: <span class="syn-string">"module"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">  <span class="syn-keyword">"scripts"</span>: {</span></div>
+<div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">    <span class="syn-keyword">"dev"</span>: <span class="syn-string">"vite --port=3000"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    <span class="syn-keyword">"build"</span>: <span class="syn-string">"vite build"</span></span></div>
+<div class="editor-line-row"><span class="editor-line-number">9</span><span class="editor-line-content">  },</span></div>
+<div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">  <span class="syn-keyword">"dependencies"</span>: {</span></div>
+<div class="editor-line-row"><span class="editor-line-number">11</span><span class="editor-line-content">    <span class="syn-keyword">"react"</span>: <span class="syn-string">"^18.3.0"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">12</span><span class="editor-line-content">    <span class="syn-keyword">"react-dom"</span>: <span class="syn-string">"^18.3.0"</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">13</span><span class="editor-line-content">    <span class="syn-keyword">"recharts"</span>: <span class="syn-string">"^2.12"</span></span></div>
+<div class="editor-line-row"><span class="editor-line-number">14</span><span class="editor-line-content">  }</span></div>
+<div class="editor-line-row"><span class="editor-line-number">15</span><span class="editor-line-content">}</span></div>`;
+          } else {
+            // General fallback source file
+            codeContentView.innerHTML = `
+<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-comment">// Source file representation of ${fileName}</span></span></div>
+<div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">export const</span> config = {</span></div>
+<div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content">  active: <span class="syn-keyword">true</span>,</span></div>
+<div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content">  alias: <span class="syn-string">"${fileName.split('.')[0]}"</span></span></div>
+<div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">};</span></div>`;
+          }
+        });
+      });
+
+      // Submit new chat query interactions
+      const chatInput = document.getElementById("chat-textarea-box");
+      const chatSubmit = document.getElementById("chat-submit-btn");
+      const chatScroll = document.getElementById("sidebar-scroll-area");
+
+      // Model Dropdown Logic
+      const modelSelectBtn = document.getElementById('model-select-btn');
+      const modelDropdown = document.getElementById('model-dropdown');
+      const modelLabel = document.getElementById('current-model-label');
+      const chevronIcon = document.getElementById('chevron-icon');
+
+      if (modelSelectBtn && modelDropdown) {
+        modelSelectBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = modelDropdown.classList.contains('open');
+          if (isOpen) {
+            modelDropdown.classList.remove('open');
+            if (chevronIcon) chevronIcon.style.transform = 'rotate(0deg)';
+          } else {
+            modelDropdown.classList.add('open');
+            if (chevronIcon) chevronIcon.style.transform = 'rotate(180deg)';
+          }
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!modelDropdown.contains(e.target) && !modelSelectBtn.contains(e.target)) {
+            modelDropdown.classList.remove('open');
+            if (chevronIcon) chevronIcon.style.transform = 'rotate(0deg)';
+          }
+        });
+
+        const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+        let foundModel = false;
+        
+        const options = modelDropdown.querySelectorAll('.model-option');
+        options.forEach(opt => {
+          if (opt.dataset.id === savedModel) {
+            options.forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            if (modelLabel) modelLabel.textContent = opt.dataset.name || 'Auto';
+            foundModel = true;
+          }
+        });
+
+        options.forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            options.forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            const modelId = opt.dataset.id || 'auto';
+            const modelName = opt.dataset.name || 'Auto';
+            localStorage.setItem('huggy-selected-model', modelId);
+            if (modelLabel) modelLabel.textContent = modelName;
+            modelDropdown.classList.remove('open');
+            if (chevronIcon) chevronIcon.style.transform = 'rotate(0deg)';
+          });
+        });
+
+        const dropdownSearch = modelDropdown.querySelector('.dropdown-search-input');
+        if (dropdownSearch) {
+          dropdownSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            options.forEach(opt => {
+              const name = opt.dataset.name?.toLowerCase() || '';
+              const desc = opt.querySelector('.opt-meta span:last-child')?.textContent?.toLowerCase() || '';
+              if (name.includes(query) || desc.includes(query)) {
+                opt.style.display = 'flex';
+              } else {
+                opt.style.display = 'none';
+              }
+            });
+          });
+          dropdownSearch.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+          });
+          dropdownSearch.addEventListener('click', (e) => {
+            e.stopPropagation();
+          });
+        }
+      }
+
+      // Generic Collapsible Logic for Message Cards & Tools Pills
+      if (chatScroll) {
+        chatScroll.addEventListener("click", (e) => {
+          // Toggle Message Card collapse
+          const toggleMsgBtn = e.target.closest(".btn-toggle-msg-card");
+          if (toggleMsgBtn) {
+            e.stopPropagation();
+            const card = toggleMsgBtn.closest(".message-card");
+            if (card) {
+              card.classList.toggle("collapsed");
+              toggleMsgBtn.setAttribute("title", card.classList.contains("collapsed") ? "Expand message" : "Collapse message");
+            }
+            return;
+          }
+
+          // Toggle Tools Pill Show/Hide
+          const toggleToolsBtn = e.target.closest(".btn-show-all-tools");
+          if (toggleToolsBtn) {
+            e.stopPropagation();
+            const card = toggleToolsBtn.closest(".message-card");
+            if (card) {
+              const toolsContainer = card.querySelector(".tools-detail-container");
+              if (toolsContainer) {
+                const isHidden = toolsContainer.style.display === "none" || !toolsContainer.style.display;
+                toolsContainer.style.display = isHidden ? "flex" : "none";
+                toggleToolsBtn.textContent = isHidden ? "Hide tools" : "Show all";
+              }
+            }
+            return;
+          }
+        });
+      }
+
+      // Auto-resize chat textarea and active state on send button
+      if (chatInput && chatSubmit) {
+        chatInput.addEventListener('input', () => {
+          chatInput.style.height = 'auto';
+          chatInput.style.height = Math.min(chatInput.scrollHeight, 150) + 'px';
+          chatSubmit.classList.toggle('active', chatInput.value.trim().length > 0);
+        });
+      }
+
+      chatSubmit.addEventListener("click", () => {
+        const value = chatInput.value.trim();
+        if (!value) return;
+
+        const hr = document.createElement("div");
+        hr.className = "message-card";
+        hr.innerHTML = `
+          <div class="msg-header-line">
+            <span class="msg-sender-identity" style="color:#d946ef;">👤 User</span>
+            <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
           </div>
-        </div>
-      </div>
+          <p class="msg-body-paragraph">${value}</p>
+        `;
+        chatScroll.appendChild(hr);
+        chatInput.value = "";
+        
+        // Reset height and submission button state
+        chatInput.style.height = '48px';
+        chatSubmit.classList.remove('active');
+        
+        chatScroll.scrollTop = chatScroll.scrollHeight;
 
-      <div class="preview-footer">
-        <button class="console-toggle" id="console-toggle">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <polyline points="18 15 12 9 6 15"/>
-          </svg>
-          Console · 0 errors · 2 warnings
-        </button>
-        <span class="preview-stats">FCP 0.8s · 420 × 640</span>
-      </div>
-    </aside>
-  </div>
+        // Mock reply
+        setTimeout(() => {
+          const ai = document.createElement("div");
+          ai.className = "message-card";
+          ai.innerHTML = `
+            <div class="msg-header-line">
+              <span class="msg-sender-identity" style="display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 32 32" fill="none">
+                  <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
+                  <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
+                  <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
+                  <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
+                </svg>
+                <span style="font-weight: 500;">Huggy AI</span>
+              </span>
+              <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+            <p class="msg-body-paragraph">
+              Analyzing workspace. I will make sure the modules are correctly referenced and reload the browser preview now.
+            </p>
+          `;
+          chatScroll.appendChild(ai);
+          chatScroll.scrollTop = chatScroll.scrollHeight;
+        }, 1200);
+      });
 
-  <!-- ── CONSOLE ──────────────────────────────────────── -->
-  <div class="console-panel" id="console-panel">
-    <div class="console-header">
-      <button class="console-sub-tab active">Output</button>
-      <button class="console-sub-tab">Errors</button>
-      <button class="console-sub-tab">Warnings</button>
-      <button class="console-sub-tab btn-console-close" id="console-close">✕</button>
-    </div>
-    <div class="console-log-area" id="console-log-area">
-      <!-- Injected by generations -->
-    </div>
-  </div>
+      chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          chatSubmit.click();
+        }
+      });
 
-  <script type="module" src="/src/builder.ts"></script>
+      // Collapse / Expand Left Sidebar Pane logic
+      const arrowCollapseSidebar = document.querySelector(".collapse-sidebar-arrow");
+      const workspaceBody = document.querySelector(".workspace-body");
+
+      function toggleSidebarCollapse() {
+        workspaceBody.classList.toggle("sidebar-collapsed");
+      }
+
+      if (arrowCollapseSidebar) {
+        arrowCollapseSidebar.addEventListener("click", toggleSidebarCollapse);
+      }
+
+      // Collapse / Expand File Explorer column logic
+      const btnCollapseExplorer = document.getElementById("btn-collapse-explorer");
+      const btnToggleExplorerGlobal = document.getElementById("btn-toggle-explorer-global");
+      const screenLayoutCode = document.getElementById("screen-layout-code");
+
+      function toggleExplorerCollapse() {
+        if (screenLayoutCode) {
+          screenLayoutCode.classList.toggle("explorer-collapsed");
+        }
+      }
+
+      if (btnCollapseExplorer) {
+        btnCollapseExplorer.addEventListener("click", toggleExplorerCollapse);
+      }
+      if (btnToggleExplorerGlobal) {
+        btnToggleExplorerGlobal.addEventListener("click", toggleExplorerCollapse);
+      }
+
+      // Save simulation triggered by Ctrl+S / Cmd+S
+      function showSaveToast() {
+        // Remove existing toast if any
+        const existing = document.getElementById("save-success-toast");
+        if (existing) {
+          existing.remove();
+        }
+
+        const toast = document.createElement("div");
+        toast.id = "save-success-toast";
+        toast.style.cssText = `
+          position: fixed;
+          bottom: 24px;
+          right: 24px;
+          background: #09090b;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-left: 3px solid #10b981;
+          border-radius: 8px;
+          padding: 12px 16px;
+          box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          color: #f4f4f5;
+          font-family: inherit;
+          font-size: 13px;
+          z-index: 99999;
+          transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+          transform: translateY(20px);
+          opacity: 0;
+        `;
+
+        toast.innerHTML = `
+          <div style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; flex-shrink: 0;"></div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-weight: 500; color: #ffffff;">Project Saved</span>
+            <span style="font-size: 11px; color: #a1a1aa;">Ctrl+S simulation saved successfully</span>
+          </div>
+          <button style="background: none; border: none; padding: 4px; color: #52525b; cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
+        `;
+
+        document.body.appendChild(toast);
+
+        // Trigger entering animation
+        requestAnimationFrame(() => {
+          toast.style.transform = "translateY(0)";
+          toast.style.opacity = "1";
+        });
+
+        // Fade out and remove after 3s
+        setTimeout(() => {
+          toast.style.transform = "translateY(20px)";
+          toast.style.opacity = "0";
+          setTimeout(() => {
+            toast.remove();
+          }, 300);
+        }, 3000);
+      }
+
+      document.addEventListener("keydown", function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+          e.preventDefault();
+          showSaveToast();
+        }
+      });
+    });
+  </script>
 </body>
 </html>

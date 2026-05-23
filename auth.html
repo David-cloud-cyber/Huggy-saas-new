@@ -500,6 +500,13 @@
             }, 600);
         }
 
+        document.querySelectorAll('.btn-social').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleAuth();
+            });
+        });
+
         // Theme management
         let curtainBusy = false;
         function updateIcons(theme) {
@@ -544,14 +551,23 @@
         updateIcons(html.getAttribute('data-theme'));
 
         // Page load
-        window.addEventListener('load', () => {
-            curtain.classList.add('rising');
-        });
+        const liftCurtain = () => {
+            if (curtain) curtain.classList.add('rising');
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            liftCurtain();
+        } else {
+            window.addEventListener('load', liftCurtain);
+        }
 
         // Intercept internal links
         document.addEventListener('click', (e) => {
             const link = e.target.closest('a');
             if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+                const href = link.getAttribute('href');
+                if (href && (href.startsWith('#') || href === '')) {
+                    return;
+                }
                 if (link.id === 'link-signup' || link.id === 'link-login') return; // Handled by setMode
                 e.preventDefault();
                 navigate(link.href);

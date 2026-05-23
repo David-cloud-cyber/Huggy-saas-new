@@ -84,139 +84,18 @@
         .pricing-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
+            gap: 28px;
             max-width: 1400px;
             margin: 0 auto 120px;
             padding: 0 24px;
         }
 
         .pricing-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
-            position: relative;
-            overflow: hidden;
             animation: fadeUp 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
         .pricing-card:nth-child(2) { animation-delay: 0.1s; }
         .pricing-card:nth-child(3) { animation-delay: 0.2s; }
-
-        .pricing-card:hover {
-            border-color: var(--border-focus);
-            transform: translateY(-8px);
-            box-shadow: 0 24px 60px rgba(0,0,0,0.4);
-        }
-
-        .pricing-card.featured {
-            border-color: var(--accent);
-            background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
-        }
-
-        .featured-label {
-            position: absolute;
-            top: 24px;
-            right: 24px;
-            background: var(--warning-dim);
-            color: var(--warning);
-            padding: 4px 12px;
-            border-radius: 999px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            font-family: "JetBrains Mono";
-        }
-
-        .card-name {
-            font-family: "JetBrains Mono";
-            text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.1em;
-            color: var(--text-muted);
-            margin-bottom: 40px;
-        }
-
-        .card-price {
-            font-family: "Instrument Serif";
-            font-size: 56px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-        }
-
-        .card-price span {
-            font-family: "Instrument Sans";
-            font-size: 16px;
-            color: var(--text-sub);
-            font-style: italic;
-        }
-
-        .card-desc {
-            font-size: 14px;
-            color: var(--text-muted);
-            line-height: 1.6;
-            margin-bottom: 40px;
-            font-weight: 300;
-        }
-
-        .feature-list {
-            list-style: none;
-            margin-bottom: 48px;
-            flex: 1;
-        }
-
-        .feature-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 0;
-            font-size: 14px;
-            color: var(--text);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .feature-item:last-child { border-bottom: none; }
-
-        .feature-item svg {
-            color: var(--accent);
-            opacity: 0.8;
-        }
-
-        .card-cta {
-            width: 100%;
-            padding: 16px;
-            border-radius: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 200ms;
-            margin-top: auto;
-        }
-
-        .btn-outline {
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-
-        .btn-outline:hover {
-            background: var(--accent-dim);
-            border-color: var(--border-focus);
-        }
-
-        .btn-solid {
-            background: var(--accent);
-            color: var(--bg);
-        }
-
-        .btn-solid:hover {
-            opacity: 0.9;
-            transform: scale(0.98);
-        }
 
         /* FAQ SECTION */
         .faq-section {
@@ -301,6 +180,11 @@
             </div>
             <span class="logo-text">Huggy</span>
         </a>
+        <div class="nav-links">
+            <a href="/pricing.html" class="nav-link-item">Pricing</a>
+            <a href="/dashboard.html" class="nav-link-item">Dashboard</a>
+            <a href="/builder.html" class="nav-link-item">Builder</a>
+        </div>
         <div class="nav-actions">
             <button class="theme-toggle" id="theme-btn">
                 <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -537,6 +421,235 @@
         </div>
     </section>
 
+    <!-- Interactive Prompt CTA Section -->
+    <section class="cta-prompt-section reveal" style="padding: 100px 20px; border-top: 1px solid var(--border); background: radial-gradient(circle at center, var(--accent-dim) 0%, transparent 60%); text-align: center;">
+        <div class="cta-prompt-container" style="max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 32px;">
+            <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+                <h2 style="font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em;">Ready to bring your ideas to life? <span style="display: inline-block;" class="neon-highlight neon-glow">Build now.</span></h2>
+                <p style="color: var(--text-muted); font-size: 1.1rem; max-width: 580px; text-wrap: balance; line-height: 1.5;">Type any prompt below and let Huggy design, code and launch your application instantly with full-stack speed.</p>
+            </div>
+            <div class="input-wrapper" style="width: 100%; text-align: left;">
+                <textarea placeholder="Describe the app you want to build..."></textarea>
+                <div class="input-actions">
+                    <div class="actions-left">
+                        <button class="icon-btn btn-upload" data-tooltip="Upload files" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <input type="file" style="display: none;" class="file-input" multiple>
+                        <button class="icon-btn btn-search" data-tooltip="Search snippets" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="7"></circle>
+                                <line x1="12" y1="2" x2="12" y2="5"></line>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                                <line x1="2" y1="12" x2="5" y2="12"></line>
+                                <line x1="19" y1="12" x2="22" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="icon-btn btn-voice" data-tooltip="Voice input" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="actions-right">
+                        <div class="model-select" data-tooltip="Switch AI engine">
+                            <span class="model-label-prefix">Model</span>
+                            <span class="current-model-label">Sonnet 4.6</span>
+                            <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                            <div class="dropdown">
+                                <div class="dropdown-header">Choose AI Engine</div>
+                                <div class="dropdown-search-wrapper">
+                                    <svg class="dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                    <input type="text" class="dropdown-search-input" placeholder="Search models...">
+                                </div>
+                                <div class="model-option" data-name="Auto" data-id="auto">
+                                    <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Auto</span>
+                                        <span class="opt-desc">Best for the task</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="dropdown-group-title">Anthropic</div>
+                                <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
+                                    <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Sonnet 4.6</span>
+                                        <span class="opt-desc">Intelligence + Speed</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7">
+                                    <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Opus 4.7</span>
+                                        <span class="opt-desc">Deep Reasoning</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="dropdown-group-title">OpenAI</div>
+                                <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro">
+                                    <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">GPT-5.5 Pro</span>
+                                        <span class="opt-desc">State of the Art</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5">
+                                    <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">GPT-5.5</span>
+                                        <span class="opt-desc">Power & Performance</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="dropdown-group-title">Google</div>
+                                <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro">
+                                    <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Gemini 3 Pro</span>
+                                        <span class="opt-desc">Multimodal Power</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash">
+                                    <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Gemini 3 Flash</span>
+                                        <span class="opt-desc">Instant & Efficient</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash">
+                                    <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Gemini 3.5 Flash</span>
+                                        <span class="opt-desc">Advanced Instant & Efficient</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini">
+                                    <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">GPT-5 Mini</span>
+                                        <span class="opt-desc">Fast & Smart</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano">
+                                    <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">GPT-5 Nano</span>
+                                        <span class="opt-desc">Ultra-lightweight</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="dropdown-group-title">Specialized / Coders</div>
+                                <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder">
+                                    <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">DeepSeek Coder</span>
+                                        <span class="opt-desc">Code Expert</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder">
+                                    <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Qwen Coder</span>
+                                        <span class="opt-desc">Alibaba Labs</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="model-option" data-name="Codestral" data-id="mistralai/codestral">
+                                    <div class="model-dot" style="background: #EC4899; box-shadow: 0 0 8px #EC4899;"></div>
+                                    <div class="opt-meta">
+                                        <span class="opt-name">Codestral</span>
+                                        <span class="opt-desc">Mistral AI Logic</span>
+                                    </div>
+                                    <div class="active-check">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="submit-wrapper">
+                            <button class="submit-btn" title="Build now" type="button">
+                                <span>Build <span class="neon-glow">now</span></span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                                    <polyline points="5 12 12 5 19 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <footer class="footer">
         <div class="footer-grid">
             <div class="footer-brand">
@@ -591,30 +704,7 @@
     </footer>
 
     <script>
-        // Global navigation helper using standardized curtain
-        function navigate(url) {
-            const curtain = document.getElementById('curtain');
-            if (curtain) {
-                curtain.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060606';
-                curtain.classList.remove('rising');
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = url;
-                }, 600);
-            } else {
-                window.location.href = url;
-            }
-        }
-
-        // Initialize theme
-        const html = document.documentElement;
-
-        window.addEventListener('load', () => {
-            const curtain = document.getElementById('curtain');
-            if (curtain) curtain.classList.add('rising');
-        });
-
-        // Toggle Billing
+        // Toggle Billing for Pricing Plans Comparison
         function setBilling(mode) {
             const buttons = document.querySelectorAll('.toggle-btn');
             const priceStarter = document.getElementById('price-starter');
@@ -638,69 +728,13 @@
             }
         }
 
-        // FAQ Toggle
+        // FAQ Collapse Toggle
         document.querySelectorAll('.faq-q').forEach(q => {
             q.addEventListener('click', () => {
                 q.parentElement.classList.toggle('open');
             });
         });
-
-        // Theme Toggle Logic with Curtain Fall
-        const themeBtn = document.getElementById('theme-btn');
-        let curtainBusy = false;
-
-        function updateIcons(theme) {
-            const moon = document.getElementById('moon-icon');
-            const sun = document.getElementById('sun-icon');
-            if (theme === 'dark') {
-                moon.style.display = 'block';
-                sun.style.display = 'none';
-            } else {
-                moon.style.display = 'none';
-                sun.style.display = 'block';
-            }
-        }
-
-        themeBtn.addEventListener('click', () => {
-            if (curtainBusy) return;
-            curtainBusy = true;
-            
-            const curtain = document.getElementById('curtain');
-            const current = html.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            
-            curtain.style.background = next === 'dark' ? '#060606' : '#F8F5F0';
-            curtain.style.transformOrigin = 'top';
-            curtain.classList.add('falling');
-
-            setTimeout(() => {
-                html.setAttribute('data-theme', next);
-                localStorage.setItem('huggy-theme', next);
-                updateIcons(next);
-                
-                curtain.classList.remove('falling');
-                requestAnimationFrame(() => {
-                    curtain.style.transformOrigin = 'bottom';
-                    curtain.classList.add('rising');
-                    setTimeout(() => {
-                        curtain.classList.remove('rising');
-                        curtainBusy = false;
-                    }, 620);
-                });
-            }, 600);
-        });
-        
-        // Finalize icons based on load theme
-        updateIcons(html.getAttribute('data-theme'));
-
-        // Intercept internal links
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
-                e.preventDefault();
-                navigate(link.href);
-            }
-        });
     </script>
+    <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
