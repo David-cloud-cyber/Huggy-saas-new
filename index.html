@@ -197,6 +197,240 @@
       cursor: pointer;
     }
 
+    /* Pricing Modal Styling */
+    .pricing-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(9, 9, 11, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      opacity: 0;
+      transition: opacity 250ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    .pricing-modal-overlay.active {
+      display: flex;
+      opacity: 1;
+    }
+
+    .pricing-modal-content {
+      background: rgb(24, 24, 27);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      width: 95%;
+      max-width: 900px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      transform: scale(0.95) translateY(10px);
+      transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    
+    .pricing-modal-overlay.active .pricing-modal-content {
+      transform: scale(1) translateY(0);
+    }
+
+    .pricing-modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      transition: all 150ms;
+      font-size: 11px;
+    }
+
+    .pricing-modal-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    /* Modal Grid & Plans */
+    .p-modal-header {
+      padding: 32px 32px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .p-modal-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      margin: 0;
+    }
+
+    .p-modal-subtitle {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      max-width: 500px;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Modal Billing Switch */
+    .p-billing-toggle {
+      display: inline-flex;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 3px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-top: 8px;
+    }
+
+    .p-toggle-btn {
+      background: transparent;
+      border: none;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 150ms;
+    }
+
+    .p-toggle-btn.active {
+      background: #a855f7;
+      color: #ffffff;
+    }
+
+    /* Cards */
+    .p-plans-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding: 0 32px 32px;
+    }
+
+    .p-plan-card {
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all 200ms;
+    }
+    
+    .p-plan-card.recommended {
+      border-color: #a855f7;
+      background: rgba(168, 85, 247, 0.03);
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.08);
+    }
+    
+    .p-plan-card.recommended::before {
+      content: 'Best Seller / Recommended';
+      position: absolute;
+      top: -10px;
+      left: 16px;
+      background: #a855f7;
+      color: #ffffff;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .p-plan-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 2px;
+    }
+
+    .p-plan-price {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .p-plan-price span {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-muted);
+    }
+
+    .p-plan-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.4;
+      min-height: 32px;
+    }
+
+    .p-plan-features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .p-feature-item {
+      font-size: 10.5px;
+      color: #e4e4e7;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .p-feature-item svg {
+      color: #a855f7;
+      flex-shrink: 0;
+    }
+
+    .p-plan-cta {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 150ms;
+    }
+
+    .p-plan-cta:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .p-plan-card.recommended .p-plan-cta {
+      background: #a855f7;
+      border: none;
+    }
+
+    .p-plan-card.recommended .p-plan-cta:hover {
+      background: #b55fe6;
+    }
+
     /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
     .workspace-body {
       display: grid;
@@ -1480,6 +1714,107 @@
 
   </div>
 
+  <!-- ── PRICING CONTEXTUAL MODAL ──────────────────────────────── -->
+  <div class="pricing-modal-overlay" id="pricing-modal">
+    <div class="pricing-modal-content">
+      <button class="pricing-modal-close" id="pricing-modal-close-btn" title="Close">✕</button>
+      
+      <div class="p-modal-header">
+        <h2 class="p-modal-title">Upgrade your workspace plan</h2>
+        <p class="p-modal-subtitle">Start for free, scale as you grow. Choose the creative horsepower your projects deserve.</p>
+        
+        <div class="p-billing-toggle">
+          <button class="p-toggle-btn active" id="p-toggle-monthly">Monthly</button>
+          <button class="p-toggle-btn" id="p-toggle-yearly">Yearly — Save 20%</button>
+        </div>
+      </div>
+
+      <div class="p-plans-grid">
+        <!-- STARTER PLAN -->
+        <div class="p-plan-card">
+          <div class="p-plan-name">Starter</div>
+          <div class="p-plan-price" id="p-price-starter">$20<span>/mo</span></div>
+          <p class="p-plan-desc">Ideal for launching private MVPs and small interactive web tools.</p>
+          <ul class="p-plan-features">
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              100 credits / month
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              3 active projects (Private)
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              1 Custom domain
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Full code export
+            </li>
+          </ul>
+          <button class="p-plan-cta" data-plan="Starter">Select Starter</button>
+        </div>
+
+        <!-- PRO PLAN -->
+        <div class="p-plan-card recommended">
+          <div class="p-plan-name" style="color: #c084fc;">Pro</div>
+          <div class="p-plan-price" id="p-price-pro">$49<span>/mo</span></div>
+          <p class="p-plan-desc">Ultimate configuration for professional developers and builders.</p>
+          <ul class="p-plan-features">
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              300 credits / month
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              10 active projects (Private)
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              5 Custom domains included
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Economy + Standard + Pro models
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              GitHub Sync & Deployments
+            </li>
+          </ul>
+          <button class="p-plan-cta" data-plan="Pro">Go Pro Now</button>
+        </div>
+
+        <!-- STUDIO PLAN -->
+        <div class="p-plan-card">
+          <div class="p-plan-name">Studio</div>
+          <div class="p-plan-price" id="p-price-studio">$99<span>/mo</span></div>
+          <p class="p-plan-desc">For small teams, agencies and production level collaboration.</p>
+          <ul class="p-plan-features">
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              700 credits / month
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              30 active projects
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              15 Custom domains included
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Team real-time editing
+            </li>
+          </ul>
+          <button class="p-plan-cta" data-plan="Studio">Select Studio</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     document.addEventListener("DOMContentLoaded", () => {
       const openFileTabLabel = document.getElementById("open-file-tab-label");
@@ -1840,6 +2175,112 @@
           }, 300);
         }, 3000);
       }
+
+      // ── PRICING MODAL LOGIC ───────────────────────────────────────
+      const upgradeBtn = document.querySelector(".btn-upgrade");
+      const pricingModal = document.getElementById("pricing-modal");
+      const modalCloseBtn = document.getElementById("pricing-modal-close-btn");
+      const btnMonthly = document.getElementById("p-toggle-monthly");
+      const btnYearly = document.getElementById("p-toggle-yearly");
+      
+      const priceStarter = document.getElementById("p-price-starter");
+      const pricePro = document.getElementById("p-price-pro");
+      const priceStudio = document.getElementById("p-price-studio");
+
+      if (upgradeBtn && pricingModal) {
+        upgradeBtn.addEventListener("click", () => {
+          pricingModal.classList.add("active");
+        });
+      }
+
+      if (modalCloseBtn && pricingModal) {
+        modalCloseBtn.addEventListener("click", () => {
+          pricingModal.classList.remove("active");
+        });
+        
+        pricingModal.addEventListener("click", (e) => {
+          if (e.target === pricingModal) {
+            pricingModal.classList.remove("active");
+          }
+        });
+      }
+
+      function updateModalPrices(billing) {
+        if (billing === "monthly") {
+          btnMonthly.classList.add("active");
+          btnYearly.classList.remove("active");
+          if (priceStarter) priceStarter.innerHTML = "$20<span>/mo</span>";
+          if (pricePro) pricePro.innerHTML = "$49<span>/mo</span>";
+          if (priceStudio) priceStudio.innerHTML = "$99<span>/mo</span>";
+        } else {
+          btnYearly.classList.add("active");
+          btnMonthly.classList.remove("active");
+          if (priceStarter) priceStarter.innerHTML = "$16<span>/mo</span>";
+          if (pricePro) pricePro.innerHTML = "$39.20<span>/mo</span>";
+          if (priceStudio) priceStudio.innerHTML = "$79.20<span>/mo</span>";
+        }
+      }
+
+      if (btnMonthly && btnYearly) {
+        btnMonthly.addEventListener("click", () => updateModalPrices("monthly"));
+        btnYearly.addEventListener("click", () => updateModalPrices("yearly"));
+      }
+
+      // Add selection confirmation
+      const pModalCtas = document.querySelectorAll(".p-plan-cta");
+      pModalCtas.forEach(cta => {
+        cta.addEventListener("click", () => {
+          const planName = cta.getAttribute("data-plan");
+          
+          // Show toast feedback for subscription choice!
+          const toast = document.createElement("div");
+          toast.style.cssText = `
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #18181b;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-left: 3px solid #a855f7;
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #f4f4f5;
+            font-family: inherit;
+            font-size: 13px;
+            z-index: 10001;
+            transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+            opacity: 0;
+          `;
+          
+          toast.innerHTML = `
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7; box-shadow: 0 0 8px #a855f7; flex-shrink: 0;"></div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 500; color: #ffffff;">Activating ${planName} Plan</span>
+              <span style="font-size: 11px; color: #a1a1aa;">Redirecting to billing checkout...</span>
+            </div>
+          `;
+          
+          document.body.appendChild(toast);
+          
+          requestAnimationFrame(() => {
+            toast.style.transform = "translateX(-50%) translateY(0)";
+            toast.style.opacity = "1";
+          });
+          
+          setTimeout(() => {
+            toast.style.transform = "translateX(-50%) translateY(20px)";
+            toast.style.opacity = "0";
+            setTimeout(() => {
+              toast.remove();
+              pricingModal.classList.remove("active");
+            }, 300);
+          }, 2500);
+        });
+      });
 
       document.addEventListener("keydown", function(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === "s") {
