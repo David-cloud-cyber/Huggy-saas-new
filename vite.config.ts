@@ -39,7 +39,6 @@ export default defineConfig(({mode}) => {
           security: path.resolve(__dirname, 'security.html'),
           showcase: path.resolve(__dirname, 'showcase.html'),
           dashboard: path.resolve(__dirname, 'dashboard.html'),
-          auth: path.resolve(__dirname, 'auth.html'),
         },
       },
     },
