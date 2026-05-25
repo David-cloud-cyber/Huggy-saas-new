@@ -1094,6 +1094,7 @@
     .modal-overlay.open { opacity: 1; visibility: visible; }
     
     .modal-content {
+      position: relative;
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: 16px; padding: 28px;
@@ -1225,7 +1226,7 @@
         <div class="sidebar-promo">
           <div class="promo-badge">PRO</div>
           <p class="promo-text">Unlock full AI power with the Pro plan.</p>
-          <button class="btn-promo-upgrade" onclick="navigate('/pricing.html')">Upgrade to Pro</button>
+          <button class="btn-promo-upgrade" id="btn-upgrade-dashboard">Upgrade to Pro</button>
         </div>
 
         <span class="nav-label">Projects</span>
@@ -1732,14 +1733,17 @@
     }
 
     function navigate(url) {
+        const targetUrl = typeof url === 'string' && url.startsWith('/')
+            ? url
+            : `/${String(url).replace(/^\.?\//, '')}`;
         if (curtain) {
             curtain.classList.remove('rising');
             curtain.classList.add('falling');
             setTimeout(() => {
-                window.location.href = url;
+                window.location.href = targetUrl;
             }, 600);
         } else {
-            window.location.href = url;
+            window.location.href = targetUrl;
         }
     }
 
@@ -1837,7 +1841,7 @@
       const targetProj = projects.find(p => p.id === id);
       if (targetProj) {
         localStorage.setItem('huggy-current-project', JSON.stringify(targetProj));
-        navigate('builder.html');
+        navigate('/builder.html');
       }
     };
 
@@ -1956,7 +1960,7 @@
             localStorage.setItem('huggy-current-project', JSON.stringify(draftProj));
           }
         }
-        navigate('builder.html');
+        navigate('/builder.html');
       });
     });
 
@@ -1988,24 +1992,24 @@
         const cardObj = deleteBtn.closest('.project-card');
         if (cardObj) {
           projectToDeleteId = cardObj.dataset.id;
-          deleteModal.classList.add('open');
+          deleteModal?.classList.add('open');
         }
       }
     });
 
-    modalCancel.addEventListener('click', () => {
+    modalCancel?.addEventListener('click', () => {
       deleteModal.classList.remove('open');
       projectToDeleteId = null;
     });
 
-    deleteModal.addEventListener('click', (e) => {
+    deleteModal?.addEventListener('click', (e) => {
       if (e.target === deleteModal) {
         deleteModal.classList.remove('open');
         projectToDeleteId = null;
       }
     });
 
-    modalConfirm.addEventListener('click', () => {
+    modalConfirm?.addEventListener('click', () => {
       if (projectToDeleteId) {
         projects = projects.filter(p => p.id !== projectToDeleteId);
         localStorage.setItem('huggy-projects', JSON.stringify(projects));
@@ -2119,6 +2123,34 @@
       });
     }
 
+    const upgradeModal = document.getElementById('upgrade-modal');
+    const btnUpgradeDashboard = document.getElementById('btn-upgrade-dashboard');
+    const btnUpgradeClose = document.getElementById('btn-upgrade-close');
+    const btnUpgradeLater = document.getElementById('btn-upgrade-later');
+    const btnUpgradePricing = document.getElementById('btn-upgrade-pricing');
+
+    function openUpgradeModal() {
+      if (upgradeModal) upgradeModal.classList.add('open');
+    }
+
+    function closeUpgradeModal() {
+      if (upgradeModal) upgradeModal.classList.remove('open');
+    }
+
+    btnUpgradeDashboard?.addEventListener('click', (e) => {
+      e.preventDefault();
+      openUpgradeModal();
+    });
+    btnUpgradeClose?.addEventListener('click', closeUpgradeModal);
+    btnUpgradeLater?.addEventListener('click', closeUpgradeModal);
+    btnUpgradePricing?.addEventListener('click', () => navigate('/pricing.html'));
+    upgradeModal?.addEventListener('click', (e) => {
+      if (e.target === upgradeModal) closeUpgradeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeUpgradeModal();
+    });
+
     // 9. Settings Logic
     const btnSettings = document.getElementById('btn-settings');
     const settingsPanel = document.getElementById('settings-panel');
@@ -2130,14 +2162,14 @@
     const saveStatus = document.getElementById('save-status');
 
     function openSettings() {
-      settingsOverlay.classList.add('open');
-      settingsPanel.classList.add('open');
+      settingsOverlay?.classList.add('open');
+      settingsPanel?.classList.add('open');
       document.body.style.overflow = 'hidden';
     }
 
     function closeSettings() {
-      settingsOverlay.classList.remove('open');
-      settingsPanel.classList.remove('open');
+      settingsOverlay?.classList.remove('open');
+      settingsPanel?.classList.remove('open');
       document.body.style.overflow = '';
     }
 
@@ -2427,6 +2459,28 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="upgrade-modal">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="upgrade-modal-title">
+      <button id="btn-upgrade-close" aria-label="Close upgrade modal" style="position:absolute; top:14px; right:14px; width:28px; height:28px; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-sub);">x</button>
+      <h3 class="modal-title" id="upgrade-modal-title">Upgrade to Pro</h3>
+      <p class="modal-desc">Unlock more credits, private projects, custom domains, and stronger AI models when your workspace is ready to scale.</p>
+      <div style="display:grid; gap:10px; margin:16px 0 20px;">
+        <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
+          <span>Starter</span>
+          <strong>$20/mo · 100 credits</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
+          <span>Pro</span>
+          <strong>$49/mo · 300 credits</strong>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal btn-cancel" id="btn-upgrade-later">Later</button>
+        <button class="btn-modal" id="btn-upgrade-pricing" style="background: var(--accent); color: var(--bg); font-weight: 600;">View plans</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="new-project-modal">
     <div class="modal-content modal-content-lg" style="max-width: 500px;">
       <h3 class="modal-title" style="font-size: 24px;">New Project Configuration</h3>
@@ -2498,5 +2552,117 @@
       </div>
     </div>
   </div>
+  <script>
+    (function bindLateDashboardModals() {
+      const onReady = (callback) => {
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', callback);
+        } else {
+          callback();
+        }
+      };
+
+      const getProjects = () => {
+        try {
+          return JSON.parse(localStorage.getItem('huggy-projects') || '[]');
+        } catch (error) {
+          return [];
+        }
+      };
+
+      const saveProjectAndOpenBuilder = () => {
+        const nameInput = document.getElementById('new-proj-name');
+        const templateSelect = document.getElementById('new-proj-template');
+        const themeSelect = document.getElementById('new-proj-theme');
+        const modelSelect = document.getElementById('new-proj-model');
+        const name = nameInput?.value.trim();
+
+        if (!name) {
+          alert('Please enter a valid project name.');
+          return;
+        }
+
+        const template = templateSelect?.value || 'dashboard';
+        const project = {
+          id: 'proj-' + Math.random().toString(36).substring(2, 9),
+          name,
+          template,
+          theme: themeSelect?.value || 'dark',
+          model: modelSelect?.value || 'anthropic/claude-sonnet-4.6',
+          desc: typeof getTemplateDesc === 'function'
+            ? getTemplateDesc(template)
+            : 'AI generated project workspace.',
+          features: [
+            document.getElementById('features-db')?.checked ? 'db' : null,
+            document.getElementById('features-auth')?.checked ? 'auth' : null,
+            document.getElementById('features-export')?.checked ? 'export' : null,
+            document.getElementById('features-seo')?.checked ? 'seo' : null
+          ].filter(Boolean),
+          createdAt: new Date().toISOString()
+        };
+
+        const projects = getProjects();
+        projects.unshift(project);
+        localStorage.setItem('huggy-projects', JSON.stringify(projects));
+        localStorage.setItem('huggy-current-project', JSON.stringify(project));
+        if (typeof navigate === 'function') {
+          navigate('/builder.html');
+        } else {
+          window.location.href = '/builder.html';
+        }
+      };
+
+      onReady(() => {
+        const newProjectModal = document.getElementById('new-project-modal');
+        const upgradeModal = document.getElementById('upgrade-modal');
+        const deleteModal = document.getElementById('delete-modal');
+
+        const openNewProjectModal = () => {
+          const nameInput = document.getElementById('new-proj-name');
+          if (nameInput && !nameInput.value.trim()) {
+            nameInput.value = `project-${getProjects().length + 1}`;
+          }
+          newProjectModal?.classList.add('open');
+        };
+
+        const closeNewProjectModal = () => newProjectModal?.classList.remove('open');
+        const openUpgradeModal = () => upgradeModal?.classList.add('open');
+        const closeUpgradeModal = () => upgradeModal?.classList.remove('open');
+
+        document.getElementById('btn-new-project')?.addEventListener('click', openNewProjectModal);
+        document.getElementById('btn-create-top')?.addEventListener('click', openNewProjectModal);
+        document.getElementById('btn-new-proj-cancel')?.addEventListener('click', closeNewProjectModal);
+        document.getElementById('btn-new-proj-create')?.addEventListener('click', (event) => {
+          event.preventDefault();
+          saveProjectAndOpenBuilder();
+        });
+        newProjectModal?.addEventListener('click', (event) => {
+          if (event.target === newProjectModal) closeNewProjectModal();
+        });
+
+        document.getElementById('btn-upgrade-dashboard')?.addEventListener('click', openUpgradeModal);
+        document.getElementById('btn-upgrade-close')?.addEventListener('click', closeUpgradeModal);
+        document.getElementById('btn-upgrade-later')?.addEventListener('click', closeUpgradeModal);
+        document.getElementById('btn-upgrade-pricing')?.addEventListener('click', () => {
+          if (typeof navigate === 'function') {
+            navigate('/pricing.html');
+          } else {
+            window.location.href = '/pricing.html';
+          }
+        });
+        upgradeModal?.addEventListener('click', (event) => {
+          if (event.target === upgradeModal) closeUpgradeModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            closeNewProjectModal();
+            closeUpgradeModal();
+            deleteModal?.classList.remove('open');
+          }
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
