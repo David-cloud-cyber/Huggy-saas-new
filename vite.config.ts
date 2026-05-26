@@ -25,7 +25,6 @@ export default defineConfig(({mode}) => {
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
-          auth: path.resolve(__dirname, 'auth.html'),
           builder: path.resolve(__dirname, 'builder.html'),
           about: path.resolve(__dirname, 'about.html'),
           apiReference: path.resolve(__dirname, 'api-reference.html'),
