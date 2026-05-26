@@ -1,6 +1,7 @@
 import express from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
@@ -21,9 +22,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 3000;
+const port = Number(process.env.PORT || 3000);
 const DEFAULT_SUPABASE_URL = 'https://notgpriaragtiahcqjoa.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_rp4hpA--fkybGy0GczSMvA_KU9BitSa';
+const staticRoot = path.join(__dirname, 'dist');
 
 // Standard middlewares
 app.use(express.json());
@@ -681,7 +683,15 @@ app.get('/api/projects/:id/deployments', (req, res) => {
 });
 
 // Static files (frontend)
-app.use(express.static(__dirname));
+app.use(express.static(pathExists(staticRoot) ? staticRoot : __dirname));
+
+function pathExists(target: string): boolean {
+  try {
+    return Boolean(target && path.isAbsolute(target) && fs.existsSync(target));
+  } catch {
+    return false;
+  }
+}
 
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
