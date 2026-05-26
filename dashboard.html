@@ -31,6 +31,7 @@
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script type="module" src="/src/auth-guard.ts"></script>
   <style>
     :root[data-theme="dark"] {
       --bg           : #060606;
@@ -1261,7 +1262,7 @@
             <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
           </svg>
         </button>
-        <button class="btn-footer" onclick="window.location.href='/auth.html'" style="color: var(--error); margin-left: auto;" title="Déconnexion">
+        <button class="btn-footer" data-auth-logout style="color: var(--error); margin-left: auto;" title="Déconnexion">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
             <polyline points="16 17 21 12 16 7"></polyline>

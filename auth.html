@@ -312,6 +312,34 @@
             text-decoration: underline;
         }
 
+        .auth-status {
+            margin-top: 16px;
+            padding: 11px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-input);
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.45;
+            display: none;
+        }
+
+        .auth-status:not(:empty) {
+            display: block;
+        }
+
+        .auth-status.error {
+            color: #F87171;
+            border-color: rgba(248, 113, 113, 0.24);
+            background: rgba(248, 113, 113, 0.08);
+        }
+
+        .auth-status.success {
+            color: #4ADE80;
+            border-color: rgba(74, 222, 128, 0.24);
+            background: rgba(74, 222, 128, 0.08);
+        }
+
         /* Theme toggle floating */
         .theme-toggle {
             position: fixed;
@@ -392,7 +420,7 @@
                 <button class="tab-btn" id="tab-signup">Sign Up</button>
             </div>
 
-            <form id="auth-form" onsubmit="event.preventDefault(); handleAuth();">
+            <form id="auth-form">
                 <div class="form-group" id="name-group" style="display:none;">
                     <label class="label">Full Name</label>
                     <input type="text" class="input" placeholder="John Doe" id="input-name">
@@ -492,21 +520,6 @@
         tabSignup.addEventListener('click', () => setMode(false));
         document.getElementById('link-signup').addEventListener('click', (e) => { e.preventDefault(); setMode(false); });
 
-        function handleAuth() {
-            curtain.classList.remove('rising');
-            curtain.classList.add('falling');
-            setTimeout(() => {
-                window.location.href = '/dashboard.html';
-            }, 600);
-        }
-
-        document.querySelectorAll('.btn-social').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                handleAuth();
-            });
-        });
-
         // Theme management
         let curtainBusy = false;
         function updateIcons(theme) {
@@ -574,5 +587,6 @@
             }
         });
     </script>
+    <script type="module" src="/src/auth.ts"></script>
 </body>
 </html>

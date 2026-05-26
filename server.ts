@@ -22,6 +22,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = 3000;
+const DEFAULT_SUPABASE_URL = 'https://notgpriaragtiahcqjoa.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_rp4hpA--fkybGy0GczSMvA_KU9BitSa';
 
 // Standard middlewares
 app.use(express.json());
@@ -30,7 +32,7 @@ app.use(express.json());
 let supabase: any = null;
 function getSupabase() {
   if (!supabase) {
-    const url = process.env.SUPABASE_URL;
+    const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (url && key) {
       supabase = createClient(url, key);
@@ -40,6 +42,70 @@ function getSupabase() {
   }
   return supabase;
 }
+
+let supabaseAuth: any = null;
+function getSupabaseAuthClient() {
+  if (!supabaseAuth) {
+    const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+    const key =
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+
+    supabaseAuth = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+  return supabaseAuth;
+}
+
+async function requireAuth(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+    });
+  }
+
+  const authClient = getSupabaseAuthClient();
+  const { data, error } = await authClient.auth.getUser(token);
+
+  if (error || !data?.user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid or expired session',
+    });
+  }
+
+  req.user = data.user;
+  return next();
+}
+
+app.get('/api/auth/me', requireAuth, (req: any, res) => {
+  res.json({
+    success: true,
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+    },
+  });
+});
+
+app.use('/api/billing/wallet', requireAuth);
+app.use('/api/billing/ledger', requireAuth);
+app.use('/api/billing/checkout', requireAuth);
+app.use('/api/billing/portal', requireAuth);
+app.use('/api/ai/estimate', requireAuth);
+app.use('/api/ai/route', requireAuth);
+app.use('/api/users/me', requireAuth);
+app.use('/api/projects', requireAuth);
 
 // ── LOCAL IN-MEMORY BACKUP DATA STORES (For instant developer previews with zero credentials) ──
 const SIM_WALLETS = new Map<string, { balance: number; updated_at: string }>();
