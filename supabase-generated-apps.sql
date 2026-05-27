@@ -55,6 +55,19 @@ create table if not exists public.deployments (
   created_at timestamptz default now() not null
 );
 
+create table if not exists public.agent_events (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid not null,
+  sequence_number integer not null,
+  event_type text not null,
+  message text not null,
+  payload jsonb default '{}'::jsonb not null,
+  created_at timestamptz default now() not null,
+  unique (project_id, sequence_number)
+);
+
 alter table public.deployments add column if not exists organization_id uuid;
 alter table public.deployments add column if not exists provider text default 'vercel';
 alter table public.deployments add column if not exists provider_deployment_id text;
@@ -65,6 +78,7 @@ alter table public.deployments add column if not exists branch text default 'mai
 alter table public.projects enable row level security;
 alter table public.project_files enable row level security;
 alter table public.deployments enable row level security;
+alter table public.agent_events enable row level security;
 
 drop policy if exists "Projects owner isolation" on public.projects;
 create policy "Projects owner isolation" on public.projects
@@ -89,7 +103,17 @@ create policy "Deployments owner isolation" on public.deployments
     project_id in (select id from public.projects where owner_id = auth.uid())
   );
 
+drop policy if exists "Agent events owner isolation" on public.agent_events;
+create policy "Agent events owner isolation" on public.agent_events
+  for all using (
+    project_id in (select id from public.projects where owner_id = auth.uid())
+  )
+  with check (
+    project_id in (select id from public.projects where owner_id = auth.uid())
+  );
+
 create unique index if not exists projects_owner_slug_idx on public.projects (owner_id, slug);
 create unique index if not exists project_files_project_path_unique_idx on public.project_files (project_id, path);
 create index if not exists projects_owner_updated_idx on public.projects (owner_id, updated_at desc);
 create index if not exists deployments_project_created_idx on public.deployments (project_id, created_at desc);
+create index if not exists agent_events_project_sequence_idx on public.agent_events (project_id, sequence_number);

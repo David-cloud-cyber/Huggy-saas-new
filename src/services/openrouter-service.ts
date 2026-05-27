@@ -25,6 +25,10 @@ export interface ChatCompletionResult {
   cost_usd: number;
 }
 
+export type StreamChatEvent =
+  | { type: 'token'; text: string; model: string }
+  | { type: 'usage'; usage: ChatCompletionResult['usage']; cost_usd: number; model: string };
+
 export class OpenRouterService {
   private config: OpenRouterConfig;
 
@@ -128,6 +132,91 @@ export class OpenRouterService {
     const response = await fetch('https://openrouter.ai/api/v1/models');
     if (!response.ok) throw new Error('Failed to fetch OpenRouter catalog');
     return await response.json();
+  }
+
+  async *streamChat(modelId: string, messages: ChatMessage[], timeoutMs = 90000): AsyncGenerator<StreamChatEvent> {
+    validateAllowedModel(modelId);
+
+    const fallbackModels = AI_MODEL_FALLBACKS[modelId as AllowedModelId] || [];
+    for (const fb of fallbackModels) {
+      validateAllowedModel(fb);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.maskApiKey(this.config.apiKey)}`,
+          'HTTP-Referer': this.config.siteUrl,
+          'X-Title': this.config.appName,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal as any,
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          models: [modelId, ...fallbackModels],
+          route: 'fallback',
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+
+      if (!response.ok) {
+        const errMsg = await response.text();
+        throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg || response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('OpenRouter streaming response body is empty');
+      }
+
+      let buffer = '';
+      let model = modelId;
+
+      for await (const chunk of response.body as any) {
+        buffer += Buffer.from(chunk).toString('utf8');
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          const lines = part.split('\n').filter(line => line.startsWith('data:'));
+          for (const line of lines) {
+            const raw = line.replace(/^data:\s*/, '').trim();
+            if (!raw || raw === '[DONE]') continue;
+
+            const data = JSON.parse(raw);
+            model = data?.model || model;
+            const text = data?.choices?.[0]?.delta?.content || data?.choices?.[0]?.text || '';
+            if (text) {
+              yield { type: 'token', text, model };
+            }
+
+            if (data?.usage) {
+              const usage = data.usage;
+              const promptTokens = usage.prompt_tokens || 0;
+              const completionTokens = usage.completion_tokens || 0;
+              yield {
+                type: 'usage',
+                model,
+                usage: {
+                  prompt_tokens: promptTokens,
+                  completion_tokens: completionTokens,
+                  total_tokens: usage.total_tokens || promptTokens + completionTokens,
+                  cached_tokens: usage?.prompt_tokens_details?.cached || 0,
+                },
+                cost_usd: data?.price || this.estimateUsdCost(model, promptTokens, completionTokens),
+              };
+            }
+          }
+        }
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private maskApiKey(key: string): string {

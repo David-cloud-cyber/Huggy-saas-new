@@ -1,4 +1,4 @@
-import { apiFetch } from './lib/api';
+import { apiFetch, apiStream } from './lib/api';
 
 type GeneratedFile = {
   path: string;
@@ -201,19 +201,51 @@ async function generateFromPrompt(prompt: string) {
 
   appendMessage('user', prompt);
   const status = appendMessage('assistant', 'Planning changes, generating files, building preview...');
+  let streamedText = '';
   try {
-    const payload = await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify({ prompt, modelId: selectedModel() }),
-    });
+    await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
+      prompt,
+      modelId: selectedModel(),
+    }, (eventType, event) => {
+      if (eventType === 'token') {
+        streamedText += event.message || '';
+        updateMessage(status, streamedText || 'Streaming code generation...');
+        return;
+      }
 
-    renderFiles(payload.files || []);
-    if (payload.preview?.html) setPreview(payload.preview.html);
-    const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
-    updateMessage(status, `${payload.summary || 'Application generated and preview updated.'}${credits}`);
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started') {
+        updateMessage(status, event.message || 'Working...');
+        return;
+      }
+
+      if (eventType === 'preview_ready') {
+        const payload = event.payload as ProjectPayload;
+        renderFiles(payload.files || []);
+        if (payload.preview?.html) setPreview(payload.preview.html);
+        const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
+        updateMessage(status, `${event.message || payload.summary || 'Application generated and preview updated.'}${credits}`);
+        return;
+      }
+
+      if (eventType === 'error') {
+        updateMessage(status, event.message || 'Generation failed.');
+      }
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Generation failed.';
-    updateMessage(status, `${message} Use Fix with AI after checking configuration and prompt details.`);
+    try {
+      const payload = await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ prompt, modelId: selectedModel() }),
+      });
+
+      renderFiles(payload.files || []);
+      if (payload.preview?.html) setPreview(payload.preview.html);
+      const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
+      updateMessage(status, `${payload.summary || 'Application generated and preview updated.'}${credits}`);
+    } catch (fallbackError) {
+      const message = fallbackError instanceof Error ? fallbackError.message : error instanceof Error ? error.message : 'Generation failed.';
+      updateMessage(status, `${message} Use Fix with AI after checking configuration and prompt details.`);
+    }
   } finally {
     isGenerating = false;
   }

@@ -154,6 +154,20 @@ const openRouter = new OpenRouterService({
 const modelRouter = new ModelRouter();
 const costEstimator = new CostEstimatorService();
 
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+function allowSimulation(): boolean {
+  return !isProductionRuntime() || process.env.HUGGY_ALLOW_SIMULATION === 'true';
+}
+
+function assertSimulationAllowed(feature: string) {
+  if (!allowSimulation()) {
+    throw new Error(`${feature} requires live configuration in production. Configure Supabase/OpenRouter/Vercel/Stripe instead of using simulated data.`);
+  }
+}
+
 type GeneratedFile = {
   path: string;
   content: string;
@@ -176,6 +190,18 @@ type GeneratedProject = {
   preview_html?: string;
   created_at: string;
   updated_at: string;
+};
+
+type AgentEvent = {
+  id?: string;
+  organization_id: string;
+  project_id: string;
+  user_id: string;
+  sequence_number: number;
+  event_type: string;
+  message: string;
+  payload?: Record<string, unknown>;
+  created_at?: string;
 };
 
 function getUserOrgId(req: any): string {
@@ -385,8 +411,65 @@ async function generateFilesWithAi(input: {
   };
 }
 
+function buildGenerationMessages(input: {
+  projectName: string;
+  prompt: string;
+  existingFiles: GeneratedFile[];
+}) {
+  const fileManifest = input.existingFiles
+    .map(file => `${file.path} (${file.content.length} chars)`)
+    .slice(0, 40)
+    .join('\n');
+
+  return [
+    {
+      role: 'system' as const,
+      content: [
+        'You are Huggy, a senior fullstack app generator.',
+        'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
+        'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
+        'Never include secrets, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
+      ].join(' '),
+    },
+    {
+      role: 'user' as const,
+      content: JSON.stringify({
+        projectName: input.projectName,
+        prompt: input.prompt,
+        existingFiles: fileManifest || 'No existing files yet.',
+      }),
+    },
+  ];
+}
+
+function parseGeneratedOutput(projectName: string, rawText: string) {
+  const cleaned = rawText.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    parsed = {
+      summary: 'The model returned non-JSON output, so Huggy wrapped it in a safe preview page.',
+      files: [{ path: 'index.html', content: buildFallbackAppHtml(projectName, rawText), language: 'html' }],
+    };
+  }
+
+  const files = normalizeGeneratedFiles(parsed.files);
+  if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
+    files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
+  }
+
+  return {
+    files,
+    summary: String(parsed.summary || 'Application files generated.'),
+  };
+}
+
 async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
   const client = getSupabase();
+  if (!client) assertSimulationAllowed('Project persistence');
+
   SIM_PROJECTS.set(project.id, project);
   if (files) SIM_PROJECT_FILES.set(project.id, files);
 
@@ -422,6 +505,8 @@ async function loadProject(projectId: string, userId: string): Promise<Generated
     if (error) console.warn(`Supabase project load skipped: ${error.message}`);
   }
 
+  assertSimulationAllowed('Project loading');
+
   const project = SIM_PROJECTS.get(projectId);
   if (!project || project.owner_id !== userId) return null;
   return project;
@@ -434,6 +519,7 @@ async function listProjectsForUser(userId: string): Promise<GeneratedProject[]> 
     if (!error && data) return data as GeneratedProject[];
     if (error) console.warn(`Supabase project listing skipped: ${error.message}`);
   }
+  assertSimulationAllowed('Project listing');
   return Array.from(SIM_PROJECTS.values()).filter(project => project.owner_id === userId).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
@@ -444,19 +530,50 @@ async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
     if (!error && data) return data as GeneratedFile[];
     if (error) console.warn(`Supabase project files load skipped: ${error.message}`);
   }
+  assertSimulationAllowed('Project file loading');
   return SIM_PROJECT_FILES.get(projectId) || [];
 }
 
 async function saveDeploymentRecord(record: any) {
-  SIM_DEPLOYMENTS.unshift(record);
   const client = getSupabase();
+  if (!client) assertSimulationAllowed('Deployment persistence');
+
+  SIM_DEPLOYMENTS.unshift(record);
   if (!client) return;
   const { error } = await client.from('deployments').insert([record]);
   if (error) console.warn(`Supabase deployment persistence skipped: ${error.message}`);
 }
 
+async function saveAgentEvent(event: AgentEvent) {
+  const row = {
+    ...event,
+    id: event.id || randomUUID(),
+    payload: event.payload || {},
+    created_at: event.created_at || new Date().toISOString(),
+  };
+
+  const client = getSupabase();
+  if (client) {
+    const { error } = await client.from('agent_events').insert([row]);
+    if (error) console.warn(`Supabase agent event persistence skipped: ${error.message}`);
+  } else {
+    assertSimulationAllowed('Agent event persistence');
+  }
+
+  return row;
+}
+
 function getVercelToken(): string {
   return process.env.VERCEL_TOKEN || process.env.VERCEL_API_TOKEN || '';
+}
+
+function createVercelDomainProxy() {
+  const token = getVercelToken();
+  if (!token) {
+    assertSimulationAllowed('Vercel domain operations');
+    return new VercelDomainService('mock-vercel-token');
+  }
+  return new VercelDomainService(token);
 }
 
 async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFile[]) {
@@ -523,6 +640,7 @@ function getDbHelpers() {
         const { data } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
         return data ? parseFloat(data.balance) : 0;
       }
+      assertSimulationAllowed('Credit wallet');
       return SIM_WALLETS.get(orgId)?.balance ?? 100.00;
     },
     updateWallet: async (orgId: string, diff: number) => {
@@ -533,6 +651,7 @@ function getDbHelpers() {
         await client.from('credit_wallets').upsert([{ organization_id: orgId, balance: next, updated_at: new Date().toISOString() }]);
         return next;
       } else {
+        assertSimulationAllowed('Credit wallet update');
         const current = SIM_WALLETS.get(orgId)?.balance ?? 100.00;
         const next = current + diff;
         SIM_WALLETS.set(orgId, { balance: next, updated_at: new Date().toISOString() });
@@ -544,6 +663,7 @@ function getDbHelpers() {
       if (client) {
         await client.from('credit_ledger').insert([log]);
       } else {
+        assertSimulationAllowed('Credit ledger');
         SIM_LEDGERS.unshift(log);
       }
     },
@@ -551,6 +671,7 @@ function getDbHelpers() {
       if (client) {
         await client.from('audit_logs').insert([{ ...data, created_at: new Date().toISOString() }]);
       } else {
+        assertSimulationAllowed('Audit log');
         SIM_AUDITS.unshift({ ...data, id: String(SIM_AUDITS.length + 1), created_at: new Date().toISOString() });
       }
     },
@@ -560,6 +681,7 @@ function getDbHelpers() {
       if (client) {
         await client.from('credit_reservations').insert([res]);
       } else {
+        assertSimulationAllowed('Credit reservation');
         SIM_RESERVATIONS.set(refId, res);
       }
       return res;
@@ -1062,6 +1184,161 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   }
 });
 
+app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+
+  const prompt = String(req.body?.prompt || '').trim();
+  if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  let sequence = 0;
+  const send = async (event_type: string, message: string, payload: Record<string, unknown> = {}) => {
+    sequence += 1;
+    const event = await saveAgentEvent({
+      organization_id: project.organization_id,
+      project_id: project.id,
+      user_id: userId,
+      sequence_number: sequence,
+      event_type,
+      message,
+      payload,
+    });
+
+    res.write(`event: ${event_type}\n`);
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  const helpers = getDbHelpers();
+  const wallet = await helpers.getWallet(userId);
+  const estimate = costEstimator.calculateRequiredCredits({
+    openrouter_cost_usd: 0.002,
+    infra_cost_usd: 0.0005,
+    storage_cost_usd: 0.0001,
+    build_cost_usd: 0.001,
+    domain_operation_cost_usd: 0,
+    minimum_action_credits: 2,
+    complexity_surcharge: prompt.length > 400 ? 2 : 0,
+  });
+
+  if (wallet < estimate.finalCredits) {
+    await send('error', 'Insufficient credits for this generation.', { code: 'InsufficientCreditsError', required: estimate.finalCredits, balance: wallet });
+    res.end();
+    return;
+  }
+
+  const refId = `gen_${randomUUID()}`;
+  await helpers.createReservation(userId, estimate.finalCredits, refId);
+
+  try {
+    await send('queued', 'Generation queued.', { estimated_credits: estimate.finalCredits });
+    await send('routing', 'Selecting the model and preparing project context.', { mode: req.body?.modelId || project.model_id || 'auto' });
+
+    const existingFiles = await loadProjectFiles(project.id);
+    const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
+    let generatedText = '';
+    let model = 'local-template';
+    let costUsd = 0;
+
+    if (!hasLiveKey) {
+      if (isProductionRuntime()) {
+        throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
+      }
+
+      await send('tool_call', 'OpenRouter is not configured locally; using development template.', { tool: 'local_template' });
+      const local = createTemplateFiles(project.name, prompt);
+      generatedText = JSON.stringify({ summary: 'Generated a local development template.', files: local });
+    } else {
+      const selectedModel = req.body?.modelId && req.body.modelId !== 'auto'
+        ? String(req.body.modelId)
+        : 'anthropic/claude-sonnet-4.6';
+      validateAllowedModel(selectedModel);
+      model = selectedModel;
+
+      await send('model_started', `Streaming response from ${selectedModel}.`, { model: selectedModel });
+      const messages = buildGenerationMessages({ projectName: project.name, prompt, existingFiles });
+
+      for await (const event of openRouter.streamChat(selectedModel, messages)) {
+        if (event.type === 'token') {
+          generatedText += event.text;
+          model = event.model;
+          await send('token', event.text, { model: event.model });
+        } else {
+          model = event.model;
+          costUsd = event.cost_usd;
+          await send('usage', 'Token usage received.', { model: event.model, usage: event.usage, cost_usd: event.cost_usd });
+        }
+      }
+    }
+
+    await send('build_started', 'Normalizing generated files and building preview.', {});
+    const parsed = parseGeneratedOutput(project.name, generatedText);
+
+    const mergedByPath = new Map<string, GeneratedFile>();
+    existingFiles.forEach(file => mergedByPath.set(file.path, file));
+    parsed.files.forEach(file => mergedByPath.set(file.path, file));
+    const files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+    const previewHtml = renderPreviewHtml(files, project.name);
+
+    const updatedProject: GeneratedProject = {
+      ...project,
+      prompt,
+      model_id: model,
+      status: 'generated',
+      preview_status: 'ready',
+      preview_html: previewHtml,
+      updated_at: new Date().toISOString(),
+    };
+
+    await saveProject(updatedProject, files);
+
+    const finalCost = costEstimator.calculateRequiredCredits({
+      openrouter_cost_usd: costUsd,
+      infra_cost_usd: 0.0005,
+      storage_cost_usd: 0.0001,
+      build_cost_usd: 0.001,
+      domain_operation_cost_usd: 0,
+      minimum_action_credits: 2,
+      complexity_surcharge: prompt.length > 400 ? 2 : 0,
+    });
+    const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
+    await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${model}`, refId);
+
+    await send('preview_ready', parsed.summary, {
+      project: updatedProject,
+      files,
+      preview: { status: 'ready', html: previewHtml },
+      model,
+      credits: {
+        estimated: estimate.finalCredits,
+        charged: finalCost.finalCredits,
+        remaining: finalBalance,
+      },
+    });
+
+    await send('done', 'Generation completed.', {});
+    res.end();
+  } catch (error: any) {
+    await helpers.addLedger(userId, 'refund', estimate.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
+    await helpers.addAudit({
+      user_id: userId,
+      organization_id: userId,
+      project_id: project.id,
+      requested_model: req.body?.modelId || project.model_id || 'auto',
+      reason: `Streaming generation failed: ${error.message}`,
+      source: 'builder_stream',
+    });
+
+    await send('error', error.message || 'Generation failed.', { code: 'GenerationFailed' });
+    res.end();
+  }
+});
+
 app.post('/api/projects/:id/preview', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
@@ -1095,6 +1372,7 @@ app.get('/api/projects/:id/domains', async (req, res) => {
     const { data } = await client.from('domains').select('*').eq('project_id', projectId).neq('status', 'removed');
     res.json({ success: true, domains: data || [] });
   } else {
+    assertSimulationAllowed('Domain listing');
     const projDomains = SIM_DOMAINS.filter(d => d.project_id === projectId && d.status !== 'removed');
     res.json({ success: true, domains: projDomains });
   }
@@ -1106,13 +1384,14 @@ app.post('/api/projects/:id/domains', async (req: any, res: any) => {
   const { domain, type, orgId = DEFAULT_ORG_ID, plan = 'starter' } = req.body;
 
   try {
-    const vercelProxy = new VercelDomainService(process.env.VERCEL_API_TOKEN || 'mock-vercel-token');
+    const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(getSupabase(), vercelProxy);
 
     if (getSupabase()) {
       const records = await domainService.registerDomain(orgId, projectId, domain, type || 'custom', plan as any);
       return res.json({ success: true, domain: records });
     } else {
+      assertSimulationAllowed('Domain creation');
       // simulate domain additions
       const sanitized = domain.trim().toLowerCase();
       const isSub = type === 'subdomain';
@@ -1153,13 +1432,14 @@ app.post('/api/projects/:id/domains/:domainId/verify', async (req, res) => {
   const domainId = req.params.domainId;
 
   try {
-    const vercelProxy = new VercelDomainService(process.env.VERCEL_API_TOKEN || 'mock-vercel-token');
+    const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(getSupabase(), vercelProxy);
 
     if (getSupabase()) {
       const result = await domainService.verifyDnsRecords(projectId, domainId);
       res.json({ success: true, ...result });
     } else {
+      assertSimulationAllowed('Domain verification');
       // simulation verification (flip pending to active)
       const domain = SIM_DOMAINS.find(d => d.id === domainId && d.project_id === projectId);
       if (domain) {
@@ -1181,12 +1461,13 @@ app.delete('/api/projects/:id/domains/:domainId', async (req, res) => {
   const domainId = req.params.domainId;
 
   try {
-    const vercelProxy = new VercelDomainService(process.env.VERCEL_API_TOKEN || 'mock-vercel-token');
+    const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(getSupabase(), vercelProxy);
 
     if (getSupabase()) {
       await domainService.removeDomain(projectId, domainId);
     } else {
+      assertSimulationAllowed('Domain deletion');
       const domain = SIM_DOMAINS.find(d => d.id === domainId && d.project_id === projectId);
       if (domain) {
         domain.status = 'removed';
@@ -1204,12 +1485,13 @@ app.patch('/api/projects/:id/domains/:domainId/primary', async (req, res) => {
   const domainId = req.params.domainId;
 
   try {
-    const vercelProxy = new VercelDomainService(process.env.VERCEL_API_TOKEN || 'mock-vercel-token');
+    const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(getSupabase(), vercelProxy);
 
     if (getSupabase()) {
       await domainService.setPrimaryDomain(projectId, domainId);
     } else {
+      assertSimulationAllowed('Primary domain update');
       SIM_DOMAINS.forEach(d => {
         if (d.project_id === projectId) {
           d.is_primary = (d.id === domainId);
