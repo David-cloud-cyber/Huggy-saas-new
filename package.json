@@ -3,28 +3,32 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node --experimental-strip-types server.ts",
+    "start": "tsx server.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "node --experimental-strip-types test-policy.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
+    "@tailwindcss/vite": "^4.3.0",
     "@types/express": "^5.0.6",
     "@types/node-fetch": "^2.6.13",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "node-fetch": "^3.3.2",
     "stripe": "^22.1.1",
+    "tailwindcss": "^4.3.0",
+    "tsx": "^4.22.3",
     "vite": "^6.2.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.0.0",
-    "tailwindcss": "^4.0.0",
     "typescript": "^6.0.3"
   }
 }
