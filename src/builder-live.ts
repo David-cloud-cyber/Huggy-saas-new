@@ -539,6 +539,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
 
   appendMessage('user', `${requestedMode === 'plan' ? 'Plan' : 'Build'}: ${prompt}`);
   const status = appendMessage('assistant', requestedMode === 'plan' ? 'Preparing a plan without changing files...' : 'Planning, generating, building preview...');
+  if (requestedMode === 'build') activateBuilderView('preview');
   let streamedText = '';
   try {
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
@@ -581,6 +582,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         return;
       }
       if (eventType === 'preview_ready') {
+        activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
         const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
