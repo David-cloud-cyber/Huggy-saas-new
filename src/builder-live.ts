@@ -137,8 +137,7 @@ function setPreview(html: string, status = 'ready') {
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (frame) frame.srcdoc = html;
 
-  const previewTab = document.getElementById('tab-btn-preview') as HTMLButtonElement | null;
-  previewTab?.click();
+  activateBuilderView('preview');
 
   const address = document.querySelector('.preview-address-glow span:last-child');
   if (address) address.textContent = `${status}.huggy.local / ${currentProjectId.slice(0, 8)}`;
@@ -389,7 +388,9 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
   };
   Object.entries(screens).forEach(([name, id]) => {
     const node = document.getElementById(id);
-    if (node) node.style.display = name === view ? (view === 'code' ? 'grid' : 'flex') : 'none';
+    if (!node) return;
+    node.style.display = name === view ? (view === 'code' ? 'grid' : 'flex') : 'none';
+    node.setAttribute('aria-hidden', name === view ? 'false' : 'true');
   });
   document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
   document.getElementById(`tab-btn-${view}`)?.classList.add('active');
@@ -902,6 +903,8 @@ function ensureResizableSidebar() {
     const next = Math.min(560, Math.max(300, width));
     body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
     body.style.setProperty('--huggy-sidebar-width', `${next}px`);
+    const currentHandle = document.getElementById('huggy-sidebar-resizer') as HTMLElement | null;
+    if (currentHandle) currentHandle.style.left = `${next - 4}px`;
     localStorage.setItem('huggy-sidebar-width', String(next));
   };
   applyWidth(savedWidth);
@@ -924,7 +927,7 @@ function ensureResizableSidebar() {
       const next = Math.min(560, Math.max(300, startWidth + moveEvent.clientX - startX));
       body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
       body.style.setProperty('--huggy-sidebar-width', `${next}px`);
-      handle.style.left = `${next - 3}px`;
+      handle.style.left = `${next - 4}px`;
       localStorage.setItem('huggy-sidebar-width', String(Math.round(next)));
     };
     const up = () => {
