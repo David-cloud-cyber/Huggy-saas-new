@@ -46,6 +46,7 @@ export async function apiStream(
   path: string,
   body: unknown,
   onEvent: (eventType: string, data: any) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const verified = await getVerifiedSession();
   if (!verified?.session?.access_token) {
@@ -60,6 +61,7 @@ export async function apiStream(
       Authorization: `Bearer ${verified.session.access_token}`,
     },
     body: JSON.stringify(body || {}),
+    signal,
   });
 
   if (!response.ok || !response.body) {

@@ -16,31 +16,45 @@ type ProjectPayload = {
     preview_status?: string;
   };
   files: GeneratedFile[];
+  messages?: Array<{ role: string; content: string; intent?: string }>;
+  events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any }>;
   preview?: {
     status: string;
     html: string;
   };
   summary?: string;
+  text?: string;
   model?: string;
+  intent?: { intent: string };
+  diff?: { created: string[]; modified: string[]; deleted: string[]; summary: string };
+  errors?: Array<{ message: string; file?: string }>;
   credits?: {
     estimated?: number;
     charged?: number;
     remaining?: number;
+    balance?: number;
+    required?: number;
   };
 };
 
 type DeployPayload = {
   success: boolean;
-  deployment: {
+  event?: string;
+  deployment?: {
     deployment_url: string;
     status: string;
   };
+  credits?: { required: number; balance: number };
+  error?: string;
 };
 
 let currentProjectId = '';
 let currentFiles: GeneratedFile[] = [];
 let currentPreviewHtml = '';
 let isGenerating = false;
+let lastPlan = '';
+let lastBuildSessionId = '';
+let activeAbort: AbortController | null = null;
 
 function escapeHtml(value: string): string {
   return value
@@ -84,8 +98,10 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
     <div class="msg-header-line">
       <span class="msg-sender-identity" style="color:${color};">${name}</span>
     </div>
-    <p class="msg-body-paragraph">${escapeHtml(body)}</p>
+    <p class="msg-body-paragraph" style="white-space:pre-wrap;"></p>
   `;
+  const paragraph = card.querySelector('.msg-body-paragraph');
+  if (paragraph) paragraph.textContent = body;
   scroll.appendChild(card);
   scroll.scrollTop = scroll.scrollHeight;
   return card;
@@ -96,7 +112,17 @@ function updateMessage(card: HTMLElement | null, body: string) {
   if (paragraph) paragraph.textContent = body;
 }
 
-function setPreview(html: string) {
+function addInlineAction(card: HTMLElement | null, label: string, action: () => void) {
+  if (!card) return;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.style.cssText = 'margin-top:10px;height:30px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:7px;padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;';
+  button.addEventListener('click', action);
+  card.appendChild(button);
+}
+
+function setPreview(html: string, status = 'ready') {
   currentPreviewHtml = html;
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (frame) frame.srcdoc = html;
@@ -105,7 +131,8 @@ function setPreview(html: string) {
   previewTab?.click();
 
   const address = document.querySelector('.preview-address-glow span:last-child');
-  if (address) address.textContent = `preview.huggy.local / ${currentProjectId.slice(0, 8)}`;
+  if (address) address.textContent = `${status}.huggy.local / ${currentProjectId.slice(0, 8)}`;
+  updateDeployState(status === 'ready');
 }
 
 function renderFiles(files: GeneratedFile[]) {
@@ -148,12 +175,84 @@ function ensureToolbar() {
   nav.insertAdjacentHTML('afterbegin', `
     <button id="btn-live-refresh-preview" type="button" style="${style}">Refresh</button>
     <button id="btn-live-open-preview" type="button" style="${style}">Open</button>
-    <button id="btn-live-deploy" type="button" style="${style}background:#f4f4f5;color:#09090b;font-weight:700;">Deploy</button>
+    <button id="btn-live-cancel" type="button" style="${style}display:none;">Cancel</button>
+    <button id="btn-live-deploy" type="button" disabled style="${style}background:#3f3f46;color:#a1a1aa;font-weight:700;">Deploy</button>
   `);
 
   document.getElementById('btn-live-refresh-preview')?.addEventListener('click', refreshPreview);
   document.getElementById('btn-live-open-preview')?.addEventListener('click', openPreview);
   document.getElementById('btn-live-deploy')?.addEventListener('click', deployProject);
+  document.getElementById('btn-live-cancel')?.addEventListener('click', cancelBuild);
+  document.getElementById('action-download-zip')?.addEventListener('click', exportCode);
+}
+
+function updateDeployState(enabled: boolean) {
+  const button = document.getElementById('btn-live-deploy') as HTMLButtonElement | null;
+  if (!button) return;
+  button.disabled = !enabled;
+  button.style.background = enabled ? '#f4f4f5' : '#3f3f46';
+  button.style.color = enabled ? '#09090b' : '#a1a1aa';
+}
+
+function setBusy(busy: boolean) {
+  isGenerating = busy;
+  const cancel = document.getElementById('btn-live-cancel') as HTMLButtonElement | null;
+  if (cancel) cancel.style.display = busy ? 'inline-flex' : 'none';
+}
+
+function ensurePlanBuildControls() {
+  const submitWrapper = document.querySelector('.submit-wrapper');
+  if (!submitWrapper || document.getElementById('btn-plan-mode')) return;
+  submitWrapper.insertAdjacentHTML('beforebegin', `
+    <button id="btn-plan-mode" type="button" title="Plan without coding" style="height:24px;border:1px solid var(--border);background:var(--bg-input);color:var(--text-muted);border-radius:6px;padding:0 9px;font-size:10px;font-weight:700;cursor:pointer;">Plan</button>
+    <button id="btn-build-mode" type="button" title="Build and update preview" style="height:24px;border:1px solid rgba(244,244,245,.18);background:#f4f4f5;color:#09090b;border-radius:6px;padding:0 9px;font-size:10px;font-weight:800;cursor:pointer;">Build</button>
+  `);
+}
+
+function ensureDatabaseView() {
+  const tabs = document.querySelector('.sub-nav-tabs');
+  const holder = document.querySelector('.viewport-content-holder');
+  if (!tabs || !holder || document.getElementById('tab-btn-database')) return;
+
+  const databaseBtn = document.createElement('button');
+  databaseBtn.className = 'sub-nav-tab';
+  databaseBtn.id = 'tab-btn-database';
+  databaseBtn.innerHTML = '<span style="font-size:13px;">▦</span> Database';
+  const analysis = document.getElementById('tab-btn-analysis');
+  tabs.insertBefore(databaseBtn, analysis || null);
+
+  const panel = document.createElement('div');
+  panel.id = 'screen-layout-database';
+  panel.style.cssText = 'display:none;flex:1;overflow:auto;padding:18px;background:#09090b;color:#f4f4f5;';
+  panel.innerHTML = `
+    <div style="display:grid;gap:14px;max-width:1120px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+        <div>
+          <h2 style="font-size:18px;margin:0 0 4px;">Project database</h2>
+          <p style="font-size:12px;color:#a1a1aa;margin:0;">Shared Supabase backend isolated by project and organization.</p>
+        </div>
+        <button id="btn-add-secret" type="button" style="height:32px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
+      </div>
+      <div id="database-content" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;"></div>
+    </div>
+  `;
+  holder.appendChild(panel);
+  databaseBtn.addEventListener('click', () => activateDatabaseView());
+  panel.querySelector('#btn-add-secret')?.addEventListener('click', () => showApiKeyModal([{ service: 'Custom', variable: 'CUSTOM_API_KEY', description: 'Project API key', required: false }]));
+}
+
+function activateDatabaseView() {
+  ['screen-layout-code', 'screen-layout-preview'].forEach(id => {
+    const node = document.getElementById(id);
+    if (node) node.style.display = 'none';
+  });
+  const analysis = document.getElementById('screen-layout-analysis');
+  if (analysis) analysis.style.display = 'none';
+  const database = document.getElementById('screen-layout-database');
+  if (database) database.style.display = 'block';
+  document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
+  document.getElementById('tab-btn-database')?.classList.add('active');
+  void loadDatabase();
 }
 
 async function ensureProject() {
@@ -182,72 +281,109 @@ async function ensureProject() {
 
 async function loadProject() {
   ensureToolbar();
+  ensurePlanBuildControls();
+  ensureDatabaseView();
   const projectName = document.getElementById('project-name');
-  const loading = appendMessage('system', 'Loading project files and preview...');
+  const loading = appendMessage('system', 'Loading project files, timeline and preview...');
   try {
     const payload = await ensureProject();
     if (projectName) projectName.textContent = payload.project.name;
     renderFiles(payload.files || []);
-    if (payload.preview?.html) setPreview(payload.preview.html);
-    updateMessage(loading, 'Project synchronized. Generate or edit the app from the chat.');
+    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
+    restoreMessages(payload);
+    updateMessage(loading, 'Project synchronized. Use Plan to think, or Build to update the app.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
   }
 }
 
-async function generateFromPrompt(prompt: string) {
-  if (isGenerating || !prompt.trim()) return;
-  isGenerating = true;
+function restoreMessages(payload: ProjectPayload) {
+  if (!payload.messages?.length) return;
+  const scroll = chatScroll();
+  if (!scroll || scroll.dataset.restored === 'true') return;
+  scroll.dataset.restored = 'true';
+  payload.messages.slice(-12).forEach(message => {
+    const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
+    if (message.intent === 'plan') {
+      lastPlan = message.content;
+      addInlineAction(card, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
+    }
+  });
+}
 
-  appendMessage('user', prompt);
-  const status = appendMessage('assistant', 'Planning changes, generating files, building preview...');
+async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build', useLastPlan = false, extra: Record<string, unknown> = {}) {
+  if (isGenerating || !prompt.trim()) return;
+  setBusy(true);
+  activeAbort = new AbortController();
+
+  appendMessage('user', `${requestedMode === 'plan' ? 'Plan' : 'Build'}: ${prompt}`);
+  const status = appendMessage('assistant', requestedMode === 'plan' ? 'Preparing a plan without changing files...' : 'Planning, generating, building preview...');
   let streamedText = '';
   try {
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
       prompt,
+      requestedMode,
+      useLastPlan,
       modelId: selectedModel(),
+      ...extra,
     }, (eventType, event) => {
+      const payload = event.payload || {};
+      if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (eventType === 'token') {
         streamedText += event.message || '';
         updateMessage(status, streamedText || 'Streaming code generation...');
         return;
       }
-
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started') {
+      if (eventType === 'planning' || eventType === 'answering') {
+        updateMessage(status, payload.text || event.message || '');
+        if (eventType === 'planning') {
+          lastPlan = payload.text || event.message || '';
+          addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
+        }
+        return;
+      }
+      if (eventType === 'credits_insufficient') {
+        updateMessage(status, 'Credits are not enough for this action.');
+        showCreditsModal(payload.required || payload.credits?.required || 0, payload.balance || 0);
+        return;
+      }
+      if (eventType === 'external_api_keys_required') {
+        updateMessage(status, 'External API keys are needed or can be skipped.');
+        showApiKeyModal(payload.requirements || []);
+        return;
+      }
+      if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
+        showFixBugBox(payload.errors || [{ message: event.message }]);
+      }
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building' || eventType === 'auto_fix_started' || eventType === 'patch_applied') {
         updateMessage(status, event.message || 'Working...');
         return;
       }
-
       if (eventType === 'preview_ready') {
-        const payload = event.payload as ProjectPayload;
         renderFiles(payload.files || []);
-        if (payload.preview?.html) setPreview(payload.preview.html);
+        if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
         const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
-        updateMessage(status, `${event.message || payload.summary || 'Application generated and preview updated.'}${credits}`);
+        const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
+        updateMessage(status, `${event.message || 'Application generated and preview updated.'}${diff}${credits}`);
+        if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }
-
+      if (eventType === 'done') {
+        setBusy(false);
+      }
       if (eventType === 'error') {
         updateMessage(status, event.message || 'Generation failed.');
       }
-    });
+    }, activeAbort.signal);
   } catch (error) {
-    try {
-      const payload = await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
-        method: 'POST',
-        body: JSON.stringify({ prompt, modelId: selectedModel() }),
-      });
-
-      renderFiles(payload.files || []);
-      if (payload.preview?.html) setPreview(payload.preview.html);
-      const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
-      updateMessage(status, `${payload.summary || 'Application generated and preview updated.'}${credits}`);
-    } catch (fallbackError) {
-      const message = fallbackError instanceof Error ? fallbackError.message : error instanceof Error ? error.message : 'Generation failed.';
-      updateMessage(status, `${message} Use Fix with AI after checking configuration and prompt details.`);
+    if ((error as Error).name === 'AbortError') {
+      updateMessage(status, 'Build cancelled.');
+    } else {
+      updateMessage(status, error instanceof Error ? error.message : 'Generation failed.');
     }
   } finally {
-    isGenerating = false;
+    setBusy(false);
+    activeAbort = null;
   }
 }
 
@@ -259,7 +395,7 @@ async function refreshPreview() {
       method: 'POST',
       body: JSON.stringify({}),
     });
-    if (payload.preview?.html) setPreview(payload.preview.html);
+    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
     updateMessage(status, 'Preview refreshed from the persisted files.');
   } catch (error) {
     updateMessage(status, error instanceof Error ? error.message : 'Preview refresh failed.');
@@ -283,13 +419,162 @@ async function deployProject() {
       method: 'POST',
       body: JSON.stringify({ userCredits: 100 }),
     });
-    updateMessage(status, `ready -> ${payload.deployment.deployment_url}`);
+    if (payload.event === 'credits_insufficient') {
+      showCreditsModal(payload.credits?.required || 2, payload.credits?.balance || 0);
+      updateMessage(status, 'Credits are not enough to deploy.');
+      return;
+    }
+    updateMessage(status, `ready -> ${payload.deployment?.deployment_url || 'Deployment started'}`);
   } catch (error) {
     updateMessage(status, error instanceof Error ? error.message : 'Deployment failed.');
   } finally {
     button.disabled = false;
     button.textContent = 'Deploy';
   }
+}
+
+async function cancelBuild() {
+  activeAbort?.abort();
+  if (currentProjectId) {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ buildSessionId: lastBuildSessionId }),
+    }).catch(() => null);
+  }
+  setBusy(false);
+}
+
+async function exportCode() {
+  if (!currentProjectId) return;
+  const files = currentFiles.length ? currentFiles : [{ path: 'README.md', content: 'No generated files yet.' }];
+  const blob = new Blob([JSON.stringify({ files }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'huggy-code-export.json';
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function loadDatabase() {
+  if (!currentProjectId) return;
+  const target = document.getElementById('database-content');
+  if (!target) return;
+  target.innerHTML = '<div style="color:#a1a1aa;font-size:12px;">Loading database...</div>';
+  try {
+    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
+    const db = payload.database;
+    const secrets = db.secrets || [];
+    target.innerHTML = `
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Tables</h3>
+        ${(db.tables || []).map((table: any) => `<div style="font-size:12px;color:#d4d4d8;">${escapeHtml(table.name)} <span style="color:#71717a;">${table.rows} rows</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No project data yet.</p>'}
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">API keys</h3>
+        ${secrets.map((secret: any) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#d4d4d8;margin-bottom:7px;"><span>${escapeHtml(secret.variable)}</span><span style="color:#a1a1aa;">${escapeHtml(secret.masked_value)} · ${escapeHtml(secret.status)}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No API keys configured.</p>'}
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Security</h3>
+        <p style="font-size:12px;color:#a1a1aa;line-height:1.5;margin:0;">RLS required. Secrets masked. Service role is server-only.</p>
+      </div>
+    `;
+  } catch (error) {
+    target.innerHTML = `<div style="font-size:12px;color:#fca5a5;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
+  }
+}
+
+function showCreditsModal(required: number, balance: number) {
+  showMiniModal('Credits required', `
+    <p>You need ${required} credits, but your balance is ${balance}.</p>
+    <div class="huggy-modal-actions">
+      <button data-action="upgrade">Upgrade plan</button>
+      <button data-action="topup">Buy credits</button>
+      <button data-action="economy">Use cheaper model</button>
+    </div>
+  `, (action) => {
+    if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
+    if (action === 'economy') localStorage.setItem('huggy-selected-model', 'openai/gpt-5-nano');
+  });
+}
+
+function showApiKeyModal(requirements: any[]) {
+  const rows = requirements.length ? requirements : [{ service: 'Custom', variable: 'CUSTOM_API_KEY', description: 'Project API key' }];
+  showMiniModal('Connect external API', `
+    <p>Keys are stored server-side and masked in the Database tab.</p>
+    ${rows.map((item, index) => `
+      <label style="display:grid;gap:5px;margin:10px 0;font-size:11px;color:#a1a1aa;">
+        ${escapeHtml(item.service)} · ${escapeHtml(item.variable)}
+        <input data-key-index="${index}" data-service="${escapeHtml(item.service)}" data-variable="${escapeHtml(item.variable)}" type="password" placeholder="${escapeHtml(item.variable)}" style="height:34px;border:1px solid rgba(255,255,255,.12);background:#09090b;color:#f4f4f5;border-radius:7px;padding:0 10px;">
+      </label>
+    `).join('')}
+    <div class="huggy-modal-actions">
+      <button data-action="continue">Continue</button>
+      <button data-action="skip">Skip for now</button>
+    </div>
+  `, async (action, root) => {
+    if (action === 'skip') {
+      await generateFromPrompt('Continue with safe placeholders', 'build', false, { skipExternalKeys: true });
+      return;
+    }
+    if (action === 'continue') {
+      const keys = Array.from(root.querySelectorAll('input')).map((input: any) => ({
+        service: input.dataset.service,
+        variable: input.dataset.variable,
+        value: input.value,
+      })).filter(item => item.value);
+      await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/external-keys`, {
+        method: 'POST',
+        body: JSON.stringify({ keys }),
+      });
+      await loadDatabase();
+      await generateFromPrompt('Continue build with configured API keys', 'build', false, { externalKeysConfirmed: true });
+    }
+  });
+}
+
+function showFixBugBox(errors: any[]) {
+  const first = errors[0] || { message: 'Preview failed.' };
+  showMiniModal('Fix bug', `
+    <p>${escapeHtml(first.message || 'Preview failed.')}</p>
+    <p style="color:#71717a;">${escapeHtml(first.file || 'unknown file')}</p>
+    <div class="huggy-modal-actions">
+      <button data-action="fix">Fix with AI</button>
+      <button data-action="copy">Copy error</button>
+      <button data-action="send">Send to chat</button>
+    </div>
+  `, async (action) => {
+    if (action === 'copy') await navigator.clipboard?.writeText(first.message || 'Preview failed.');
+    if (action === 'send') {
+      const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+      if (input) input.value = `Fix this preview error: ${first.message}`;
+    }
+    if (action === 'fix') await generateFromPrompt(`Fix this preview error: ${first.message}`, 'build');
+  });
+}
+
+function showMiniModal(title: string, html: string, onAction: (action: string, root: HTMLElement) => void | Promise<void>) {
+  document.getElementById('huggy-live-modal')?.remove();
+  const root = document.createElement('div');
+  root.id = 'huggy-live-modal';
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:99999;padding:16px;';
+  root.innerHTML = `
+    <div style="width:min(420px,100%);border:1px solid rgba(255,255,255,.12);background:#18181b;color:#f4f4f5;border-radius:14px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.45);">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px;">
+        <h3 style="font-size:15px;margin:0;">${escapeHtml(title)}</h3>
+        <button data-action="close" style="border:0;background:transparent;color:#a1a1aa;font-size:18px;cursor:pointer;">×</button>
+      </div>
+      <div style="font-size:12px;color:#d4d4d8;line-height:1.5;">${html}</div>
+    </div>
+  `;
+  root.querySelectorAll('button[data-action]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const action = (button as HTMLElement).dataset.action || 'close';
+      if (action !== 'close') await onAction(action, root);
+      root.remove();
+    });
+  });
+  document.body.appendChild(root);
 }
 
 function bindChat() {
@@ -302,13 +587,13 @@ function bindChat() {
   submit.style.pointerEvents = 'auto';
   submit.style.cursor = 'pointer';
 
-  const send = () => {
+  const send = (mode: 'plan' | 'build') => {
     const value = input.value.trim();
     if (!value) return;
     input.value = '';
     input.style.height = '48px';
     submit.classList.remove('active');
-    void generateFromPrompt(value);
+    void generateFromPrompt(value, mode);
   };
 
   input.addEventListener('input', () => {
@@ -319,18 +604,24 @@ function bindChat() {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      send();
+      send('build');
     }
   }, true);
 
   submit.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    send();
+    send('build');
   }, true);
+
+  document.getElementById('btn-plan-mode')?.addEventListener('click', () => send('plan'));
+  document.getElementById('btn-build-mode')?.addEventListener('click', () => send('build'));
 }
 
 function init() {
+  ensureToolbar();
+  ensurePlanBuildControls();
+  ensureDatabaseView();
   bindChat();
   void loadProject();
 }

@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
@@ -139,6 +139,16 @@ const SIM_PROJECT_PREFS = new Map<string, any>();
 const SIM_AUDITS: any[] = [];
 const SIM_PROJECTS = new Map<string, GeneratedProject>();
 const SIM_PROJECT_FILES = new Map<string, GeneratedFile[]>();
+const SIM_PROJECT_MESSAGES: any[] = [];
+const SIM_AGENT_EVENTS: AgentEvent[] = [];
+const SIM_PROJECT_VERSIONS = new Map<string, any[]>();
+const SIM_BUILD_SESSIONS = new Map<string, any>();
+const SIM_BUILD_ERRORS = new Map<string, any[]>();
+const SIM_PROJECT_PATCHES = new Map<string, any[]>();
+const SIM_PROJECT_INTEGRATIONS = new Map<string, any[]>();
+const SIM_PROJECT_SECRETS = new Map<string, any[]>();
+const SIM_PROJECT_ASSETS = new Map<string, any[]>();
+const SIM_RATE_LIMITS = new Map<string, number[]>();
 
 // Initialize a default simulated user/organization wallet with 100.0 credits for previewing
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
@@ -204,8 +214,65 @@ type AgentEvent = {
   created_at?: string;
 };
 
+type IntentDecision = {
+  intent: 'conversation' | 'plan' | 'build' | 'clarification';
+  confidence: number;
+  requestedMode: 'plan' | 'build';
+  requiresFileChanges: boolean;
+  requiresPreviewRebuild: boolean;
+  requiresCredits: boolean;
+  userVisibleReason: string;
+};
+
+type PreviewBuildResult = {
+  status: 'ready' | 'failed';
+  html: string;
+  errors: any[];
+  summary: string;
+};
+
+type ExternalApiRequirement = {
+  service: string;
+  variable: string;
+  description: string;
+  required: boolean;
+  placeholder: string;
+};
+
 function getUserOrgId(req: any): string {
   return req.user?.id || DEFAULT_ORG_ID;
+}
+
+function getUserProjectRole(_req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
+  return 'owner';
+}
+
+function requireProjectCapability(req: any, res: any, capability: 'build' | 'deploy' | 'secrets' | 'view') {
+  const role = getUserProjectRole(req);
+  const allowed: Record<string, string[]> = {
+    view: ['owner', 'admin', 'editor', 'viewer'],
+    build: ['owner', 'admin', 'editor'],
+    deploy: ['owner', 'admin'],
+    secrets: ['owner', 'admin'],
+  };
+  if (!allowed[capability].includes(role)) {
+    res.status(403).json({ success: false, error: 'Permission denied', capability });
+    return false;
+  }
+  return true;
+}
+
+function enforceRateLimit(key: string, limit: number, windowMs: number) {
+  const now = Date.now();
+  const recent = (SIM_RATE_LIMITS.get(key) || []).filter(ts => now - ts < windowMs);
+  if (recent.length >= limit) return false;
+  recent.push(now);
+  SIM_RATE_LIMITS.set(key, recent);
+  return true;
+}
+
+function isAbusivePrompt(prompt: string) {
+  return /(phishing|steal password|credential harvester|malware|ransomware|keylogger)/i.test(prompt);
 }
 
 function slugify(value: string): string {
@@ -337,6 +404,293 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
       content: `# ${projectName}\n\nGenerated from this prompt:\n\n${prompt || 'No prompt provided.'}\n\nThis MVP is static-preview ready and includes Supabase schema notes for the backend layer.\n`,
     },
   ]);
+}
+
+class IntentRouterService {
+  decide(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }): IntentDecision {
+    const text = input.prompt.trim();
+    const lower = text.toLowerCase();
+    const requestedMode = input.requestedMode === 'plan' ? 'plan' : 'build';
+
+    if (requestedMode === 'plan') {
+      return {
+        intent: 'plan',
+        confidence: 1,
+        requestedMode,
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: true,
+        userVisibleReason: 'Plan mode was selected, so Huggy will prepare a plan without touching files.',
+      };
+    }
+
+    if (!text || text.length < 4) {
+      return {
+        intent: 'clarification',
+        confidence: 0.62,
+        requestedMode,
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: false,
+        userVisibleReason: 'The request is too short to safely change the app.',
+      };
+    }
+
+    const conversationHints = [
+      'explique', 'explain', 'c est quoi', "c'est quoi", 'what is', 'comment marche',
+      'est-ce que', 'peux tu me dire', 'dis moi', 'pourquoi', 'how does'
+    ];
+    const buildHints = [
+      'crée', 'creer', 'create', 'ajoute', 'add', 'modifie', 'change', 'corrige',
+      'fix', 'build', 'implémente', 'implemente', 'generate', 'génère', 'genere',
+      'page', 'component', 'dashboard', 'landing', 'formulaire', 'deploy'
+    ];
+    const lastPlanHints = ['ok fais', 'fais-le', 'implemente ça', 'implémente ça', 'build this plan', 'continue le plan'];
+
+    if (lastPlanHints.some(hint => lower.includes(hint)) && input.lastPlan) {
+      return {
+        intent: 'build',
+        confidence: 0.96,
+        requestedMode,
+        requiresFileChanges: true,
+        requiresPreviewRebuild: true,
+        requiresCredits: true,
+        userVisibleReason: 'The message refers to the last approved plan, so Huggy will build that plan.',
+      };
+    }
+
+    const wantsBuild = buildHints.some(hint => lower.includes(hint));
+    const wantsConversation = conversationHints.some(hint => lower.includes(hint));
+    if (wantsConversation && !wantsBuild) {
+      return {
+        intent: 'conversation',
+        confidence: 0.86,
+        requestedMode,
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: false,
+        userVisibleReason: 'This looks like a question, not an app change.',
+      };
+    }
+
+    return {
+      intent: 'build',
+      confidence: wantsBuild ? 0.9 : 0.72,
+      requestedMode,
+      requiresFileChanges: true,
+      requiresPreviewRebuild: true,
+      requiresCredits: true,
+      userVisibleReason: input.hasFiles ? 'Huggy will patch the existing project.' : 'Huggy will generate the first project version.',
+    };
+  }
+}
+
+const intentRouter = new IntentRouterService();
+
+function createPlanResponse(project: GeneratedProject, prompt: string, files: GeneratedFile[]) {
+  const fileHints = files.slice(0, 8).map(file => `- ${file.path}`).join('\n') || '- No generated files yet';
+  return [
+    `Plan for ${project.name}`,
+    '',
+    '1. Understand the requested outcome and protect the current working version.',
+    '2. Identify the smallest set of files that should change.',
+    '3. Update UI, data model, and preview behavior in focused steps.',
+    '4. Build the preview and run the auto-fix loop if an error appears.',
+    '5. Show a diff summary before the user deploys.',
+    '',
+    'Relevant files:',
+    fileHints,
+    '',
+    `Request: ${prompt}`,
+  ].join('\n');
+}
+
+function createConversationResponse(project: GeneratedProject, prompt: string) {
+  return `I can help with ${project.name}. This message looks like a question, so I will not change files or rebuild the preview.\n\n${prompt}`;
+}
+
+function detectExternalApiRequirements(prompt: string): ExternalApiRequirement[] {
+  const lower = prompt.toLowerCase();
+  const services: Array<[string, string, string, string[]]> = [
+    ['Stripe', 'STRIPE_SECRET_KEY', 'Payments and billing operations', ['stripe', 'payment', 'checkout', 'abonnement']],
+    ['Resend', 'RESEND_API_KEY', 'Transactional emails', ['resend', 'sendgrid', 'email', 'mail']],
+    ['Google Maps', 'GOOGLE_MAPS_API_KEY', 'Maps, places and geocoding', ['google maps', 'map', 'maps', 'géolocalisation', 'geolocation']],
+    ['Twilio', 'TWILIO_AUTH_TOKEN', 'SMS and WhatsApp messaging', ['twilio', 'whatsapp', 'sms']],
+    ['OpenAI', 'OPENAI_API_KEY', 'External OpenAI-powered app features', ['openai api', 'chatgpt api']],
+    ['Clerk', 'CLERK_SECRET_KEY', 'External auth provider integration', ['clerk']],
+  ];
+
+  return services
+    .filter(([, , , hints]) => hints.some(hint => lower.includes(hint)))
+    .map(([service, variable, description]) => ({
+      service,
+      variable,
+      description,
+      required: false,
+      placeholder: `${variable}=configure_in_database_tab`,
+    }));
+}
+
+function maskSecret(value: string) {
+  if (!value) return '';
+  if (value.length <= 8) return '••••';
+  return `${value.slice(0, 4)}••••••${value.slice(-4)}`;
+}
+
+function pseudoEncryptSecret(value: string) {
+  const salt = randomBytes(6).toString('hex');
+  const digest = createHash('sha256').update(`${salt}:${value}`).digest('hex');
+  return `sha256:${salt}:${digest}`;
+}
+
+function estimateActionCost(prompt: string, intent: IntentDecision) {
+  if (intent.intent === 'conversation') return { finalCredits: 0, minimum_action_credits: 0 };
+  if (intent.intent === 'plan') return costEstimator.calculateRequiredCredits({
+    openrouter_cost_usd: 0.0005,
+    infra_cost_usd: 0.0001,
+    storage_cost_usd: 0,
+    build_cost_usd: 0,
+    domain_operation_cost_usd: 0,
+    minimum_action_credits: 0.5,
+    complexity_surcharge: prompt.length > 600 ? 0.5 : 0,
+  });
+  return costEstimator.calculateRequiredCredits({
+    openrouter_cost_usd: 0.002,
+    infra_cost_usd: 0.0005,
+    storage_cost_usd: 0.0001,
+    build_cost_usd: 0.001,
+    domain_operation_cost_usd: 0,
+    minimum_action_credits: 2,
+    complexity_surcharge: prompt.length > 400 ? 2 : 0,
+  });
+}
+
+function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
+  const beforeMap = new Map(before.map(file => [file.path, file.content]));
+  const afterMap = new Map(after.map(file => [file.path, file.content]));
+  const created = after.filter(file => !beforeMap.has(file.path)).map(file => file.path);
+  const modified = after.filter(file => beforeMap.has(file.path) && beforeMap.get(file.path) !== file.content).map(file => file.path);
+  const deleted = before.filter(file => !afterMap.has(file.path)).map(file => file.path);
+  return {
+    created,
+    modified,
+    deleted,
+    summary: `${created.length} created, ${modified.length} modified, ${deleted.length} deleted`,
+  };
+}
+
+function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): PreviewBuildResult {
+  const errors: any[] = [];
+  for (const file of files) {
+    if (!isSafeProjectFilePath(file.path)) {
+      errors.push({ file: file.path, message: 'Unsafe file path blocked.', severity: 'high' });
+    }
+    if (/process\.env\.[A-Z0-9_]*SECRET|sk_live_|sk_test_|api[_-]?key\s*[:=]/i.test(file.content)) {
+      errors.push({ file: file.path, message: 'Potential secret exposure detected in generated code.', severity: 'high' });
+    }
+    if (/from\s+['"][^'"]+['"]/.test(file.content) && /__missing_import__|missing-module/i.test(file.content)) {
+      errors.push({ file: file.path, message: 'Missing import detected.', severity: 'medium' });
+    }
+  }
+
+  const html = renderPreviewHtml(files, project.name);
+  if (!html.trim() || /__HUGGY_FORCE_ERROR__/i.test(html)) {
+    errors.push({ file: 'index.html', message: 'Preview HTML is empty or intentionally failing.', severity: 'high' });
+  }
+
+  return {
+    status: errors.length ? 'failed' : 'ready',
+    html: errors.length ? buildFallbackAppHtml('Preview needs attention', errors[0].message) : html,
+    errors,
+    summary: errors.length ? errors[0].message : 'Preview build completed successfully.',
+  };
+}
+
+function applyAutoFix(project: GeneratedProject, files: GeneratedFile[], errors: any[]) {
+  if (!errors.length) return { files, fixed: false, patch: null as any };
+  const primary = errors[0];
+  const targetPath = primary.file || 'index.html';
+  const patched = files.map(file => {
+    if (file.path !== targetPath) return file;
+    let content = file.content
+      .replace(/__HUGGY_FORCE_ERROR__/g, '')
+      .replace(/from\s+['"]__missing_import__['"];?/g, '')
+      .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+/g, 'SECRET_CONFIGURED_SERVER_SIDE');
+
+    if (content === file.content) {
+      content += `\n<!-- Huggy auto-fix note: ${escapeHtml(primary.message || 'Preview issue checked')} -->\n`;
+    }
+
+    return { ...file, content, updated_at: new Date().toISOString() };
+  });
+
+  return {
+    files: patched,
+    fixed: true,
+    patch: {
+      id: randomUUID(),
+      project_id: project.id,
+      target_file: targetPath,
+      summary: `Applied targeted patch for ${primary.message}`,
+      created_at: new Date().toISOString(),
+    },
+  };
+}
+
+function createZipBuffer(files: GeneratedFile[]): Buffer {
+  const chunks: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = Buffer.from(file.path);
+    const data = Buffer.from(file.content);
+    const crc = 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(0, 10);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    chunks.push(local, name, data);
+
+    const c = Buffer.alloc(46);
+    c.writeUInt32LE(0x02014b50, 0);
+    c.writeUInt16LE(20, 4);
+    c.writeUInt16LE(20, 6);
+    c.writeUInt16LE(0, 8);
+    c.writeUInt16LE(0, 10);
+    c.writeUInt32LE(0, 12);
+    c.writeUInt32LE(crc, 16);
+    c.writeUInt32LE(data.length, 20);
+    c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(name.length, 28);
+    c.writeUInt16LE(0, 30);
+    c.writeUInt16LE(0, 32);
+    c.writeUInt32LE(0, 34);
+    c.writeUInt32LE(0, 38);
+    c.writeUInt32LE(offset, 42);
+    central.push(c, name);
+    offset += local.length + name.length + data.length;
+  }
+
+  const centralStart = offset;
+  const centralBuffer = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralBuffer.length, 12);
+  end.writeUInt32LE(centralStart, 16);
+  end.writeUInt16LE(0, 20);
+  return Buffer.concat([...chunks, centralBuffer, end]);
 }
 
 async function generateFilesWithAi(input: {
@@ -560,7 +914,125 @@ async function saveAgentEvent(event: AgentEvent) {
     assertSimulationAllowed('Agent event persistence');
   }
 
+  SIM_AGENT_EVENTS.push(row);
   return row;
+}
+
+async function saveProjectMessage(data: any) {
+  const row = { id: data.id || randomUUID(), ...data, created_at: data.created_at || new Date().toISOString() };
+  const client = getSupabase();
+  if (client) {
+    const { error } = await client.from('project_messages').insert([row]);
+    if (error) console.warn(`Supabase project message persistence skipped: ${error.message}`);
+  } else {
+    assertSimulationAllowed('Project message persistence');
+  }
+  SIM_PROJECT_MESSAGES.push(row);
+  return row;
+}
+
+async function listProjectMessages(projectId: string) {
+  const client = getSupabase();
+  if (client) {
+    const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
+    if (!error && data) return data;
+  }
+  assertSimulationAllowed('Project message listing');
+  return SIM_PROJECT_MESSAGES.filter(message => message.project_id === projectId);
+}
+
+async function listAgentEvents(projectId: string) {
+  const client = getSupabase();
+  if (client) {
+    const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
+    if (!error && data) return data;
+  }
+  assertSimulationAllowed('Agent event listing');
+  return SIM_AGENT_EVENTS.filter(event => event.project_id === projectId);
+}
+
+async function createProjectVersion(project: GeneratedProject, files: GeneratedFile[], reason: string, diff: any) {
+  const versions = SIM_PROJECT_VERSIONS.get(project.id) || [];
+  const row = {
+    id: randomUUID(),
+    organization_id: project.organization_id,
+    project_id: project.id,
+    version_number: versions.length + 1,
+    reason,
+    files_snapshot: files,
+    diff_summary: diff,
+    created_at: new Date().toISOString(),
+  };
+  versions.unshift(row);
+  SIM_PROJECT_VERSIONS.set(project.id, versions);
+
+  const client = getSupabase();
+  if (client) {
+    const { error } = await client.from('project_versions').insert([row]);
+    if (error) console.warn(`Supabase project version persistence skipped: ${error.message}`);
+  } else {
+    assertSimulationAllowed('Project version persistence');
+  }
+  return row;
+}
+
+async function listProjectVersions(projectId: string) {
+  const client = getSupabase();
+  if (client) {
+    const { data, error } = await client.from('project_versions').select('*').eq('project_id', projectId).order('version_number', { ascending: false });
+    if (!error && data) return data;
+  }
+  assertSimulationAllowed('Project version listing');
+  return SIM_PROJECT_VERSIONS.get(projectId) || [];
+}
+
+async function saveBuildError(project: GeneratedProject, error: any) {
+  const row = { id: randomUUID(), organization_id: project.organization_id, project_id: project.id, ...error, status: error.status || 'detected', created_at: new Date().toISOString() };
+  const list = SIM_BUILD_ERRORS.get(project.id) || [];
+  list.unshift(row);
+  SIM_BUILD_ERRORS.set(project.id, list);
+  const client = getSupabase();
+  if (client) {
+    const { error: dbError } = await client.from('build_errors').insert([row]);
+    if (dbError) console.warn(`Supabase build error persistence skipped: ${dbError.message}`);
+  }
+  return row;
+}
+
+async function listProjectSecrets(projectId: string) {
+  const client = getSupabase();
+  if (client) {
+    const { data, error } = await client.from('project_secrets').select('id, project_id, service, variable, masked_value, status, created_at, updated_at').eq('project_id', projectId).order('created_at', { ascending: false });
+    if (!error && data) return data;
+  }
+  assertSimulationAllowed('Project secrets listing');
+  return SIM_PROJECT_SECRETS.get(projectId) || [];
+}
+
+async function saveProjectSecret(project: GeneratedProject, service: string, variable: string, value: string, status = 'configured') {
+  const row = {
+    id: randomUUID(),
+    organization_id: project.organization_id,
+    project_id: project.id,
+    service,
+    variable,
+    encrypted_value: value ? pseudoEncryptSecret(value) : null,
+    masked_value: value ? maskSecret(value) : 'not configured',
+    status,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const list = SIM_PROJECT_SECRETS.get(project.id) || [];
+  list.unshift(({ ...row, encrypted_value: undefined }));
+  SIM_PROJECT_SECRETS.set(project.id, list);
+  const client = getSupabase();
+  if (client) {
+    const { error } = await client.from('project_secrets').insert([row]);
+    if (error) console.warn(`Supabase project secret persistence skipped: ${error.message}`);
+  } else {
+    assertSimulationAllowed('Project secret persistence');
+  }
+  return { ...row, encrypted_value: undefined };
 }
 
 function getVercelToken(): string {
@@ -1069,15 +1541,64 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
   const files = await loadProjectFiles(project.id);
+  const messages = await listProjectMessages(project.id);
+  const events = await listAgentEvents(project.id);
   res.json({
     success: true,
     project,
     files,
+    messages,
+    events,
     preview: {
       status: project.preview_status || 'idle',
       html: project.preview_html || renderPreviewHtml(files, project.name),
     },
   });
+});
+
+app.get('/api/projects/:id/state', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const files = await loadProjectFiles(project.id);
+  const messages = await listProjectMessages(project.id);
+  const events = await listAgentEvents(project.id);
+  const versions = await listProjectVersions(project.id);
+  const secrets = await listProjectSecrets(project.id);
+  const errors = SIM_BUILD_ERRORS.get(project.id) || [];
+  const helpers = getDbHelpers();
+  const balance = await helpers.getWallet(userId);
+  res.json({
+    success: true,
+    project,
+    files,
+    messages,
+    events,
+    versions,
+    secrets,
+    errors,
+    credits: { balance },
+    preview: {
+      status: project.preview_status || 'idle',
+      html: project.preview_html || renderPreviewHtml(files, project.name),
+    },
+  });
+});
+
+app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const files = await loadProjectFiles(project.id);
+  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const decision = intentRouter.decide({
+    prompt: String(req.body?.prompt || ''),
+    requestedMode: req.body?.requestedMode || 'build',
+    hasFiles: files.length > 0,
+    lastPlan,
+  });
+  const estimate = estimateActionCost(String(req.body?.prompt || ''), decision);
+  res.json({ success: true, intent: decision, estimate });
 });
 
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
@@ -1087,24 +1608,68 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+  if (!requireProjectCapability(req, res, 'build')) return;
+  if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
+  }
+  if (isAbusivePrompt(prompt)) {
+    return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
+  }
 
   const helpers = getDbHelpers();
-  const wallet = await helpers.getWallet(userId);
-  const cost = costEstimator.calculateRequiredCredits({
-    openrouter_cost_usd: 0.002,
-    infra_cost_usd: 0.0005,
-    storage_cost_usd: 0.0001,
-    build_cost_usd: 0.001,
-    domain_operation_cost_usd: 0,
-    minimum_action_credits: 2,
-    complexity_surcharge: prompt.length > 400 ? 2 : 0,
+  const existingFiles = await loadProjectFiles(project.id);
+  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const decision = intentRouter.decide({
+    prompt,
+    requestedMode: req.body?.requestedMode || 'build',
+    hasFiles: existingFiles.length > 0,
+    lastPlan,
+  });
+  await saveProjectMessage({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    role: 'user',
+    content: prompt,
+    intent: decision.intent,
+    requested_mode: decision.requestedMode,
   });
 
+  if (decision.intent === 'conversation' || decision.intent === 'clarification' || decision.intent === 'plan') {
+    const content = decision.intent === 'plan'
+      ? createPlanResponse(project, prompt, existingFiles)
+      : decision.intent === 'clarification'
+        ? 'I need one more detail before I can safely build this. What should the app do first?'
+        : createConversationResponse(project, prompt);
+    await saveProjectMessage({
+      organization_id: project.organization_id,
+      project_id: project.id,
+      user_id: userId,
+      role: 'assistant',
+      content,
+      intent: decision.intent,
+      requested_mode: decision.requestedMode,
+    });
+    return res.json({
+      success: true,
+      intent: decision,
+      text: content,
+      files: existingFiles,
+      preview: { status: project.preview_status || 'idle', html: project.preview_html || renderPreviewHtml(existingFiles, project.name) },
+      credits: { estimated: 0, charged: 0, remaining: await helpers.getWallet(userId) },
+    });
+  }
+
+  const wallet = await helpers.getWallet(userId);
+  const cost = estimateActionCost(prompt, decision);
+
   if (wallet < cost.finalCredits) {
-    return res.status(402).json({
+    return res.status(200).json({
       success: false,
+      event: 'credits_insufficient',
       error: 'InsufficientCreditsError',
       message: `Your balance (${wallet} credits) is below the required ${cost.finalCredits} credits.`,
+      credits: { balance: wallet, required: cost.finalCredits },
     });
   }
 
@@ -1112,10 +1677,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   await helpers.createReservation(userId, cost.finalCredits, refId);
 
   try {
-    const existingFiles = await loadProjectFiles(project.id);
     const generation = await generateFilesWithAi({
       projectName: project.name,
-      prompt,
+      prompt: req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt,
       modelId: req.body?.modelId || project.model_id || 'auto',
       existingFiles,
     });
@@ -1125,18 +1689,37 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     generation.files.forEach(file => mergedByPath.set(file.path, file));
     const files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
 
-    const previewHtml = renderPreviewHtml(files, project.name);
+    let pipeline = runPreviewPipeline(project, files);
+    let finalFiles = files;
+    let autoFix = null as any;
+    if (pipeline.status === 'failed') {
+      await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
+      const fix = applyAutoFix(project, files, pipeline.errors);
+      autoFix = fix.patch;
+      if (fix.fixed) {
+        finalFiles = fix.files;
+        pipeline = runPreviewPipeline(project, finalFiles);
+      }
+    }
+    const previewHtml = pipeline.html;
     const updatedProject: GeneratedProject = {
       ...project,
       prompt,
       model_id: generation.model,
       status: 'generated',
-      preview_status: 'ready',
+      preview_status: pipeline.status,
       preview_html: previewHtml,
       updated_at: new Date().toISOString(),
     };
 
-    await saveProject(updatedProject, files);
+    await saveProject(updatedProject, finalFiles);
+    const diff = diffFiles(existingFiles, finalFiles);
+    await createProjectVersion(updatedProject, finalFiles, prompt, diff);
+    if (autoFix) {
+      const patches = SIM_PROJECT_PATCHES.get(project.id) || [];
+      patches.unshift(autoFix);
+      SIM_PROJECT_PATCHES.set(project.id, patches);
+    }
 
     const finalCost = costEstimator.calculateRequiredCredits({
       openrouter_cost_usd: generation.cost_usd,
@@ -1152,12 +1735,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
     res.json({
       success: true,
+      intent: decision,
       project: updatedProject,
-      files,
+      files: finalFiles,
       summary: generation.summary,
       model: generation.model,
+      diff,
+      auto_fix: autoFix,
+      errors: pipeline.errors,
       preview: {
-        status: 'ready',
+        status: pipeline.status,
         html: previewHtml,
       },
       credits: {
@@ -1191,6 +1778,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+  if (!requireProjectCapability(req, res, 'build')) return;
+  if (!enforceRateLimit(`stream:${userId}`, 12, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
+  }
+  if (isAbusivePrompt(prompt)) {
+    return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
+  }
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -1216,30 +1810,89 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   const helpers = getDbHelpers();
   const wallet = await helpers.getWallet(userId);
-  const estimate = costEstimator.calculateRequiredCredits({
-    openrouter_cost_usd: 0.002,
-    infra_cost_usd: 0.0005,
-    storage_cost_usd: 0.0001,
-    build_cost_usd: 0.001,
-    domain_operation_cost_usd: 0,
-    minimum_action_credits: 2,
-    complexity_surcharge: prompt.length > 400 ? 2 : 0,
+  const existingFiles = await loadProjectFiles(project.id);
+  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const decision = intentRouter.decide({
+    prompt,
+    requestedMode: req.body?.requestedMode || 'build',
+    hasFiles: existingFiles.length > 0,
+    lastPlan,
   });
+  const estimate = estimateActionCost(prompt, decision);
+  await saveProjectMessage({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    role: 'user',
+    content: prompt,
+    intent: decision.intent,
+    requested_mode: decision.requestedMode,
+  });
+  await send('intent_detected', decision.userVisibleReason, { intent: decision });
 
   if (wallet < estimate.finalCredits) {
-    await send('error', 'Insufficient credits for this generation.', { code: 'InsufficientCreditsError', required: estimate.finalCredits, balance: wallet });
+    await send('credits_insufficient', 'Credits are not enough for this action.', { code: 'InsufficientCreditsError', required: estimate.finalCredits, balance: wallet });
     res.end();
     return;
   }
 
+  if (decision.intent === 'conversation' || decision.intent === 'clarification' || decision.intent === 'plan') {
+    const eventName = decision.intent === 'plan' ? 'planning' : 'answering';
+    const content = decision.intent === 'plan'
+      ? createPlanResponse(project, prompt, existingFiles)
+      : decision.intent === 'clarification'
+        ? 'I need one more detail before I can safely build this. What should the app do first?'
+        : createConversationResponse(project, prompt);
+    await saveProjectMessage({
+      organization_id: project.organization_id,
+      project_id: project.id,
+      user_id: userId,
+      role: 'assistant',
+      content,
+      intent: decision.intent,
+      requested_mode: decision.requestedMode,
+    });
+    await send(eventName, content, {
+      text: content,
+      preview: { status: project.preview_status || 'idle', html: project.preview_html || renderPreviewHtml(existingFiles, project.name) },
+      files: existingFiles,
+      credits: { estimated: estimate.finalCredits, charged: 0, remaining: wallet },
+    });
+    await send('done', 'No file changes were made.', {});
+    res.end();
+    return;
+  }
+
+  const requirements = detectExternalApiRequirements(prompt);
+  if (requirements.length && !req.body?.skipExternalKeys && !req.body?.externalKeysConfirmed) {
+    await send('external_api_keys_required', 'This build can connect external APIs before continuing.', { requirements });
+    await send('waiting_for_api_keys', 'Waiting for API keys or skip confirmation.', {});
+    res.end();
+    return;
+  }
+  if (requirements.length && req.body?.skipExternalKeys) {
+    for (const item of requirements) {
+      await saveProjectSecret(project, item.service, item.variable, '', 'skipped');
+    }
+    await send('api_keys_skipped', 'Continuing with safe placeholders for external APIs.', { requirements });
+  }
+
   const refId = `gen_${randomUUID()}`;
+  const buildSessionId = `build_${randomUUID()}`;
+  SIM_BUILD_SESSIONS.set(buildSessionId, {
+    id: buildSessionId,
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    status: 'running',
+    created_at: new Date().toISOString(),
+  });
   await helpers.createReservation(userId, estimate.finalCredits, refId);
 
   try {
-    await send('queued', 'Generation queued.', { estimated_credits: estimate.finalCredits });
+    await send('queued', 'Generation queued.', { estimated_credits: estimate.finalCredits, build_session_id: buildSessionId });
     await send('routing', 'Selecting the model and preparing project context.', { mode: req.body?.modelId || project.model_id || 'auto' });
 
-    const existingFiles = await loadProjectFiles(project.id);
     const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
     let generatedText = '';
     let model = 'local-template';
@@ -1250,8 +1903,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
       }
 
-      await send('tool_call', 'OpenRouter is not configured locally; using development template.', { tool: 'local_template' });
-      const local = createTemplateFiles(project.name, prompt);
+      await send('building', 'OpenRouter is not configured locally; using development template.', { tool: 'local_template' });
+      const local = createTemplateFiles(project.name, req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\n${prompt}` : prompt);
       generatedText = JSON.stringify({ summary: 'Generated a local development template.', files: local });
     } else {
       const selectedModel = req.body?.modelId && req.body.modelId !== 'auto'
@@ -1261,9 +1914,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       model = selectedModel;
 
       await send('model_started', `Streaming response from ${selectedModel}.`, { model: selectedModel });
-      const messages = buildGenerationMessages({ projectName: project.name, prompt, existingFiles });
+      const messages = buildGenerationMessages({ projectName: project.name, prompt: req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt, existingFiles });
 
       for await (const event of openRouter.streamChat(selectedModel, messages)) {
+        const session = SIM_BUILD_SESSIONS.get(buildSessionId);
+        if (session?.status === 'cancelled') {
+          await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId });
+          res.end();
+          return;
+        }
         if (event.type === 'token') {
           generatedText += event.text;
           model = event.model;
@@ -1282,20 +1941,49 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
     parsed.files.forEach(file => mergedByPath.set(file.path, file));
-    const files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
-    const previewHtml = renderPreviewHtml(files, project.name);
+    let files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+    await send('files_changed', 'Generated files were merged into the project.', { diff: diffFiles(existingFiles, files) });
+    await send('preview_building', 'Building preview sandbox.', {});
+    let pipeline = runPreviewPipeline(project, files);
+    let autoFix = null as any;
+    if (pipeline.status === 'failed') {
+      await send('error_detected', pipeline.errors[0]?.message || 'Preview build failed.', { errors: pipeline.errors });
+      await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
+      for (let attempt = 1; attempt <= 2 && pipeline.status === 'failed'; attempt += 1) {
+        await send('auto_fix_started', `Auto-fix attempt ${attempt} started.`, { attempt });
+        const fix = applyAutoFix(project, files, pipeline.errors);
+        autoFix = fix.patch;
+        if (!fix.fixed) break;
+        files = fix.files;
+        await send('patch_applied', fix.patch?.summary || 'Targeted patch applied.', { patch: fix.patch });
+        pipeline = runPreviewPipeline(project, files);
+      }
+      if (pipeline.status === 'ready') {
+        await send('auto_fix_succeeded', 'Auto-fix succeeded and preview is ready.', { patch: autoFix });
+      } else {
+        await send('auto_fix_failed', 'Auto-fix could not resolve every issue.', { errors: pipeline.errors });
+      }
+    }
+    const previewHtml = pipeline.html;
 
     const updatedProject: GeneratedProject = {
       ...project,
       prompt,
       model_id: model,
       status: 'generated',
-      preview_status: 'ready',
+      preview_status: pipeline.status,
       preview_html: previewHtml,
       updated_at: new Date().toISOString(),
     };
 
     await saveProject(updatedProject, files);
+    const diff = diffFiles(existingFiles, files);
+    await createProjectVersion(updatedProject, files, prompt, diff);
+    if (autoFix) {
+      const patches = SIM_PROJECT_PATCHES.get(project.id) || [];
+      patches.unshift(autoFix);
+      SIM_PROJECT_PATCHES.set(project.id, patches);
+    }
 
     const finalCost = costEstimator.calculateRequiredCredits({
       openrouter_cost_usd: costUsd,
@@ -1312,8 +2000,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send('preview_ready', parsed.summary, {
       project: updatedProject,
       files,
-      preview: { status: 'ready', html: previewHtml },
+      preview: { status: pipeline.status, html: previewHtml },
       model,
+      diff,
+      auto_fix: autoFix,
+      errors: pipeline.errors,
       credits: {
         estimated: estimate.finalCredits,
         charged: finalCost.finalCredits,
@@ -1321,9 +2012,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       },
     });
 
+    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
+    if (session) session.status = 'completed';
     await send('done', 'Generation completed.', {});
     res.end();
   } catch (error: any) {
+    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
+    if (session) session.status = 'failed';
     await helpers.addLedger(userId, 'refund', estimate.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
     await helpers.addAudit({
       user_id: userId,
@@ -1362,6 +2057,183 @@ app.post('/api/projects/:id/preview', async (req: any, res: any) => {
     },
     files,
   });
+});
+
+app.post('/api/projects/:id/build/cancel', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const buildSessionId = String(req.body?.buildSessionId || '');
+  if (buildSessionId && SIM_BUILD_SESSIONS.has(buildSessionId)) {
+    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
+    session.status = 'cancelled';
+    session.cancelled_at = new Date().toISOString();
+  }
+  await saveAgentEvent({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    sequence_number: Date.now(),
+    event_type: 'cancelled',
+    message: 'Build cancelled by user.',
+    payload: { build_session_id: buildSessionId },
+  });
+  res.json({ success: true, status: 'cancelled' });
+});
+
+app.post('/api/projects/:id/build/resume', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  res.json({
+    success: true,
+    message: 'Resume is ready. Send the original prompt again with confirmedCost or externalKeysConfirmed.',
+    project_id: project.id,
+  });
+});
+
+app.get('/api/projects/:id/versions', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const versions = await listProjectVersions(project.id);
+  res.json({ success: true, versions });
+});
+
+app.post('/api/projects/:id/versions/:versionId/rollback', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build')) return;
+  const versions = await listProjectVersions(project.id);
+  const version = versions.find((item: any) => item.id === req.params.versionId);
+  if (!version) return res.status(404).json({ success: false, error: 'Version not found.' });
+  const files = normalizeGeneratedFiles(version.files_snapshot || []);
+  const pipeline = runPreviewPipeline(project, files);
+  const updatedProject = { ...project, preview_status: pipeline.status, preview_html: pipeline.html, updated_at: new Date().toISOString() };
+  await saveProject(updatedProject, files);
+  await createProjectVersion(updatedProject, files, `Rollback to v${version.version_number}`, { rollback_to: version.id });
+  res.json({ success: true, project: updatedProject, files, preview: { status: pipeline.status, html: pipeline.html } });
+});
+
+app.get('/api/projects/:id/diff', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const versions = await listProjectVersions(project.id);
+  res.json({ success: true, diff: versions[0]?.diff_summary || { created: [], modified: [], deleted: [], summary: 'No diff yet' } });
+});
+
+app.get('/api/projects/:id/database', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const files = await loadProjectFiles(project.id);
+  const schemaFile = files.find(file => file.path === 'supabase/schema.sql');
+  const secrets = await listProjectSecrets(project.id);
+  const integrations = SIM_PROJECT_INTEGRATIONS.get(project.id) || [];
+  res.json({
+    success: true,
+    database: {
+      project_id: project.id,
+      mode: 'shared_supabase_project',
+      rls_status: 'enabled_required',
+      last_sync_at: project.updated_at,
+      tables: schemaFile ? [{ name: 'app_records', source: 'supabase/schema.sql', rows: 0 }] : [],
+      schema: schemaFile?.content || '-- No project schema generated yet.',
+      secrets,
+      integrations,
+      security: { secrets_masked: true, service_role_server_only: true },
+    },
+  });
+});
+
+app.get('/api/projects/:id/database/tables', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const files = await loadProjectFiles(project.id);
+  const schemaFile = files.find(file => file.path === 'supabase/schema.sql');
+  res.json({ success: true, tables: schemaFile ? [{ name: 'app_records', rows: 0, schema: schemaFile.content }] : [] });
+});
+
+app.get('/api/projects/:id/database/secrets', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const secrets = await listProjectSecrets(project.id);
+  res.json({ success: true, secrets });
+});
+
+app.post('/api/projects/:id/database/secrets', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'secrets')) return;
+  if (!enforceRateLimit(`secret:${userId}`, 20, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many secret updates.' });
+  }
+  const row = await saveProjectSecret(project, String(req.body?.service || 'Custom'), String(req.body?.variable || 'CUSTOM_API_KEY'), String(req.body?.value || ''), 'configured');
+  res.json({ success: true, secret: row });
+});
+
+app.post('/api/projects/:id/external-keys', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'secrets')) return;
+  const keys = Array.isArray(req.body?.keys) ? req.body.keys : [];
+  const saved = [];
+  for (const item of keys) {
+    saved.push(await saveProjectSecret(project, String(item.service || 'Custom'), String(item.variable || 'CUSTOM_API_KEY'), String(item.value || ''), item.skip ? 'skipped' : 'configured'));
+  }
+  res.json({ success: true, secrets: saved });
+});
+
+app.delete('/api/projects/:id/database/secrets/:secretId', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'secrets')) return;
+  const list = (SIM_PROJECT_SECRETS.get(project.id) || []).filter(secret => secret.id !== req.params.secretId);
+  SIM_PROJECT_SECRETS.set(project.id, list);
+  const client = getSupabase();
+  if (client) {
+    const { error } = await client.from('project_secrets').delete().eq('id', req.params.secretId).eq('project_id', project.id);
+    if (error) console.warn(`Supabase secret deletion skipped: ${error.message}`);
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/projects/:id/assets', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build')) return;
+  const asset = {
+    id: randomUUID(),
+    organization_id: project.organization_id,
+    project_id: project.id,
+    name: String(req.body?.name || 'asset'),
+    url: String(req.body?.url || ''),
+    kind: String(req.body?.kind || 'image'),
+    created_at: new Date().toISOString(),
+  };
+  const assets = SIM_PROJECT_ASSETS.get(project.id) || [];
+  assets.unshift(asset);
+  SIM_PROJECT_ASSETS.set(project.id, assets);
+  res.json({ success: true, asset });
+});
+
+app.get('/api/projects/:id/export', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const files = await loadProjectFiles(project.id);
+  const zip = createZipBuffer(files.length ? files : createTemplateFiles(project.name, project.prompt || project.name));
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${project.slug || 'huggy-app'}.zip"`);
+  res.send(zip);
 });
 
 // GET /projects/:id/domains
@@ -1513,13 +2385,25 @@ app.post('/api/projects/:id/deploy', async (req: any, res: any) => {
   const projectId = req.params.id;
   const userId = getUserOrgId(req);
   const { commitHash, branch = 'main', userCredits = 100 } = req.body;
+  if (!requireProjectCapability(req, res, 'deploy')) return;
+  if (!enforceRateLimit(`deploy:${userId}`, 6, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many deploy requests. Please wait a moment.' });
+  }
 
   if (userCredits < 2) {
-    return res.status(402).json({ success: false, error: 'Insufficient credits (2 required for production deployment)' });
+    return res.status(200).json({
+      success: false,
+      event: 'credits_insufficient',
+      error: 'Insufficient credits',
+      credits: { required: 2, balance: userCredits },
+    });
   }
 
   const project = await loadProject(projectId, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (project.preview_status !== 'ready') {
+    return res.status(409).json({ success: false, error: 'Preview must be ready before deployment.' });
+  }
 
   const files = await loadProjectFiles(projectId);
   if (files.length === 0) {

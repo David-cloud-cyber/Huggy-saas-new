@@ -117,3 +117,179 @@ create unique index if not exists project_files_project_path_unique_idx on publi
 create index if not exists projects_owner_updated_idx on public.projects (owner_id, updated_at desc);
 create index if not exists deployments_project_created_idx on public.deployments (project_id, created_at desc);
 create index if not exists agent_events_project_sequence_idx on public.agent_events (project_id, sequence_number);
+
+create table if not exists public.project_messages (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid not null,
+  role text not null check (role in ('user', 'assistant', 'system')),
+  content text not null,
+  intent text,
+  requested_mode text,
+  created_at timestamptz default now() not null
+);
+
+create table if not exists public.project_versions (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  version_number integer not null,
+  reason text,
+  files_snapshot jsonb default '[]'::jsonb not null,
+  diff_summary jsonb default '{}'::jsonb not null,
+  created_at timestamptz default now() not null
+);
+
+create table if not exists public.build_sessions (
+  id text primary key,
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  user_id uuid not null,
+  status text not null default 'running',
+  created_at timestamptz default now() not null,
+  cancelled_at timestamptz
+);
+
+create table if not exists public.build_errors (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  file text,
+  message text not null,
+  severity text default 'medium',
+  status text default 'detected',
+  created_at timestamptz default now() not null
+);
+
+create table if not exists public.auto_fix_attempts (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  error_id uuid,
+  status text not null,
+  summary text,
+  created_at timestamptz default now() not null
+);
+
+create table if not exists public.project_patches (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  target_file text,
+  summary text,
+  created_at timestamptz default now() not null
+);
+
+create table if not exists public.project_integrations (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  service text not null,
+  status text not null default 'missing',
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+create table if not exists public.project_secrets (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  service text not null,
+  variable text not null,
+  encrypted_value text,
+  masked_value text not null,
+  status text not null default 'configured',
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+alter table public.project_secrets add column if not exists organization_id uuid;
+alter table public.project_secrets add column if not exists project_id uuid references public.projects(id) on delete cascade;
+alter table public.project_secrets add column if not exists service text default 'Custom';
+alter table public.project_secrets add column if not exists variable text default 'CUSTOM_API_KEY';
+alter table public.project_secrets add column if not exists encrypted_value text;
+alter table public.project_secrets add column if not exists masked_value text default '••••';
+alter table public.project_secrets add column if not exists status text default 'configured';
+alter table public.project_secrets add column if not exists created_at timestamptz default now();
+alter table public.project_secrets add column if not exists updated_at timestamptz default now();
+
+create table if not exists public.project_assets (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  name text not null,
+  url text,
+  kind text default 'image',
+  created_at timestamptz default now() not null
+);
+
+alter table public.project_messages enable row level security;
+alter table public.project_versions enable row level security;
+alter table public.build_sessions enable row level security;
+alter table public.build_errors enable row level security;
+alter table public.auto_fix_attempts enable row level security;
+alter table public.project_patches enable row level security;
+alter table public.project_integrations enable row level security;
+alter table public.project_secrets enable row level security;
+alter table public.project_assets enable row level security;
+
+drop policy if exists "Project messages owner isolation" on public.project_messages;
+create policy "Project messages owner isolation" on public.project_messages
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project versions owner isolation" on public.project_versions;
+create policy "Project versions owner isolation" on public.project_versions
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Build sessions owner isolation" on public.build_sessions;
+create policy "Build sessions owner isolation" on public.build_sessions
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Build errors owner isolation" on public.build_errors;
+create policy "Build errors owner isolation" on public.build_errors
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Auto fix attempts owner isolation" on public.auto_fix_attempts;
+create policy "Auto fix attempts owner isolation" on public.auto_fix_attempts
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project patches owner isolation" on public.project_patches;
+create policy "Project patches owner isolation" on public.project_patches
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project integrations owner isolation" on public.project_integrations;
+create policy "Project integrations owner isolation" on public.project_integrations
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project secrets owner isolation" on public.project_secrets;
+create policy "Project secrets owner isolation" on public.project_secrets
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project assets owner isolation" on public.project_assets;
+create policy "Project assets owner isolation" on public.project_assets
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+create index if not exists project_messages_project_created_idx on public.project_messages (project_id, created_at);
+create index if not exists project_versions_project_number_idx on public.project_versions (project_id, version_number desc);
+create index if not exists build_errors_project_created_idx on public.build_errors (project_id, created_at desc);
+create index if not exists project_secrets_project_variable_idx on public.project_secrets (project_id, variable);
+
+grant select, insert, update, delete on public.project_messages to authenticated;
+grant select, insert, update, delete on public.project_versions to authenticated;
+grant select, insert, update, delete on public.build_sessions to authenticated;
+grant select, insert, update, delete on public.build_errors to authenticated;
+grant select, insert, update, delete on public.auto_fix_attempts to authenticated;
+grant select, insert, update, delete on public.project_patches to authenticated;
+grant select, insert, update, delete on public.project_integrations to authenticated;
+grant select, insert, update, delete on public.project_secrets to authenticated;
+grant select, insert, update, delete on public.project_assets to authenticated;
