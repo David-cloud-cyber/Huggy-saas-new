@@ -436,8 +436,11 @@
     .workspace-body {
       display: grid;
       grid-template-columns: var(--huggy-sidebar-width, 380px) minmax(0, 1fr);
-      flex: 1;
+      grid-template-rows: minmax(0, 1fr);
+      align-items: stretch;
+      flex: 1 1 auto;
       overflow: hidden;
+      min-height: 0;
       transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
@@ -452,17 +455,22 @@
     }
 
     .workspace-body.sidebar-collapsed {
-      grid-template-columns: 0px 1fr;
+      grid-template-columns: 0px minmax(0, 1fr);
     }
 
     /* ── LEFT PANEL (CHAT & DESIGN) ───────────────────────────── */
     .sidebar-pane {
+      grid-column: 1;
+      grid-row: 1;
       border-right: 1px solid var(--border);
       background: var(--bg-panel);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       min-width: 0;
+      min-height: 0;
+      height: 100%;
+      max-height: 100%;
       transition: visibility 200ms, opacity 200ms, width 200ms;
     }
 
@@ -853,27 +861,40 @@
 
     /* ── RIGHT COLUMN: CODE & PREVIEW WORKSPACE ─────────────── */
     .editor-pane {
+      grid-column: 2;
+      grid-row: 1;
       background: var(--bg);
       display: grid;
       grid-template-rows: 44px minmax(0, 1fr);
       overflow: hidden;
       min-width: 0;
       min-height: 0;
+      height: 100%;
+      max-height: 100%;
+      align-self: stretch;
     }
 
     /* Control mini-navbar matches screenshot precisamente */
     .sub-navbar {
+      grid-row: 1;
       height: 44px;
       min-height: 44px;
+      width: 100%;
+      align-self: start;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
       background: var(--bg);
-      position: relative;
+      position: sticky;
+      top: 0;
       z-index: 40;
-      grid-row: 1;
+      flex: 0 0 44px;
+    }
+
+    .sub-nav-left {
+      min-width: 0;
     }
 
     .sub-nav-left {
@@ -904,10 +925,18 @@
 
     .sub-nav-tabs {
       display: flex;
+      flex-wrap: nowrap;
+      max-width: 100%;
+      overflow-x: auto;
       background: rgba(255, 255, 255, 0.02);
       border-radius: 6px;
       padding: 2px;
       border: 1px solid rgba(255, 255, 255, 0.04);
+      scrollbar-width: none;
+    }
+
+    .sub-nav-tabs::-webkit-scrollbar {
+      display: none;
     }
 
     .sub-nav-tab {
@@ -923,6 +952,8 @@
       background: transparent;
       border: none;
       cursor: pointer;
+      white-space: nowrap;
+      flex: 0 0 auto;
     }
 
     .sub-nav-tab.active {
@@ -964,6 +995,7 @@
       min-width: 0;
       min-height: 0;
       height: 100%;
+      max-height: 100%;
     }
 
     /* Code View double-column layout */
