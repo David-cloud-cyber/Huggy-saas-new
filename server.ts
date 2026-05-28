@@ -40,8 +40,6 @@ function getSupabase() {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (url && key) {
       supabase = createClient(url, key);
-    } else {
-      console.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured. Falling back to local in-memory simulation state.');
     }
   }
   return supabase;
@@ -128,35 +126,14 @@ app.use('/api/ai/route', requireAuth);
 app.use('/api/users/me', requireAuth);
 app.use('/api/projects', requireAuth);
 
-// ── LOCAL IN-MEMORY BACKUP DATA STORES (For instant developer previews with zero credentials) ──
-const SIM_WALLETS = new Map<string, { balance: number; updated_at: string }>();
-const SIM_LEDGERS: any[] = [];
-const SIM_RESERVATIONS = new Map<string, any>();
-const SIM_DOMAINS: any[] = [];
-const SIM_DEPLOYMENTS: any[] = [];
-const SIM_USER_PREFS = new Map<string, any>();
-const SIM_PROJECT_PREFS = new Map<string, any>();
-const SIM_AUDITS: any[] = [];
-const SIM_PROJECTS = new Map<string, GeneratedProject>();
-const SIM_PROJECT_FILES = new Map<string, GeneratedFile[]>();
-const SIM_PROJECT_MESSAGES: any[] = [];
-const SIM_AGENT_EVENTS: AgentEvent[] = [];
-const SIM_PROJECT_VERSIONS = new Map<string, any[]>();
-const SIM_BUILD_SESSIONS = new Map<string, any>();
-const SIM_BUILD_ERRORS = new Map<string, any[]>();
-const SIM_PROJECT_PATCHES = new Map<string, any[]>();
-const SIM_PROJECT_INTEGRATIONS = new Map<string, any[]>();
-const SIM_PROJECT_SECRETS = new Map<string, any[]>();
-const SIM_PROJECT_ASSETS = new Map<string, any[]>();
-const SIM_RATE_LIMITS = new Map<string, number[]>();
-
-// Initialize a default simulated user/organization wallet with 100.0 credits for previewing
+// Runtime data must live in Supabase. The only in-memory state kept here is
+// short-lived rate-limit counters, which are not product data.
+const RATE_LIMITS = new Map<string, number[]>();
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
-SIM_WALLETS.set(DEFAULT_ORG_ID, { balance: 100.00, updated_at: new Date().toISOString() });
 
 // Instantiate Core Services
 const openRouter = new OpenRouterService({
-  apiKey: process.env.OPENROUTER_API_KEY || 'sk-or-mock-key-for-preview',
+  apiKey: process.env.OPENROUTER_API_KEY || '',
   siteUrl: process.env.OPENROUTER_SITE_URL || 'https://huggy.app',
   appName: process.env.OPENROUTER_APP_NAME || 'Huggy SaaS'
 });
@@ -164,18 +141,31 @@ const openRouter = new OpenRouterService({
 const modelRouter = new ModelRouter();
 const costEstimator = new CostEstimatorService();
 
-function isProductionRuntime(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
-
-function allowSimulation(): boolean {
-  return !isProductionRuntime() || process.env.HUGGY_ALLOW_SIMULATION === 'true';
-}
-
-function assertSimulationAllowed(feature: string) {
-  if (!allowSimulation()) {
-    throw new Error(`${feature} requires live configuration in production. Configure Supabase/OpenRouter/Vercel/Stripe instead of using simulated data.`);
+function requireSupabase(feature: string) {
+  const client = getSupabase();
+  if (!client) {
+    const error = new Error(`${feature} requires SUPABASE_SERVICE_ROLE_KEY on the backend.`);
+    (error as any).statusCode = 503;
+    throw error;
   }
+  return client;
+}
+
+function normalizeProviderError(error: any): string {
+  const message = String(error?.message || error || 'Generation failed.');
+  if (/OpenRouter HTTP 401|OpenRouter HTTP 403|invalid api key|unauthorized/i.test(message)) {
+    return 'OpenRouter key invalid or unauthorized. Update OPENROUTER_API_KEY on Railway and redeploy.';
+  }
+  if (/OpenRouter HTTP 404|model.*not.*found|not found/i.test(message)) {
+    return 'The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.';
+  }
+  if (/OpenRouter HTTP 429|rate limit|too many requests/i.test(message)) {
+    return 'OpenRouter rate limit reached. Please wait a moment and try again.';
+  }
+  if (/OpenRouter HTTP 5|provider|upstream|timeout|AbortError/i.test(message)) {
+    return 'OpenRouter provider error. The request was not completed; try again or choose another allowed model.';
+  }
+  return message;
 }
 
 type GeneratedFile = {
@@ -264,10 +254,10 @@ function requireProjectCapability(req: any, res: any, capability: 'build' | 'dep
 
 function enforceRateLimit(key: string, limit: number, windowMs: number) {
   const now = Date.now();
-  const recent = (SIM_RATE_LIMITS.get(key) || []).filter(ts => now - ts < windowMs);
+  const recent = (RATE_LIMITS.get(key) || []).filter(ts => now - ts < windowMs);
   if (recent.length >= limit) return false;
   recent.push(now);
-  SIM_RATE_LIMITS.set(key, recent);
+  RATE_LIMITS.set(key, recent);
   return true;
 }
 
@@ -285,11 +275,22 @@ function slugify(value: string): string {
     .slice(0, 48) || `project-${Date.now()}`;
 }
 
-function uniqueSlug(base: string): string {
+async function uniqueSlug(base: string, ownerId: string): Promise<string> {
   const candidate = slugify(base);
-  const existing = new Set(Array.from(SIM_PROJECTS.values()).map(project => project.slug));
+  const client = requireSupabase('Project slug generation');
+  const { data, error } = await client
+    .from('projects')
+    .select('slug')
+    .eq('owner_id', ownerId)
+    .ilike('slug', `${candidate}%`);
+  if (error) throw new Error(`Project slug lookup failed: ${error.message}`);
+  const existing = new Set((data || []).map((row: any) => row.slug));
   if (!existing.has(candidate)) return candidate;
-  return `${candidate}-${Math.random().toString(36).slice(2, 6)}`;
+  for (let i = 2; i < 1000; i += 1) {
+    const next = `${candidate}-${i}`;
+    if (!existing.has(next)) return next;
+  }
+  return `${candidate}-${randomUUID().slice(0, 8)}`;
 }
 
 function isSafeProjectFilePath(filePath: string): boolean {
@@ -701,15 +702,7 @@ async function generateFilesWithAi(input: {
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
   if (!hasLiveKey) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
-    }
-    return {
-      files: createTemplateFiles(input.projectName, input.prompt),
-      summary: 'Generated a local development template because OpenRouter is not configured.',
-      model: 'local-template',
-      cost_usd: 0,
-    };
+    throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
   }
 
   const selectedModel = input.modelId && input.modelId !== 'auto' ? input.modelId : 'anthropic/claude-sonnet-4.6';
@@ -821,18 +814,10 @@ function parseGeneratedOutput(projectName: string, rawText: string) {
 }
 
 async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
-  const client = getSupabase();
-  if (!client) assertSimulationAllowed('Project persistence');
-
-  SIM_PROJECTS.set(project.id, project);
-  if (files) SIM_PROJECT_FILES.set(project.id, files);
-
-  if (!client) return project;
-
+  const client = requireSupabase('Project persistence');
   const { error } = await client.from('projects').upsert([project]);
   if (error) {
-    console.warn(`Supabase project persistence skipped: ${error.message}`);
-    return project;
+    throw new Error(`Supabase project persistence failed: ${error.message}`);
   }
 
   if (files) {
@@ -845,57 +830,37 @@ async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
       updated_at: new Date().toISOString(),
     }));
     const { error: fileError } = await client.from('project_files').insert(rows);
-    if (fileError) console.warn(`Supabase project file persistence skipped: ${fileError.message}`);
+    if (fileError) throw new Error(`Supabase project file persistence failed: ${fileError.message}`);
   }
 
   return project;
 }
 
 async function loadProject(projectId: string, userId: string): Promise<GeneratedProject | null> {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('projects').select('*').eq('id', projectId).eq('owner_id', userId).maybeSingle();
-    if (!error && data) return data as GeneratedProject;
-    if (error) console.warn(`Supabase project load skipped: ${error.message}`);
-  }
-
-  assertSimulationAllowed('Project loading');
-
-  const project = SIM_PROJECTS.get(projectId);
-  if (!project || project.owner_id !== userId) return null;
-  return project;
+  const client = requireSupabase('Project loading');
+  const { data, error } = await client.from('projects').select('*').eq('id', projectId).eq('owner_id', userId).maybeSingle();
+  if (error) throw new Error(`Supabase project load failed: ${error.message}`);
+  return (data as GeneratedProject) || null;
 }
 
 async function listProjectsForUser(userId: string): Promise<GeneratedProject[]> {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('projects').select('*').eq('owner_id', userId).order('updated_at', { ascending: false });
-    if (!error && data) return data as GeneratedProject[];
-    if (error) console.warn(`Supabase project listing skipped: ${error.message}`);
-  }
-  assertSimulationAllowed('Project listing');
-  return Array.from(SIM_PROJECTS.values()).filter(project => project.owner_id === userId).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const client = requireSupabase('Project listing');
+  const { data, error } = await client.from('projects').select('*').eq('owner_id', userId).order('updated_at', { ascending: false });
+  if (error) throw new Error(`Supabase project listing failed: ${error.message}`);
+  return (data || []) as GeneratedProject[];
 }
 
 async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
-    if (!error && data) return data as GeneratedFile[];
-    if (error) console.warn(`Supabase project files load skipped: ${error.message}`);
-  }
-  assertSimulationAllowed('Project file loading');
-  return SIM_PROJECT_FILES.get(projectId) || [];
+  const client = requireSupabase('Project file loading');
+  const { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
+  if (error) throw new Error(`Supabase project files load failed: ${error.message}`);
+  return (data || []) as GeneratedFile[];
 }
 
 async function saveDeploymentRecord(record: any) {
-  const client = getSupabase();
-  if (!client) assertSimulationAllowed('Deployment persistence');
-
-  SIM_DEPLOYMENTS.unshift(record);
-  if (!client) return;
+  const client = requireSupabase('Deployment persistence');
   const { error } = await client.from('deployments').insert([record]);
-  if (error) console.warn(`Supabase deployment persistence skipped: ${error.message}`);
+  if (error) throw new Error(`Supabase deployment persistence failed: ${error.message}`);
 }
 
 async function saveAgentEvent(event: AgentEvent) {
@@ -906,53 +871,51 @@ async function saveAgentEvent(event: AgentEvent) {
     created_at: event.created_at || new Date().toISOString(),
   };
 
-  const client = getSupabase();
-  if (client) {
-    const { error } = await client.from('agent_events').insert([row]);
-    if (error) console.warn(`Supabase agent event persistence skipped: ${error.message}`);
-  } else {
-    assertSimulationAllowed('Agent event persistence');
-  }
-
-  SIM_AGENT_EVENTS.push(row);
+  const client = requireSupabase('Agent event persistence');
+  const { error } = await client.from('agent_events').insert([row]);
+  if (error) throw new Error(`Supabase agent event persistence failed: ${error.message}`);
   return row;
 }
 
 async function saveProjectMessage(data: any) {
   const row = { id: data.id || randomUUID(), ...data, created_at: data.created_at || new Date().toISOString() };
-  const client = getSupabase();
-  if (client) {
-    const { error } = await client.from('project_messages').insert([row]);
-    if (error) console.warn(`Supabase project message persistence skipped: ${error.message}`);
-  } else {
-    assertSimulationAllowed('Project message persistence');
-  }
-  SIM_PROJECT_MESSAGES.push(row);
+  const client = requireSupabase('Project message persistence');
+  const { error } = await client.from('project_messages').insert([row]);
+  if (error) throw new Error(`Supabase project message persistence failed: ${error.message}`);
   return row;
 }
 
 async function listProjectMessages(projectId: string) {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
-    if (!error && data) return data;
-  }
-  assertSimulationAllowed('Project message listing');
-  return SIM_PROJECT_MESSAGES.filter(message => message.project_id === projectId);
+  const client = requireSupabase('Project message listing');
+  const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
+  if (error) throw new Error(`Supabase project message listing failed: ${error.message}`);
+  return data || [];
+}
+
+async function getLastProjectPlan(projectId: string): Promise<string> {
+  const client = requireSupabase('Project plan lookup');
+  const { data, error } = await client
+    .from('project_messages')
+    .select('content')
+    .eq('project_id', projectId)
+    .eq('intent', 'plan')
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Supabase project plan lookup failed: ${error.message}`);
+  return data?.content || '';
 }
 
 async function listAgentEvents(projectId: string) {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
-    if (!error && data) return data;
-  }
-  assertSimulationAllowed('Agent event listing');
-  return SIM_AGENT_EVENTS.filter(event => event.project_id === projectId);
+  const client = requireSupabase('Agent event listing');
+  const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
+  if (error) throw new Error(`Supabase agent event listing failed: ${error.message}`);
+  return data || [];
 }
 
 async function createProjectVersion(project: GeneratedProject, files: GeneratedFile[], reason: string, diff: any) {
-  const versions = SIM_PROJECT_VERSIONS.get(project.id) || [];
+  const versions = await listProjectVersions(project.id);
   const row = {
     id: randomUUID(),
     organization_id: project.organization_id,
@@ -963,50 +926,82 @@ async function createProjectVersion(project: GeneratedProject, files: GeneratedF
     diff_summary: diff,
     created_at: new Date().toISOString(),
   };
-  versions.unshift(row);
-  SIM_PROJECT_VERSIONS.set(project.id, versions);
-
-  const client = getSupabase();
-  if (client) {
-    const { error } = await client.from('project_versions').insert([row]);
-    if (error) console.warn(`Supabase project version persistence skipped: ${error.message}`);
-  } else {
-    assertSimulationAllowed('Project version persistence');
-  }
+  const client = requireSupabase('Project version persistence');
+  const { error } = await client.from('project_versions').insert([row]);
+  if (error) throw new Error(`Supabase project version persistence failed: ${error.message}`);
   return row;
 }
 
 async function listProjectVersions(projectId: string) {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('project_versions').select('*').eq('project_id', projectId).order('version_number', { ascending: false });
-    if (!error && data) return data;
-  }
-  assertSimulationAllowed('Project version listing');
-  return SIM_PROJECT_VERSIONS.get(projectId) || [];
+  const client = requireSupabase('Project version listing');
+  const { data, error } = await client.from('project_versions').select('*').eq('project_id', projectId).order('version_number', { ascending: false });
+  if (error) throw new Error(`Supabase project version listing failed: ${error.message}`);
+  return data || [];
 }
 
 async function saveBuildError(project: GeneratedProject, error: any) {
   const row = { id: randomUUID(), organization_id: project.organization_id, project_id: project.id, ...error, status: error.status || 'detected', created_at: new Date().toISOString() };
-  const list = SIM_BUILD_ERRORS.get(project.id) || [];
-  list.unshift(row);
-  SIM_BUILD_ERRORS.set(project.id, list);
-  const client = getSupabase();
-  if (client) {
-    const { error: dbError } = await client.from('build_errors').insert([row]);
-    if (dbError) console.warn(`Supabase build error persistence skipped: ${dbError.message}`);
-  }
+  const client = requireSupabase('Build error persistence');
+  const { error: dbError } = await client.from('build_errors').insert([row]);
+  if (dbError) throw new Error(`Supabase build error persistence failed: ${dbError.message}`);
   return row;
 }
 
+async function listBuildErrors(projectId: string) {
+  const client = requireSupabase('Build error listing');
+  const { data, error } = await client.from('build_errors').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+  if (error) throw new Error(`Supabase build error listing failed: ${error.message}`);
+  return data || [];
+}
+
+async function createBuildSession(project: GeneratedProject, userId: string) {
+  const row = {
+    id: `build_${randomUUID()}`,
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    status: 'running',
+    created_at: new Date().toISOString(),
+  };
+  const client = requireSupabase('Build session persistence');
+  const { error } = await client.from('build_sessions').insert([row]);
+  if (error) throw new Error(`Supabase build session persistence failed: ${error.message}`);
+  return row;
+}
+
+async function getBuildSession(buildSessionId: string) {
+  const client = requireSupabase('Build session lookup');
+  const { data, error } = await client.from('build_sessions').select('*').eq('id', buildSessionId).maybeSingle();
+  if (error) throw new Error(`Supabase build session lookup failed: ${error.message}`);
+  return data;
+}
+
+async function updateBuildSessionStatus(buildSessionId: string, status: string, extra: Record<string, unknown> = {}) {
+  const client = requireSupabase('Build session update');
+  const { error } = await client.from('build_sessions').update({ status, ...extra }).eq('id', buildSessionId);
+  if (error) throw new Error(`Supabase build session update failed: ${error.message}`);
+}
+
+async function saveProjectPatch(project: GeneratedProject, patch: any) {
+  if (!patch) return;
+  const client = requireSupabase('Project patch persistence');
+  const row = {
+    id: randomUUID(),
+    organization_id: project.organization_id,
+    project_id: project.id,
+    target_file: patch.target_file || patch.file || null,
+    summary: patch.summary || 'Targeted patch applied.',
+    created_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('project_patches').insert([row]);
+  if (error) throw new Error(`Supabase project patch persistence failed: ${error.message}`);
+}
+
 async function listProjectSecrets(projectId: string) {
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('project_secrets').select('id, project_id, service, variable, masked_value, status, created_at, updated_at').eq('project_id', projectId).order('created_at', { ascending: false });
-    if (!error && data) return data;
-  }
-  assertSimulationAllowed('Project secrets listing');
-  return SIM_PROJECT_SECRETS.get(projectId) || [];
+  const client = requireSupabase('Project secrets listing');
+  const { data, error } = await client.from('project_secrets').select('id, project_id, service, variable, masked_value, status, created_at, updated_at').eq('project_id', projectId).order('created_at', { ascending: false });
+  if (error) throw new Error(`Supabase project secrets listing failed: ${error.message}`);
+  return data || [];
 }
 
 async function saveProjectSecret(project: GeneratedProject, service: string, variable: string, value: string, status = 'configured') {
@@ -1022,16 +1017,9 @@ async function saveProjectSecret(project: GeneratedProject, service: string, var
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const list = SIM_PROJECT_SECRETS.get(project.id) || [];
-  list.unshift(({ ...row, encrypted_value: undefined }));
-  SIM_PROJECT_SECRETS.set(project.id, list);
-  const client = getSupabase();
-  if (client) {
-    const { error } = await client.from('project_secrets').insert([row]);
-    if (error) console.warn(`Supabase project secret persistence skipped: ${error.message}`);
-  } else {
-    assertSimulationAllowed('Project secret persistence');
-  }
+  const client = requireSupabase('Project secret persistence');
+  const { error } = await client.from('project_secrets').insert([row]);
+  if (error) throw new Error(`Supabase project secret persistence failed: ${error.message}`);
   return { ...row, encrypted_value: undefined };
 }
 
@@ -1042,8 +1030,7 @@ function getVercelToken(): string {
 function createVercelDomainProxy() {
   const token = getVercelToken();
   if (!token) {
-    assertSimulationAllowed('Vercel domain operations');
-    return new VercelDomainService('mock-vercel-token');
+    throw new Error('Vercel domain operations are not configured. Add VERCEL_TOKEN on Railway.');
   }
   return new VercelDomainService(token);
 }
@@ -1103,59 +1090,38 @@ async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFi
   };
 }
 
-// Wrapper to safely access DB status or simulated state
+// Wrapper to safely access live Supabase-backed billing state.
 function getDbHelpers() {
-  const client = getSupabase();
+  const client = requireSupabase('Billing and usage persistence');
   return {
     getWallet: async (orgId: string) => {
-      if (client) {
-        const { data } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
-        return data ? parseFloat(data.balance) : 0;
-      }
-      assertSimulationAllowed('Credit wallet');
-      return SIM_WALLETS.get(orgId)?.balance ?? 100.00;
+      const { data, error } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
+      if (error) throw new Error(`Credit wallet lookup failed: ${error.message}`);
+      return data ? parseFloat(data.balance) : 0;
     },
     updateWallet: async (orgId: string, diff: number) => {
-      if (client) {
-        const { data: wallet } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
-        const current = wallet ? parseFloat(wallet.balance) : 100.00;
-        const next = current + diff;
-        await client.from('credit_wallets').upsert([{ organization_id: orgId, balance: next, updated_at: new Date().toISOString() }]);
-        return next;
-      } else {
-        assertSimulationAllowed('Credit wallet update');
-        const current = SIM_WALLETS.get(orgId)?.balance ?? 100.00;
-        const next = current + diff;
-        SIM_WALLETS.set(orgId, { balance: next, updated_at: new Date().toISOString() });
-        return next;
-      }
+      const { data: wallet, error: walletError } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
+      if (walletError) throw new Error(`Credit wallet update lookup failed: ${walletError.message}`);
+      const current = wallet ? parseFloat(wallet.balance) : 0;
+      const next = current + diff;
+      const { error } = await client.from('credit_wallets').upsert([{ organization_id: orgId, balance: next, updated_at: new Date().toISOString() }]);
+      if (error) throw new Error(`Credit wallet update failed: ${error.message}`);
+      return next;
     },
     addLedger: async (orgId: string, type: string, amount: number, balance_after: number, desc: string, refId: string) => {
       const log = { wallet_id: orgId, type, amount, balance_after, description: desc, reference_id: refId, created_at: new Date().toISOString() };
-      if (client) {
-        await client.from('credit_ledger').insert([log]);
-      } else {
-        assertSimulationAllowed('Credit ledger');
-        SIM_LEDGERS.unshift(log);
-      }
+      const { error } = await client.from('credit_ledger').insert([log]);
+      if (error) throw new Error(`Credit ledger insert failed: ${error.message}`);
     },
     addAudit: async (data: any) => {
-      if (client) {
-        await client.from('audit_logs').insert([{ ...data, created_at: new Date().toISOString() }]);
-      } else {
-        assertSimulationAllowed('Audit log');
-        SIM_AUDITS.unshift({ ...data, id: String(SIM_AUDITS.length + 1), created_at: new Date().toISOString() });
-      }
+      const { error } = await client.from('audit_logs').insert([{ ...data, created_at: new Date().toISOString() }]);
+      if (error) console.warn(`Audit log insert failed: ${error.message}`);
     },
     createReservation: async (orgId: string, amount: number, refId: string) => {
       const expires_at = new Date(Date.now() + 15 * 60000).toISOString();
-      const res = { id: `res_${Math.random().toString(36).substring(2, 11)}`, wallet_id: orgId, amount, status: 'reserved', reference_id: refId, expires_at };
-      if (client) {
-        await client.from('credit_reservations').insert([res]);
-      } else {
-        assertSimulationAllowed('Credit reservation');
-        SIM_RESERVATIONS.set(refId, res);
-      }
+      const res = { id: randomUUID(), wallet_id: orgId, amount, status: 'reserved', reference_id: refId, expires_at };
+      const { error } = await client.from('credit_reservations').insert([res]);
+      if (error) throw new Error(`Credit reservation failed: ${error.message}`);
       return res;
     }
   };
@@ -1176,7 +1142,7 @@ app.get('/api/billing/plans', (req, res) => {
 
 // GET /billing/wallet
 app.get('/api/billing/wallet', async (req, res) => {
-  const orgId = (req.query.orgId as string) || DEFAULT_ORG_ID;
+  const orgId = (req.query.orgId as string) || (req as any).user?.id || DEFAULT_ORG_ID;
   const helpers = getDbHelpers();
   const balance = await helpers.getWallet(orgId);
   res.json({
@@ -1188,16 +1154,11 @@ app.get('/api/billing/wallet', async (req, res) => {
 
 // GET /billing/ledger
 app.get('/api/billing/ledger', async (req, res) => {
-  const orgId = (req.query.orgId as string) || DEFAULT_ORG_ID;
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('credit_ledger').select('*').eq('wallet_id', orgId).order('created_at', { ascending: false });
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ success: true, ledger: data });
-  } else {
-    const orgLedger = SIM_LEDGERS.filter(l => l.wallet_id === orgId);
-    return res.json({ success: true, ledger: orgLedger });
-  }
+  const orgId = (req.query.orgId as string) || (req as any).user?.id || DEFAULT_ORG_ID;
+  const client = requireSupabase('Credit ledger listing');
+  const { data, error } = await client.from('credit_ledger').select('*').eq('wallet_id', orgId).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ success: true, ledger: data || [] });
 });
 
 // POST /billing/checkout/subscription
@@ -1243,9 +1204,9 @@ app.post('/api/billing/checkout/topup', async (req, res) => {
 // POST /billing/portal
 app.post('/api/billing/portal', async (req, res) => {
   const orgId = req.body.orgId || DEFAULT_ORG_ID;
-  const client = getSupabase();
+  const client = requireSupabase('Billing portal');
   
-  if (client && process.env.STRIPE_SECRET_KEY) {
+  if (process.env.STRIPE_SECRET_KEY) {
     try {
       const { data } = await client.from('stripe_customers').select('stripe_customer_id').eq('id', orgId).single();
       if (data?.stripe_customer_id) {
@@ -1257,11 +1218,11 @@ app.post('/api/billing/portal', async (req, res) => {
         return res.json({ success: true, url: portalSession.url });
       }
     } catch (e: any) {
-      console.warn('Billing portal setup failed, routing to simulated settings:', e.message);
+      return res.status(503).json({ success: false, error: `Billing portal setup failed: ${e.message}` });
     }
   }
   
-  res.json({ success: true, url: '/settings?simulated_portal=true' });
+  res.status(503).json({ success: false, error: 'Stripe is not configured. Add STRIPE_SECRET_KEY on Railway.' });
 });
 
 // POST /stripe/webhook
@@ -1339,11 +1300,12 @@ app.post('/api/ai/route', async (req, res) => {
 });
 
 // PATCH /users/me/ai-preferences
-app.patch('/api/users/me/ai-preferences', (req, res) => {
-  const { userId, default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
-  const uid = userId || '00000000-0000-0000-0000-000000000000';
+app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
+  const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
+  const uid = req.user?.id || DEFAULT_ORG_ID;
 
   const updated = {
+    user_id: uid,
     default_routing_mode: default_routing_mode || 'Auto',
     max_credits_per_action: max_credits_per_action || 50.0,
     ask_confirm_before_premium: ask_confirm_before_premium !== false,
@@ -1351,16 +1313,22 @@ app.patch('/api/users/me/ai-preferences', (req, res) => {
     updated_at: new Date().toISOString()
   };
 
-  SIM_USER_PREFS.set(uid, updated);
+  const client = requireSupabase('User AI preferences');
+  const { error } = await client.from('user_ai_preferences').upsert([updated]);
+  if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, preferences: updated });
 });
 
 // PATCH /projects/:id/ai-preferences
-app.patch('/api/projects/:id/ai-preferences', (req, res) => {
+app.patch('/api/projects/:id/ai-preferences', async (req: any, res) => {
   const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
   const pid = req.params.id;
+  const userId = getUserOrgId(req);
+  const project = await loadProject(pid, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
   const updated = {
+    project_id: pid,
     default_routing_mode: default_routing_mode || 'Auto',
     max_credits_per_action: max_credits_per_action || 50.0,
     ask_confirm_before_premium: ask_confirm_before_premium !== false,
@@ -1368,7 +1336,9 @@ app.patch('/api/projects/:id/ai-preferences', (req, res) => {
     updated_at: new Date().toISOString()
   };
 
-  SIM_PROJECT_PREFS.set(pid, updated);
+  const client = requireSupabase('Project AI preferences');
+  const { error } = await client.from('project_ai_preferences').upsert([updated]);
+  if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, preferences: updated });
 });
 
@@ -1433,17 +1403,10 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 
       const finalEstimate = costEstimator.calculateRequiredCredits(finalCostComp);
 
-      const reservationServ = new CreditReservationService(getSupabase());
-      if (getSupabase()) {
-        await reservationServ.releaseReservation(refId, true, finalEstimate.finalCredits);
-      } else {
-        // Simulated Reservation release
-        const currentBalance = SIM_WALLETS.get(orgId)?.balance ?? 100;
-        const refundAmount = Math.max(0, initialEstimate.finalCredits - finalEstimate.finalCredits);
-        const finalBalance = currentBalance + refundAmount;
-        SIM_WALLETS.set(orgId, { balance: finalBalance, updated_at: new Date().toISOString() });
-        await clientHelpers.addLedger(orgId, 'usage', -finalEstimate.finalCredits, finalBalance, `AI usage on:${completionResult.model}`, refId);
-      }
+      const reservationServ = new CreditReservationService(requireSupabase('Credit reservation release'));
+      await reservationServ.releaseReservation(refId, true, finalEstimate.finalCredits);
+      const finalBalance = await clientHelpers.updateWallet(orgId, -finalEstimate.finalCredits);
+      await clientHelpers.addLedger(orgId, 'usage', -finalEstimate.finalCredits, finalBalance, `AI usage on:${completionResult.model}`, refId);
 
       res.json({
         success: true,
@@ -1456,16 +1419,8 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 
     } catch (apiError: any) {
       // Platform / API service error => Refund fully!
-      const reservationServ = new CreditReservationService(getSupabase());
-      if (getSupabase()) {
-        await reservationServ.releaseReservation(refId, false); // full refund
-      } else {
-        // simulated full refund
-        const currentBalance = SIM_WALLETS.get(orgId)?.balance ?? 100;
-        const finalBalance = currentBalance + initialEstimate.finalCredits;
-        SIM_WALLETS.set(orgId, { balance: finalBalance, updated_at: new Date().toISOString() });
-        await clientHelpers.addLedger(orgId, 'refund', initialEstimate.finalCredits, finalBalance, `Failed request refund: ${apiError.message}`, refId);
-      }
+      const reservationServ = new CreditReservationService(requireSupabase('Credit reservation refund'));
+      await reservationServ.releaseReservation(refId, false);
 
       throw new Error(`Platform Engine Auto-Refund Triggered: ${apiError.message}`);
     }
@@ -1509,7 +1464,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     owner_id: userId,
     organization_id: userId,
     name,
-    slug: uniqueSlug(name),
+    slug: await uniqueSlug(name, userId),
     prompt,
     template: String(req.body?.template || 'custom'),
     theme: String(req.body?.theme || 'dark'),
@@ -1565,7 +1520,7 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
   const events = await listAgentEvents(project.id);
   const versions = await listProjectVersions(project.id);
   const secrets = await listProjectSecrets(project.id);
-  const errors = SIM_BUILD_ERRORS.get(project.id) || [];
+  const errors = await listBuildErrors(project.id);
   const helpers = getDbHelpers();
   const balance = await helpers.getWallet(userId);
   res.json({
@@ -1590,7 +1545,7 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   const files = await loadProjectFiles(project.id);
-  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const lastPlan = await getLastProjectPlan(project.id);
   const decision = intentRouter.decide({
     prompt: String(req.body?.prompt || ''),
     requestedMode: req.body?.requestedMode || 'build',
@@ -1618,7 +1573,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   const helpers = getDbHelpers();
   const existingFiles = await loadProjectFiles(project.id);
-  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const lastPlan = await getLastProjectPlan(project.id);
   const decision = intentRouter.decide({
     prompt,
     requestedMode: req.body?.requestedMode || 'build',
@@ -1715,11 +1670,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     await saveProject(updatedProject, finalFiles);
     const diff = diffFiles(existingFiles, finalFiles);
     await createProjectVersion(updatedProject, finalFiles, prompt, diff);
-    if (autoFix) {
-      const patches = SIM_PROJECT_PATCHES.get(project.id) || [];
-      patches.unshift(autoFix);
-      SIM_PROJECT_PATCHES.set(project.id, patches);
-    }
+    if (autoFix) await saveProjectPatch(updatedProject, autoFix);
 
     const finalCost = costEstimator.calculateRequiredCredits({
       openrouter_cost_usd: generation.cost_usd,
@@ -1811,7 +1762,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const helpers = getDbHelpers();
   const wallet = await helpers.getWallet(userId);
   const existingFiles = await loadProjectFiles(project.id);
-  const lastPlan = [...SIM_PROJECT_MESSAGES].reverse().find(message => message.project_id === project.id && message.intent === 'plan')?.content || '';
+  const lastPlan = await getLastProjectPlan(project.id);
   const decision = intentRouter.decide({
     prompt,
     requestedMode: req.body?.requestedMode || 'build',
@@ -1878,15 +1829,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   }
 
   const refId = `gen_${randomUUID()}`;
-  const buildSessionId = `build_${randomUUID()}`;
-  SIM_BUILD_SESSIONS.set(buildSessionId, {
-    id: buildSessionId,
-    organization_id: project.organization_id,
-    project_id: project.id,
-    user_id: userId,
-    status: 'running',
-    created_at: new Date().toISOString(),
-  });
+  const buildSession = await createBuildSession(project, userId);
+  const buildSessionId = buildSession.id;
   await helpers.createReservation(userId, estimate.finalCredits, refId);
 
   try {
@@ -1895,29 +1839,22 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
     const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
     let generatedText = '';
-    let model = 'local-template';
+    let model = req.body?.modelId && req.body.modelId !== 'auto'
+      ? String(req.body.modelId)
+      : 'anthropic/claude-sonnet-4.6';
     let costUsd = 0;
 
     if (!hasLiveKey) {
-      if (isProductionRuntime()) {
-        throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
-      }
-
-      await send('building', 'OpenRouter is not configured locally; using development template.', { tool: 'local_template' });
-      const local = createTemplateFiles(project.name, req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\n${prompt}` : prompt);
-      generatedText = JSON.stringify({ summary: 'Generated a local development template.', files: local });
+      throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
     } else {
-      const selectedModel = req.body?.modelId && req.body.modelId !== 'auto'
-        ? String(req.body.modelId)
-        : 'anthropic/claude-sonnet-4.6';
+      const selectedModel = model;
       validateAllowedModel(selectedModel);
-      model = selectedModel;
 
       await send('model_started', `Streaming response from ${selectedModel}.`, { model: selectedModel });
       const messages = buildGenerationMessages({ projectName: project.name, prompt: req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt, existingFiles });
 
       for await (const event of openRouter.streamChat(selectedModel, messages)) {
-        const session = SIM_BUILD_SESSIONS.get(buildSessionId);
+        const session = await getBuildSession(buildSessionId);
         if (session?.status === 'cancelled') {
           await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId });
           res.end();
@@ -1979,11 +1916,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await saveProject(updatedProject, files);
     const diff = diffFiles(existingFiles, files);
     await createProjectVersion(updatedProject, files, prompt, diff);
-    if (autoFix) {
-      const patches = SIM_PROJECT_PATCHES.get(project.id) || [];
-      patches.unshift(autoFix);
-      SIM_PROJECT_PATCHES.set(project.id, patches);
-    }
+    if (autoFix) await saveProjectPatch(updatedProject, autoFix);
 
     const finalCost = costEstimator.calculateRequiredCredits({
       openrouter_cost_usd: costUsd,
@@ -2012,13 +1945,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       },
     });
 
-    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
-    if (session) session.status = 'completed';
+    await updateBuildSessionStatus(buildSessionId, 'completed');
     await send('done', 'Generation completed.', {});
     res.end();
   } catch (error: any) {
-    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
-    if (session) session.status = 'failed';
+    await updateBuildSessionStatus(buildSessionId, 'failed').catch(() => null);
     await helpers.addLedger(userId, 'refund', estimate.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
     await helpers.addAudit({
       user_id: userId,
@@ -2029,7 +1960,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       source: 'builder_stream',
     });
 
-    await send('error', error.message || 'Generation failed.', { code: 'GenerationFailed' });
+    console.error('[huggy:generate_stream_failed]', {
+      project_id: project.id,
+      user_id: userId,
+      model: req.body?.modelId || project.model_id || 'auto',
+      message: error.message,
+    });
+    await send('error', normalizeProviderError(error), { code: 'GenerationFailed' });
     res.end();
   }
 });
@@ -2064,11 +2001,7 @@ app.post('/api/projects/:id/build/cancel', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   const buildSessionId = String(req.body?.buildSessionId || '');
-  if (buildSessionId && SIM_BUILD_SESSIONS.has(buildSessionId)) {
-    const session = SIM_BUILD_SESSIONS.get(buildSessionId);
-    session.status = 'cancelled';
-    session.cancelled_at = new Date().toISOString();
-  }
+  if (buildSessionId) await updateBuildSessionStatus(buildSessionId, 'cancelled', { cancelled_at: new Date().toISOString() });
   await saveAgentEvent({
     organization_id: project.organization_id,
     project_id: project.id,
@@ -2131,19 +2064,31 @@ app.get('/api/projects/:id/database', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const schemaFile = files.find(file => file.path === 'supabase/schema.sql');
   const secrets = await listProjectSecrets(project.id);
-  const integrations = SIM_PROJECT_INTEGRATIONS.get(project.id) || [];
+  const client = requireSupabase('Project database view');
+  const { data: integrations = [] } = await client.from('project_integrations').select('*').eq('project_id', project.id).order('updated_at', { ascending: false });
+  const { data: assets = [] } = await client.from('project_assets').select('id, name, url, kind, created_at').eq('project_id', project.id).order('created_at', { ascending: false });
+  const { data: activity = [] } = await client.from('agent_events').select('event_type, message, created_at').eq('project_id', project.id).order('created_at', { ascending: false }).limit(8);
+  const tableMatches = [...(schemaFile?.content || '').matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-zA-Z0-9_]+)/gi)];
+  const tables = tableMatches.length
+    ? tableMatches.map(match => ({ name: match[1], rows: 0, source: 'supabase/schema.sql', columns: [] }))
+    : [{ name: 'project_files', rows: files.length, source: 'huggy_control_db', columns: ['path', 'language', 'updated_at'] }];
   res.json({
     success: true,
     database: {
       project_id: project.id,
+      backend_status: schemaFile ? 'schema_generated' : 'waiting_for_schema',
       mode: 'shared_supabase_project',
       rls_status: 'enabled_required',
       last_sync_at: project.updated_at,
-      tables: schemaFile ? [{ name: 'app_records', source: 'supabase/schema.sql', rows: 0 }] : [],
+      tables,
+      records_preview: files.slice(0, 5).map(file => ({ table: 'project_files', path: file.path, language: file.language || 'text', updated_at: file.updated_at || project.updated_at })),
       schema: schemaFile?.content || '-- No project schema generated yet.',
       secrets,
       integrations,
-      security: { secrets_masked: true, service_role_server_only: true },
+      assets,
+      storage: { bucket: 'project-assets', assets_count: assets.length },
+      activity,
+      security: { rls_required: true, secrets_masked: true, service_role_server_only: true },
     },
   });
 });
@@ -2195,13 +2140,9 @@ app.delete('/api/projects/:id/database/secrets/:secretId', async (req: any, res:
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   if (!requireProjectCapability(req, res, 'secrets')) return;
-  const list = (SIM_PROJECT_SECRETS.get(project.id) || []).filter(secret => secret.id !== req.params.secretId);
-  SIM_PROJECT_SECRETS.set(project.id, list);
-  const client = getSupabase();
-  if (client) {
-    const { error } = await client.from('project_secrets').delete().eq('id', req.params.secretId).eq('project_id', project.id);
-    if (error) console.warn(`Supabase secret deletion skipped: ${error.message}`);
-  }
+  const client = requireSupabase('Project secret deletion');
+  const { error } = await client.from('project_secrets').delete().eq('id', req.params.secretId).eq('project_id', project.id);
+  if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true });
 });
 
@@ -2219,9 +2160,9 @@ app.post('/api/projects/:id/assets', async (req: any, res: any) => {
     kind: String(req.body?.kind || 'image'),
     created_at: new Date().toISOString(),
   };
-  const assets = SIM_PROJECT_ASSETS.get(project.id) || [];
-  assets.unshift(asset);
-  SIM_PROJECT_ASSETS.set(project.id, assets);
+  const client = requireSupabase('Project asset persistence');
+  const { error } = await client.from('project_assets').insert([asset]);
+  if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, asset });
 });
 
@@ -2239,15 +2180,10 @@ app.get('/api/projects/:id/export', async (req: any, res: any) => {
 // GET /projects/:id/domains
 app.get('/api/projects/:id/domains', async (req, res) => {
   const projectId = req.params.id;
-  const client = getSupabase();
-  if (client) {
-    const { data } = await client.from('domains').select('*').eq('project_id', projectId).neq('status', 'removed');
-    res.json({ success: true, domains: data || [] });
-  } else {
-    assertSimulationAllowed('Domain listing');
-    const projDomains = SIM_DOMAINS.filter(d => d.project_id === projectId && d.status !== 'removed');
-    res.json({ success: true, domains: projDomains });
-  }
+  const client = requireSupabase('Domain listing');
+  const { data, error } = await client.from('domains').select('*').eq('project_id', projectId).neq('status', 'removed');
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, domains: data || [] });
 });
 
 // POST /projects/:id/domains
@@ -2257,38 +2193,9 @@ app.post('/api/projects/:id/domains', async (req: any, res: any) => {
 
   try {
     const vercelProxy = createVercelDomainProxy();
-    const domainService = new DomainService(getSupabase(), vercelProxy);
-
-    if (getSupabase()) {
-      const records = await domainService.registerDomain(orgId, projectId, domain, type || 'custom', plan as any);
-      return res.json({ success: true, domain: records });
-    } else {
-      assertSimulationAllowed('Domain creation');
-      // simulate domain additions
-      const sanitized = domain.trim().toLowerCase();
-      const isSub = type === 'subdomain';
-      
-      const parts = sanitized.split('.');
-      if (isSub && PARTS_RESERVED(parts[0])) {
-         return res.status(400).json({ success: false, message: `The subdomain '${parts[0]}' is reserved.` });
-      }
-
-      const verifiedStatus = isSub ? 'active' : 'pending';
-      const record = {
-        id: `dom_${Math.random().toString(36).substring(2, 9)}`,
-        organization_id: orgId,
-        project_id: projectId,
-        domain: sanitized,
-        type: type || 'custom',
-        status: verifiedStatus,
-        is_primary: false,
-        verification_token: `vc-sim-verify-${Math.random().toString(36).substring(2, 10)}`,
-        created_at: new Date().toISOString()
-      };
-
-      SIM_DOMAINS.push(record);
-      res.json({ success: true, domain: record });
-    }
+    const domainService = new DomainService(requireSupabase('Domain creation'), vercelProxy);
+    const records = await domainService.registerDomain(orgId, projectId, domain, type || 'custom', plan as any);
+    return res.json({ success: true, domain: records });
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -2305,23 +2212,9 @@ app.post('/api/projects/:id/domains/:domainId/verify', async (req, res) => {
 
   try {
     const vercelProxy = createVercelDomainProxy();
-    const domainService = new DomainService(getSupabase(), vercelProxy);
-
-    if (getSupabase()) {
-      const result = await domainService.verifyDnsRecords(projectId, domainId);
-      res.json({ success: true, ...result });
-    } else {
-      assertSimulationAllowed('Domain verification');
-      // simulation verification (flip pending to active)
-      const domain = SIM_DOMAINS.find(d => d.id === domainId && d.project_id === projectId);
-      if (domain) {
-        domain.status = 'active';
-        domain.verified_at = new Date().toISOString();
-        res.json({ success: true, status: 'active', domain });
-      } else {
-        res.status(404).json({ success: false, message: 'Domain reference not found' });
-      }
-    }
+    const domainService = new DomainService(requireSupabase('Domain verification'), vercelProxy);
+    const result = await domainService.verifyDnsRecords(projectId, domainId);
+    res.json({ success: true, ...result });
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -2334,17 +2227,8 @@ app.delete('/api/projects/:id/domains/:domainId', async (req, res) => {
 
   try {
     const vercelProxy = createVercelDomainProxy();
-    const domainService = new DomainService(getSupabase(), vercelProxy);
-
-    if (getSupabase()) {
-      await domainService.removeDomain(projectId, domainId);
-    } else {
-      assertSimulationAllowed('Domain deletion');
-      const domain = SIM_DOMAINS.find(d => d.id === domainId && d.project_id === projectId);
-      if (domain) {
-        domain.status = 'removed';
-      }
-    }
+    const domainService = new DomainService(requireSupabase('Domain deletion'), vercelProxy);
+    await domainService.removeDomain(projectId, domainId);
     res.json({ success: true, message: 'Domain deleted successfully.' });
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
@@ -2358,18 +2242,8 @@ app.patch('/api/projects/:id/domains/:domainId/primary', async (req, res) => {
 
   try {
     const vercelProxy = createVercelDomainProxy();
-    const domainService = new DomainService(getSupabase(), vercelProxy);
-
-    if (getSupabase()) {
-      await domainService.setPrimaryDomain(projectId, domainId);
-    } else {
-      assertSimulationAllowed('Primary domain update');
-      SIM_DOMAINS.forEach(d => {
-        if (d.project_id === projectId) {
-          d.is_primary = (d.id === domainId);
-        }
-      });
-    }
+    const domainService = new DomainService(requireSupabase('Primary domain update'), vercelProxy);
+    await domainService.setPrimaryDomain(projectId, domainId);
     res.json({ success: true, message: 'Primary domain updated.' });
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
@@ -2438,13 +2312,10 @@ app.post('/api/projects/:id/deploy', async (req: any, res: any) => {
 // GET /projects/:id/deployments
 app.get('/api/projects/:id/deployments', async (req: any, res) => {
   const projectId = req.params.id;
-  const client = getSupabase();
-  if (client) {
-    const { data, error } = await client.from('deployments').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
-    if (!error && data) return res.json({ success: true, deployments: data });
-  }
-  const list = SIM_DEPLOYMENTS.filter(d => d.project_id === projectId);
-  res.json({ success: true, deployments: list });
+  const client = requireSupabase('Deployment listing');
+  const { data, error } = await client.from('deployments').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, deployments: data || [] });
 });
 
 // Static files (frontend)

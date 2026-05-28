@@ -48,6 +48,14 @@ type DeployPayload = {
   error?: string;
 };
 
+type AiModel = {
+  id: string;
+  display_name: string;
+  tier?: string;
+  locked?: boolean;
+  capabilities?: Record<string, unknown>;
+};
+
 let currentProjectId = '';
 let currentFiles: GeneratedFile[] = [];
 let currentPreviewHtml = '';
@@ -56,6 +64,7 @@ let lastPlan = '';
 let lastBuildSessionId = '';
 let activeAbort: AbortController | null = null;
 let selectedChatMode: 'plan' | 'build' = 'build';
+let selectedModelId = 'auto';
 
 function escapeHtml(value: string): string {
   return value
@@ -80,7 +89,7 @@ function getProjectIdFromUrl() {
 }
 
 function selectedModel() {
-  return localStorage.getItem('huggy-selected-model') || getStoredProject().model || 'auto';
+  return selectedModelId || getStoredProject().model || 'auto';
 }
 
 function chatScroll() {
@@ -201,6 +210,91 @@ function setBusy(busy: boolean) {
   if (cancel) cancel.style.display = busy ? 'inline-flex' : 'none';
 }
 
+function renderTierColor(tier = 'Standard') {
+  if (/premium/i.test(tier)) return '#c084fc';
+  if (/pro/i.test(tier)) return '#60a5fa';
+  if (/economy/i.test(tier)) return '#34d399';
+  return '#a1a1aa';
+}
+
+async function ensureModelSelector() {
+  const oldRoot = document.getElementById('model-select-btn');
+  if (!oldRoot || oldRoot.dataset.liveBound === 'true') return;
+
+  const root = oldRoot.cloneNode(false) as HTMLElement;
+  root.id = 'model-select-btn';
+  root.dataset.liveBound = 'true';
+  root.style.cssText = 'display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);';
+  root.innerHTML = `
+    <span style="width:6px;height:6px;border-radius:999px;background:#f4f4f5;box-shadow:0 0 10px rgba(244,244,245,.55);"></span>
+    <span id="current-model-label" style="font-weight:800;">Auto</span>
+    <span style="color:var(--text-sub);font-size:9px;">v</span>
+    <div id="model-dropdown" style="position:absolute;right:0;bottom:calc(100% + 10px);width:min(360px,calc(100vw - 28px));max-height:420px;overflow:auto;border:1px solid var(--border);background:#111113;border-radius:14px;padding:8px;box-shadow:0 24px 80px rgba(0,0,0,.48);display:none;z-index:1000;"></div>
+  `;
+  oldRoot.replaceWith(root);
+
+  const dropdown = root.querySelector('#model-dropdown') as HTMLElement;
+  const label = root.querySelector('#current-model-label') as HTMLElement;
+  const close = () => { dropdown.style.display = 'none'; };
+  const open = async () => {
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    if (dropdown.dataset.loaded === 'true') return;
+    dropdown.innerHTML = '<div style="padding:12px;color:#a1a1aa;font-size:12px;">Loading models...</div>';
+    try {
+      const payload = await apiFetch<{ models: AiModel[] }>('/api/ai/models');
+      const models = payload.models || [];
+      dropdown.dataset.loaded = 'true';
+      dropdown.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 8px 10px;">
+          <div>
+            <div style="font-size:13px;font-weight:800;color:#f4f4f5;">AI model</div>
+            <div style="font-size:11px;color:#71717a;margin-top:2px;">Auto keeps quality and credits balanced.</div>
+          </div>
+          <button type="button" data-model-id="auto" data-model-name="Auto" style="height:28px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 10px;font-size:11px;font-weight:800;cursor:pointer;">Use Auto</button>
+        </div>
+        <div style="display:grid;gap:5px;">
+          ${models.map(model => {
+            const tier = model.tier || (model.id === 'auto' ? 'Auto' : 'Standard');
+            const color = renderTierColor(tier);
+            const locked = model.locked ? '<span style="font-size:10px;color:#fbbf24;">Upgrade</span>' : '';
+            return `<button type="button" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:${model.id === selectedModelId ? 'rgba(255,255,255,.09)' : 'transparent'};color:#f4f4f5;border-radius:9px;padding:9px;cursor:pointer;text-align:left;">
+              <span style="display:grid;gap:2px;">
+                <span style="font-size:12px;font-weight:750;">${escapeHtml(model.display_name || model.id)}</span>
+                <span style="font-size:10px;color:#71717a;">${escapeHtml(model.id)}</span>
+              </span>
+              <span style="display:flex;align-items:center;gap:7px;">
+                <span style="font-size:10px;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;">${escapeHtml(tier)}</span>
+                ${locked}
+              </span>
+            </button>`;
+          }).join('')}
+        </div>
+      `;
+    } catch (error) {
+      dropdown.innerHTML = `<div style="padding:12px;color:#fca5a5;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
+    }
+  };
+
+  root.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    void open();
+  });
+  dropdown.addEventListener('click', async event => {
+    event.stopPropagation();
+    const target = (event.target as HTMLElement).closest('[data-model-id]') as HTMLElement | null;
+    if (!target) return;
+    selectedModelId = target.dataset.modelId || 'auto';
+    if (label) label.textContent = target.dataset.modelName || 'Auto';
+    close();
+    await apiFetch('/api/users/me/ai-preferences', {
+      method: 'PATCH',
+      body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
+    }).catch(() => null);
+  });
+  document.addEventListener('click', close);
+}
+
 function ensurePlanBuildControls() {
   const submitWrapper = document.querySelector('.submit-wrapper');
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
@@ -231,7 +325,51 @@ function setChatMode(mode: 'plan' | 'build') {
   if (menu) menu.style.display = 'none';
 }
 
+function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis') {
+  const screens: Record<string, string> = {
+    preview: 'screen-layout-preview',
+    code: 'screen-layout-code',
+    database: 'screen-layout-database',
+    analysis: 'screen-layout-analysis',
+  };
+  Object.entries(screens).forEach(([name, id]) => {
+    const node = document.getElementById(id);
+    if (node) node.style.display = name === view ? (view === 'code' ? 'grid' : 'flex') : 'none';
+  });
+  document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
+  document.getElementById(`tab-btn-${view}`)?.classList.add('active');
+  if (view === 'database') void loadDatabase();
+}
+
+function bindBuilderViews() {
+  const entries: Array<['preview' | 'code' | 'database' | 'analysis', string]> = [
+    ['preview', 'tab-btn-preview'],
+    ['code', 'tab-btn-code'],
+    ['database', 'tab-btn-database'],
+    ['analysis', 'tab-btn-analysis'],
+  ];
+  entries.forEach(([view, id]) => {
+    const oldButton = document.getElementById(id) as HTMLButtonElement | null;
+    if (!oldButton || oldButton.dataset.liveBound === 'true') return;
+    const button = oldButton.cloneNode(true) as HTMLButtonElement;
+    button.dataset.liveBound = 'true';
+    oldButton.replaceWith(button);
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      activateBuilderView(view);
+    }, true);
+  });
+  document.getElementById('btn-add-secret')?.addEventListener('click', () => {
+    showApiKeyModal([{ service: 'Custom', variable: 'CUSTOM_API_KEY', description: 'Project API key', required: false }]);
+  });
+}
+
 function ensureDatabaseView() {
+  if (document.getElementById('tab-btn-database')) {
+    bindBuilderViews();
+    return;
+  }
   const tabs = document.querySelector('.sub-nav-tabs');
   const holder = document.querySelector('.viewport-content-holder');
   if (!tabs || !holder || document.getElementById('tab-btn-database')) return;
@@ -487,6 +625,10 @@ async function loadDatabase() {
     const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
     const db = payload.database;
     const secrets = db.secrets || [];
+    const integrations = db.integrations || [];
+    const assets = db.assets || [];
+    const activity = db.activity || [];
+    const records = db.records_preview || [];
     target.innerHTML = `
       <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
         <h3 style="margin:0 0 8px;font-size:13px;">Tables</h3>
@@ -499,6 +641,22 @@ async function loadDatabase() {
       <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
         <h3 style="margin:0 0 8px;font-size:13px;">Security</h3>
         <p style="font-size:12px;color:#a1a1aa;line-height:1.5;margin:0;">RLS required. Secrets masked. Service role is server-only.</p>
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Records</h3>
+        ${records.map((record: any) => `<div style="font-size:11px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(record.path || record.table || 'record')}</div>`).join('') || '<p style="font-size:12px;color:#71717a;">No records yet.</p>'}
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Integrations</h3>
+        ${integrations.map((item: any) => `<div style="font-size:12px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.service)} <span style="color:#71717a;">${escapeHtml(item.status)}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No integrations detected.</p>'}
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Storage</h3>
+        ${assets.map((item: any) => `<div style="font-size:12px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.name)} <span style="color:#71717a;">${escapeHtml(item.kind || 'asset')}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No assets uploaded.</p>'}
+      </div>
+      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+        <h3 style="margin:0 0 8px;font-size:13px;">Activity</h3>
+        ${activity.map((item: any) => `<div style="font-size:11px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.event_type)} - ${escapeHtml(item.message || '')}</div>`).join('') || '<p style="font-size:12px;color:#71717a;">No activity yet.</p>'}
       </div>
     `;
   } catch (error) {
@@ -516,7 +674,11 @@ function showCreditsModal(required: number, balance: number) {
     </div>
   `, (action) => {
     if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
-    if (action === 'economy') localStorage.setItem('huggy-selected-model', 'openai/gpt-5-nano');
+    if (action === 'economy') {
+      selectedModelId = 'openai/gpt-5-nano';
+      const label = document.getElementById('current-model-label');
+      if (label) label.textContent = 'GPT-5 Nano';
+    }
   });
 }
 
@@ -666,10 +828,52 @@ function bindChat() {
   setChatMode(selectedChatMode);
 }
 
+function ensureResizableSidebar() {
+  const body = document.querySelector('.workspace-body') as HTMLElement | null;
+  const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
+  if (!body || !sidebar || document.getElementById('huggy-sidebar-resizer')) return;
+  const savedWidth = Number(localStorage.getItem('huggy-sidebar-width') || 340);
+  const applyWidth = (width: number) => {
+    const next = Math.min(520, Math.max(280, width));
+    body.style.gridTemplateColumns = `${next}px 1fr`;
+    body.style.setProperty('--huggy-sidebar-width', `${next}px`);
+    localStorage.setItem('huggy-sidebar-width', String(next));
+  };
+  applyWidth(savedWidth);
+  const handle = document.createElement('div');
+  handle.id = 'huggy-sidebar-resizer';
+  handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 340px) - 3px);width:6px;cursor:col-resize;z-index:20;background:transparent;';
+  body.style.position = 'relative';
+  body.appendChild(handle);
+  handle.addEventListener('pointerdown', event => {
+    if (window.matchMedia('(max-width: 760px)').matches) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebar.getBoundingClientRect().width;
+    document.body.style.userSelect = 'none';
+    const move = (moveEvent: PointerEvent) => {
+      const next = Math.min(520, Math.max(280, startWidth + moveEvent.clientX - startX));
+      body.style.gridTemplateColumns = `${next}px 1fr`;
+      body.style.setProperty('--huggy-sidebar-width', `${next}px`);
+      handle.style.left = `${next - 3}px`;
+      localStorage.setItem('huggy-sidebar-width', String(Math.round(next)));
+    };
+    const up = () => {
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
+}
+
 function init() {
   ensureToolbar();
+  void ensureModelSelector();
   ensurePlanBuildControls();
   ensureDatabaseView();
+  ensureResizableSidebar();
   bindChat();
   void loadProject();
 }

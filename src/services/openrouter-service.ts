@@ -188,7 +188,12 @@ export class OpenRouterService {
             const raw = line.replace(/^data:\s*/, '').trim();
             if (!raw || raw === '[DONE]') continue;
 
-            const data = JSON.parse(raw);
+            let data: any;
+            try {
+              data = JSON.parse(raw);
+            } catch {
+              continue;
+            }
             model = data?.model || model;
             const text = data?.choices?.[0]?.delta?.content || data?.choices?.[0]?.text || '';
             if (text) {

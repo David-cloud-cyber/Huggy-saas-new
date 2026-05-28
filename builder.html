@@ -1595,6 +1595,14 @@
                 </svg>
                 Code
               </button>
+              <button class="sub-nav-tab" id="tab-btn-database">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
+                  <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                  <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
+                  <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
+                </svg>
+                Database
+              </button>
               <button class="sub-nav-tab" id="tab-btn-analysis">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
                   <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -1719,6 +1727,17 @@
               <h3 style="margin: 0; font-size: 14px; font-weight: 500; color: #f4f4f5;">No Analysis History</h3>
               <p style="margin: 6px auto 0 auto; font-size: 12px; color: #52525b; max-width: 280px; line-height: 1.6;">Run a production build or trigger testing metrics to populate analysis diagrams and performance telemetry.</p>
             </div>
+          </div>
+
+          <div class="analysis-screen-panel" id="screen-layout-database" style="display: none;">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px;">
+              <div>
+                <h1 class="analysis-header" style="margin:0;">Project Database</h1>
+                <p style="font-size:12px;color:#71717a;margin:6px 0 0;">Live Supabase project state, secrets, integrations and storage.</p>
+              </div>
+              <button id="btn-add-secret" type="button" style="height:32px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
+            </div>
+            <div id="database-content" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;"></div>
           </div>
 
         </div>
@@ -1947,7 +1966,7 @@
           }
         });
 
-        const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+        const savedModel = 'auto';
         let foundModel = false;
         
         const options = modelDropdown.querySelectorAll('.model-option');
@@ -1967,7 +1986,7 @@
             opt.classList.add('active');
             const modelId = opt.dataset.id || 'auto';
             const modelName = opt.dataset.name || 'Auto';
-            localStorage.setItem('huggy-selected-model', modelId);
+            window.dispatchEvent(new CustomEvent('huggy:legacy-model-selected', { detail: { modelId } }));
             if (modelLabel) modelLabel.textContent = modelName;
             modelDropdown.classList.remove('open');
             if (chevronIcon) chevronIcon.style.transform = 'rotate(0deg)';
@@ -2040,6 +2059,7 @@
       }
 
       chatSubmit.addEventListener("click", () => {
+        return;
         const value = chatInput.value.trim();
         if (!value) return;
 
@@ -2065,7 +2085,7 @@
         
         chatScroll.scrollTop = chatScroll.scrollHeight;
 
-        // Mock reply
+        // Legacy demo reply disabled by live builder connector.
         setTimeout(() => {
           const ai = document.createElement("div");
           ai.className = "message-card";
