@@ -224,57 +224,95 @@ async function ensureModelSelector() {
   const root = oldRoot.cloneNode(false) as HTMLElement;
   root.id = 'model-select-btn';
   root.dataset.liveBound = 'true';
-  root.style.cssText = 'display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);';
+  root.className = 'model-select huggy-model-trigger';
+  root.style.cssText = 'display:inline-flex;align-items:center;gap:5px;height:24px;max-width:116px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);flex:0 0 auto;white-space:nowrap;overflow:hidden;';
   root.innerHTML = `
-    <span style="width:6px;height:6px;border-radius:999px;background:#f4f4f5;box-shadow:0 0 10px rgba(244,244,245,.55);"></span>
-    <span id="current-model-label" style="font-weight:800;">Auto</span>
-    <span style="color:var(--text-sub);font-size:9px;">v</span>
-    <div id="model-dropdown" style="position:absolute;right:0;bottom:calc(100% + 10px);width:min(360px,calc(100vw - 28px));max-height:420px;overflow:auto;border:1px solid var(--border);background:#111113;border-radius:14px;padding:8px;box-shadow:0 24px 80px rgba(0,0,0,.48);display:none;z-index:1000;"></div>
+    <span style="width:6px;height:6px;border-radius:999px;background:#f4f4f5;box-shadow:0 0 10px rgba(244,244,245,.55);flex:0 0 auto;"></span>
+    <span id="current-model-label" style="font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;">Auto</span>
+    <span style="color:var(--text-sub);font-size:9px;flex:0 0 auto;">v</span>
   `;
   oldRoot.replaceWith(root);
 
-  const dropdown = root.querySelector('#model-dropdown') as HTMLElement;
+  document.getElementById('model-dropdown')?.remove();
+  const dropdown = document.createElement('div');
+  dropdown.id = 'model-dropdown';
+  dropdown.style.cssText = 'position:fixed;width:292px;max-width:calc(100vw - 24px);max-height:min(320px,calc(100vh - 32px));overflow:auto;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 54px rgba(0,0,0,.5);display:none;z-index:3000;';
+  document.body.appendChild(dropdown);
+
   const label = root.querySelector('#current-model-label') as HTMLElement;
-  const close = () => { dropdown.style.display = 'none'; };
+  const positionDropdown = () => {
+    const rect = root.getBoundingClientRect();
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      dropdown.style.left = '10px';
+      dropdown.style.right = '10px';
+      dropdown.style.bottom = '10px';
+      dropdown.style.top = 'auto';
+      dropdown.style.width = 'auto';
+      dropdown.style.maxHeight = '60vh';
+      return;
+    }
+    const width = Math.min(292, window.innerWidth - 24);
+    const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
+    const availableAbove = Math.max(160, rect.top - 18);
+    dropdown.style.width = `${width}px`;
+    dropdown.style.maxHeight = `${Math.min(320, availableAbove)}px`;
+    dropdown.style.left = `${left}px`;
+    dropdown.style.right = 'auto';
+    dropdown.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 8)}px`;
+    dropdown.style.top = 'auto';
+  };
+  const close = () => { dropdown.style.display = 'none'; root.setAttribute('aria-expanded', 'false'); };
   const open = async () => {
-    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    const shouldOpen = dropdown.style.display !== 'block';
+    if (!shouldOpen) {
+      close();
+      return;
+    }
+    dropdown.style.display = 'block';
+    root.setAttribute('aria-expanded', 'true');
+    positionDropdown();
     if (dropdown.dataset.loaded === 'true') return;
-    dropdown.innerHTML = '<div style="padding:12px;color:#a1a1aa;font-size:12px;">Loading models...</div>';
+    dropdown.innerHTML = '<div style="padding:10px;color:#a1a1aa;font-size:12px;">Loading models...</div>';
     try {
       const payload = await apiFetch<{ models: AiModel[] }>('/api/ai/models');
       const models = payload.models || [];
       dropdown.dataset.loaded = 'true';
       dropdown.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 8px 10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 6px 8px;">
           <div>
-            <div style="font-size:13px;font-weight:800;color:#f4f4f5;">AI model</div>
-            <div style="font-size:11px;color:#71717a;margin-top:2px;">Auto keeps quality and credits balanced.</div>
+            <div style="font-size:12px;font-weight:800;color:#f4f4f5;">AI model</div>
+            <div style="font-size:10px;color:#71717a;margin-top:2px;">Auto balances quality and credits.</div>
           </div>
-          <button type="button" data-model-id="auto" data-model-name="Auto" style="height:28px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 10px;font-size:11px;font-weight:800;cursor:pointer;">Use Auto</button>
+          <button type="button" data-model-id="auto" data-model-name="Auto" style="height:26px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 9px;font-size:10px;font-weight:800;cursor:pointer;flex:0 0 auto;">Auto</button>
         </div>
-        <div style="display:grid;gap:5px;">
+        <div style="display:grid;gap:3px;">
           ${models.map(model => {
             const tier = model.tier || (model.id === 'auto' ? 'Auto' : 'Standard');
             const color = renderTierColor(tier);
             const locked = model.locked ? '<span style="font-size:10px;color:#fbbf24;">Upgrade</span>' : '';
-            return `<button type="button" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:${model.id === selectedModelId ? 'rgba(255,255,255,.09)' : 'transparent'};color:#f4f4f5;border-radius:9px;padding:9px;cursor:pointer;text-align:left;">
-              <span style="display:grid;gap:2px;">
-                <span style="font-size:12px;font-weight:750;">${escapeHtml(model.display_name || model.id)}</span>
-                <span style="font-size:10px;color:#71717a;">${escapeHtml(model.id)}</span>
+            return `<button type="button" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:${model.id === selectedModelId ? 'rgba(255,255,255,.09)' : 'transparent'};color:#f4f4f5;border-radius:8px;padding:7px;cursor:pointer;text-align:left;">
+              <span style="display:grid;gap:1px;min-width:0;">
+                <span style="font-size:11px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(model.display_name || model.id)}</span>
+                <span style="font-size:9px;color:#71717a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(model.id)}</span>
               </span>
-              <span style="display:flex;align-items:center;gap:7px;">
-                <span style="font-size:10px;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;">${escapeHtml(tier)}</span>
+              <span style="display:flex;align-items:center;gap:5px;flex:0 0 auto;">
+                <span style="font-size:9px;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 6px;">${escapeHtml(tier)}</span>
                 ${locked}
               </span>
             </button>`;
           }).join('')}
         </div>
       `;
+      positionDropdown();
     } catch (error) {
-      dropdown.innerHTML = `<div style="padding:12px;color:#fca5a5;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
+      dropdown.innerHTML = `<div style="padding:10px;color:#fca5a5;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
+      positionDropdown();
     }
   };
 
+  window.addEventListener('resize', () => {
+    if (dropdown.style.display === 'block') positionDropdown();
+  });
   root.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();

@@ -1946,7 +1946,8 @@
       const modelLabel = document.getElementById('current-model-label');
       const chevronIcon = document.getElementById('chevron-icon');
 
-      if (modelSelectBtn && modelDropdown) {
+      const legacyModelSelectorEnabled = false;
+      if (legacyModelSelectorEnabled && modelSelectBtn && modelDropdown && modelSelectBtn.dataset.liveBound !== 'true') {
         modelSelectBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           const isOpen = modelDropdown.classList.contains('open');
