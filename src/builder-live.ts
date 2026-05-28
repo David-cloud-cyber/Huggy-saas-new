@@ -150,6 +150,14 @@ function renderFiles(files: GeneratedFile[]) {
   const tree = document.querySelector('.explorer-tree-scroll');
   if (tree) {
     tree.innerHTML = '';
+    if (!files.length) {
+      tree.innerHTML = `
+        <div class="code-empty-state" style="margin:8px;">
+          <h3>No files yet</h3>
+          <p>Use Build to generate project files. Real files from your backend will appear here.</p>
+        </div>
+      `;
+    }
     files.forEach((file, index) => {
       const item = document.createElement('div');
       item.className = `tree-file${index === 0 ? ' selected' : ''}`;
@@ -159,7 +167,16 @@ function renderFiles(files: GeneratedFile[]) {
       tree.appendChild(item);
     });
   }
-  if (files[0]) selectFile(files.find(file => file.path === 'index.html')?.path || files[0].path);
+  if (files[0]) {
+    selectFile(files.find(file => file.path === 'index.html')?.path || files[0].path);
+    return;
+  }
+  const label = document.getElementById('open-file-tab-label');
+  if (label) label.textContent = 'No file selected';
+  const code = document.getElementById('code-content-view-panel');
+  if (code) {
+    code.innerHTML = '<div class="code-empty-state"><h3>No source file loaded</h3><p>Generated files will be loaded from the project once Huggy receives them from the backend.</p></div>';
+  }
 }
 
 function selectFile(filePath: string) {
@@ -481,6 +498,11 @@ async function loadProject() {
   ensureToolbar();
   ensurePlanBuildControls();
   ensureDatabaseView();
+  const scroll = chatScroll();
+  if (scroll && scroll.dataset.liveInitialized !== 'true') {
+    scroll.innerHTML = '';
+    scroll.dataset.liveInitialized = 'true';
+  }
   const projectName = document.getElementById('project-name');
   const loading = appendMessage('system', 'Loading project files, timeline and preview...');
   try {
@@ -870,34 +892,43 @@ function ensureResizableSidebar() {
   const body = document.querySelector('.workspace-body') as HTMLElement | null;
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
   if (!body || !sidebar || document.getElementById('huggy-sidebar-resizer')) return;
-  const savedWidth = Number(localStorage.getItem('huggy-sidebar-width') || 340);
+  const savedWidth = Number(localStorage.getItem('huggy-sidebar-width') || 380);
   const applyWidth = (width: number) => {
-    const next = Math.min(520, Math.max(280, width));
-    body.style.gridTemplateColumns = `${next}px 1fr`;
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      body.style.gridTemplateColumns = '';
+      body.style.removeProperty('--huggy-sidebar-width');
+      return;
+    }
+    const next = Math.min(560, Math.max(300, width));
+    body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
     body.style.setProperty('--huggy-sidebar-width', `${next}px`);
     localStorage.setItem('huggy-sidebar-width', String(next));
   };
   applyWidth(savedWidth);
   const handle = document.createElement('div');
   handle.id = 'huggy-sidebar-resizer';
-  handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 340px) - 3px);width:6px;cursor:col-resize;z-index:20;background:transparent;';
+  handle.title = 'Resize chat panel';
+  handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 380px) - 4px);width:8px;cursor:col-resize;z-index:20;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);opacity:.45;touch-action:none;';
   body.style.position = 'relative';
   body.appendChild(handle);
+  window.addEventListener('resize', () => applyWidth(Number(localStorage.getItem('huggy-sidebar-width') || 380)));
+  handle.addEventListener('dblclick', () => applyWidth(380));
   handle.addEventListener('pointerdown', event => {
     if (window.matchMedia('(max-width: 760px)').matches) return;
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = sidebar.getBoundingClientRect().width;
-    document.body.style.userSelect = 'none';
+    body.classList.add('is-resizing-sidebar');
+    handle.setPointerCapture?.(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const next = Math.min(520, Math.max(280, startWidth + moveEvent.clientX - startX));
-      body.style.gridTemplateColumns = `${next}px 1fr`;
+      const next = Math.min(560, Math.max(300, startWidth + moveEvent.clientX - startX));
+      body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
       body.style.setProperty('--huggy-sidebar-width', `${next}px`);
       handle.style.left = `${next - 3}px`;
       localStorage.setItem('huggy-sidebar-width', String(Math.round(next)));
     };
     const up = () => {
-      document.body.style.userSelect = '';
+      body.classList.remove('is-resizing-sidebar');
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };

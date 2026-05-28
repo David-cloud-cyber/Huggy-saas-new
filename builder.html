@@ -435,10 +435,20 @@
     /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
     .workspace-body {
       display: grid;
-      grid-template-columns: 340px 1fr;
+      grid-template-columns: var(--huggy-sidebar-width, 380px) minmax(0, 1fr);
       flex: 1;
       overflow: hidden;
       transition: grid-template-columns 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .workspace-body.is-resizing-sidebar {
+      cursor: col-resize;
+      transition: none;
+      user-select: none;
+    }
+
+    .workspace-body > * {
+      min-width: 0;
     }
 
     .workspace-body.sidebar-collapsed {
@@ -452,6 +462,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      min-width: 0;
       transition: visibility 200ms, opacity 200ms, width 200ms;
     }
 
@@ -536,10 +547,36 @@
     .sidebar-scroll-area {
       flex: 1;
       overflow-y: auto;
-      padding: 16px;
+      padding: 22px 20px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
+    }
+
+    .sidebar-empty-state,
+    .code-empty-state {
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.025);
+      color: var(--text-muted);
+      padding: 18px;
+      text-align: left;
+    }
+
+    .sidebar-empty-state h3,
+    .code-empty-state h3 {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 650;
+      margin: 0 0 8px;
+    }
+
+    .sidebar-empty-state p,
+    .code-empty-state p {
+      color: var(--text-sub);
+      font-size: 12px;
+      line-height: 1.6;
+      margin: 0;
     }
 
     .message-card {
@@ -601,7 +638,7 @@
 
     .msg-body-paragraph {
       font-size: 13px;
-      line-height: 1.55;
+      line-height: 1.65;
       color: #d4d4d8;
       font-weight: 400;
       margin: 0;
@@ -726,7 +763,7 @@
     /* Custom Chat input Area precisely customized */
     .chat-input-row {
       border-top: 1px solid var(--border-light);
-      padding: 16px;
+      padding: 18px;
       background: var(--bg-panel);
     }
 
@@ -1286,141 +1323,9 @@
 
         <!-- Chat feed -->
         <div class="sidebar-scroll-area" id="sidebar-scroll-area">
-          <div class="message-card">
-            
-            <div class="msg-header-line">
-              <span class="msg-sender-identity" style="display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 32 32" fill="none">
-                  <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
-                  <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
-                  <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
-                  <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
-                </svg>
-                <span style="font-weight: 500;">Huggy AI</span>
-              </span>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </button>
-                <span class="pane-dots-btn">...</span>
-              </div>
-            </div>
-
-            <div class="msg-sub-text">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-              Thoughts 6 sec ago
-            </div>
-
-            <p class="msg-body-paragraph">
-              I'll implement the plan by fixing button colors and creating separate page components. Let me start by checking the current color configuration and routing structure.
-            </p>
-
-            <!-- Tools details collapse row -->
-            <div class="tools-pill-group">
-              <span class="tools-pill-left">
-                <span class="tools-pill-left-spark">✦</span> 3 tools used
-              </span>
-              <button class="btn-show-all-tools">Show all</button>
-            </div>
-
-            <!-- Tools execution log list (collapsible) -->
-            <div class="tools-detail-container" style="display: none; flex-direction: column; gap: 8px; border-left: 1.5px solid rgba(255, 255, 255, 0.15); padding-left: 12px; margin-left: 6px; margin-top: 4px; margin-bottom: 8px; transition: all 200ms;">
-              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="color: var(--accent); font-weight: 500;">grep -rI "chat-input"</span>
-                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
-                </div>
-                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Found 12 occurrences in 2 files</span>
-              </div>
-              
-              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="color: var(--accent); font-weight: 500;">edit_file /index.html</span>
-                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
-                </div>
-                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Injected model search & selection inputs</span>
-              </div>
-              
-              <div class="tool-run-item" style="display: flex; flex-direction: column; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(0,0,0,0.15); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span style="color: var(--accent); font-weight: 500;">compile_applet</span>
-                  <span style="color:#10B981; font-size:10px; display:flex; align-items:center; gap:3px;">● complete</span>
-                </div>
-                <span style="color: var(--text-muted); opacity:0.8; font-size:10px;">Build successfully completed</span>
-              </div>
-            </div>
-
-            <p class="msg-body-paragraph">
-              Now I can see the structure. The color configuration looks correct with HSL values. The issue might be with specific button styling. Let me check the button component colors and create the separate page components. I'll also examine the console logs for any color-related errors
-            </p>
-
-            <!-- File system changes stack -->
-            <div class="edited-files-container">
-              
-              <div class="edited-file-item">
-                <span class="edited-file-left">
-                  <span class="edited-file-icon">📄</span>
-                  <span class="edited-file-label">Edited</span>
-                  <span class="edited-file-path-highlight">src/pages/proposals.tsx</span>
-                </span>
-                <button class="btn-toggle-edit-view">Hide</button>
-              </div>
-
-              <div class="edited-file-item">
-                <span class="edited-file-left">
-                  <span class="edited-file-icon">📄</span>
-                  <span class="edited-file-label">Edited</span>
-                  <span class="edited-file-path-highlight">src/pages/templates.tsx</span>
-                </span>
-              </div>
-
-              <div class="edited-file-item">
-                <span class="edited-file-left">
-                  <span class="edited-file-icon">📄</span>
-                  <span class="edited-file-label">Edited</span>
-                  <span class="edited-file-path-highlight">src/pages/dashboard.tsx</span>
-                </span>
-              </div>
-
-              <div class="edited-file-item">
-                <span class="edited-file-left">
-                  <span class="edited-file-icon">📄</span>
-                  <span class="edited-file-label">Edited</span>
-                  <span class="edited-file-path-highlight">src/pages/dashboard.tsx</span>
-                </span>
-              </div>
-
-            </div>
-
-            <p class="msg-body-paragraph">
-              Fixed button colors and created distinct pages! Each page now has unique content:
-            </p>
-
-            <!-- Bullet indicators -->
-            <div class="highlights-list">
-              <div class="highlight-card-row">
-                <span class="highlight-bold-title">Dashboard</span>
-                <span style="color: var(--text-muted);">Overview stats, recent proposals, quick actions</span>
-              </div>
-              <div class="highlight-card-row">
-                <span class="highlight-bold-title">Proposals</span>
-                <span style="color: var(--text-muted);">Full proposal management with search/filters</span>
-              </div>
-              <div class="highlight-card-row">
-                <span class="highlight-bold-title">Templates</span>
-                <span style="color: var(--text-muted);">Template categories, popular templates, template manager</span>
-              </div>
-            </div>
-
-            <p class="msg-body-paragraph">
-              Removed custom button styling that could cause color issues and applied consistent size="sm" across all buttons using
-            </p>
-
+          <div class="sidebar-empty-state" id="chat-empty-state">
+            <h3>Chat ready</h3>
+            <p>Your real project conversation and agent events will appear here after synchronization. Use Plan to think or Build to generate files.</p>
           </div>
         </div>
 
@@ -1447,112 +1352,11 @@
                 
                 <div class="actions-right" style="display: flex; align-items: center; gap: 8px;">
                     <div class="model-select" id="model-select-btn" style="display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 10px; color: var(--text-sub); user-select: none; position: relative; transition: all 150ms; cursor: pointer; background: var(--bg-input);">
-                        <span class="model-label-prefix" style="font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 8px; opacity: 0.6; padding-right: 4px; border-right: 1px solid var(--border);">Model</span>
-                        <span id="current-model-label" style="font-family: 'JetBrains Mono'; font-weight: 500;">Sonnet 4.6</span>
+                        <span id="current-model-label" style="font-family: 'JetBrains Mono'; font-weight: 600;">Auto</span>
                         <svg id="chevron-icon" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 200ms;">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
-                        
-                        <div class="dropdown" id="model-dropdown" style="position: absolute; bottom: calc(100% + 10px); right: -4px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 6px; min-width: 220px; max-height: 280px; overflow-y: auto; z-index: 1000; box-shadow: 0 12px 32px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(8px) scale(0.97); transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1); pointer-events: none; backdrop-filter: blur(8px);">
-                            <div class="dropdown-header" style="font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); padding: 6px 8px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px;">Choose AI Engine</div>
-                            <div class="dropdown-search-wrapper" style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--bg-input);">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-sub);">
-                                    <circle cx="11" cy="11" r="8"></circle>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <input type="text" class="dropdown-search-input" placeholder="Search models..." style="background: transparent; border: none; outline: none; font-size: 11px; color: var(--text); width: 100%;">
-                            </div>
-                            <div class="model-option" data-name="Auto" data-id="auto" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Auto</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Best for the task</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Anthropic</div>
-                            <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Sonnet 4.6</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Intelligence + Speed</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Opus 4.7</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Deep Reasoning</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">OpenAI</div>
-                            <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5.5 Pro</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">State of the Art</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5.5</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Power & Performance</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Google</div>
-                            <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3 Pro</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Multimodal Power</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3 Flash</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Instant & Efficient</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Gemini 3.5 Flash</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Advanced Instant & Efficient</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5 Mini</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Fast & Smart</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">GPT-5 Nano</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Ultra-lightweight</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title" style="font-size: 8px; font-weight: 700; color: var(--text-muted); padding: 4px 8px; text-transform: uppercase; opacity: 0.5;">Specialized / Coders</div>
-                            <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">DeepSeek Coder</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Code Expert</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; transition: all 120ms; position: relative;">
-                                <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name" style="font-size: 11px; color: var(--text); font-weight: 500;">Qwen Coder</span>
-                                    <span class="opt-desc" style="font-size: 9px; color: var(--text-muted); font-family: 'JetBrains Mono'; margin-top: 1px;">Alibaba Labs</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
-                    <div class="submit-wrapper" style="position: relative; display: flex; align-items: center; border-radius: 6px; overflow: visible; padding: 1px;">
                         <button class="submit-btn" id="chat-submit-btn" type="button" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-sub); cursor: not-allowed; pointer-events: none; transition: all 150ms;">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="12" y1="19" x2="12" y2="5"></line>
@@ -1644,36 +1448,10 @@
               </div>
 
               <div class="explorer-tree-scroll">
-                
-                <div class="tree-file" data-file="eslint.config.js">
-                  <span class="tree-file-icon">📄</span>
-                  <span>eslint.config.js</span>
+                <div class="code-empty-state" style="margin:8px;">
+                  <h3>No files yet</h3>
+                  <p>Use Build to generate project files. Real files from your backend will appear here.</p>
                 </div>
-                <div class="tree-file selected" data-file="index.html">
-                  <span class="tree-file-icon" style="color:#d946ef;">📄</span>
-                  <span>index.html</span>
-                </div>
-                <div class="tree-file" data-file="builder.html">
-                  <span class="tree-file-icon">📄</span>
-                  <span>builder.html</span>
-                </div>
-                <div class="tree-file" data-file="package.json">
-                  <span class="tree-file-icon">📄</span>
-                  <span>package.json</span>
-                </div>
-                <div class="tree-file" data-file="tailwind.config.ts">
-                  <span class="tree-file-icon">📄</span>
-                  <span>tailwind.config.ts</span>
-                </div>
-                <div class="tree-file" data-file="tsconfig.json">
-                  <span class="tree-file-icon">📄</span>
-                  <span>tsconfig.json</span>
-                </div>
-                <div class="tree-file" data-file="vite.config.ts">
-                  <span class="tree-file-icon">📄</span>
-                  <span>vite.config.ts</span>
-                </div>
-
               </div>
             </div>
 
@@ -1689,15 +1467,13 @@
                   </button>
                   <div class="editor-tab-item" style="border-left: none;">
                     <span style="color: #60a5fa;">📄</span>
-                    <span id="open-file-tab-label">index.html</span>
+                    <span id="open-file-tab-label">No file selected</span>
                   </div>
                 </div>
               </div>
 
               <div class="editor-main-scroll" id="editor-source-output">
-                <!-- Highlighted React Code rendered precisely as in screenshot -->
-                <pre class="code-editor-pre" id="code-content-view-panel">
-<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-keyword">import</span> React <span class="syn-keyword">from</span> <span class="syn-string">"react"</span></span></div><div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">import</span> { Workspace } <span class="syn-keyword">from</span> <span class="syn-string">"./components/Workspace"</span></span></div><div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content"></span></div><div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content"><span class="syn-keyword">export default function</span> <span class="syn-call">App</span>() {</span></div><div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">return</span> (</span></div><div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">    &lt;<span class="syn-type">div</span> className=<span class="syn-string">"workspace-container theme-dark"</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">      &lt;<span class="syn-type">Workspace</span> viewport=<span class="syn-string">"active"</span> /&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    &lt;/<span class="syn-type">div</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">9</span><span class="editor-line-content">  )</span></div><div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">}</span></div></pre>
+                <div class="code-editor-pre" id="code-content-view-panel"><div class="code-empty-state"><h3>No source file loaded</h3><p>Generated files will be loaded from the project once Huggy receives them from the backend.</p></div></div>
               </div>
             </div>
           </div>
@@ -1710,8 +1486,7 @@
                 <span>localhost:3000 /</span>
               </div>
             </div>
-            <!-- Iframed target proposals dashboard page or fallback mockup -->
-            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #09090b; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px solid rgba(255,255,255,0.03); padding: 24px; border-radius: 12px; background: #0c0c0e; } h3 { color: #f4f4f5; margin: 0 0 8px 0; font-weight: 500; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #52525b; }</style></head><body><div class='card'><h3>Workspace Sandbox Ready</h3><p>Server active on port 3000. Open a source file on the editor to compile and display the rendering live.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
+            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #09090b; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(255,255,255,0.08); padding: 24px; border-radius: 12px; background: #0c0c0e; } h3 { color: #f4f4f5; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #52525b; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
           </div>
 
           <!-- SCREEN LAYOUT FOR CODE ANALYSIS -->
@@ -1892,48 +1667,7 @@
         sidebarDesignTab.classList.add("active");
         sidebarChatTab.classList.remove("active");
       });
-
-      // Interactive file explorer clicks
-      const treeFiles = document.querySelectorAll(".tree-file");
-      treeFiles.forEach(file => {
-        file.addEventListener("click", () => {
-          treeFiles.forEach(f => f.classList.remove("selected"));
-          file.classList.add("selected");
-
-          const fileName = file.getAttribute("data-file");
-          openFileTabLabel.innerText = fileName;
-
-          if (fileName === "index.html") {
-            codeContentView.innerHTML = `
-<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-keyword">import</span> React <span class="syn-keyword">from</span> <span class="syn-string">"react"</span></span></div><div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">import</span> { Workspace } <span class="syn-keyword">from</span> <span class="syn-string">"./components/Workspace"</span></span></div><div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content"></span></div><div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content"><span class="syn-keyword">export default function</span> <span class="syn-call">App</span>() {</span></div><div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">return</span> (</span></div><div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">    &lt;<span class="syn-type">div</span> className=<span class="syn-string">"workspace-container theme-dark"</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">      &lt;<span class="syn-type">Workspace</span> viewport=<span class="syn-string">"active"</span> /&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    &lt;/<span class="syn-type">div</span>&gt;</span></div><div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">  )</span></div><div class="editor-line-row"><span class="editor-line-number">11</span><span class="editor-line-content">}</span></div>`;
-          } else if (fileName === "package.json") {
-            codeContentView.innerHTML = `
-<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content">{</span></div>
-<div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content">  <span class="syn-keyword">"name"</span>: <span class="syn-string">"santora-saas"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content">  <span class="syn-keyword">"private"</span>: <span class="syn-keyword">true</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content">  <span class="syn-keyword">"version"</span>: <span class="syn-string">"1.0.0"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">  <span class="syn-keyword">"type"</span>: <span class="syn-string">"module"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">6</span><span class="editor-line-content">  <span class="syn-keyword">"scripts"</span>: {</span></div>
-<div class="editor-line-row"><span class="editor-line-number">7</span><span class="editor-line-content">    <span class="syn-keyword">"dev"</span>: <span class="syn-string">"vite --port=3000"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">8</span><span class="editor-line-content">    <span class="syn-keyword">"build"</span>: <span class="syn-string">"vite build"</span></span></div>
-<div class="editor-line-row"><span class="editor-line-number">9</span><span class="editor-line-content">  },</span></div>
-<div class="editor-line-row"><span class="editor-line-number">10</span><span class="editor-line-content">  <span class="syn-keyword">"dependencies"</span>: {</span></div>
-<div class="editor-line-row"><span class="editor-line-number">11</span><span class="editor-line-content">    <span class="syn-keyword">"react"</span>: <span class="syn-string">"^18.3.0"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">12</span><span class="editor-line-content">    <span class="syn-keyword">"react-dom"</span>: <span class="syn-string">"^18.3.0"</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">13</span><span class="editor-line-content">    <span class="syn-keyword">"recharts"</span>: <span class="syn-string">"^2.12"</span></span></div>
-<div class="editor-line-row"><span class="editor-line-number">14</span><span class="editor-line-content">  }</span></div>
-<div class="editor-line-row"><span class="editor-line-number">15</span><span class="editor-line-content">}</span></div>`;
-          } else {
-            // General fallback source file
-            codeContentView.innerHTML = `
-<div class="editor-line-row"><span class="editor-line-number">1</span><span class="editor-line-content"><span class="syn-comment">// Source file representation of ${fileName}</span></span></div>
-<div class="editor-line-row"><span class="editor-line-number">2</span><span class="editor-line-content"><span class="syn-keyword">export const</span> config = {</span></div>
-<div class="editor-line-row"><span class="editor-line-number">3</span><span class="editor-line-content">  active: <span class="syn-keyword">true</span>,</span></div>
-<div class="editor-line-row"><span class="editor-line-number">4</span><span class="editor-line-content">  alias: <span class="syn-string">"${fileName.split('.')[0]}"</span></span></div>
-<div class="editor-line-row"><span class="editor-line-number">5</span><span class="editor-line-content">};</span></div>`;
-          }
-        });
-      });
+      // Live file rendering is handled by src/builder-live.ts.
 
       // Submit new chat query interactions
       const chatInput = document.getElementById("chat-textarea-box");
@@ -2058,63 +1792,7 @@
           chatSubmit.classList.toggle('active', chatInput.value.trim().length > 0);
         });
       }
-
-      chatSubmit.addEventListener("click", () => {
-        return;
-        const value = chatInput.value.trim();
-        if (!value) return;
-
-        const hr = document.createElement("div");
-        hr.className = "message-card";
-        hr.innerHTML = `
-          <div class="msg-header-line">
-            <span class="msg-sender-identity" style="color:#d946ef;">👤 User</span>
-            <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
-                <polyline points="6 9 12 15 18 9"></polyline>
-              </svg>
-            </button>
-          </div>
-          <p class="msg-body-paragraph">${value}</p>
-        `;
-        chatScroll.appendChild(hr);
-        chatInput.value = "";
-        
-        // Reset height and submission button state
-        chatInput.style.height = '48px';
-        chatSubmit.classList.remove('active');
-        
-        chatScroll.scrollTop = chatScroll.scrollHeight;
-
-        // Legacy demo reply disabled by live builder connector.
-        setTimeout(() => {
-          const ai = document.createElement("div");
-          ai.className = "message-card";
-          ai.innerHTML = `
-            <div class="msg-header-line">
-              <span class="msg-sender-identity" style="display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 32 32" fill="none">
-                  <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
-                  <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
-                  <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
-                  <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
-                </svg>
-                <span style="font-weight: 500;">Huggy AI</span>
-              </span>
-              <button class="btn-toggle-msg-card" title="Collapse/Expand message" style="background: transparent; border: none; font-size: 10px; color: var(--text-sub); opacity: 0.6; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; transition: all 150ms;">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 150ms;">
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
-            </div>
-            <p class="msg-body-paragraph">
-              Analyzing workspace. I will make sure the modules are correctly referenced and reload the browser preview now.
-            </p>
-          `;
-          chatScroll.appendChild(ai);
-          chatScroll.scrollTop = chatScroll.scrollHeight;
-        }, 1200);
-      });
+      // Live chat submission is handled by src/builder-live.ts.
 
       chatInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
