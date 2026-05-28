@@ -55,6 +55,7 @@ let isGenerating = false;
 let lastPlan = '';
 let lastBuildSessionId = '';
 let activeAbort: AbortController | null = null;
+let selectedChatMode: 'plan' | 'build' = 'build';
 
 function escapeHtml(value: string): string {
   return value
@@ -202,11 +203,32 @@ function setBusy(busy: boolean) {
 
 function ensurePlanBuildControls() {
   const submitWrapper = document.querySelector('.submit-wrapper');
-  if (!submitWrapper || document.getElementById('btn-plan-mode')) return;
+  if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
-    <button id="btn-plan-mode" type="button" title="Plan without coding" style="height:24px;border:1px solid var(--border);background:var(--bg-input);color:var(--text-muted);border-radius:6px;padding:0 9px;font-size:10px;font-weight:700;cursor:pointer;">Plan</button>
-    <button id="btn-build-mode" type="button" title="Build and update preview" style="height:24px;border:1px solid rgba(244,244,245,.18);background:#f4f4f5;color:#09090b;border-radius:6px;padding:0 9px;font-size:10px;font-weight:800;cursor:pointer;">Build</button>
+    <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;">
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:66px;border:1px solid rgba(244,244,245,.16);background:#f4f4f5;color:#09090b;border-radius:6px;padding:0 8px;font-size:10px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+        <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.72;">v</span>
+      </button>
+      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:190px;border:1px solid var(--border);background:var(--bg-surface);border-radius:10px;padding:5px;box-shadow:0 18px 50px rgba(0,0,0,.45);display:none;z-index:1000;">
+        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:rgba(244,244,245,.08);color:var(--text);border-radius:7px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or modify the app</span></button>
+        <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:7px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
+      </div>
+    </div>
   `);
+}
+
+function setChatMode(mode: 'plan' | 'build') {
+  selectedChatMode = mode;
+  const label = document.getElementById('chat-mode-label');
+  const button = document.getElementById('btn-chat-mode') as HTMLButtonElement | null;
+  const menu = document.getElementById('chat-mode-menu');
+  if (label) label.textContent = mode === 'plan' ? 'Plan' : 'Build';
+  if (button) {
+    button.style.background = mode === 'plan' ? 'var(--bg-input)' : '#f4f4f5';
+    button.style.color = mode === 'plan' ? 'var(--text)' : '#09090b';
+    button.setAttribute('aria-expanded', 'false');
+  }
+  if (menu) menu.style.display = 'none';
 }
 
 function ensureDatabaseView() {
@@ -604,18 +626,44 @@ function bindChat() {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      send('build');
+      send(selectedChatMode);
     }
   }, true);
 
   submit.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    send('build');
+    send(selectedChatMode);
   }, true);
 
-  document.getElementById('btn-plan-mode')?.addEventListener('click', () => send('plan'));
-  document.getElementById('btn-build-mode')?.addEventListener('click', () => send('build'));
+  document.getElementById('btn-chat-mode')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const menu = document.getElementById('chat-mode-menu');
+    const button = document.getElementById('btn-chat-mode') as HTMLButtonElement | null;
+    const nextOpen = menu?.style.display !== 'block';
+    if (menu) menu.style.display = nextOpen ? 'block' : 'none';
+    button?.setAttribute('aria-expanded', String(nextOpen));
+  });
+
+  document.querySelectorAll('[data-chat-mode]').forEach(option => {
+    option.addEventListener('click', (event) => {
+      event.preventDefault();
+      const mode = (option as HTMLElement).dataset.chatMode === 'plan' ? 'plan' : 'build';
+      setChatMode(mode);
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    const wrapper = document.getElementById('chat-mode-wrapper');
+    if (wrapper && !wrapper.contains(event.target as Node)) {
+      const menu = document.getElementById('chat-mode-menu');
+      const button = document.getElementById('btn-chat-mode') as HTMLButtonElement | null;
+      if (menu) menu.style.display = 'none';
+      button?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  setChatMode(selectedChatMode);
 }
 
 function init() {
