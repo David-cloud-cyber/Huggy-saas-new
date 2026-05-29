@@ -30,6 +30,8 @@ const DEFAULT_SUPABASE_URL = 'https://notgpriaragtiahcqjoa.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_rp4hpA--fkybGy0GczSMvA_KU9BitSa';
 const staticRoot = path.join(__dirname, 'dist');
 const MAX_PROJECT_ASSET_BYTES = 4 * 1024 * 1024;
+const ANALYTICS_MAX_ROWS = 10000;
+const ANALYTICS_CURRENT_VISITOR_WINDOW_MS = 5 * 60 * 1000;
 const ALLOWED_PROJECT_ASSET_MIME = new Set([
   'image/png',
   'image/jpeg',
@@ -43,6 +45,23 @@ const ALLOWED_PROJECT_ASSET_MIME = new Set([
   'application/pdf',
   'application/octet-stream',
 ]);
+
+const COUNTRY_NAMES: Record<string, string> = {
+  BR: 'Brazil',
+  CA: 'Canada',
+  CM: 'Cameroon',
+  DE: 'Germany',
+  ES: 'Spain',
+  FR: 'France',
+  GB: 'United Kingdom',
+  IN: 'India',
+  IT: 'Italy',
+  NG: 'Nigeria',
+  NL: 'Netherlands',
+  PT: 'Portugal',
+  US: 'United States',
+  ZA: 'South Africa',
+};
 
 // Standard middlewares
 app.use(express.json({ limit: '8mb' }));
@@ -132,6 +151,18 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+function setAnalyticsCors(res: any) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Vary', 'Origin');
+}
+
+app.options('/api/analytics/collect', (_req, res) => {
+  setAnalyticsCors(res);
+  res.status(204).end();
+});
+
 app.use('/api/billing/wallet', requireAuth);
 app.use('/api/billing/ledger', requireAuth);
 app.use('/api/billing/checkout', requireAuth);
@@ -181,6 +212,97 @@ function normalizeProviderError(error: any): string {
     return 'OpenRouter provider error. The request was not completed; try again or choose another allowed model.';
   }
   return message;
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function cleanAnalyticsText(value: unknown, fallback: string, maxLength = 120): string {
+  const text = String(value || '').trim().replace(/[\u0000-\u001f\u007f]/g, '');
+  return (text || fallback).slice(0, maxLength);
+}
+
+function normalizeAnalyticsEventType(value: unknown): 'pageview' | 'heartbeat' | 'duration' {
+  const eventType = cleanAnalyticsText(value, 'pageview', 32).toLowerCase();
+  if (eventType === 'heartbeat' || eventType === 'duration') return eventType;
+  return 'pageview';
+}
+
+function normalizeAnalyticsEnvironment(value: unknown): 'preview' | 'production' {
+  return cleanAnalyticsText(value, 'preview', 32).toLowerCase() === 'production' ? 'production' : 'preview';
+}
+
+function normalizeAnalyticsPath(value: unknown): string {
+  const raw = cleanAnalyticsText(value, '/', 240);
+  if (!raw.startsWith('/')) return '/';
+  return raw.split('#')[0].split('?')[0] || '/';
+}
+
+function normalizeAnalyticsSource(value: unknown): string {
+  const source = cleanAnalyticsText(value, 'Direct', 80);
+  if (!source || /^https?:\/\//i.test(source)) {
+    try {
+      return new URL(source).hostname.slice(0, 80) || 'Direct';
+    } catch {
+      return 'Direct';
+    }
+  }
+  return source === 'direct' ? 'Direct' : source;
+}
+
+function detectAnalyticsDevice(userAgentHeader: unknown): 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown' {
+  const userAgent = String(userAgentHeader || '');
+  if (!userAgent) return 'Unknown';
+  if (/ipad|tablet|kindle|silk/i.test(userAgent)) return 'Tablet';
+  if (/mobi|iphone|android.*mobile|windows phone/i.test(userAgent)) return 'Mobile';
+  if (/mozilla|chrome|safari|firefox|edg/i.test(userAgent)) return 'Desktop';
+  return 'Unknown';
+}
+
+function detectAnalyticsCountry(req: any) {
+  const rawCode = String(
+    req.headers['cf-ipcountry'] ||
+    req.headers['x-vercel-ip-country'] ||
+    req.headers['x-country-code'] ||
+    ''
+  ).toUpperCase();
+  const countryCode = /^[A-Z]{2}$/.test(rawCode) ? rawCode : 'UN';
+  return {
+    country_code: countryCode,
+    country_name: COUNTRY_NAMES[countryCode] || (countryCode === 'UN' ? 'Unknown' : countryCode),
+  };
+}
+
+function getAnalyticsRange(rangeValue: unknown) {
+  const range = cleanAnalyticsText(rangeValue, '30d', 8).toLowerCase();
+  const now = Date.now();
+  if (range === '24h') {
+    return { key: '24h', start: new Date(now - 24 * 60 * 60 * 1000), bucketCount: 24, bucketMs: 60 * 60 * 1000 };
+  }
+  if (range === '7d') {
+    return { key: '7d', start: new Date(now - 7 * 24 * 60 * 60 * 1000), bucketCount: 7, bucketMs: 24 * 60 * 60 * 1000 };
+  }
+  if (range === '90d') {
+    return { key: '90d', start: new Date(now - 90 * 24 * 60 * 60 * 1000), bucketCount: 30, bucketMs: 3 * 24 * 60 * 60 * 1000 };
+  }
+  return { key: '30d', start: new Date(now - 30 * 24 * 60 * 60 * 1000), bucketCount: 30, bucketMs: 24 * 60 * 60 * 1000 };
+}
+
+function uniqueCount(values: string[]) {
+  return new Set(values.filter(Boolean)).size;
+}
+
+function groupVisitors<T extends Record<string, any>>(rows: T[], getKey: (row: T) => string) {
+  const grouped = new Map<string, Set<string>>();
+  rows.forEach(row => {
+    const key = getKey(row);
+    if (!grouped.has(key)) grouped.set(key, new Set());
+    grouped.get(key)?.add(String(row.visitor_id || row.session_id || 'unknown'));
+  });
+  return Array.from(grouped.entries())
+    .map(([label, visitors]) => ({ label, visitors: visitors.size }))
+    .sort((a, b) => b.visitors - a.visitors || a.label.localeCompare(b.label));
 }
 
 type GeneratedFile = {
@@ -401,10 +523,69 @@ function buildFallbackAppHtml(title: string, prompt: string): string {
 </html>`;
 }
 
-function renderPreviewHtml(files: GeneratedFile[], projectName = 'Huggy app'): string {
+function injectAnalyticsSnippet(html: string, projectId?: string, environment: 'preview' | 'production' = 'preview') {
+  if (!projectId || html.includes('data-huggy-analytics="true"')) return html;
+  const apiBase = (process.env.HUGGY_PUBLIC_API_URL || '').replace(/\/$/, '');
+  const snippet = `
+<script data-huggy-analytics="true">
+(() => {
+  const projectId = ${JSON.stringify(projectId)};
+  const environment = ${JSON.stringify(environment)};
+  const apiBase = ${JSON.stringify(apiBase)};
+  const endpoint = (apiBase || window.location.origin).replace(/\\/$/, '') + '/api/analytics/collect';
+  const safeId = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+  const storageGet = (store, key) => { try { return store.getItem(key); } catch { return ''; } };
+  const storageSet = (store, key, value) => { try { store.setItem(key, value); } catch {} };
+  let visitorId = storageGet(localStorage, 'huggy_visitor_id');
+  if (!visitorId) { visitorId = safeId(); storageSet(localStorage, 'huggy_visitor_id', visitorId); }
+  let sessionId = storageGet(sessionStorage, 'huggy_session_id');
+  if (!sessionId) { sessionId = safeId(); storageSet(sessionStorage, 'huggy_session_id', sessionId); }
+  const startedAt = Date.now();
+  const source = (() => {
+    try {
+      if (!document.referrer) return 'Direct';
+      const referrer = new URL(document.referrer);
+      if (/builder\\.html|dashboard\\.html|auth\\.html/i.test(referrer.pathname)) return 'Direct';
+      return referrer.hostname || 'Direct';
+    } catch { return 'Direct'; }
+  })();
+  const send = (eventType) => {
+    const payload = {
+      project_id: projectId,
+      event_type: eventType,
+      page_path: window.location.pathname || '/',
+      session_id: sessionId,
+      visitor_id: visitorId,
+      source,
+      duration_seconds: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
+      environment,
+    };
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      const ok = navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
+      if (ok) return;
+    }
+    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  };
+  send('pageview');
+  const heartbeat = setInterval(() => send('heartbeat'), 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') send('duration');
+  });
+  window.addEventListener('beforeunload', () => {
+    clearInterval(heartbeat);
+    send('duration');
+  });
+})();
+</script>`;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${snippet}\n</body>`);
+  return `${html}\n${snippet}`;
+}
+
+function renderPreviewHtml(files: GeneratedFile[], projectName = 'Huggy app', projectId?: string, environment: 'preview' | 'production' = 'preview'): string {
   const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
-  if (indexFile?.content) return indexFile.content;
-  return buildFallbackAppHtml(projectName, 'Preview ready. Generate or edit this project to replace the placeholder.');
+  const html = indexFile?.content || buildFallbackAppHtml(projectName, 'Preview ready. Generate or edit this project to replace the placeholder.');
+  return injectAnalyticsSnippet(html, projectId, environment);
 }
 
 function createTemplateFiles(projectName: string, prompt: string): GeneratedFile[] {
@@ -653,7 +834,7 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
     }
   }
 
-  const html = renderPreviewHtml(files, project.name);
+  const html = renderPreviewHtml(files, project.name, project.id, 'preview');
   if (!html.trim() || /__HUGGY_FORCE_ERROR__/i.test(html)) {
     errors.push({ file: 'index.html', message: 'Preview HTML is empty or intentionally failing.', severity: 'high' });
   }
@@ -910,6 +1091,13 @@ async function loadProject(projectId: string, userId: string): Promise<Generated
   return (data as GeneratedProject) || null;
 }
 
+async function loadProjectForAnalytics(projectId: string): Promise<GeneratedProject | null> {
+  const client = requireSupabase('Analytics project loading');
+  const { data, error } = await client.from('projects').select('*').eq('id', projectId).maybeSingle();
+  if (error) throw new Error(`Supabase analytics project load failed: ${error.message}`);
+  return (data as GeneratedProject) || null;
+}
+
 async function listProjectsForUser(userId: string): Promise<GeneratedProject[]> {
   const client = requireSupabase('Project listing');
   const { data, error } = await client.from('projects').select('*').eq('owner_id', userId).order('updated_at', { ascending: false });
@@ -957,6 +1145,161 @@ async function listProjectMessages(projectId: string) {
   const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
   if (error) throw new Error(`Supabase project message listing failed: ${error.message}`);
   return data || [];
+}
+
+async function saveAnalyticsEvent(project: GeneratedProject, record: any) {
+  const client = requireSupabase('Analytics event persistence');
+  const now = new Date().toISOString();
+  const pageviewDelta = record.event_type === 'pageview' ? 1 : 0;
+  const { data: session } = await client
+    .from('project_analytics_sessions')
+    .select('id, pageviews, duration_seconds')
+    .eq('project_id', project.id)
+    .eq('session_id', record.session_id)
+    .maybeSingle();
+
+  if (session?.id) {
+    const { error: sessionError } = await client
+      .from('project_analytics_sessions')
+      .update({
+        source: record.source,
+        country_code: record.country_code,
+        country_name: record.country_name,
+        device: record.device,
+        environment: record.environment,
+        pageviews: Number(session.pageviews || 0) + pageviewDelta,
+        duration_seconds: Math.max(Number(session.duration_seconds || 0), Number(record.duration_seconds || 0)),
+        last_seen_at: now,
+      })
+      .eq('id', session.id);
+    if (sessionError) throw new Error(`Supabase analytics session update failed: ${sessionError.message}`);
+  } else {
+    const { error: sessionError } = await client.from('project_analytics_sessions').insert([{
+      id: randomUUID(),
+      organization_id: project.organization_id,
+      project_id: project.id,
+      session_id: record.session_id,
+      visitor_id: record.visitor_id,
+      environment: record.environment,
+      source: record.source,
+      country_code: record.country_code,
+      country_name: record.country_name,
+      device: record.device,
+      pageviews: pageviewDelta,
+      duration_seconds: Number(record.duration_seconds || 0),
+      first_seen_at: now,
+      last_seen_at: now,
+    }]);
+    if (sessionError) throw new Error(`Supabase analytics session insert failed: ${sessionError.message}`);
+  }
+
+  const { error } = await client.from('project_analytics_events').insert([{
+    id: randomUUID(),
+    organization_id: project.organization_id,
+    project_id: project.id,
+    ...record,
+    occurred_at: now,
+  }]);
+  if (error) throw new Error(`Supabase analytics event insert failed: ${error.message}`);
+}
+
+function buildAnalyticsTimeseries(events: any[], range: ReturnType<typeof getAnalyticsRange>) {
+  const startMs = range.start.getTime();
+  const buckets = Array.from({ length: range.bucketCount }, (_, index) => {
+    const bucketStart = startMs + index * range.bucketMs;
+    const label = range.key === '24h'
+      ? new Date(bucketStart).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+      : new Date(bucketStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { start: bucketStart, label, visitors: new Set<string>(), pageviews: 0 };
+  });
+
+  events.forEach(event => {
+    const occurredMs = new Date(event.occurred_at).getTime();
+    const index = Math.min(range.bucketCount - 1, Math.max(0, Math.floor((occurredMs - startMs) / range.bucketMs)));
+    buckets[index]?.visitors.add(String(event.visitor_id || event.session_id || 'unknown'));
+    if (event.event_type === 'pageview') buckets[index].pageviews += 1;
+  });
+
+  return buckets.map(bucket => ({
+    time: bucket.label,
+    visitors: bucket.visitors.size,
+    pageviews: bucket.pageviews,
+  }));
+}
+
+async function loadProjectAnalysis(project: GeneratedProject, rangeKey: string) {
+  const client = requireSupabase('Project analytics');
+  const range = getAnalyticsRange(rangeKey);
+  const startIso = range.start.toISOString();
+  const { data: events = [], error: eventsError } = await client
+    .from('project_analytics_events')
+    .select('event_type, page_path, session_id, visitor_id, source, country_code, country_name, device, duration_seconds, environment, occurred_at')
+    .eq('project_id', project.id)
+    .gte('occurred_at', startIso)
+    .order('occurred_at', { ascending: true })
+    .limit(ANALYTICS_MAX_ROWS);
+  if (eventsError) throw new Error(`Supabase analytics events load failed: ${eventsError.message}`);
+
+  const { data: sessions = [], error: sessionsError } = await client
+    .from('project_analytics_sessions')
+    .select('session_id, visitor_id, source, country_code, country_name, device, pageviews, duration_seconds, environment, first_seen_at, last_seen_at')
+    .eq('project_id', project.id)
+    .gte('last_seen_at', startIso)
+    .order('last_seen_at', { ascending: false })
+    .limit(ANALYTICS_MAX_ROWS);
+  if (sessionsError) throw new Error(`Supabase analytics sessions load failed: ${sessionsError.message}`);
+
+  const pageviewEvents = events.filter((event: any) => event.event_type === 'pageview');
+  const sessionCount = sessions.length;
+  const visitorCount = uniqueCount(sessions.map((session: any) => String(session.visitor_id || session.session_id || '')));
+  const pageviews = pageviewEvents.length;
+  const totalDuration = sessions.reduce((sum: number, session: any) => sum + Number(session.duration_seconds || 0), 0);
+  const bounceSessions = sessions.filter((session: any) => Number(session.pageviews || 0) <= 1).length;
+  const currentCutoff = Date.now() - ANALYTICS_CURRENT_VISITOR_WINDOW_MS;
+  const currentVisitors = uniqueCount(
+    sessions
+      .filter((session: any) => new Date(session.last_seen_at).getTime() >= currentCutoff)
+      .map((session: any) => String(session.visitor_id || session.session_id || ''))
+  );
+
+  const sources = groupVisitors(pageviewEvents, (event: any) => cleanAnalyticsText(event.source, 'Direct', 80))
+    .map(item => ({ source: item.label, visitors: item.visitors }));
+  const pages = groupVisitors(pageviewEvents, (event: any) => normalizeAnalyticsPath(event.page_path))
+    .map(item => ({ page: item.label, visitors: item.visitors }));
+  const countriesMap = new Map<string, { country_code: string; country_name: string; visitors: Set<string> }>();
+  pageviewEvents.forEach((event: any) => {
+    const code = cleanAnalyticsText(event.country_code, 'UN', 2).toUpperCase();
+    const key = `${code}:${cleanAnalyticsText(event.country_name, COUNTRY_NAMES[code] || 'Unknown', 80)}`;
+    if (!countriesMap.has(key)) {
+      countriesMap.set(key, { country_code: code, country_name: cleanAnalyticsText(event.country_name, COUNTRY_NAMES[code] || 'Unknown', 80), visitors: new Set() });
+    }
+    countriesMap.get(key)?.visitors.add(String(event.visitor_id || event.session_id || 'unknown'));
+  });
+  const countries = Array.from(countriesMap.values())
+    .map(item => ({ country_code: item.country_code, country_name: item.country_name, visitors: item.visitors.size }))
+    .sort((a, b) => b.visitors - a.visitors || a.country_name.localeCompare(b.country_name));
+  const devices = groupVisitors(pageviewEvents, (event: any) => cleanAnalyticsText(event.device, 'Unknown', 24))
+    .map(item => ({
+      device: ['Mobile', 'Desktop', 'Tablet'].includes(item.label) ? item.label : 'Unknown',
+      visitors: item.visitors,
+      percentage: visitorCount ? Number(((item.visitors / visitorCount) * 100).toFixed(1)) : 0,
+    }));
+
+  return {
+    current_visitors: currentVisitors,
+    metrics: {
+      visitors: visitorCount,
+      pageviews,
+      views_per_visit: sessionCount ? Number((pageviews / sessionCount).toFixed(2)) : 0,
+      visit_duration_seconds: sessionCount ? Math.round(totalDuration / sessionCount) : 0,
+      bounce_rate: sessionCount ? Math.round((bounceSessions / sessionCount) * 100) : 0,
+    },
+    timeseries: buildAnalyticsTimeseries(events, range),
+    sources,
+    pages,
+    countries,
+    devices,
+  };
 }
 
 async function getLastProjectPlan(projectId: string): Promise<string> {
@@ -1110,11 +1453,11 @@ async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFi
 
   const deploymentFiles = normalizeGeneratedFiles(files).map(file => ({
     file: file.path,
-    data: file.content,
+    data: file.path.endsWith('.html') ? injectAnalyticsSnippet(file.content, project.id, 'production') : file.content,
   }));
 
   if (!deploymentFiles.some(file => file.file === 'index.html')) {
-    deploymentFiles.unshift({ file: 'index.html', data: renderPreviewHtml(files, project.name) });
+    deploymentFiles.unshift({ file: 'index.html', data: renderPreviewHtml(files, project.name, project.id, 'production') });
   }
 
   const params = new URLSearchParams();
@@ -1510,6 +1853,45 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 // 3. CUSTOM DOMAINS ENDPOINTS
 // ──────────────────────────────────────────────────────────────────────
 
+app.post('/api/analytics/collect', async (req: any, res: any) => {
+  setAnalyticsCors(res);
+  try {
+    const projectId = String(req.body?.project_id || '').trim();
+    if (!isUuid(projectId)) {
+      return res.status(400).json({ success: false, error: 'A valid project_id is required.' });
+    }
+
+    const project = await loadProjectForAnalytics(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const durationSeconds = Math.max(0, Math.min(24 * 60 * 60, Number(req.body?.duration_seconds || 0)));
+    const country = detectAnalyticsCountry(req);
+    await saveAnalyticsEvent(project, {
+      session_id: cleanAnalyticsText(req.body?.session_id, randomUUID(), 120),
+      visitor_id: cleanAnalyticsText(req.body?.visitor_id, randomUUID(), 120),
+      event_type: normalizeAnalyticsEventType(req.body?.event_type),
+      page_path: normalizeAnalyticsPath(req.body?.page_path),
+      source: normalizeAnalyticsSource(req.body?.source),
+      duration_seconds: Number.isFinite(durationSeconds) ? durationSeconds : 0,
+      environment: normalizeAnalyticsEnvironment(req.body?.environment),
+      country_code: country.country_code,
+      country_name: country.country_name,
+      device: detectAnalyticsDevice(req.headers['user-agent']),
+    });
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('[huggy:analytics_collect_failed]', { message: error?.message || String(error) });
+    const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : 500);
+    return res.status(status).json({
+      success: false,
+      error: status === 503 ? 'Analytics storage is not configured.' : 'Analytics event could not be collected.',
+    });
+  }
+});
+
 app.get('/api/projects', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const projects = await listProjectsForUser(userId);
@@ -1543,7 +1925,7 @@ app.post('/api/projects', async (req: any, res: any) => {
   };
 
   const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
-  project.preview_html = renderPreviewHtml(files, project.name);
+  project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview');
   await saveProject(project, files);
 
   res.status(201).json({
@@ -1573,7 +1955,7 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
     events,
     preview: {
       status: project.preview_status || 'idle',
-      html: project.preview_html || renderPreviewHtml(files, project.name),
+      html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
     },
   });
 });
@@ -1602,9 +1984,25 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
     credits: { balance },
     preview: {
       status: project.preview_status || 'idle',
-      html: project.preview_html || renderPreviewHtml(files, project.name),
+      html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
     },
   });
+});
+
+app.get('/api/projects/:id/analysis', async (req: any, res: any) => {
+  try {
+    const userId = getUserOrgId(req);
+    const project = await loadProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    const analysis = await loadProjectAnalysis(project, String(req.query?.range || '30d'));
+    res.json({ success: true, project_id: project.id, range: String(req.query?.range || '30d'), ...analysis });
+  } catch (error: any) {
+    const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : 500);
+    res.status(status).json({
+      success: false,
+      error: status === 503 ? 'Analytics storage is not configured.' : error?.message || 'Analysis unavailable.',
+    });
+  }
 });
 
 app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
@@ -1714,7 +2112,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       intent: decision,
       text: content,
       files: existingFiles,
-      preview: { status: project.preview_status || 'idle', html: project.preview_html || renderPreviewHtml(existingFiles, project.name) },
+      preview: { status: project.preview_status || 'idle', html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(existingFiles, project.name, project.id, 'preview'), project.id, 'preview') },
       credits: { estimated: 0, charged: 0, remaining: await helpers.getWallet(userId) },
     });
   }
@@ -1918,7 +2316,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       choices: decision.clarification?.choices || [],
       recommendation: decision.clarification?.recommendation,
       original_prompt: prompt,
-      preview: { status: project.preview_status || 'idle', html: project.preview_html || renderPreviewHtml(existingFiles, project.name) },
+      preview: { status: project.preview_status || 'idle', html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(existingFiles, project.name, project.id, 'preview'), project.id, 'preview') },
       files: existingFiles,
       credits: { estimated: estimate.finalCredits, charged: 0, remaining: wallet },
     });
@@ -2110,7 +2508,7 @@ app.post('/api/projects/:id/preview', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
   const files = await loadProjectFiles(project.id);
-  const html = renderPreviewHtml(files, project.name);
+  const html = renderPreviewHtml(files, project.name, project.id, 'preview');
   const updatedProject = {
     ...project,
     preview_status: 'ready',

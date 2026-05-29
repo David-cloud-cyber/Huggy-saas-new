@@ -303,3 +303,73 @@ grant select, insert, update, delete on public.project_patches to authenticated;
 grant select, insert, update, delete on public.project_integrations to authenticated;
 grant select, insert, update, delete on public.project_secrets to authenticated;
 grant select, insert, update, delete on public.project_assets to authenticated;
+
+create table if not exists public.project_analytics_sessions (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  session_id text not null,
+  visitor_id text not null,
+  environment text not null default 'preview',
+  source text not null default 'Direct',
+  country_code text not null default 'UN',
+  country_name text not null default 'Unknown',
+  device text not null default 'Unknown',
+  pageviews integer not null default 0,
+  duration_seconds integer not null default 0,
+  first_seen_at timestamptz default now() not null,
+  last_seen_at timestamptz default now() not null
+);
+
+create table if not exists public.project_analytics_events (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid,
+  project_id uuid not null references public.projects(id) on delete cascade,
+  session_id text not null,
+  visitor_id text not null,
+  event_type text not null default 'pageview',
+  page_path text not null default '/',
+  source text not null default 'Direct',
+  country_code text not null default 'UN',
+  country_name text not null default 'Unknown',
+  device text not null default 'Unknown',
+  environment text not null default 'preview',
+  duration_seconds integer not null default 0,
+  occurred_at timestamptz default now() not null
+);
+
+alter table public.project_analytics_sessions add column if not exists organization_id uuid;
+alter table public.project_analytics_sessions add column if not exists environment text not null default 'preview';
+alter table public.project_analytics_sessions add column if not exists source text not null default 'Direct';
+alter table public.project_analytics_sessions add column if not exists country_code text not null default 'UN';
+alter table public.project_analytics_sessions add column if not exists country_name text not null default 'Unknown';
+alter table public.project_analytics_sessions add column if not exists device text not null default 'Unknown';
+alter table public.project_analytics_sessions add column if not exists pageviews integer not null default 0;
+alter table public.project_analytics_sessions add column if not exists duration_seconds integer not null default 0;
+alter table public.project_analytics_sessions add column if not exists first_seen_at timestamptz default now();
+alter table public.project_analytics_sessions add column if not exists last_seen_at timestamptz default now();
+
+alter table public.project_analytics_events add column if not exists organization_id uuid;
+alter table public.project_analytics_events add column if not exists environment text not null default 'preview';
+alter table public.project_analytics_events add column if not exists duration_seconds integer not null default 0;
+
+alter table public.project_analytics_sessions enable row level security;
+alter table public.project_analytics_events enable row level security;
+
+drop policy if exists "Project analytics sessions owner isolation" on public.project_analytics_sessions;
+create policy "Project analytics sessions owner isolation" on public.project_analytics_sessions
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+drop policy if exists "Project analytics events owner isolation" on public.project_analytics_events;
+create policy "Project analytics events owner isolation" on public.project_analytics_events
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+create unique index if not exists project_analytics_sessions_project_session_idx on public.project_analytics_sessions (project_id, session_id);
+create index if not exists project_analytics_sessions_project_last_seen_idx on public.project_analytics_sessions (project_id, last_seen_at desc);
+create index if not exists project_analytics_events_project_occurred_idx on public.project_analytics_events (project_id, occurred_at desc);
+create index if not exists project_analytics_events_project_session_idx on public.project_analytics_events (project_id, session_id);
+
+grant select, insert, update, delete on public.project_analytics_sessions to authenticated;
+grant select, insert, update, delete on public.project_analytics_events to authenticated;

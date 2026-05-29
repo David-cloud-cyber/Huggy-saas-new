@@ -1323,11 +1323,11 @@
       position: absolute;
       inset: 0;
       background: var(--bg);
-      padding: 32px;
+      padding: 26px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 18px;
       z-index: 5;
       width: 100%;
       height: 100%;
@@ -1335,64 +1335,227 @@
       min-height: 0;
     }
 
-    .analysis-title-row {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 12px;
-    }
-
-    .analysis-header {
-      font-size: 18px;
-      font-weight: 500;
-      color: var(--text);
-      margin: 0;
-    }
-
-    .analysis-cards-grid {
+    .analysis-content {
+      width: min(1280px, 100%);
+      margin: 0 auto;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .analysis-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 18px;
+    }
+
+    .analysis-live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 13px;
+      font-weight: 750;
+      color: var(--text);
+    }
+
+    .analysis-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #16a34a;
+      box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+    }
+
+    .analysis-range-select {
+      height: 36px;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .analysis-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .analysis-metric-card,
+    .analysis-chart-card,
+    .analysis-breakdown-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 14px 36px rgba(0,0,0,.06);
+    }
+
+    .analysis-metric-card {
+      min-height: 112px;
+      padding: 20px;
+      display: grid;
+      align-content: space-between;
       gap: 16px;
     }
 
-    .analysis-card {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
+    .analysis-metric-card.is-primary {
+      border-color: rgba(37, 99, 235, .44);
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, .08), 0 18px 42px rgba(37, 99, 235, .09);
     }
 
-    .analysis-card-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 6px;
+    .analysis-metric-label {
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 760;
+      color: var(--text);
     }
 
-    .analysis-card-val {
+    .analysis-metric-card.is-primary .analysis-metric-label {
+      color: #2563eb;
+    }
+
+    .analysis-metric-value {
       font-size: 24px;
-      font-weight: 600;
+      line-height: 1;
+      font-weight: 820;
       color: var(--text);
       font-family: "JetBrains Mono", monospace;
     }
 
-    .analysis-card-sub {
-      font-size: 11.5px;
-      color: #22c55e;
-      margin-top: 4px;
+    .analysis-chart-card {
+      padding: 20px;
+      min-height: 310px;
     }
 
-    .performance-bar-container {
-      background: var(--bg-input);
-      border-radius: 4px;
-      height: 6px;
+    .analysis-chart {
+      width: 100%;
+      height: 260px;
+      display: block;
+      overflow: visible;
+    }
+
+    .analysis-chart-grid {
+      stroke: color-mix(in srgb, var(--text-muted) 20%, transparent);
+      stroke-width: 1;
+    }
+
+    .analysis-chart-line {
+      fill: none;
+      stroke: #2563eb;
+      stroke-width: 3;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    .analysis-chart-area {
+      fill: rgba(37, 99, 235, .10);
+    }
+
+    .analysis-chart-label {
+      fill: var(--text-muted);
+      font-size: 11px;
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .analysis-breakdown-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .analysis-breakdown-card {
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      min-height: 144px;
+    }
+
+    .analysis-breakdown-head,
+    .analysis-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .analysis-breakdown-head {
+      font-size: 13px;
+      font-weight: 820;
+      color: var(--text);
+    }
+
+    .analysis-row {
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .analysis-row-track {
+      position: relative;
       overflow: hidden;
-      margin-top: 10px;
+      border-radius: 8px;
+      background: var(--bg-input);
+      padding: 8px 10px;
+      min-width: 0;
     }
 
-    .performance-bar-fill {
-      background: linear-gradient(90deg, #d946ef, #a855f7);
-      width: 96%;
-      height: 100%;
+    .analysis-row-track::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--row-width, 0%);
+      background: rgba(37, 99, 235, .16);
+      border-radius: inherit;
+    }
+
+    .analysis-row-track span {
+      position: relative;
+      z-index: 1;
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .analysis-empty,
+    .analysis-error,
+    .analysis-loading {
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      padding: 42px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      background: var(--bg-panel);
+    }
+
+    .analysis-skeleton {
+      min-height: 120px;
+      border-radius: 16px;
+      background: linear-gradient(90deg, rgba(0,0,0,.04), rgba(0,0,0,.08), rgba(0,0,0,.04));
+      background-size: 220% 100%;
+      animation: analysis-shimmer 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+
+    @keyframes analysis-shimmer {
+      from { background-position: 100% 0; }
+      to { background-position: -100% 0; }
+    }
+
+    @media (max-width: 900px) {
+      .analysis-screen-panel { padding: 18px; }
+      .analysis-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .analysis-breakdown-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .analysis-topbar { align-items: flex-start; flex-direction: column; }
+      .analysis-metrics-grid { grid-template-columns: 1fr; }
+      .analysis-chart-card { padding: 14px; }
     }
   </style>
 </head>
@@ -1626,16 +1789,11 @@
 
           <!-- SCREEN LAYOUT FOR CODE ANALYSIS -->
           <div class="analysis-screen-panel" id="screen-layout-analysis" style="display: none;">
-            <div class="analysis-title-row">
-              <h1 class="analysis-header">Performance & Coverage Overview</h1>
-            </div>
-
-            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,0.04); border-radius: 8px; padding: 40px; text-align: center; background: rgba(0,0,0,0.1); width: 100%;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2" style="margin-bottom: 12px;">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-              </svg>
-              <h3 style="margin: 0; font-size: 14px; font-weight: 500; color: #f4f4f5;">No Analysis History</h3>
-              <p style="margin: 6px auto 0 auto; font-size: 12px; color: #52525b; max-width: 280px; line-height: 1.6;">Run a production build or trigger testing metrics to populate analysis diagrams and performance telemetry.</p>
+            <div class="analysis-content" id="analysis-content">
+              <div class="analysis-loading">
+                <strong style="display:block;color:var(--text);font-size:14px;margin-bottom:6px;">Analysis is ready</strong>
+                <span style="font-size:12px;">Open this tab after a project preview receives real traffic.</span>
+              </div>
             </div>
           </div>
 

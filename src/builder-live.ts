@@ -51,6 +51,22 @@ type AiModel = {
   capabilities?: Record<string, unknown>;
 };
 
+type AnalysisPayload = {
+  current_visitors: number;
+  metrics: {
+    visitors: number;
+    pageviews: number;
+    views_per_visit: number;
+    visit_duration_seconds: number;
+    bounce_rate: number;
+  };
+  timeseries: Array<{ time: string; visitors: number; pageviews: number }>;
+  sources: Array<{ source: string; visitors: number }>;
+  pages: Array<{ page: string; visitors: number }>;
+  countries: Array<{ country_code: string; country_name: string; visitors: number }>;
+  devices: Array<{ device: 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown'; visitors: number; percentage: number }>;
+};
+
 let currentProjectId = '';
 let currentFiles: GeneratedFile[] = [];
 let currentPreviewHtml = '';
@@ -61,6 +77,8 @@ let activeAbort: AbortController | null = null;
 let selectedChatMode: 'plan' | 'build' = 'build';
 let selectedModelId = 'auto';
 let initialBuilderHandoff: { prompt: string; mode: 'plan' | 'build' } | null = null;
+let analysisPollTimer: number | null = null;
+let analysisRange = '30d';
 
 function escapeHtml(value: string): string {
   return value
@@ -624,6 +642,12 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
   document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
   document.getElementById(`tab-btn-${view}`)?.classList.add('active');
   if (view === 'database') void loadDatabase();
+  if (view === 'analysis') {
+    void loadAnalysis();
+    startAnalysisPolling();
+  } else {
+    stopAnalysisPolling();
+  }
 }
 
 function bindBuilderViews() {
@@ -994,6 +1018,187 @@ async function loadDatabase() {
     `;
   } catch (error) {
     target.innerHTML = `<div style="font-size:12px;color:#b91c1c;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
+  }
+}
+
+function stopAnalysisPolling() {
+  if (analysisPollTimer !== null) {
+    window.clearInterval(analysisPollTimer);
+    analysisPollTimer = null;
+  }
+}
+
+function startAnalysisPolling() {
+  stopAnalysisPolling();
+  analysisPollTimer = window.setInterval(() => {
+    if (document.getElementById('tab-btn-analysis')?.classList.contains('active')) {
+      void loadAnalysis(true);
+    }
+  }, 30000);
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: value >= 10 ? 0 : 2 }).format(value || 0);
+}
+
+function formatDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.round(seconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remaining = safeSeconds % 60;
+  if (minutes <= 0) return `${remaining}s`;
+  if (minutes < 60) return `${minutes}m ${remaining}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+function countryFlag(code: string) {
+  const normalized = (code || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(normalized) || normalized === 'UN') return '';
+  return normalized
+    .split('')
+    .map(char => String.fromCodePoint(127397 + char.charCodeAt(0)))
+    .join('');
+}
+
+function renderAnalysisChart(points: AnalysisPayload['timeseries']) {
+  const data = points.length ? points : [
+    { time: '00:00', visitors: 0, pageviews: 0 },
+    { time: '03:00', visitors: 0, pageviews: 0 },
+    { time: '06:00', visitors: 0, pageviews: 0 },
+    { time: '09:00', visitors: 0, pageviews: 0 },
+    { time: '12:00', visitors: 0, pageviews: 0 },
+  ];
+  const width = 1000;
+  const height = 260;
+  const padX = 54;
+  const padTop = 22;
+  const padBottom = 36;
+  const chartHeight = height - padTop - padBottom;
+  const maxValue = Math.max(1, ...data.map(point => point.visitors));
+  const stepX = data.length > 1 ? (width - padX * 2) / (data.length - 1) : 0;
+  const coords = data.map((point, index) => {
+    const x = padX + index * stepX;
+    const y = padTop + chartHeight - (point.visitors / maxValue) * chartHeight;
+    return { x, y, point };
+  });
+  const linePath = coords.map((coord, index) => `${index === 0 ? 'M' : 'L'} ${coord.x.toFixed(2)} ${coord.y.toFixed(2)}`).join(' ');
+  const areaPath = `${linePath} L ${coords[coords.length - 1]?.x || padX} ${height - padBottom} L ${coords[0]?.x || padX} ${height - padBottom} Z`;
+  const yTicks = maxValue <= 1 ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.25, 0.5, 0.75, 1].map(item => Math.round(item * maxValue));
+  const xLabelEvery = Math.max(1, Math.ceil(data.length / 5));
+  return `
+    <svg class="analysis-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Visitors over time">
+      ${yTicks.map(tick => {
+        const y = padTop + chartHeight - (tick / maxValue) * chartHeight;
+        return `<line class="analysis-chart-grid" x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}"></line><text class="analysis-chart-label" x="10" y="${y + 4}">${tick}</text>`;
+      }).join('')}
+      <path class="analysis-chart-area" d="${areaPath}"></path>
+      <path class="analysis-chart-line" d="${linePath}"></path>
+      ${coords.map((coord, index) => index % xLabelEvery === 0 || index === coords.length - 1
+        ? `<text class="analysis-chart-label" x="${coord.x}" y="${height - 8}" text-anchor="middle">${escapeHtml(coord.point.time)}</text>`
+        : ''
+      ).join('')}
+    </svg>
+  `;
+}
+
+function renderAnalysisBreakdown(
+  title: string,
+  rows: Array<{ label: string; visitors: number; suffix?: string }>
+) {
+  const maxVisitors = Math.max(1, ...rows.map(row => row.visitors));
+  return `
+    <section class="analysis-breakdown-card">
+      <div class="analysis-breakdown-head"><span>${escapeHtml(title)}</span><span>Visitors</span></div>
+      ${rows.length ? rows.map(row => `
+        <div class="analysis-row">
+          <div class="analysis-row-track" style="--row-width:${Math.max(8, (row.visitors / maxVisitors) * 100)}%;">
+            <span>${escapeHtml(row.label)}</span>
+          </div>
+          <strong>${formatCompactNumber(row.visitors)}${row.suffix || ''}</strong>
+        </div>
+      `).join('') : '<p style="margin:0;color:var(--text-muted);font-size:12px;">No data yet</p>'}
+    </section>
+  `;
+}
+
+function renderAnalysis(payload: AnalysisPayload) {
+  const target = document.getElementById('analysis-content');
+  if (!target) return;
+  const metrics = payload.metrics || {
+    visitors: 0,
+    pageviews: 0,
+    views_per_visit: 0,
+    visit_duration_seconds: 0,
+    bounce_rate: 0,
+  };
+  const sourceRows = (payload.sources || []).map(row => ({ label: row.source || 'Direct', visitors: row.visitors }));
+  const pageRows = (payload.pages || []).map(row => ({ label: row.page || '/', visitors: row.visitors }));
+  const countryRows = (payload.countries || []).map(row => ({
+    label: `${countryFlag(row.country_code)} ${row.country_name || row.country_code || 'Unknown'}`.trim(),
+    visitors: row.visitors,
+  }));
+  const deviceRows = (payload.devices || []).map(row => ({
+    label: row.device || 'Unknown',
+    visitors: row.visitors,
+    suffix: row.percentage ? ` · ${row.percentage}%` : '',
+  }));
+
+  target.innerHTML = `
+    <div class="analysis-topbar">
+      <div class="analysis-live-pill">
+        <span class="analysis-live-dot"></span>
+        <span>${formatCompactNumber(payload.current_visitors || 0)} current visitor${payload.current_visitors === 1 ? '' : 's'}</span>
+      </div>
+      <select id="analysis-range-select" class="analysis-range-select" aria-label="Analysis range">
+        <option value="24h"${analysisRange === '24h' ? ' selected' : ''}>Last 24 hours</option>
+        <option value="7d"${analysisRange === '7d' ? ' selected' : ''}>Last 7 days</option>
+        <option value="30d"${analysisRange === '30d' ? ' selected' : ''}>Last 30 days</option>
+        <option value="90d"${analysisRange === '90d' ? ' selected' : ''}>Last 90 days</option>
+      </select>
+    </div>
+    <div class="analysis-metrics-grid">
+      <section class="analysis-metric-card is-primary"><div class="analysis-metric-label">Visitors</div><div class="analysis-metric-value">${formatCompactNumber(metrics.visitors)}</div></section>
+      <section class="analysis-metric-card"><div class="analysis-metric-label">Pageviews</div><div class="analysis-metric-value">${formatCompactNumber(metrics.pageviews)}</div></section>
+      <section class="analysis-metric-card"><div class="analysis-metric-label">Views Per Visit</div><div class="analysis-metric-value">${formatCompactNumber(metrics.views_per_visit)}</div></section>
+      <section class="analysis-metric-card"><div class="analysis-metric-label">Visit Duration</div><div class="analysis-metric-value">${formatDuration(metrics.visit_duration_seconds)}</div></section>
+      <section class="analysis-metric-card"><div class="analysis-metric-label">Bounce Rate</div><div class="analysis-metric-value">${formatCompactNumber(metrics.bounce_rate)}%</div></section>
+    </div>
+    <section class="analysis-chart-card">
+      ${renderAnalysisChart(payload.timeseries || [])}
+    </section>
+    <div class="analysis-breakdown-grid">
+      ${renderAnalysisBreakdown('Source', sourceRows)}
+      ${renderAnalysisBreakdown('Page', pageRows)}
+      ${renderAnalysisBreakdown('Country', countryRows)}
+      ${renderAnalysisBreakdown('Device', deviceRows)}
+    </div>
+  `;
+
+  document.getElementById('analysis-range-select')?.addEventListener('change', event => {
+    analysisRange = (event.target as HTMLSelectElement).value || '30d';
+    void loadAnalysis();
+  });
+}
+
+async function loadAnalysis(silent = false) {
+  const target = document.getElementById('analysis-content');
+  if (!target) return;
+  if (!currentProjectId) {
+    target.innerHTML = '<div class="analysis-empty"><strong style="display:block;color:var(--text);font-size:14px;margin-bottom:6px;">No project selected</strong><span style="font-size:12px;">Open or create a project before viewing analysis.</span></div>';
+    return;
+  }
+  if (!silent) {
+    target.innerHTML = `
+      <div class="analysis-topbar"><div class="analysis-skeleton" style="width:220px;min-height:36px;"></div><div class="analysis-skeleton" style="width:150px;min-height:36px;"></div></div>
+      <div class="analysis-metrics-grid">${Array.from({ length: 5 }, () => '<div class="analysis-skeleton"></div>').join('')}</div>
+      <div class="analysis-skeleton" style="min-height:310px;"></div>
+    `;
+  }
+  try {
+    const payload = await apiFetch<AnalysisPayload & { success: boolean }>(`/api/projects/${encodeURIComponent(currentProjectId)}/analysis?range=${encodeURIComponent(analysisRange)}`);
+    renderAnalysis(payload);
+  } catch (error) {
+    target.innerHTML = `<div class="analysis-error"><strong style="display:block;color:var(--text);font-size:14px;margin-bottom:6px;">Analysis unavailable</strong><span style="font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load project analysis.')}</span></div>`;
   }
 }
 
