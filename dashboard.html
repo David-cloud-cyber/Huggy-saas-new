@@ -637,6 +637,94 @@
         transform: translateY(-1px);
     }
 
+    .prompt-mode {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 0 0 auto;
+    }
+
+    .prompt-mode-btn {
+        height: 34px;
+        min-width: 74px;
+        border: 1px solid var(--border);
+        background: var(--bg-input);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 0 11px;
+        font-size: 11px;
+        font-weight: 750;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .prompt-mode-btn:hover,
+    .prompt-mode.open .prompt-mode-btn {
+        border-color: var(--border-focus);
+        background: var(--accent-hover);
+    }
+
+    .prompt-mode-chevron {
+        font-size: 9px;
+        line-height: 1;
+        opacity: 0.58;
+    }
+
+    .prompt-mode-menu {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 10px);
+        width: 206px;
+        border: 1px solid var(--border);
+        background: var(--bg-surface);
+        border-radius: 12px;
+        padding: 6px;
+        box-shadow: 0 18px 50px rgba(0,0,0,.5);
+        display: none;
+        z-index: 1000;
+    }
+
+    .prompt-mode.open .prompt-mode-menu {
+        display: grid;
+        gap: 4px;
+    }
+
+    .prompt-mode-menu button {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: var(--text-muted);
+        border-radius: 8px;
+        padding: 9px;
+        cursor: pointer;
+        font: inherit;
+    }
+
+    .prompt-mode-menu button.active,
+    .prompt-mode-menu button:hover {
+        background: rgba(244,244,245,.08);
+        color: var(--text);
+    }
+
+    .prompt-mode-menu span {
+        display: block;
+        font-size: 11px;
+        font-weight: 750;
+    }
+
+    .prompt-mode-menu small {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-sub);
+        font-size: 10px;
+        font-weight: 500;
+    }
+
     .dropdown {
         position: absolute;
         bottom: calc(100% + 12px);
@@ -1254,9 +1342,14 @@
     }
 
     .create-section {
-      align-items: stretch;
-      text-align: left;
-      padding: 16px;
+      align-items: center;
+      text-align: center;
+      padding: 0;
+      margin: clamp(54px, 9vh, 108px) auto 30px;
+      max-width: 860px;
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
     }
 
     .create-title {
@@ -1264,19 +1357,20 @@
       font-style: normal;
       font-size: 14px;
       font-weight: 700;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
 
     .create-subtitle {
       font-size: 12px;
-      margin-bottom: 14px;
-      max-width: none;
+      margin-bottom: 22px;
+      max-width: 560px;
     }
 
     .input-wrapper {
-      max-width: none;
-      border-radius: 10px;
-      background: #151518;
+      max-width: 780px;
+      border-radius: 16px;
+      border-color: transparent;
+      background: rgba(255, 255, 255, 0.035);
       box-shadow: none;
     }
 
@@ -1286,13 +1380,14 @@
     }
 
     .input-wrapper:focus-within {
-      border-color: rgba(255, 255, 255, 0.16);
-      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+      border-color: transparent;
+      box-shadow: none;
     }
 
     #ai-textarea {
-      min-height: 72px;
-      padding: 14px 14px 0;
+      min-height: 88px;
+      padding: 18px 18px 0;
+      text-align: center;
     }
 
     #ai-textarea::placeholder,
@@ -1301,8 +1396,8 @@
     }
 
     .chips-row {
-      justify-content: flex-start;
-      margin-top: 12px;
+      justify-content: center;
+      margin-top: 16px;
     }
 
     .chip {
@@ -1371,6 +1466,15 @@
         padding: 16px;
       }
 
+      .create-section {
+        margin-top: 44px;
+      }
+
+      .actions-right {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
       .topbar {
         padding: 0 14px;
       }
@@ -1411,19 +1515,19 @@
       <div class="sidebar-profile">
         <div class="profile-avatar">U</div>
         <div class="profile-info">
-          <div class="profile-name">User Account</div>
-          <div class="profile-email">Ready to build</div>
+          <div class="profile-name" id="dashboard-user-name">Workspace</div>
+          <div class="profile-email" id="dashboard-user-email">Signed in</div>
         </div>
       </div>
 
       <div class="sidebar-credits">
         <div class="credits-header">
           <span class="plan-label">Plan</span>
-          <span class="plan-badge">Free</span>
+          <span class="plan-badge" id="dashboard-plan-badge">Live</span>
         </div>
         <div class="credits-value-row">
-          <span class="credits-count">500</span>
-          <span class="credits-total">/ 500 tokens</span>
+          <span class="credits-count">--</span>
+          <span class="credits-total"> credits</span>
         </div>
         <div class="credits-track">
           <div class="credits-fill" data-fill="100%"></div>
@@ -1517,62 +1621,9 @@
 
       <div class="content-area">
         
-        <section>
-          <span class="section-label">Workspace</span>
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-              </svg>
-              <span class="kpi-label">Projects</span>
-              <div class="kpi-value">0</div>
-              <div class="kpi-trend">
-                Ready to start
-              </div>
-            </div>
-
-            <div class="kpi-card">
-              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-              </svg>
-              <span class="kpi-label">Builds</span>
-              <div class="kpi-value">0</div>
-              <div class="kpi-trend">
-                Start building
-              </div>
-            </div>
-
-            <div class="kpi-card">
-              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-              <span class="kpi-label">Tokens</span>
-              <div class="kpi-value">500</div>
-              <div class="kpi-trend">
-                100% available
-              </div>
-              <div class="kpi-mini-track">
-                <div class="kpi-mini-fill" data-fill="100%"></div>
-              </div>
-            </div>
-
-            <div class="kpi-card">
-              <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <circle cx="12" cy="8" r="7"></circle>
-                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-              </svg>
-              <span class="kpi-label">Quality Score</span>
-              <div class="kpi-value">--</div>
-              <div class="kpi-trend">
-                No data yet
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section class="create-section">
           <h2 class="create-title">Ask Huggy to build</h2>
-          <p class="create-subtitle">Describe the app you want. Huggy will create a project and open the builder.</p>
+          <p class="create-subtitle">Describe the app you want. Huggy will open the builder with your prompt ready.</p>
           
           <div class="input-wrapper">
             <textarea id="ai-textarea" placeholder="E.g.: An HR dashboard with auth, interactive charts and CSV exports..."></textarea>
@@ -1596,7 +1647,7 @@
                 <div class="actions-right">
                     <div class="model-select" id="model-select-btn">
                         <span class="model-label-prefix">Model</span>
-                        <span id="current-model-label">Sonnet 4.6</span>
+                        <span id="current-model-label">Auto</span>
                         <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 200ms;">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
@@ -1610,7 +1661,7 @@
                                 </svg>
                                 <input type="text" class="dropdown-search-input" placeholder="Search models...">
                             </div>
-                            <div class="model-option" data-name="Auto" data-id="auto">
+                            <div class="model-option active" data-name="Auto" data-id="auto">
                                 <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
                                 <div class="opt-meta">
                                     <span class="opt-name">Auto</span>
@@ -1618,7 +1669,7 @@
                                 </div>
                             </div>
                             <div class="dropdown-group-title">Anthropic</div>
-                            <div class="model-option active" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
+                            <div class="model-option" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
                                 <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
                                 <div class="opt-meta">
                                     <span class="opt-name">Sonnet 4.6</span>
@@ -1707,6 +1758,22 @@
                             </div>
                         </div>
                     </div>
+                    <div class="prompt-mode" data-prompt-mode="build">
+                        <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Build or Plan">
+                            <span class="prompt-mode-label">Build</span>
+                            <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                        </button>
+                        <div class="prompt-mode-menu" role="menu">
+                            <button type="button" data-prompt-mode-option="build" role="menuitem">
+                                <span>Build</span>
+                                <small>Generate or edit the app</small>
+                            </button>
+                            <button type="button" data-prompt-mode-option="plan" role="menuitem">
+                                <span>Plan</span>
+                                <small>Think without changing files</small>
+                            </button>
+                        </div>
+                    </div>
                     <div class="submit-wrapper">
                         <button class="submit-btn" id="submit-btn">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1720,10 +1787,10 @@
           </div>
 
           <div class="chips-row">
-            <button class="chip">Analytics Dashboard</button>
-            <button class="chip">E-commerce App</button>
-            <button class="chip">3D Portfolio</button>
-            <button class="chip">SaaS Manager</button>
+            <button class="chip" data-prompt="Create an analytics dashboard">Analytics Dashboard</button>
+            <button class="chip" data-prompt="Create an e-commerce app">E-commerce App</button>
+            <button class="chip" data-prompt="Create a 3D portfolio">3D Portfolio</button>
+            <button class="chip" data-prompt="Create a SaaS manager">SaaS Manager</button>
           </div>
         </section>
 
@@ -1741,7 +1808,7 @@
                 </svg>
               </div>
               <h3 class="empty-title">Your workspace is quiet</h3>
-              <p class="empty-desc">Describe your first idea above to start building something amazing.</p>
+              <p class="empty-desc">Describe your first idea above or open a new builder session.</p>
             </div>
           </div>
         </section>
@@ -1825,6 +1892,44 @@
     const modelDropdown = document.getElementById('model-dropdown');
     const modelLabel = document.getElementById('current-model-label');
     const chevronIcon = document.getElementById('chevron-icon');
+    const promptModeRoot = document.querySelector('.prompt-mode');
+    const promptModeBtn = document.querySelector('.prompt-mode-btn');
+    const promptModeLabel = document.querySelector('.prompt-mode-label');
+    let selectedPromptMode = 'build';
+
+    function setPromptMode(mode) {
+      selectedPromptMode = mode === 'plan' ? 'plan' : 'build';
+      promptModeRoot?.classList.remove('open');
+      promptModeRoot?.setAttribute('data-prompt-mode', selectedPromptMode);
+      promptModeBtn?.setAttribute('aria-expanded', 'false');
+      if (promptModeLabel) promptModeLabel.textContent = selectedPromptMode === 'plan' ? 'Plan' : 'Build';
+      document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
+        option.classList.toggle('active', option.dataset.promptModeOption === selectedPromptMode);
+      });
+    }
+
+    setPromptMode('build');
+
+    promptModeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nextOpen = !promptModeRoot?.classList.contains('open');
+      promptModeRoot?.classList.toggle('open', nextOpen);
+      promptModeBtn.setAttribute('aria-expanded', String(nextOpen));
+    });
+
+    document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setPromptMode(option.dataset.promptModeOption);
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!promptModeRoot?.contains(e.target)) {
+        promptModeRoot?.classList.remove('open');
+        promptModeBtn?.setAttribute('aria-expanded', 'false');
+      }
+    });
 
     // Model Dropdown Toggle
     modelSelectBtn.addEventListener('click', (e) => {
@@ -1847,7 +1952,7 @@
     });
 
     // Initialize saved model
-    const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+    const savedModel = localStorage.getItem('huggy-selected-model') || 'auto';
     let foundModel = false;
     document.querySelectorAll('.model-option').forEach(opt => {
       if (opt.dataset.id === savedModel) {
@@ -1860,7 +1965,7 @@
     if (!foundModel && modelLabel) {
       const activeOpt = document.querySelector('.model-option.active');
       if (activeOpt) {
-        modelLabel.textContent = activeOpt.dataset.name || 'Sonnet 4.6';
+        modelLabel.textContent = activeOpt.dataset.name || 'Auto';
       }
     }
 
@@ -1902,7 +2007,7 @@
 
     document.querySelectorAll('.chip').forEach(chip => {
       chip.addEventListener('click', () => {
-        aiTextarea.value = chip.textContent;
+        aiTextarea.value = chip.dataset.prompt || chip.textContent.trim();
         aiTextarea.dispatchEvent(new Event('input'));
         aiTextarea.focus();
       });
@@ -1966,21 +2071,23 @@
         }
     }
 
-    const DEFAULT_PROJECTS = [];
-    const isSeedProject = (project) => ['proj-1', 'proj-2'].includes(project?.id);
+    function openNewBuilder(prompt = '', mode = selectedPromptMode) {
+      const cleanPrompt = String(prompt || '').trim();
+      if (cleanPrompt) {
+        sessionStorage.setItem('huggy-initial-prompt', cleanPrompt);
+        sessionStorage.setItem('huggy-requested-mode', mode === 'plan' ? 'plan' : 'build');
+      } else {
+        sessionStorage.removeItem('huggy-initial-prompt');
+        sessionStorage.removeItem('huggy-requested-mode');
+      }
+      localStorage.removeItem('huggy-initial-prompt');
+      localStorage.removeItem('huggy-current-project');
+      navigate('/builder.html?new=1');
+    }
 
     let projects = [];
-    try {
-      const stored = localStorage.getItem('huggy-projects');
-      if (stored) {
-        projects = JSON.parse(stored).filter(project => !isSeedProject(project));
-        localStorage.setItem('huggy-projects', JSON.stringify(projects));
-      } else {
-        projects = [];
-      }
-    } catch (e) {
-      projects = [];
-    }
+    localStorage.removeItem('huggy-projects');
+    localStorage.removeItem('huggy-current-project');
 
     function escapeHtml(text) {
       if (!text) return '';
@@ -2037,11 +2144,7 @@
     }
 
     window.openProjectWorkspace = function(id) {
-      const targetProj = projects.find(p => p.id === id);
-      if (targetProj) {
-        localStorage.setItem('huggy-current-project', JSON.stringify(targetProj));
-        navigate('/builder.html');
-      }
+      if (id) navigate(`/builder.html?project=${encodeURIComponent(id)}`);
     };
 
     function renderProjects() {
@@ -2055,11 +2158,6 @@
         countLabel.textContent = `(${totalCount})`;
       }
       
-      const kpiVal = document.querySelector('.kpi-card .kpi-value');
-      if (kpiVal) {
-        kpiVal.textContent = totalCount;
-      }
-
       // Sidebar rendering
       if (sidebarList) {
         if (totalCount === 0) {
@@ -2073,7 +2171,7 @@
             <button class="nav-project" data-id="${proj.id}" onclick="openProjectWorkspace('${proj.id}')">
               <div class="project-dot" style="background: ${getThemeColor(proj.theme)}"></div>
               <span class="project-nav-name">${escapeHtml(proj.name)}</span>
-              <span class="badge-builds">v1.2</span>
+              <span class="badge-builds">${escapeHtml(proj.status || proj.preview_status || 'ready')}</span>
             </button>
           `).join('');
         }
@@ -2108,7 +2206,7 @@
                 <div class="project-dot" style="background: ${getThemeColor(proj.theme)}"></div>
                 <span class="card-name">${escapeHtml(proj.name)}</span>
               </div>
-              <span class="status-badge" style="background: var(--success-dim); color: var(--success); border: 1px solid rgba(74,222,128,0.2);">Active</span>
+              <span class="status-badge" style="background: var(--success-dim); color: var(--success); border: 1px solid rgba(74,222,128,0.2);">${escapeHtml(proj.status || proj.preview_status || 'ready')}</span>
             </div>
             <p class="card-desc">${escapeHtml(proj.desc || getTemplateDesc(proj.template))}</p>
             <div class="card-stats">
@@ -2117,7 +2215,7 @@
               <span class="score-badge meta" style="background: var(--bg-elevated); color: var(--text-muted); border: 1px solid var(--border);">${getModelLabel(proj.model)}</span>
             </div>
             <div class="card-footer">
-              <span class="card-meta">Updated ${relativeTime(proj.createdAt)}</span>
+              <span class="card-meta">Updated ${relativeTime(proj.updated_at || proj.created_at || proj.createdAt)}</span>
               <button class="btn-open-project" style="background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size:12px; color: var(--text);">Open Workspace</button>
             </div>
           </div>
@@ -2144,14 +2242,7 @@
         if (el.id === 'submit-btn') {
           const mainIdea = document.getElementById('ai-textarea')?.value.trim() || '';
           if (mainIdea) {
-            localStorage.setItem('huggy-initial-prompt', mainIdea);
-            const nameInput = document.getElementById('new-proj-name');
-            if (nameInput) {
-              nameInput.value = mainIdea.split(' ').slice(0, 4).join(' ') || 'New Huggy app';
-            }
-            if (typeof openNewProjectModal === 'function') {
-              openNewProjectModal();
-            }
+            openNewBuilder(mainIdea);
           }
           return;
         }
@@ -2205,12 +2296,7 @@
     });
 
     modalConfirm?.addEventListener('click', () => {
-      if (projectToDeleteId) {
-        projects = projects.filter(p => p.id !== projectToDeleteId);
-        localStorage.setItem('huggy-projects', JSON.stringify(projects));
-        renderProjects();
-        projectToDeleteId = null;
-      }
+      projectToDeleteId = null;
       deleteModal.classList.remove('open');
     });
 
@@ -2228,12 +2314,7 @@
     const newProjModelSelect = document.getElementById('new-proj-model');
 
     function openNewProjectModal() {
-      if (newProjNameInput) {
-        newProjNameInput.value = `project-${projects.length + 1}`;
-      }
-      if (newProjectModal) {
-        newProjectModal.classList.add('open');
-      }
+      openNewBuilder();
     }
 
     if (btnNewProjectSidebar) {
@@ -2294,27 +2375,10 @@
         if (hasExport) configFeatures.push("export");
         if (hasSeo) configFeatures.push("seo");
 
-        const newProj = {
-          id: 'proj-' + Math.random().toString(36).substring(2, 9),
-          name: nameVal,
-          template: templateVal,
-          theme: themeVal,
-          model: modelVal,
-          desc: getTemplateDesc(templateVal),
-          features: configFeatures,
-          createdAt: new Date().toISOString()
-        };
-
-        projects.unshift(newProj);
-        localStorage.setItem('huggy-projects', JSON.stringify(projects));
-        
-        renderProjects();
-
         if (newProjectModal) {
           newProjectModal.classList.remove('open');
         }
-
-        openProjectWorkspace(newProj.id);
+        openNewBuilder(`${nameVal}\nTemplate: ${templateVal}\nTheme: ${themeVal}\nModel: ${modelVal}\nFeatures: ${configFeatures.join(', ') || 'responsive UI'}`);
       });
     }
 
@@ -2531,7 +2595,7 @@
           <div class="danger-row" style="background:var(--bg-elevated); border-color:var(--border-mid)">
             <div class="form-row">
               <span class="form-label">Free Plan</span>
-              <span class="form-sublabel">500 / 500 tokens remaining</span>
+              <span class="form-sublabel">Credits are synced from billing.</span>
             </div>
             <button class="btn-primary" style="background:var(--warning); color:white; padding:6px 14px; font-size:12px">Upgrade to Pro</button>
           </div>
@@ -2676,77 +2740,6 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="new-project-modal">
-    <div class="modal-content modal-content-lg" style="max-width: 500px;">
-      <h3 class="modal-title" style="font-size: 24px;">New Project Configuration</h3>
-      <p class="modal-desc" style="margin-bottom: 20px;">Provide a project identity and select initial options to seed your development workspace.</p>
-      
-      <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; text-align: left;">
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 6px;">Project Name</label>
-          <input type="text" id="new-proj-name" class="settings-input" placeholder="e.g. My SaaS Product" style="width: 100%; box-sizing: border-box;" value="">
-        </div>
-        
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 6px;">Workspace Template</label>
-          <select id="new-proj-template" class="settings-select" style="width: 100%; box-sizing: border-box;">
-            <option value="dashboard">Analytics Dashboard (Tailwind CSS, charts & logs)</option>
-            <option value="ecommerce">E-commerce storefront (Grid system with cart mechanics)</option>
-            <option value="saas">AI Assistant Platform (Fully functional chat & sidebar)</option>
-            <option value="portfolio">Creative Developer Portfolio (Stunning visual design & grid)</option>
-          </select>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div>
-            <label class="form-label" style="display: block; margin-bottom: 6px;">Visual Theme</label>
-            <select id="new-proj-theme" class="settings-select" style="width: 100%; box-sizing: border-box;">
-              <option value="dark">Cosmic Dark</option>
-              <option value="light">Minimalist Light</option>
-              <option value="synthwave">Neon Synthwave</option>
-              <option value="emerald">Forest Emerald</option>
-            </select>
-          </div>
-          <div>
-            <label class="form-label" style="display: block; margin-bottom: 6px;">AI Engine</label>
-            <select id="new-proj-model" class="settings-select" style="width: 100%; box-sizing: border-box;">
-              <option value="anthropic/claude-sonnet-4.6">Clara Sonnet 4.6</option>
-              <option value="openai/gpt-5.5">GPT-5.5 Pro</option>
-              <option value="google/gemini-3.5-flash">Gemini 3.5 Flash</option>
-              <option value="deepseek/deepseek-coder">DeepSeek Coder</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label class="form-label" style="display: block; margin-bottom: 8px;">Initial Configurations</label>
-          <div style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-input); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
-              <input type="checkbox" id="features-db" checked style="accent-color: var(--accent); cursor: pointer;">
-              <span>Pre-configure persistent Storage (Supabase PostgreSQL)</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
-              <input type="checkbox" id="features-auth" checked style="accent-color: var(--accent); cursor: pointer;">
-              <span>Setup Account Authentication module</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
-              <input type="checkbox" id="features-export" style="accent-color: var(--accent); cursor: pointer;">
-              <span>Include dynamic CSV/Excel Export action</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); cursor: pointer;">
-              <input type="checkbox" id="features-seo" checked style="accent-color: var(--accent); cursor: pointer;">
-              <span>Deploy edge SEO metatags and responsive scaling</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn-modal btn-cancel" id="btn-new-proj-cancel">Cancel</button>
-        <button class="btn-modal" id="btn-new-proj-create" style="background: var(--accent); color: var(--bg); font-weight: 600;">Create Project</button>
-      </div>
-    </div>
-  </div>
   <script>
     (function bindLateDashboardModals() {
       const onReady = (callback) => {
@@ -2754,14 +2747,6 @@
           document.addEventListener('DOMContentLoaded', callback);
         } else {
           callback();
-        }
-      };
-
-      const getProjects = () => {
-        try {
-          return JSON.parse(localStorage.getItem('huggy-projects') || '[]');
-        } catch (error) {
-          return [];
         }
       };
 
@@ -2778,32 +2763,14 @@
         }
 
         const template = templateSelect?.value || 'dashboard';
-        const project = {
-          id: 'proj-' + Math.random().toString(36).substring(2, 9),
-          name,
-          template,
-          theme: themeSelect?.value || 'dark',
-          model: modelSelect?.value || 'anthropic/claude-sonnet-4.6',
-          desc: typeof getTemplateDesc === 'function'
-            ? getTemplateDesc(template)
-            : 'AI generated project workspace.',
-          features: [
-            document.getElementById('features-db')?.checked ? 'db' : null,
-            document.getElementById('features-auth')?.checked ? 'auth' : null,
-            document.getElementById('features-export')?.checked ? 'export' : null,
-            document.getElementById('features-seo')?.checked ? 'seo' : null
-          ].filter(Boolean),
-          createdAt: new Date().toISOString()
-        };
-
-        const projects = getProjects();
-        projects.unshift(project);
-        localStorage.setItem('huggy-projects', JSON.stringify(projects));
-        localStorage.setItem('huggy-current-project', JSON.stringify(project));
+        const prompt = `${name}\nTemplate: ${template}\nTheme: ${themeSelect?.value || 'dark'}\nModel: ${modelSelect?.value || 'auto'}`;
+        sessionStorage.setItem('huggy-initial-prompt', prompt);
+        sessionStorage.setItem('huggy-requested-mode', 'build');
+        localStorage.removeItem('huggy-initial-prompt');
         if (typeof navigate === 'function') {
-          navigate('/builder.html');
+          navigate('/builder.html?new=1');
         } else {
-          window.location.href = '/builder.html';
+          window.location.href = '/builder.html?new=1';
         }
       };
 
@@ -2812,12 +2779,14 @@
         const upgradeModal = document.getElementById('upgrade-modal');
         const deleteModal = document.getElementById('delete-modal');
 
-        const openNewProjectModal = () => {
-          const nameInput = document.getElementById('new-proj-name');
-          if (nameInput && !nameInput.value.trim()) {
-            nameInput.value = `project-${getProjects().length + 1}`;
+        const openNewProjectModal = (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          if (typeof openNewBuilder === 'function') {
+            openNewBuilder();
+          } else {
+            window.location.href = '/builder.html?new=1';
           }
-          newProjectModal?.classList.add('open');
         };
 
         const closeNewProjectModal = () => newProjectModal?.classList.remove('open');

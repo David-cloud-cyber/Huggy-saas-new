@@ -54,6 +54,7 @@ let lastBuildSessionId = '';
 let activeAbort: AbortController | null = null;
 let selectedChatMode: 'plan' | 'build' = 'build';
 let selectedModelId = 'auto';
+let initialBuilderHandoff: { prompt: string; mode: 'plan' | 'build' } | null = null;
 
 function escapeHtml(value: string): string {
   return value
@@ -64,25 +65,56 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;');
 }
 
-function getStoredProject() {
-  try {
-    return JSON.parse(localStorage.getItem('huggy-current-project') || '{}');
-  } catch {
-    return {};
-  }
-}
-
 function getProjectIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  return params.get('project') || getStoredProject().id || '';
+  return params.get('project') || '';
+}
+
+function getInitialBuilderHandoff() {
+  if (initialBuilderHandoff) return initialBuilderHandoff;
+  const sessionPrompt = sessionStorage.getItem('huggy-initial-prompt')?.trim() || '';
+  const legacyPrompt = localStorage.getItem('huggy-initial-prompt')?.trim() || '';
+  const rawMode = sessionStorage.getItem('huggy-requested-mode');
+  initialBuilderHandoff = {
+    prompt: sessionPrompt || legacyPrompt,
+    mode: rawMode === 'plan' ? 'plan' : 'build',
+  };
+  sessionStorage.removeItem('huggy-initial-prompt');
+  sessionStorage.removeItem('huggy-requested-mode');
+  localStorage.removeItem('huggy-initial-prompt');
+  return initialBuilderHandoff;
+}
+
+function getInitialDashboardPrompt() {
+  return getInitialBuilderHandoff().prompt;
+}
+
+function getInitialDashboardMode() {
+  return getInitialBuilderHandoff().mode;
 }
 
 function selectedModel() {
-  return selectedModelId || getStoredProject().model || 'auto';
+  return selectedModelId || 'auto';
 }
 
 function chatScroll() {
   return document.getElementById('sidebar-scroll-area');
+}
+
+function ensureInlineBlockHost() {
+  let host = document.getElementById('chat-inline-blocks');
+  if (host) return host;
+  const inputRow = document.querySelector('.chat-input-row');
+  host = document.createElement('div');
+  host.id = 'chat-inline-blocks';
+  host.style.cssText = 'display:grid;gap:8px;padding:0 24px 8px;';
+  inputRow?.parentElement?.insertBefore(host, inputRow);
+  return host;
+}
+
+function clearInlineBlocks() {
+  const host = document.getElementById('chat-inline-blocks');
+  if (host) host.innerHTML = '';
 }
 
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
@@ -210,7 +242,7 @@ async function ensureModelSelector() {
   root.id = 'model-select-btn';
   root.dataset.liveBound = 'true';
   root.className = 'model-select huggy-model-trigger';
-  root.style.cssText = 'display:inline-flex;align-items:center;gap:5px;height:24px;max-width:116px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);flex:0 0 auto;white-space:nowrap;overflow:hidden;';
+  root.style.cssText = 'display:inline-flex;align-items:center;gap:5px;height:24px;max-width:104px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);flex:0 0 auto;white-space:nowrap;overflow:hidden;';
   root.innerHTML = `
     <span style="width:6px;height:6px;border-radius:999px;background:#f4f4f5;box-shadow:0 0 10px rgba(244,244,245,.55);flex:0 0 auto;"></span>
     <span id="current-model-label" style="font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;">Auto</span>
@@ -221,7 +253,7 @@ async function ensureModelSelector() {
   document.getElementById('model-dropdown')?.remove();
   const dropdown = document.createElement('div');
   dropdown.id = 'model-dropdown';
-  dropdown.style.cssText = 'position:fixed;width:292px;max-width:calc(100vw - 24px);max-height:min(320px,calc(100vh - 32px));overflow:auto;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 54px rgba(0,0,0,.5);display:none;z-index:3000;';
+  dropdown.style.cssText = 'position:fixed;width:268px;max-width:calc(100vw - 24px);max-height:min(280px,calc(100vh - 32px));overflow:auto;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 54px rgba(0,0,0,.5);display:none;z-index:3000;';
   document.body.appendChild(dropdown);
 
   const label = root.querySelector('#current-model-label') as HTMLElement;
@@ -236,11 +268,11 @@ async function ensureModelSelector() {
       dropdown.style.maxHeight = '60vh';
       return;
     }
-    const width = Math.min(292, window.innerWidth - 24);
+    const width = Math.min(268, window.innerWidth - 24);
     const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
     const availableAbove = Math.max(160, rect.top - 18);
     dropdown.style.width = `${width}px`;
-    dropdown.style.maxHeight = `${Math.min(320, availableAbove)}px`;
+    dropdown.style.maxHeight = `${Math.min(280, availableAbove)}px`;
     dropdown.style.left = `${left}px`;
     dropdown.style.right = 'auto';
     dropdown.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 8)}px`;
@@ -442,26 +474,52 @@ function activateDatabaseView() {
 
 async function ensureProject() {
   currentProjectId = getProjectIdFromUrl();
-  const stored = getStoredProject();
 
   if (!currentProjectId || String(currentProjectId).startsWith('proj-')) {
-    const created = await apiFetch<ProjectPayload>('/api/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: stored.name || 'Generated Huggy App',
-        template: stored.template || 'custom',
-        theme: stored.theme || 'dark',
-        model: stored.model || selectedModel(),
-        prompt: stored.desc || 'Create a polished fullstack web application.',
-      }),
-    });
-    currentProjectId = created.project.id;
-    localStorage.setItem('huggy-current-project', JSON.stringify({ ...stored, id: currentProjectId, name: created.project.name }));
-    window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
-    return created;
+    return {
+      success: true,
+      project: {
+        id: '',
+        name: 'New Huggy app',
+        preview_status: 'idle',
+      },
+      files: [],
+      messages: [],
+      events: [],
+      preview: {
+        status: 'idle',
+        html: currentPreviewHtml,
+      },
+    } as ProjectPayload;
   }
 
   return apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
+}
+
+function projectNameFromPrompt(prompt: string) {
+  const words = prompt
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5);
+  return words.join(' ') || 'New Huggy app';
+}
+
+async function ensureProjectForPrompt(prompt: string) {
+  if (currentProjectId) return;
+  const initialPrompt = prompt || getInitialDashboardPrompt() || 'Create a polished fullstack web application.';
+  const created = await apiFetch<ProjectPayload>('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: projectNameFromPrompt(initialPrompt),
+      template: 'custom',
+      theme: 'dark',
+      model: selectedModel(),
+      prompt: initialPrompt,
+    }),
+  });
+  currentProjectId = created.project.id;
+  window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
 }
 
 async function loadProject() {
@@ -501,16 +559,18 @@ function restoreMessages(payload: ProjectPayload) {
   });
 }
 
-async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build', useLastPlan = false, extra: Record<string, unknown> = {}) {
+async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build', useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   if (isGenerating || !prompt.trim()) return;
   setBusy(true);
   activeAbort = new AbortController();
+  clearInlineBlocks();
 
-  appendMessage('user', prompt);
+  appendMessage('user', displayText);
   const status = appendMessage('assistant', requestedMode === 'plan' ? 'Preparing a plan without changing files...' : 'Planning, generating, building preview...');
   if (requestedMode === 'build') activateBuilderView('preview');
   let streamedText = '';
   try {
+    await ensureProjectForPrompt(prompt);
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
       prompt,
       requestedMode,
@@ -531,6 +591,11 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
           lastPlan = payload.text || event.message || '';
           addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
         }
+        return;
+      }
+      if (eventType === 'clarification_required') {
+        updateMessage(status, payload.text || event.message || 'I need one more detail before building.');
+        showClarificationBlock(payload, prompt, requestedMode);
         return;
       }
       if (eventType === 'credits_insufficient') {
@@ -592,7 +657,11 @@ async function cancelBuild() {
 
 async function exportCode() {
   if (!currentProjectId) return;
-  const files = currentFiles.length ? currentFiles : [{ path: 'README.md', content: 'No generated files yet.' }];
+  if (!currentFiles.length) {
+    appendMessage('system', 'No generated files are available to export yet.');
+    return;
+  }
+  const files = currentFiles;
   const blob = new Blob([JSON.stringify({ files }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -648,6 +717,61 @@ async function loadDatabase() {
   } catch (error) {
     target.innerHTML = `<div style="font-size:12px;color:#fca5a5;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
   }
+}
+
+function showClarificationBlock(payload: any, originalPrompt: string, requestedMode: 'plan' | 'build') {
+  const host = ensureInlineBlockHost();
+  const question = payload.question || 'What should Huggy focus on first?';
+  const choices: string[] = Array.isArray(payload.choices)
+    ? payload.choices.filter((choice: unknown): choice is string => typeof choice === 'string' && choice.trim().length > 0).slice(0, 4)
+    : [];
+  const recommendation = payload.recommendation || choices[0] || '';
+  host.innerHTML = `
+    <div id="clarification-block" style="border:1px solid rgba(96,165,250,.24);background:linear-gradient(180deg,rgba(59,130,246,.12),rgba(255,255,255,.035));border-radius:13px;padding:12px;color:#f4f4f5;box-shadow:0 18px 50px rgba(0,0,0,.28);">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;">
+        <div>
+          <div style="font-size:11px;color:#93c5fd;font-weight:800;margin-bottom:4px;">Clarification needed</div>
+          <div style="font-size:13px;line-height:1.45;font-weight:650;">${escapeHtml(question)}</div>
+        </div>
+        <button type="button" data-action="dismiss" aria-label="Dismiss" style="border:0;background:transparent;color:#a1a1aa;cursor:pointer;font-size:18px;line-height:1;">×</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
+        ${choices.map(choice => `<button type="button" data-choice="${escapeHtml(choice)}" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e4e4e7;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;">${escapeHtml(choice)}</button>`).join('')}
+      </div>
+      <textarea data-free-answer placeholder="Answer briefly or choose an option..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid rgba(255,255,255,.1);background:#09090b;color:#f4f4f5;border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:9px;">
+        <button type="button" data-action="recommend" style="height:30px;border:1px solid rgba(255,255,255,.12);background:transparent;color:#d4d4d8;border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use recommendation</button>
+        <button type="button" data-action="continue" style="height:30px;border:0;background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Continue</button>
+      </div>
+    </div>
+  `;
+
+  let selectedAnswer = '';
+  host.querySelectorAll('[data-choice]').forEach(button => {
+    button.addEventListener('click', () => {
+      selectedAnswer = (button as HTMLElement).dataset.choice || '';
+      host.querySelectorAll('[data-choice]').forEach(item => ((item as HTMLElement).style.background = 'rgba(255,255,255,.06)'));
+      (button as HTMLElement).style.background = 'rgba(96,165,250,.28)';
+    });
+  });
+  host.querySelector('[data-action="dismiss"]')?.addEventListener('click', clearInlineBlocks);
+  host.querySelector('[data-action="recommend"]')?.addEventListener('click', async () => {
+    await resumeFromClarification(recommendation || selectedAnswer || choices[0] || 'Use the recommended product structure.', originalPrompt, requestedMode);
+  });
+  host.querySelector('[data-action="continue"]')?.addEventListener('click', async () => {
+    const freeAnswer = (host.querySelector('[data-free-answer]') as HTMLTextAreaElement | null)?.value.trim() || '';
+    await resumeFromClarification(freeAnswer || selectedAnswer || recommendation, originalPrompt, requestedMode);
+  });
+}
+
+async function resumeFromClarification(answer: string, originalPrompt: string, requestedMode: 'plan' | 'build') {
+  if (!answer.trim()) return;
+  clearInlineBlocks();
+  const response = await apiFetch<{ prompt: string; requestedMode?: 'plan' | 'build' }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/answer`, {
+    method: 'POST',
+    body: JSON.stringify({ answer, originalPrompt, requestedMode, recommendation: answer }),
+  });
+  await generateFromPrompt(response.prompt || `${originalPrompt}\n\nClarification answer: ${answer}`, response.requestedMode || requestedMode, false, {}, answer);
 }
 
 function showCreditsModal(required: number, balance: number) {
@@ -814,6 +938,18 @@ function bindChat() {
   setChatMode(selectedChatMode);
 }
 
+function hydrateDashboardPrompt() {
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  const submit = document.getElementById('chat-submit-btn') as HTMLButtonElement | null;
+  const mode = getInitialDashboardMode();
+  const prompt = getInitialDashboardPrompt();
+  setChatMode(mode);
+  if (!input || !prompt || input.value.trim()) return;
+  input.value = prompt;
+  input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+  submit?.classList.add('active');
+}
+
 function ensureResizableSidebar() {
   const body = document.querySelector('.workspace-body') as HTMLElement | null;
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
@@ -825,7 +961,7 @@ function ensureResizableSidebar() {
       body.style.removeProperty('--huggy-sidebar-width');
       return;
     }
-    const next = Math.min(560, Math.max(300, width));
+    const next = Math.min(520, Math.max(280, width));
     body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
     body.style.setProperty('--huggy-sidebar-width', `${next}px`);
     const currentHandle = document.getElementById('huggy-sidebar-resizer') as HTMLElement | null;
@@ -849,7 +985,7 @@ function ensureResizableSidebar() {
     body.classList.add('is-resizing-sidebar');
     handle.setPointerCapture?.(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
-      const next = Math.min(560, Math.max(300, startWidth + moveEvent.clientX - startX));
+      const next = Math.min(520, Math.max(280, startWidth + moveEvent.clientX - startX));
       body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
       body.style.setProperty('--huggy-sidebar-width', `${next}px`);
       handle.style.left = `${next - 4}px`;
@@ -872,6 +1008,7 @@ function init() {
   ensureDatabaseView();
   ensureResizableSidebar();
   bindChat();
+  hydrateDashboardPrompt();
   void loadProject();
 }
 

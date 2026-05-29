@@ -205,13 +205,18 @@ type AgentEvent = {
 };
 
 type IntentDecision = {
-  intent: 'conversation' | 'plan' | 'build' | 'clarification';
+  intent: 'conversation' | 'clarification_required' | 'plan' | 'build' | 'debug_fix' | 'external_keys_required' | 'credits_required';
   confidence: number;
   requestedMode: 'plan' | 'build';
   requiresFileChanges: boolean;
   requiresPreviewRebuild: boolean;
   requiresCredits: boolean;
   userVisibleReason: string;
+  clarification?: {
+    question: string;
+    choices: string[];
+    recommendation: string;
+  };
 };
 
 type PreviewBuildResult = {
@@ -407,7 +412,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
   ]);
 }
 
-class IntentRouterService {
+class AgentOrchestrator {
   decide(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }): IntentDecision {
     const text = input.prompt.trim();
     const lower = text.toLowerCase();
@@ -427,13 +432,18 @@ class IntentRouterService {
 
     if (!text || text.length < 4) {
       return {
-        intent: 'clarification',
+        intent: 'clarification_required',
         confidence: 0.62,
         requestedMode,
         requiresFileChanges: false,
         requiresPreviewRebuild: false,
         requiresCredits: false,
         userVisibleReason: 'The request is too short to safely change the app.',
+        clarification: {
+          question: 'What should Huggy build first?',
+          choices: ['Landing page', 'SaaS dashboard', 'Auth + database', 'Admin panel'],
+          recommendation: 'Start with the core screen and database needs.',
+        },
       };
     }
 
@@ -474,6 +484,31 @@ class IntentRouterService {
       };
     }
 
+    const words = text.split(/\s+/).filter(Boolean);
+    const vagueBuildHints = ['app', 'application', 'site', 'dashboard', 'saas', 'projet', 'platforme', 'plateforme'];
+    const isVagueBuild = requestedMode === 'build'
+      && !input.hasFiles
+      && words.length < 8
+      && vagueBuildHints.some(hint => lower.includes(hint))
+      && !/(restaurant|booking|auth|login|crm|ecommerce|e-commerce|portfolio|marketplace|admin|analytics|chat|blog|landing|payment|stripe|supabase)/i.test(text);
+
+    if (isVagueBuild) {
+      return {
+        intent: 'clarification_required',
+        confidence: 0.78,
+        requestedMode,
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: false,
+        userVisibleReason: 'The request is too broad, so Huggy needs one product decision before writing files.',
+        clarification: {
+          question: 'What kind of first version should Huggy create?',
+          choices: ['Landing page', 'SaaS dashboard', 'Marketplace', 'Admin panel'],
+          recommendation: 'Choose the closest product type, then Huggy can build a focused first version.',
+        },
+      };
+    }
+
     return {
       intent: 'build',
       confidence: wantsBuild ? 0.9 : 0.72,
@@ -486,7 +521,8 @@ class IntentRouterService {
   }
 }
 
-const intentRouter = new IntentRouterService();
+const agentOrchestrator = new AgentOrchestrator();
+const intentRouter = agentOrchestrator;
 
 function createPlanResponse(project: GeneratedProject, prompt: string, files: GeneratedFile[]) {
   const fileHints = files.slice(0, 8).map(file => `- ${file.path}`).join('\n') || '- No generated files yet';
@@ -508,6 +544,14 @@ function createPlanResponse(project: GeneratedProject, prompt: string, files: Ge
 
 function createConversationResponse(project: GeneratedProject, prompt: string) {
   return `I can help with ${project.name}. This message looks like a question, so I will not change files or rebuild the preview.\n\n${prompt}`;
+}
+
+function createClarificationContent(decision: IntentDecision) {
+  const question = decision.clarification?.question || 'I need one more detail before I can safely build this.';
+  const choices = decision.clarification?.choices || [];
+  const options = choices.length ? `\n\nOptions:\n${choices.map(choice => `- ${choice}`).join('\n')}` : '';
+  const recommendation = decision.clarification?.recommendation ? `\n\nRecommendation: ${decision.clarification.recommendation}` : '';
+  return `${question}${options}${recommendation}`;
 }
 
 function detectExternalApiRequirements(prompt: string): ExternalApiRequirement[] {
@@ -545,7 +589,7 @@ function pseudoEncryptSecret(value: string) {
 }
 
 function estimateActionCost(prompt: string, intent: IntentDecision) {
-  if (intent.intent === 'conversation') return { finalCredits: 0, minimum_action_credits: 0 };
+  if (intent.intent === 'conversation' || intent.intent === 'clarification_required') return { finalCredits: 0, minimum_action_credits: 0 };
   if (intent.intent === 'plan') return costEstimator.calculateRequiredCredits({
     openrouter_cost_usd: 0.0005,
     infra_cost_usd: 0.0001,
@@ -1556,6 +1600,43 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   res.json({ success: true, intent: decision, estimate });
 });
 
+app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+
+  const originalPrompt = String(req.body?.originalPrompt || '').trim();
+  const answer = String(req.body?.answer || '').trim();
+  const recommendation = String(req.body?.recommendation || '').trim();
+  const finalAnswer = answer || recommendation;
+
+  if (!finalAnswer) {
+    return res.status(400).json({ success: false, error: 'A clarification answer is required.' });
+  }
+
+  const resumedPrompt = [
+    originalPrompt || 'Continue the current build request.',
+    '',
+    `Clarification answer: ${finalAnswer}`,
+  ].join('\n');
+
+  await saveProjectMessage({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    role: 'user',
+    content: `Clarification: ${finalAnswer}`,
+    intent: 'clarification_required',
+    requested_mode: req.body?.requestedMode === 'plan' ? 'plan' : 'build',
+  });
+
+  res.json({
+    success: true,
+    prompt: resumedPrompt,
+    requestedMode: req.body?.requestedMode === 'plan' ? 'plan' : 'build',
+  });
+});
+
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
@@ -1590,11 +1671,11 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     requested_mode: decision.requestedMode,
   });
 
-  if (decision.intent === 'conversation' || decision.intent === 'clarification' || decision.intent === 'plan') {
+  if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan') {
     const content = decision.intent === 'plan'
       ? createPlanResponse(project, prompt, existingFiles)
-      : decision.intent === 'clarification'
-        ? 'I need one more detail before I can safely build this. What should the app do first?'
+      : decision.intent === 'clarification_required'
+        ? createClarificationContent(decision)
         : createConversationResponse(project, prompt);
     await saveProjectMessage({
       organization_id: project.organization_id,
@@ -1723,6 +1804,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 });
 
 app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
+  try {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
@@ -1787,12 +1869,16 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
 
-  if (decision.intent === 'conversation' || decision.intent === 'clarification' || decision.intent === 'plan') {
-    const eventName = decision.intent === 'plan' ? 'planning' : 'answering';
+  if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan') {
+    const eventName = decision.intent === 'plan'
+      ? 'planning'
+      : decision.intent === 'clarification_required'
+        ? 'clarification_required'
+        : 'answering';
     const content = decision.intent === 'plan'
       ? createPlanResponse(project, prompt, existingFiles)
-      : decision.intent === 'clarification'
-        ? 'I need one more detail before I can safely build this. What should the app do first?'
+      : decision.intent === 'clarification_required'
+        ? createClarificationContent(decision)
         : createConversationResponse(project, prompt);
     await saveProjectMessage({
       organization_id: project.organization_id,
@@ -1805,6 +1891,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
     await send(eventName, content, {
       text: content,
+      question: decision.clarification?.question,
+      choices: decision.clarification?.choices || [],
+      recommendation: decision.clarification?.recommendation,
+      original_prompt: prompt,
       preview: { status: project.preview_status || 'idle', html: project.preview_html || renderPreviewHtml(existingFiles, project.name) },
       files: existingFiles,
       credits: { estimated: estimate.finalCredits, charged: 0, remaining: wallet },
@@ -1967,6 +2057,26 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       message: error.message,
     });
     await send('error', normalizeProviderError(error), { code: 'GenerationFailed' });
+    res.end();
+  }
+  } catch (error: any) {
+    const message = normalizeProviderError(error);
+    console.error('[huggy:generate_stream_preflight_failed]', {
+      project_id: req.params?.id,
+      user_id: req.user?.id,
+      message: error?.message || String(error),
+    });
+    if (!res.headersSent) {
+      const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : 500);
+      return res.status(status).json({ success: false, error: message, message });
+    }
+    res.write('event: error\n');
+    res.write(`data: ${JSON.stringify({
+      event_type: 'error',
+      message,
+      payload: { code: 'GenerationFailed' },
+      created_at: new Date().toISOString(),
+    })}\n\n`);
     res.end();
   }
 });

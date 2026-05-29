@@ -3,19 +3,7 @@ function initBuilder() {
   const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
-  // ── LOAD ACTIVE PROJECT INFORMATION ────────────────────────
-  const currentProjStr = localStorage.getItem('huggy-current-project');
-  if (currentProjStr) {
-    try {
-      const currentProj = JSON.parse(currentProjStr);
-      const projNameEl = document.getElementById('project-name');
-      if (projNameEl && currentProj.name) {
-        projNameEl.textContent = currentProj.name;
-      }
-    } catch (e) {
-      console.error("Error setting custom project identity:", e);
-    }
-  }
+  // Project identity is synchronized by builder-live.ts from the backend.
 
   // ── CODE CONTENT ────────────────────────────────────────────────
   const codeLines: [string, boolean][] = [];
@@ -78,7 +66,7 @@ function initBuilder() {
     previewEmpty.classList.add('hidden');
     previewContent.classList.remove('hidden');
     previewFilename.textContent = name;
-    previewCode.textContent = fileContents[name] || `// Content for ${name}\n// ... dynamic content mock ...`;
+    previewCode.textContent = fileContents[name] || `// ${name}\n// No generated source has been synchronized for this file yet.`;
   }
 
   const structure: any[] = [];
@@ -381,7 +369,7 @@ function initBuilder() {
   });
 
   // Initialize saved model
-  const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+  const savedModel = localStorage.getItem('huggy-selected-model') || 'auto';
   let foundModel = false;
   modelOptions.forEach(opt => {
     if ((opt as HTMLElement).dataset.id === savedModel) {
@@ -394,7 +382,7 @@ function initBuilder() {
   if (!foundModel && modelLabel) {
     const activeOpt = document.querySelector('.model-option.active') as HTMLElement;
     if (activeOpt) {
-      modelLabel.textContent = activeOpt.dataset.name || 'Sonnet 4.6';
+      modelLabel.textContent = activeOpt.dataset.name || 'Auto';
     }
   }
 
@@ -450,9 +438,9 @@ function initBuilder() {
         const sysMsg = document.createElement('div');
         sysMsg.className = 'msg-system';
         if (currentMode === 'plan') {
-          sysMsg.innerHTML = '── plan generated ──';
+          sysMsg.innerHTML = '── plan ready ──';
         } else {
-          sysMsg.innerHTML = '── change applied ──';
+          sysMsg.innerHTML = '── build event received ──';
         }
         container.appendChild(sysMsg);
         container.scrollTop = container.scrollHeight;

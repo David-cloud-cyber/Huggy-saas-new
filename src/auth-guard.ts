@@ -15,6 +15,7 @@ async function guardPage() {
   }
 
   document.documentElement.dataset.authReady = 'true';
+  (window as any).huggyAuthReady = verified;
   window.dispatchEvent(new CustomEvent('huggy:auth-ready', { detail: verified }));
 }
 

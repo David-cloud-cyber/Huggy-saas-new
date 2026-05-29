@@ -64,6 +64,11 @@ function init() {
         const chevron = wrapper.querySelector('#chevron-icon, svg.chevron, svg') as SVGElement | null; 
         const modelLabel = wrapper.querySelector('#current-model-label, .current-model-label, span:not(.model-label-prefix)') as HTMLSpanElement | null;
         const modelOptions = wrapper.querySelectorAll('.model-option');
+        const promptModeRoot = wrapper.querySelector('.prompt-mode') as HTMLDivElement | null;
+        const promptModeBtn = wrapper.querySelector('.prompt-mode-btn') as HTMLButtonElement | null;
+        const promptModeLabel = wrapper.querySelector('.prompt-mode-label') as HTMLSpanElement | null;
+        const promptModeOptions = wrapper.querySelectorAll('[data-prompt-mode-option]');
+        let selectedPromptMode: 'build' | 'plan' = 'build';
         
         const btnUpload = wrapper.querySelector('#btn-upload, .btn-upload, button[data-tooltip="Upload files"]') as HTMLButtonElement | null;
         const fileInput = wrapper.querySelector('#file-input, input[type="file"]') as HTMLInputElement | null;
@@ -87,6 +92,41 @@ function init() {
             }
         }
 
+        function setPromptMode(mode: 'build' | 'plan') {
+            selectedPromptMode = mode;
+            promptModeRoot?.classList.remove('open');
+            if (promptModeRoot) promptModeRoot.dataset.promptMode = mode;
+            if (promptModeBtn) promptModeBtn.setAttribute('aria-expanded', 'false');
+            if (promptModeLabel) promptModeLabel.textContent = mode === 'plan' ? 'Plan' : 'Build';
+            promptModeOptions.forEach(option => {
+                option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === mode);
+            });
+        }
+
+        setPromptMode('build');
+
+        promptModeBtn?.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const open = !promptModeRoot?.classList.contains('open');
+            promptModeRoot?.classList.toggle('open', open);
+            promptModeBtn.setAttribute('aria-expanded', String(open));
+        });
+
+        promptModeOptions.forEach(option => {
+            option.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const mode = (option as HTMLElement).dataset.promptModeOption === 'plan' ? 'plan' : 'build';
+                setPromptMode(mode);
+            });
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!promptModeRoot?.contains(event.target as Node)) {
+                promptModeRoot?.classList.remove('open');
+                promptModeBtn?.setAttribute('aria-expanded', 'false');
+            }
+        });
+
         // Keydown actions
         textarea?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -109,6 +149,7 @@ function init() {
 
             // Save for builder synchronization
             sessionStorage.setItem('huggy-initial-prompt', val);
+            sessionStorage.setItem('huggy-requested-mode', selectedPromptMode);
 
             submitBtn.disabled = true;
             const btnSpan = submitBtn.querySelector('span');
@@ -122,10 +163,10 @@ function init() {
                     curtain.style.transformOrigin = 'top';
                     curtain.classList.add('falling');
                     setTimeout(() => {
-                        window.location.href = '/auth.html';
+                        window.location.href = '/builder.html?new=1';
                     }, 600);
                 } else {
-                    window.location.href = '/auth.html';
+                    window.location.href = '/builder.html?new=1';
                 }
             }, 1200);
         }
@@ -264,7 +305,7 @@ function init() {
         });
 
         // Initialize display name of model
-        const savedModel = localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6';
+        const savedModel = localStorage.getItem('huggy-selected-model') || 'auto';
         let foundModel = false;
         modelOptions.forEach(opt => {
             if ((opt as HTMLElement).dataset.id === savedModel) {
@@ -279,7 +320,7 @@ function init() {
         if (!foundModel && modelLabel) {
             const activeOpt = wrapper.querySelector('.model-option.active') as HTMLElement;
             if (activeOpt) {
-                modelLabel.textContent = activeOpt.dataset.name || 'Sonnet 4.6';
+                modelLabel.textContent = activeOpt.dataset.name || 'Auto';
             }
         }
 

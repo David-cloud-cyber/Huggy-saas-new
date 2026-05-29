@@ -14,6 +14,15 @@ export class ApiError extends Error {
   }
 }
 
+function extractApiMessage(payload: unknown, fallback: string): string {
+  if (typeof payload === 'object' && payload) {
+    const record = payload as { error?: unknown; message?: unknown };
+    if (typeof record.message === 'string' && record.message.trim()) return record.message;
+    if (typeof record.error === 'string' && record.error.trim()) return record.error;
+  }
+  return fallback;
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const verified = await getVerifiedSession();
   if (!verified?.session?.access_token) {
@@ -32,10 +41,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message =
-      typeof payload === 'object' && payload && 'error' in payload
-        ? String((payload as { error?: unknown }).error)
-        : `Request failed with ${response.status}`;
+    const message = extractApiMessage(payload, `Request failed with ${response.status}`);
     throw new ApiError(message, response.status, payload);
   }
 
@@ -66,10 +72,7 @@ export async function apiStream(
 
   if (!response.ok || !response.body) {
     const payload = await response.json().catch(() => ({}));
-    const message =
-      typeof payload === 'object' && payload && 'error' in payload
-        ? String((payload as { error?: unknown }).error)
-        : `Stream failed with ${response.status}`;
+    const message = extractApiMessage(payload, `Stream failed with ${response.status}`);
     throw new ApiError(message, response.status, payload);
   }
 
@@ -89,7 +92,11 @@ export async function apiStream(
       const eventType = chunk.split('\n').find(line => line.startsWith('event:'))?.replace(/^event:\s*/, '').trim() || 'message';
       const dataLine = chunk.split('\n').find(line => line.startsWith('data:'));
       if (!dataLine) continue;
-      onEvent(eventType, JSON.parse(dataLine.replace(/^data:\s*/, '')));
+      try {
+        onEvent(eventType, JSON.parse(dataLine.replace(/^data:\s*/, '')));
+      } catch {
+        onEvent('error', { message: 'The AI stream returned a malformed event.' });
+      }
     }
   }
 }
