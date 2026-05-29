@@ -1147,6 +1147,16 @@ async function listProjectMessages(projectId: string) {
   return data || [];
 }
 
+async function listProjectMessagesPage(projectId: string, limitValue: any, beforeValue: any) {
+  const limit = Math.min(100, Math.max(1, Number(limitValue || 100)));
+  const client = requireSupabase('Project message page listing');
+  let query = client.from('project_messages').select('*').eq('project_id', projectId).order('created_at', { ascending: false }).limit(limit);
+  if (beforeValue) query = query.lt('created_at', String(beforeValue));
+  const { data, error } = await query;
+  if (error) throw new Error(`Supabase project message page failed: ${error.message}`);
+  return (data || []).reverse();
+}
+
 async function saveAnalyticsEvent(project: GeneratedProject, record: any) {
   const client = requireSupabase('Analytics event persistence');
   const now = new Date().toISOString();
@@ -1322,6 +1332,93 @@ async function listAgentEvents(projectId: string) {
   const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
   if (error) throw new Error(`Supabase agent event listing failed: ${error.message}`);
   return data || [];
+}
+
+async function listAgentEventsPage(projectId: string, limitValue: any, beforeValue: any) {
+  const limit = Math.min(100, Math.max(1, Number(limitValue || 100)));
+  const client = requireSupabase('Agent event page listing');
+  let query = client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number', { ascending: false }).limit(limit);
+  if (beforeValue) query = query.lt('sequence_number', Number(beforeValue));
+  const { data, error } = await query;
+  if (error) throw new Error(`Supabase agent event page failed: ${error.message}`);
+  return (data || []).reverse();
+}
+
+function normalizeWorkspaceMode(value: any): 'plan' | 'build' {
+  return value === 'plan' ? 'plan' : 'build';
+}
+
+function normalizeWorkspaceTab(value: any): 'preview' | 'code' | 'database' | 'analysis' {
+  return ['preview', 'code', 'database', 'analysis'].includes(String(value)) ? String(value) as any : 'preview';
+}
+
+function sanitizeWorkspaceText(value: any, max = 8000) {
+  return String(value || '').replace(/\u0000/g, '').slice(0, max);
+}
+
+function isMissingWorkspaceTableError(error: any) {
+  const message = String(error?.message || '');
+  return /user_workspace_state|project_workspace_state|schema cache|relation .* does not exist/i.test(message);
+}
+
+async function getUserWorkspaceState(userId: string) {
+  const client = requireSupabase('User workspace state');
+  const { data, error } = await client.from('user_workspace_state').select('*').eq('owner_id', userId).maybeSingle();
+  if (error && isMissingWorkspaceTableError(error)) return null;
+  if (error) throw new Error(`Supabase user workspace state failed: ${error.message}`);
+  return data || null;
+}
+
+async function upsertUserWorkspaceState(userId: string, patch: Record<string, any>) {
+  const row = {
+    owner_id: userId,
+    last_project_id: isUuid(patch.last_project_id) ? patch.last_project_id : patch.last_project_id === null ? null : undefined,
+    dashboard_draft_prompt: patch.dashboard_draft_prompt === undefined ? undefined : sanitizeWorkspaceText(patch.dashboard_draft_prompt),
+    dashboard_selected_mode: patch.dashboard_selected_mode === undefined ? undefined : normalizeWorkspaceMode(patch.dashboard_selected_mode),
+    builder_draft_prompt: patch.builder_draft_prompt === undefined ? undefined : sanitizeWorkspaceText(patch.builder_draft_prompt),
+    builder_selected_mode: patch.builder_selected_mode === undefined ? undefined : normalizeWorkspaceMode(patch.builder_selected_mode),
+    builder_selected_model: patch.builder_selected_model === undefined ? undefined : sanitizeWorkspaceText(patch.builder_selected_model, 120) || 'auto',
+    builder_active_tab: patch.builder_active_tab === undefined ? undefined : normalizeWorkspaceTab(patch.builder_active_tab),
+    theme: patch.theme === undefined ? undefined : (patch.theme === 'dark' ? 'dark' : 'light'),
+    last_route: patch.last_route === undefined ? undefined : sanitizeWorkspaceText(patch.last_route, 512),
+    updated_at: new Date().toISOString(),
+  };
+  Object.keys(row).forEach(key => (row as any)[key] === undefined && delete (row as any)[key]);
+  const client = requireSupabase('User workspace state persistence');
+  const { data, error } = await client.from('user_workspace_state').upsert([row], { onConflict: 'owner_id' }).select('*').maybeSingle();
+  if (error && isMissingWorkspaceTableError(error)) return null;
+  if (error) throw new Error(`Supabase user workspace state update failed: ${error.message}`);
+  return data;
+}
+
+async function getProjectWorkspaceState(projectId: string) {
+  const client = requireSupabase('Project workspace state');
+  const { data, error } = await client.from('project_workspace_state').select('*').eq('project_id', projectId).maybeSingle();
+  if (error && isMissingWorkspaceTableError(error)) return null;
+  if (error) throw new Error(`Supabase project workspace state failed: ${error.message}`);
+  return data || null;
+}
+
+async function upsertProjectWorkspaceState(userId: string, projectId: string, patch: Record<string, any>) {
+  const client = requireSupabase('Project workspace state persistence');
+  const row = {
+    owner_id: userId,
+    project_id: projectId,
+    draft_prompt: patch.draft_prompt === undefined ? undefined : sanitizeWorkspaceText(patch.draft_prompt),
+    selected_mode: patch.selected_mode === undefined ? undefined : normalizeWorkspaceMode(patch.selected_mode),
+    selected_model: patch.selected_model === undefined ? undefined : sanitizeWorkspaceText(patch.selected_model, 120) || 'auto',
+    active_tab: patch.active_tab === undefined ? undefined : normalizeWorkspaceTab(patch.active_tab),
+    sidebar_width: patch.sidebar_width === undefined ? undefined : Math.min(520, Math.max(280, Number(patch.sidebar_width || 380))),
+    pending_clarification: patch.pending_clarification === undefined ? undefined : (patch.pending_clarification || null),
+    last_opened_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  Object.keys(row).forEach(key => (row as any)[key] === undefined && delete (row as any)[key]);
+  const { data, error } = await client.from('project_workspace_state').upsert([row], { onConflict: 'project_id' }).select('*').maybeSingle();
+  if (error && isMissingWorkspaceTableError(error)) return null;
+  if (error) throw new Error(`Supabase project workspace state update failed: ${error.message}`);
+  await upsertUserWorkspaceState(userId, { last_project_id: projectId, last_route: `/builder.html?project=${projectId}` });
+  return data;
 }
 
 async function createProjectVersion(project: GeneratedProject, files: GeneratedFile[], reason: string, diff: any) {
@@ -1729,6 +1826,23 @@ app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
   res.json({ success: true, preferences: updated });
 });
 
+app.get('/api/users/me/workspace-state', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const state = await getUserWorkspaceState(userId);
+  res.json({ success: true, state });
+});
+
+app.patch('/api/users/me/workspace-state', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const patch = req.body || {};
+  if (patch.last_project_id) {
+    const project = await loadProject(String(patch.last_project_id), userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Last project not found.' });
+  }
+  const state = await upsertUserWorkspaceState(userId, patch);
+  res.json({ success: true, state });
+});
+
 // PATCH /projects/:id/ai-preferences
 app.patch('/api/projects/:id/ai-preferences', async (req: any, res) => {
   const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
@@ -1750,6 +1864,30 @@ app.patch('/api/projects/:id/ai-preferences', async (req: any, res) => {
   const { error } = await client.from('project_ai_preferences').upsert([updated]);
   if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, preferences: updated });
+});
+
+app.patch('/api/projects/:id/workspace-state', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const state = await upsertProjectWorkspaceState(userId, project.id, req.body || {});
+  res.json({ success: true, state });
+});
+
+app.get('/api/projects/:id/messages', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const messages = await listProjectMessagesPage(project.id, req.query?.limit, req.query?.before);
+  res.json({ success: true, messages });
+});
+
+app.get('/api/projects/:id/events', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const events = await listAgentEventsPage(project.id, req.query?.limit, req.query?.before);
+  res.json({ success: true, events });
 });
 
 // POST /projects/:id/messages (THE AI ENGINE AND CREDIT BALANCER)
@@ -1927,6 +2065,22 @@ app.post('/api/projects', async (req: any, res: any) => {
   const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
   project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview');
   await saveProject(project, files);
+  await upsertUserWorkspaceState(userId, {
+    last_project_id: project.id,
+    dashboard_draft_prompt: '',
+    builder_draft_prompt: '',
+    builder_selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+    builder_selected_model: project.model_id,
+    builder_active_tab: 'preview',
+    last_route: `/builder.html?project=${project.id}`,
+  });
+  await upsertProjectWorkspaceState(userId, project.id, {
+    draft_prompt: '',
+    selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+    selected_model: project.model_id,
+    active_tab: 'preview',
+    sidebar_width: 380,
+  });
 
   res.status(201).json({
     success: true,
@@ -1947,12 +2101,15 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const messages = await listProjectMessages(project.id);
   const events = await listAgentEvents(project.id);
+  const workspaceState = await getProjectWorkspaceState(project.id);
+  await upsertUserWorkspaceState(userId, { last_project_id: project.id, last_route: `/builder.html?project=${project.id}` });
   res.json({
     success: true,
     project,
     files,
     messages,
     events,
+    workspace_state: workspaceState,
     preview: {
       status: project.preview_status || 'idle',
       html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
@@ -1970,8 +2127,10 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
   const versions = await listProjectVersions(project.id);
   const secrets = await listProjectSecrets(project.id);
   const errors = await listBuildErrors(project.id);
+  const workspaceState = await getProjectWorkspaceState(project.id);
   const helpers = getDbHelpers();
   const balance = await helpers.getWallet(userId);
+  await upsertUserWorkspaceState(userId, { last_project_id: project.id, last_route: `/builder.html?project=${project.id}` });
   res.json({
     success: true,
     project,
@@ -1982,6 +2141,7 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
     secrets,
     errors,
     credits: { balance },
+    workspace_state: workspaceState,
     preview: {
       status: project.preview_status || 'idle',
       html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
@@ -2090,6 +2250,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     content: prompt,
     intent: decision.intent,
     requested_mode: decision.requestedMode,
+  });
+  await upsertProjectWorkspaceState(userId, project.id, {
+    draft_prompt: '',
+    selected_mode: decision.requestedMode,
+    selected_model: req.body?.modelId || project.model_id || 'auto',
+    active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
   });
 
   if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan') {
@@ -2281,6 +2447,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     content: prompt,
     intent: decision.intent,
     requested_mode: decision.requestedMode,
+  });
+  await upsertProjectWorkspaceState(userId, project.id, {
+    draft_prompt: '',
+    selected_mode: decision.requestedMode,
+    selected_model: req.body?.modelId || project.model_id || 'auto',
+    active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
   });
   await send('intent_detected', decision.userVisibleReason, { intent: decision });
 

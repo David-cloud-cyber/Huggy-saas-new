@@ -373,3 +373,74 @@ create index if not exists project_analytics_events_project_session_idx on publi
 
 grant select, insert, update, delete on public.project_analytics_sessions to authenticated;
 grant select, insert, update, delete on public.project_analytics_events to authenticated;
+
+create table if not exists public.user_workspace_state (
+  owner_id uuid primary key,
+  last_project_id uuid references public.projects(id) on delete set null,
+  dashboard_draft_prompt text default '',
+  dashboard_selected_mode text default 'build',
+  builder_draft_prompt text default '',
+  builder_selected_mode text default 'build',
+  builder_selected_model text default 'auto',
+  builder_active_tab text default 'preview',
+  theme text default 'light',
+  last_route text default '/dashboard.html',
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+create table if not exists public.project_workspace_state (
+  project_id uuid primary key references public.projects(id) on delete cascade,
+  owner_id uuid not null,
+  draft_prompt text default '',
+  selected_mode text default 'build',
+  selected_model text default 'auto',
+  active_tab text default 'preview',
+  sidebar_width integer default 380,
+  pending_clarification jsonb,
+  last_opened_at timestamptz default now() not null,
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
+alter table public.user_workspace_state add column if not exists last_project_id uuid references public.projects(id) on delete set null;
+alter table public.user_workspace_state add column if not exists dashboard_draft_prompt text default '';
+alter table public.user_workspace_state add column if not exists dashboard_selected_mode text default 'build';
+alter table public.user_workspace_state add column if not exists builder_draft_prompt text default '';
+alter table public.user_workspace_state add column if not exists builder_selected_mode text default 'build';
+alter table public.user_workspace_state add column if not exists builder_selected_model text default 'auto';
+alter table public.user_workspace_state add column if not exists builder_active_tab text default 'preview';
+alter table public.user_workspace_state add column if not exists theme text default 'light';
+alter table public.user_workspace_state add column if not exists last_route text default '/dashboard.html';
+alter table public.user_workspace_state add column if not exists created_at timestamptz default now();
+alter table public.user_workspace_state add column if not exists updated_at timestamptz default now();
+
+alter table public.project_workspace_state add column if not exists owner_id uuid;
+alter table public.project_workspace_state add column if not exists draft_prompt text default '';
+alter table public.project_workspace_state add column if not exists selected_mode text default 'build';
+alter table public.project_workspace_state add column if not exists selected_model text default 'auto';
+alter table public.project_workspace_state add column if not exists active_tab text default 'preview';
+alter table public.project_workspace_state add column if not exists sidebar_width integer default 380;
+alter table public.project_workspace_state add column if not exists pending_clarification jsonb;
+alter table public.project_workspace_state add column if not exists last_opened_at timestamptz default now();
+alter table public.project_workspace_state add column if not exists created_at timestamptz default now();
+alter table public.project_workspace_state add column if not exists updated_at timestamptz default now();
+
+alter table public.user_workspace_state enable row level security;
+alter table public.project_workspace_state enable row level security;
+
+drop policy if exists "User workspace owner isolation" on public.user_workspace_state;
+create policy "User workspace owner isolation" on public.user_workspace_state
+  for all using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+drop policy if exists "Project workspace owner isolation" on public.project_workspace_state;
+create policy "Project workspace owner isolation" on public.project_workspace_state
+  for all using (project_id in (select id from public.projects where owner_id = auth.uid()))
+  with check (project_id in (select id from public.projects where owner_id = auth.uid()));
+
+create index if not exists user_workspace_last_project_idx on public.user_workspace_state (last_project_id);
+create index if not exists project_workspace_owner_updated_idx on public.project_workspace_state (owner_id, updated_at desc);
+
+grant select, insert, update, delete on public.user_workspace_state to authenticated;
+grant select, insert, update, delete on public.project_workspace_state to authenticated;

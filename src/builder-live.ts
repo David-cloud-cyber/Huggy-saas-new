@@ -24,6 +24,7 @@ type ProjectPayload = {
   files: GeneratedFile[];
   messages?: Array<{ role: string; content: string; intent?: string }>;
   events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any }>;
+  workspace_state?: WorkspaceState | null;
   preview?: {
     status: string;
     html: string;
@@ -41,6 +42,22 @@ type ProjectPayload = {
     balance?: number;
     required?: number;
   };
+};
+
+type WorkspaceState = {
+  draft_prompt?: string;
+  selected_mode?: 'plan' | 'build';
+  selected_model?: string;
+  active_tab?: 'preview' | 'code' | 'database' | 'analysis';
+  sidebar_width?: number;
+};
+
+type UserWorkspaceState = {
+  last_project_id?: string;
+  builder_draft_prompt?: string;
+  builder_selected_mode?: 'plan' | 'build';
+  builder_selected_model?: string;
+  builder_active_tab?: 'preview' | 'code' | 'database' | 'analysis';
 };
 
 type AiModel = {
@@ -79,6 +96,9 @@ let selectedModelId = 'auto';
 let initialBuilderHandoff: { prompt: string; mode: 'plan' | 'build' } | null = null;
 let analysisPollTimer: number | null = null;
 let analysisRange = '30d';
+let projectWorkspaceState: WorkspaceState | null = null;
+let userWorkspaceState: UserWorkspaceState | null = null;
+let workspaceSaveTimer: number | null = null;
 
 function escapeHtml(value: string): string {
   return value
@@ -119,6 +139,95 @@ function getInitialDashboardMode() {
 
 function selectedModel() {
   return selectedModelId || 'auto';
+}
+
+function activeBuilderView(): 'preview' | 'code' | 'database' | 'analysis' {
+  const active = document.querySelector('.sub-nav-tab.active')?.id || '';
+  if (active.includes('code')) return 'code';
+  if (active.includes('database')) return 'database';
+  if (active.includes('analysis')) return 'analysis';
+  return 'preview';
+}
+
+function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = false) {
+  if (workspaceSaveTimer !== null) window.clearTimeout(workspaceSaveTimer);
+  const save = async () => {
+    const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+    const body = {
+      draft_prompt: input?.value || '',
+      selected_mode: selectedChatMode,
+      selected_model: selectedModelId,
+      active_tab: activeBuilderView(),
+      ...patch,
+    };
+    try {
+      if (currentProjectId) {
+        await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/workspace-state`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+      } else {
+        await apiFetch('/api/users/me/workspace-state', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            builder_draft_prompt: body.draft_prompt,
+            builder_selected_mode: body.selected_mode,
+            builder_selected_model: body.selected_model,
+            builder_active_tab: body.active_tab,
+            last_route: '/builder.html?new=1',
+          }),
+        });
+      }
+    } catch {
+      // Draft persistence must never block typing or generation.
+    }
+  };
+  if (immediate) {
+    void save();
+    return;
+  }
+  workspaceSaveTimer = window.setTimeout(save, 1500);
+}
+
+function applySidebarWidthPreference(width?: number) {
+  const body = document.querySelector('.workspace-body') as HTMLElement | null;
+  const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
+  if (!body || !sidebar || !width || window.matchMedia('(max-width: 760px)').matches) return;
+  const next = Math.min(520, Math.max(280, Number(width || 380)));
+  body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
+  body.style.setProperty('--huggy-sidebar-width', `${next}px`);
+  const handle = document.getElementById('huggy-sidebar-resizer') as HTMLElement | null;
+  if (handle) handle.style.left = `${next - 4}px`;
+}
+
+function syncModelLabelFromSelection() {
+  const label = document.getElementById('current-model-label');
+  const options = Array.from(document.querySelectorAll<HTMLElement>('[data-model-id]'));
+  const selected = options.find(option => (option.dataset.modelId || 'auto') === selectedModelId);
+  if (label) label.textContent = selected?.dataset.modelName || (selectedModelId === 'auto' ? 'Auto' : selectedModelId);
+  options.forEach(option => option.classList.toggle('active', (option.dataset.modelId || 'auto') === selectedModelId));
+}
+
+function applyWorkspaceState(state?: WorkspaceState | null) {
+  if (!state) return;
+  projectWorkspaceState = state;
+  if (state.selected_mode) setChatMode(state.selected_mode);
+  if (state.selected_model) {
+    selectedModelId = state.selected_model;
+    syncModelLabelFromSelection();
+  }
+  if (state.sidebar_width) {
+    localStorage.setItem('huggy-sidebar-width', String(state.sidebar_width));
+    applySidebarWidthPreference(state.sidebar_width);
+  }
+  const handoff = getInitialBuilderHandoff();
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  const submit = document.getElementById('chat-submit-btn') as HTMLButtonElement | null;
+  if (input && !handoff.prompt && !input.value.trim() && state.draft_prompt) {
+    input.value = state.draft_prompt;
+    input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+    submit?.classList.add('active');
+  }
 }
 
 function chatScroll() {
@@ -588,6 +697,7 @@ async function ensureModelSelector() {
     if (label) label.textContent = target.dataset.modelName || 'Auto';
     setActiveOption();
     close();
+    scheduleWorkspaceSave({ selected_model: selectedModelId });
     await apiFetch('/api/users/me/ai-preferences', {
       method: 'PATCH',
       body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
@@ -624,6 +734,7 @@ function setChatMode(mode: 'plan' | 'build') {
     button.setAttribute('aria-expanded', 'false');
   }
   if (menu) menu.style.display = 'none';
+  scheduleWorkspaceSave({ selected_mode: mode });
 }
 
 function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis') {
@@ -648,6 +759,7 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
   } else {
     stopAnalysisPolling();
   }
+  scheduleWorkspaceSave({ active_tab: view });
 }
 
 function bindBuilderViews() {
@@ -772,6 +884,28 @@ async function ensureProjectForPrompt(prompt: string) {
   });
   currentProjectId = created.project.id;
   window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
+  await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/workspace-state`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      draft_prompt: '',
+      selected_mode: selectedChatMode,
+      selected_model: selectedModelId,
+      active_tab: 'preview',
+      sidebar_width: Number(localStorage.getItem('huggy-sidebar-width') || 380),
+    }),
+  }).catch(() => null);
+  await apiFetch('/api/users/me/workspace-state', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      last_project_id: currentProjectId,
+      dashboard_draft_prompt: '',
+      builder_draft_prompt: '',
+      builder_selected_mode: selectedChatMode,
+      builder_selected_model: selectedModelId,
+      builder_active_tab: 'preview',
+      last_route: `/builder.html?project=${currentProjectId}`,
+    }),
+  }).catch(() => null);
   await flushPendingPromptAttachments();
 }
 
@@ -836,11 +970,26 @@ async function loadProject() {
   const loading = appendMessage('system', 'Loading project files, timeline and preview...');
   try {
     const payload = await ensureProject();
+    if (!currentProjectId) {
+      const userState = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state').catch(() => null);
+      userWorkspaceState = userState?.state || null;
+      if (userWorkspaceState) {
+        applyWorkspaceState({
+          draft_prompt: userWorkspaceState.builder_draft_prompt || '',
+          selected_mode: userWorkspaceState.builder_selected_mode || 'build',
+          selected_model: userWorkspaceState.builder_selected_model || 'auto',
+          active_tab: userWorkspaceState.builder_active_tab || 'preview',
+        });
+      }
+    }
     if (projectName) projectName.textContent = payload.project.name;
     if (currentProjectId) await flushPendingPromptAttachments();
     renderFiles(payload.files || []);
+    applyWorkspaceState(payload.workspace_state || null);
     if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
     restoreMessages(payload);
+    const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
+    if (activeTab) activateBuilderView(activeTab);
     updateMessage(loading, 'Project synchronized. Use Plan to think, or Build to update the app.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
@@ -852,7 +1001,7 @@ function restoreMessages(payload: ProjectPayload) {
   const scroll = chatScroll();
   if (!scroll || scroll.dataset.restored === 'true') return;
   scroll.dataset.restored = 'true';
-  payload.messages.slice(-12).forEach(message => {
+  payload.messages.slice(-100).forEach(message => {
     const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
     if (message.intent === 'plan') {
       lastPlan = message.content;
@@ -1370,11 +1519,13 @@ function bindChat() {
     input.value = '';
     input.style.height = '48px';
     submit.classList.remove('active');
+    scheduleWorkspaceSave({ draft_prompt: '', selected_mode: mode }, true);
     void generateFromPrompt(value, mode);
   };
 
   input.addEventListener('input', () => {
     submit.classList.toggle('active', input.value.trim().length > 0);
+    scheduleWorkspaceSave();
   });
 
   input.addEventListener('keydown', (event) => {
@@ -1437,7 +1588,7 @@ function ensureResizableSidebar() {
   const body = document.querySelector('.workspace-body') as HTMLElement | null;
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
   if (!body || !sidebar || document.getElementById('huggy-sidebar-resizer')) return;
-  const savedWidth = Number(localStorage.getItem('huggy-sidebar-width') || 380);
+  const savedWidth = Number(projectWorkspaceState?.sidebar_width || localStorage.getItem('huggy-sidebar-width') || 380);
   const applyWidth = (width: number) => {
     if (window.matchMedia('(max-width: 760px)').matches) {
       body.style.gridTemplateColumns = '';
@@ -1445,10 +1596,7 @@ function ensureResizableSidebar() {
       return;
     }
     const next = Math.min(520, Math.max(280, width));
-    body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
-    body.style.setProperty('--huggy-sidebar-width', `${next}px`);
-    const currentHandle = document.getElementById('huggy-sidebar-resizer') as HTMLElement | null;
-    if (currentHandle) currentHandle.style.left = `${next - 4}px`;
+    applySidebarWidthPreference(next);
     localStorage.setItem('huggy-sidebar-width', String(next));
   };
   applyWidth(savedWidth);
@@ -1473,6 +1621,7 @@ function ensureResizableSidebar() {
       body.style.setProperty('--huggy-sidebar-width', `${next}px`);
       handle.style.left = `${next - 4}px`;
       localStorage.setItem('huggy-sidebar-width', String(Math.round(next)));
+      scheduleWorkspaceSave({ sidebar_width: Math.round(next) });
     };
     const up = () => {
       body.classList.remove('is-resizing-sidebar');

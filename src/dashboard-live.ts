@@ -32,6 +32,18 @@ type ProjectListResponse = {
   }>;
 };
 
+type UserWorkspaceState = {
+  last_project_id?: string;
+  dashboard_draft_prompt?: string;
+  dashboard_selected_mode?: 'plan' | 'build';
+  theme?: string;
+  last_route?: string;
+};
+
+let dashboardInitialized = false;
+let dashboardWorkspaceTimer: number | null = null;
+let dashboardWorkspaceState: UserWorkspaceState | null = null;
+
 function getTemplateDescription(template: string): string {
   const labels: Record<string, string> = {
     dashboard: 'analytics dashboard with charts, logs and KPI cards',
@@ -66,6 +78,91 @@ function showProjectError(message: string) {
     document.querySelector('#new-project-modal .modal-content')?.appendChild(status);
   }
   status.textContent = message;
+}
+
+function selectedDashboardMode(): 'plan' | 'build' {
+  const root = document.querySelector('.prompt-mode') as HTMLElement | null;
+  return root?.dataset.promptMode === 'plan' ? 'plan' : 'build';
+}
+
+function setDashboardMode(mode: 'plan' | 'build') {
+  const selected = mode === 'plan' ? 'plan' : 'build';
+  const root = document.querySelector('.prompt-mode') as HTMLElement | null;
+  const label = document.querySelector('.prompt-mode-label');
+  root?.setAttribute('data-prompt-mode', selected);
+  if (label) label.textContent = selected === 'plan' ? 'Plan' : 'Build';
+  document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
+    option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === selected);
+  });
+}
+
+function saveDashboardWorkspace(immediate = false) {
+  if (dashboardWorkspaceTimer !== null) window.clearTimeout(dashboardWorkspaceTimer);
+  const save = async () => {
+    const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+    try {
+      await apiFetch('/api/users/me/workspace-state', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          dashboard_draft_prompt: textarea?.value || '',
+          dashboard_selected_mode: selectedDashboardMode(),
+          last_route: '/dashboard.html',
+        }),
+      });
+    } catch {
+      // Draft persistence should never block dashboard input.
+    }
+  };
+  if (immediate) {
+    void save();
+    return;
+  }
+  dashboardWorkspaceTimer = window.setTimeout(save, 1500);
+}
+
+function installContinueLastProject(state: UserWorkspaceState | null) {
+  if (!state?.last_project_id || document.getElementById('btn-continue-last-project')) return;
+  const createSection = document.querySelector('.create-section');
+  const subtitle = document.querySelector('.create-subtitle');
+  if (!createSection || !subtitle) return;
+  const button = document.createElement('button');
+  button.id = 'btn-continue-last-project';
+  button.type = 'button';
+  button.textContent = 'Continue last project';
+  button.style.cssText = 'margin:14px auto 18px;display:inline-flex;height:34px;align-items:center;justify-content:center;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);border-radius:999px;padding:0 14px;font-size:12px;font-weight:750;cursor:pointer;';
+  button.addEventListener('click', () => {
+    window.location.href = `/builder.html?project=${encodeURIComponent(state.last_project_id || '')}`;
+  });
+  subtitle.insertAdjacentElement('afterend', button);
+}
+
+async function hydrateWorkspaceState() {
+  try {
+    const response = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state');
+    dashboardWorkspaceState = response.state || null;
+    const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+    if (textarea && !textarea.value.trim() && dashboardWorkspaceState?.dashboard_draft_prompt) {
+      textarea.value = dashboardWorkspaceState.dashboard_draft_prompt;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (dashboardWorkspaceState?.dashboard_selected_mode) {
+      setDashboardMode(dashboardWorkspaceState.dashboard_selected_mode);
+    }
+    installContinueLastProject(dashboardWorkspaceState);
+  } catch {
+    dashboardWorkspaceState = null;
+  }
+}
+
+function bindDashboardWorkspacePersistence() {
+  const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+  textarea?.addEventListener('input', () => saveDashboardWorkspace());
+  document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
+    option.addEventListener('click', () => {
+      window.setTimeout(() => saveDashboardWorkspace(true), 0);
+    });
+  });
+  document.getElementById('submit-btn')?.addEventListener('click', () => saveDashboardWorkspace(true), true);
 }
 
 function escapeHtml(value: string): string {
@@ -267,9 +364,13 @@ function bindLiveProjectCreation() {
 }
 
 function initDashboardLive() {
+  if (dashboardInitialized) return;
+  dashboardInitialized = true;
   initPromptInputActions({ persistForBuilder: true });
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
+  bindDashboardWorkspacePersistence();
+  void hydrateWorkspaceState();
   void loadLiveProjects();
   void loadLiveWallet();
 }
