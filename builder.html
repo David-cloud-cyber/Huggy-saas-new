@@ -591,17 +591,17 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
       transition: all 200ms ease;
     }
 
     .message-card-user {
-      align-items: flex-start;
+      align-items: flex-end;
     }
 
     .message-card-assistant {
-      align-items: flex-end;
+      align-items: flex-start;
     }
 
     .message-card-system {
@@ -659,29 +659,31 @@
 
     .msg-body-paragraph {
       font-size: 13px;
-      line-height: 1.65;
+      line-height: 1.7;
       color: #d4d4d8;
       font-weight: 400;
       margin: 0;
-      max-width: 84%;
+      max-width: 92%;
       overflow-wrap: anywhere;
-      padding: 10px 12px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.045);
-      border-radius: 15px 15px 15px 5px;
-      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
+      padding: 0;
+      border: 0;
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
     }
 
     .message-card-assistant .msg-body-paragraph {
       color: #f4f4f5;
-      background: rgba(96, 165, 250, 0.08);
-      border-color: rgba(96, 165, 250, 0.16);
-      border-radius: 15px 15px 5px 15px;
+    }
+
+    .message-card-user .msg-body-paragraph {
+      color: #e4e4e7;
+      text-align: left;
     }
 
     .message-card-system .msg-body-paragraph {
       max-width: 92%;
-      padding: 3px 8px;
+      padding: 2px 0;
       color: var(--text-sub);
       font-size: 11.5px;
       line-height: 1.5;

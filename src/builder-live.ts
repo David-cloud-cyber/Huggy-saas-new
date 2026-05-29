@@ -322,13 +322,13 @@ function ensurePlanBuildControls() {
   const submitWrapper = document.querySelector('.submit-wrapper');
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
-    <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:66px;border:1px solid rgba(244,244,245,.16);background:#f4f4f5;color:#09090b;border-radius:6px;padding:0 8px;font-size:10px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-        <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.72;">v</span>
+    <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid rgba(244,244,245,.14);background:rgba(244,244,245,.08);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
+        <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">⌄</span>
       </button>
-      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:190px;border:1px solid var(--border);background:var(--bg-surface);border-radius:10px;padding:5px;box-shadow:0 18px 50px rgba(0,0,0,.45);display:none;z-index:1000;">
-        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:rgba(244,244,245,.08);color:var(--text);border-radius:7px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or modify the app</span></button>
-        <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:7px;padding:8px;font-size:11px;font-weight:700;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
+      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:none;z-index:1000;">
+        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:rgba(244,244,245,.08);color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+        <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
       </div>
     </div>
   `);
@@ -341,8 +341,8 @@ function setChatMode(mode: 'plan' | 'build') {
   const menu = document.getElementById('chat-mode-menu');
   if (label) label.textContent = mode === 'plan' ? 'Plan' : 'Build';
   if (button) {
-    button.style.background = mode === 'plan' ? 'var(--bg-input)' : '#f4f4f5';
-    button.style.color = mode === 'plan' ? 'var(--text)' : '#09090b';
+    button.style.background = mode === 'plan' ? 'rgba(96,165,250,.1)' : 'rgba(244,244,245,.08)';
+    button.style.color = mode === 'plan' ? '#bfdbfe' : 'var(--text)';
     button.setAttribute('aria-expanded', 'false');
   }
   if (menu) menu.style.display = 'none';

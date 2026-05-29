@@ -76,7 +76,8 @@ function bindLiveProjectCreation() {
     const theme = themeSelect?.value || 'dark';
     const model = modelSelect?.value || 'auto';
     const features = selectedFeatures();
-    const prompt = `Create a ${getTemplateDescription(template)} named "${name}". Include ${features.join(', ') || 'a polished responsive UI'}.`;
+    const initialPrompt = localStorage.getItem('huggy-initial-prompt')?.trim() || '';
+    const prompt = initialPrompt || `Create a ${getTemplateDescription(template)} named "${name}". Include ${features.join(', ') || 'a polished responsive UI'}.`;
 
     setCreateBusy(button, true);
     showProjectError('');
@@ -102,6 +103,7 @@ function bindLiveProjectCreation() {
       localStorage.setItem('huggy-current-project', JSON.stringify(project));
       const projects = JSON.parse(localStorage.getItem('huggy-projects') || '[]');
       localStorage.setItem('huggy-projects', JSON.stringify([project, ...projects.filter((item: any) => item.id !== project.id)]));
+      localStorage.removeItem('huggy-initial-prompt');
       window.location.href = `/builder.html?project=${encodeURIComponent(project.id)}`;
     } catch (error) {
       showProjectError(error instanceof Error ? error.message : 'Unable to create the project.');

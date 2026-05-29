@@ -1165,6 +1165,224 @@
       .create-input-row { flex-direction: column; align-items: stretch; }
       .btn-submit { height: 40px; }
     }
+
+    /* Codex-like dashboard refinement */
+    .dashboard {
+      background: #09090b;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: #0d0d0f;
+      border-right-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .sidebar-logo,
+    .topbar {
+      height: 74px;
+      background: #09090b;
+      border-bottom-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .sidebar-profile,
+    .sidebar-credits,
+    .sidebar-footer {
+      border-color: rgba(255, 255, 255, 0.07);
+    }
+
+    .logo-text,
+    .topbar-title {
+      font-family: "Instrument Sans", system-ui, sans-serif;
+      font-style: normal;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .main-area {
+      background: #09090b;
+    }
+
+    .topbar {
+      padding: 0 24px;
+    }
+
+    .content-area {
+      gap: 18px;
+      padding: 22px 24px 28px;
+      max-width: 1320px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      margin-bottom: 10px;
+      color: #71717a;
+      letter-spacing: 0.08em;
+    }
+
+    .kpi-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .kpi-card,
+    .project-card,
+    .activity-list,
+    .create-section,
+    .sidebar-promo {
+      background: #111113;
+      border-color: rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      box-shadow: none;
+    }
+
+    .kpi-card {
+      padding: 14px;
+    }
+
+    .kpi-card:hover,
+    .project-card:hover {
+      transform: none;
+      box-shadow: none;
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .kpi-value {
+      font-size: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .create-section {
+      align-items: stretch;
+      text-align: left;
+      padding: 16px;
+    }
+
+    .create-title {
+      font-family: "Instrument Sans", system-ui, sans-serif;
+      font-style: normal;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .create-subtitle {
+      font-size: 12px;
+      margin-bottom: 14px;
+      max-width: none;
+    }
+
+    .input-wrapper {
+      max-width: none;
+      border-radius: 10px;
+      background: #151518;
+      box-shadow: none;
+    }
+
+    .input-wrapper::before,
+    .input-wrapper::after {
+      display: none;
+    }
+
+    .input-wrapper:focus-within {
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+    }
+
+    #ai-textarea {
+      min-height: 72px;
+      padding: 14px 14px 0;
+    }
+
+    #ai-textarea::placeholder,
+    .search-input::placeholder {
+      color: #71717a;
+    }
+
+    .chips-row {
+      justify-content: flex-start;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.03);
+      color: #a1a1aa;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .projects-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .project-card {
+      padding: 16px;
+    }
+
+    .empty-state {
+      background: #111113;
+      border-color: rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 44px 28px;
+    }
+
+    .empty-title {
+      font-family: "Instrument Sans", system-ui, sans-serif;
+      font-style: normal;
+      font-size: 15px;
+    }
+
+    .sidebar-promo {
+      margin: 10px;
+      padding: 12px;
+    }
+
+    .promo-badge {
+      display: none;
+    }
+
+    .promo-text {
+      margin-bottom: 10px;
+    }
+
+    .btn-promo-upgrade,
+    .btn-create-top {
+      border-radius: 8px;
+      background: #f4f4f5;
+      color: #09090b;
+    }
+
+    .btn-new-project-sidebar {
+      border-radius: 8px;
+      border-style: solid;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    @media (max-width: 1024px) {
+      .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .content-area {
+        padding: 16px;
+      }
+
+      .topbar {
+        padding: 0 14px;
+      }
+
+      .topbar-right {
+        gap: 8px;
+      }
+
+      .btn-create-top {
+        padding: 0 10px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1283,7 +1501,7 @@
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
-          <h1 class="topbar-title">Workspace Overview</h1>
+          <h1 class="topbar-title">Dashboard</h1>
         </div>
         <div class="topbar-right">
           <div class="search-wrapper">
@@ -1300,7 +1518,7 @@
       <div class="content-area">
         
         <section>
-          <span class="section-label">Performance Overview</span>
+          <span class="section-label">Workspace</span>
           <div class="kpi-grid">
             <div class="kpi-card">
               <svg class="kpi-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1353,8 +1571,8 @@
         </section>
 
         <section class="create-section">
-          <h2 class="create-title">New Idea?</h2>
-          <p class="create-subtitle">Describe your project. Huggy generates a full application in seconds.</p>
+          <h2 class="create-title">Ask Huggy to build</h2>
+          <p class="create-subtitle">Describe the app you want. Huggy will create a project and open the builder.</p>
           
           <div class="input-wrapper">
             <textarea id="ai-textarea" placeholder="E.g.: An HR dashboard with auth, interactive charts and CSV exports..."></textarea>
@@ -1748,40 +1966,20 @@
         }
     }
 
-    const DEFAULT_PROJECTS = [
-      {
-        id: "proj-1",
-        name: "Acme Analytics",
-        template: "dashboard",
-        theme: "dark",
-        model: "anthropic/claude-sonnet-4.6",
-        desc: "Comprehensive SaaS business monitor integrating high contrast sparklines, dynamic traffic tables, and real-time token tracking.",
-        createdAt: new Date(Date.now() - 4 * 3600000).toISOString(),
-        features: ["db", "auth", "seo"]
-      },
-      {
-        id: "proj-2",
-        name: "Storefront Kit",
-        template: "ecommerce",
-        theme: "light",
-        model: "openai/gpt-5.5",
-        desc: "Fast, response-driven e-commerce staging sandbox with responsive item listings, secure stripe checkout logic, and stateful checkout cart.",
-        createdAt: new Date(Date.now() - 12 * 3600000).toISOString(),
-        features: ["auth", "seo"]
-      }
-    ];
+    const DEFAULT_PROJECTS = [];
+    const isSeedProject = (project) => ['proj-1', 'proj-2'].includes(project?.id);
 
     let projects = [];
     try {
       const stored = localStorage.getItem('huggy-projects');
       if (stored) {
-        projects = JSON.parse(stored);
-      } else {
-        projects = [...DEFAULT_PROJECTS];
+        projects = JSON.parse(stored).filter(project => !isSeedProject(project));
         localStorage.setItem('huggy-projects', JSON.stringify(projects));
+      } else {
+        projects = [];
       }
     } catch (e) {
-      projects = [...DEFAULT_PROJECTS];
+      projects = [];
     }
 
     function escapeHtml(text) {
@@ -1946,20 +2144,16 @@
         if (el.id === 'submit-btn') {
           const mainIdea = document.getElementById('ai-textarea')?.value.trim() || '';
           if (mainIdea) {
-            const draftProj = {
-              id: 'proj-' + Math.random().toString(36).substring(2, 9),
-              name: mainIdea.split(' ').slice(0, 3).join(' ') || 'AI Generated Project',
-              template: 'saas',
-              theme: 'dark',
-              model: localStorage.getItem('huggy-selected-model') || 'anthropic/claude-sonnet-4.6',
-              desc: mainIdea,
-              features: ['db', 'auth', 'seo'],
-              createdAt: new Date().toISOString()
-            };
-            projects.unshift(draftProj);
-            localStorage.setItem('huggy-projects', JSON.stringify(projects));
-            localStorage.setItem('huggy-current-project', JSON.stringify(draftProj));
+            localStorage.setItem('huggy-initial-prompt', mainIdea);
+            const nameInput = document.getElementById('new-proj-name');
+            if (nameInput) {
+              nameInput.value = mainIdea.split(' ').slice(0, 4).join(' ') || 'New Huggy app';
+            }
+            if (typeof openNewProjectModal === 'function') {
+              openNewProjectModal();
+            }
           }
+          return;
         }
         navigate('/builder.html');
       });
