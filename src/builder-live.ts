@@ -1,4 +1,10 @@
 import { apiFetch, apiStream } from './lib/api';
+import {
+  consumePendingPromptAttachments,
+  initPromptInputActions,
+  storePendingPromptAttachments,
+  type PendingPromptAttachment,
+} from './prompt-input-actions';
 
 type GeneratedFile = {
   path: string;
@@ -143,7 +149,7 @@ function addInlineAction(card: HTMLElement | null, label: string, action: () => 
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
-  button.style.cssText = 'margin-top:10px;height:30px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:7px;padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;';
+  button.style.cssText = 'margin-top:10px;height:30px;border:1px solid var(--border);background:var(--text);color:var(--bg);border-radius:7px;padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;';
   button.addEventListener('click', action);
   card.appendChild(button);
 }
@@ -234,101 +240,321 @@ function renderTierColor(tier = 'Standard') {
   return '#a1a1aa';
 }
 
+function ensureBuilderModelSelectorStyle() {
+  if (document.getElementById('huggy-builder-model-selector-style')) return;
+  const style = document.createElement('style');
+  style.id = 'huggy-builder-model-selector-style';
+  style.textContent = `
+    .huggy-builder-model-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      max-width: min(210px, 34vw);
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+      user-select: none;
+      position: relative;
+      transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), background 180ms cubic-bezier(0.22, 1, 0.36, 1);
+      cursor: pointer;
+      background: var(--bg-input);
+      flex: 0 1 auto;
+      white-space: nowrap;
+    }
+    .huggy-builder-model-trigger:hover,
+    .huggy-builder-model-trigger[aria-expanded="true"] {
+      border-color: var(--border-focus, var(--border));
+      background: var(--accent-hover, var(--bg-panel));
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+    .huggy-builder-model-trigger .model-label-prefix {
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 9px;
+      opacity: 0.62;
+      padding-right: 8px;
+      border-right: 1px solid var(--border);
+    }
+    .huggy-builder-model-trigger #current-model-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 650;
+      color: var(--text);
+    }
+    .huggy-builder-model-trigger #chevron-icon {
+      flex: 0 0 auto;
+      transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .huggy-builder-model-trigger[aria-expanded="true"] #chevron-icon {
+      transform: rotate(180deg);
+    }
+    .huggy-model-dropdown {
+      position: fixed;
+      width: 344px;
+      max-width: calc(100vw - 24px);
+      max-height: min(420px, calc(100vh - 36px));
+      overflow: auto;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text);
+      border-radius: 16px;
+      padding: 8px;
+      box-shadow: 0 18px 54px rgba(0,0,0,.20), 0 4px 16px rgba(0,0,0,.10);
+      display: none;
+      z-index: 3000;
+      backdrop-filter: blur(18px);
+    }
+    .huggy-model-dropdown.open {
+      display: block;
+    }
+    .huggy-model-dropdown .dropdown-header {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 8px 10px 10px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .huggy-model-dropdown .dropdown-search-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      margin: 0 4px 8px;
+      padding: 0 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text-muted);
+    }
+    .huggy-model-dropdown .dropdown-search-input {
+      min-width: 0;
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+    }
+    .huggy-model-dropdown .dropdown-group-title {
+      padding: 8px 10px 5px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 9px;
+      font-weight: 800;
+    }
+    .huggy-model-dropdown .model-option {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 150ms cubic-bezier(0.22, 1, 0.36, 1), transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .huggy-model-dropdown .model-option:hover,
+    .huggy-model-dropdown .model-option.active {
+      background: var(--accent-hover, rgba(180,113,86,.12));
+      transform: translateX(3px);
+    }
+    .huggy-model-dropdown .model-option[aria-disabled="true"] {
+      opacity: .58;
+      cursor: not-allowed;
+    }
+    .huggy-model-dropdown .model-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+    .huggy-model-dropdown .opt-meta {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      flex: 1 1 auto;
+    }
+    .huggy-model-dropdown .opt-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .huggy-model-dropdown .opt-desc {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .huggy-model-badge {
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 9px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    .huggy-model-upgrade {
+      color: #b45309;
+      font-size: 10px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    @media (max-width: 640px) {
+      .huggy-builder-model-trigger {
+        max-width: 132px;
+      }
+      .huggy-model-dropdown {
+        left: 10px !important;
+        right: 10px !important;
+        bottom: 10px !important;
+        top: auto !important;
+        width: auto !important;
+        max-width: none;
+        max-height: 68vh;
+        border-radius: 18px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 async function ensureModelSelector() {
+  ensureBuilderModelSelectorStyle();
   const oldRoot = document.getElementById('model-select-btn');
   if (!oldRoot || oldRoot.dataset.liveBound === 'true') return;
 
   const root = oldRoot.cloneNode(false) as HTMLElement;
   root.id = 'model-select-btn';
   root.dataset.liveBound = 'true';
-  root.className = 'model-select huggy-model-trigger';
-  root.style.cssText = 'display:inline-flex;align-items:center;gap:5px;height:24px;max-width:104px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:10px;color:var(--text);user-select:none;position:relative;cursor:pointer;background:rgba(255,255,255,.035);flex:0 0 auto;white-space:nowrap;overflow:hidden;';
+  root.className = 'model-select huggy-builder-model-trigger';
+  root.style.cssText = '';
   root.innerHTML = `
-    <span style="width:6px;height:6px;border-radius:999px;background:#f4f4f5;box-shadow:0 0 10px rgba(244,244,245,.55);flex:0 0 auto;"></span>
-    <span id="current-model-label" style="font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;">Auto</span>
-    <span style="color:var(--text-sub);font-size:9px;flex:0 0 auto;">v</span>
+    <span class="model-label-prefix">Model</span>
+    <span id="current-model-label">Auto</span>
+    <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
   `;
   oldRoot.replaceWith(root);
 
   document.getElementById('model-dropdown')?.remove();
   const dropdown = document.createElement('div');
   dropdown.id = 'model-dropdown';
-  dropdown.style.cssText = 'position:fixed;width:268px;max-width:calc(100vw - 24px);max-height:min(280px,calc(100vh - 32px));overflow:auto;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 54px rgba(0,0,0,.5);display:none;z-index:3000;';
+  dropdown.className = 'huggy-model-dropdown';
   document.body.appendChild(dropdown);
 
   const label = root.querySelector('#current-model-label') as HTMLElement;
   const positionDropdown = () => {
     const rect = root.getBoundingClientRect();
     if (window.matchMedia('(max-width: 640px)').matches) {
-      dropdown.style.left = '10px';
-      dropdown.style.right = '10px';
-      dropdown.style.bottom = '10px';
+      dropdown.style.left = '';
+      dropdown.style.right = '';
+      dropdown.style.bottom = '';
       dropdown.style.top = 'auto';
-      dropdown.style.width = 'auto';
-      dropdown.style.maxHeight = '60vh';
       return;
     }
-    const width = Math.min(268, window.innerWidth - 24);
+    const width = Math.min(344, window.innerWidth - 24);
     const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
-    const availableAbove = Math.max(160, rect.top - 18);
     dropdown.style.width = `${width}px`;
-    dropdown.style.maxHeight = `${Math.min(280, availableAbove)}px`;
     dropdown.style.left = `${left}px`;
     dropdown.style.right = 'auto';
     dropdown.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 8)}px`;
     dropdown.style.top = 'auto';
   };
-  const close = () => { dropdown.style.display = 'none'; root.setAttribute('aria-expanded', 'false'); };
+  const close = () => { dropdown.classList.remove('open'); root.setAttribute('aria-expanded', 'false'); };
+  const setActiveOption = () => {
+    dropdown.querySelectorAll<HTMLElement>('[data-model-id]').forEach(option => {
+      option.classList.toggle('active', (option.dataset.modelId || 'auto') === selectedModelId);
+    });
+  };
   const open = async () => {
-    const shouldOpen = dropdown.style.display !== 'block';
+    const shouldOpen = !dropdown.classList.contains('open');
     if (!shouldOpen) {
       close();
       return;
     }
-    dropdown.style.display = 'block';
+    dropdown.classList.add('open');
     root.setAttribute('aria-expanded', 'true');
     positionDropdown();
     if (dropdown.dataset.loaded === 'true') return;
-    dropdown.innerHTML = '<div style="padding:10px;color:#a1a1aa;font-size:12px;">Loading models...</div>';
+    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:12px;">Loading models...</div>';
     try {
       const payload = await apiFetch<{ models: AiModel[] }>('/api/ai/models');
-      const models = payload.models || [];
+      const models = (payload.models || []).filter(model => model.id !== 'auto');
       dropdown.dataset.loaded = 'true';
       dropdown.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 6px 8px;">
-          <div>
-            <div style="font-size:12px;font-weight:800;color:#f4f4f5;">AI model</div>
-            <div style="font-size:10px;color:#71717a;margin-top:2px;">Auto balances quality and credits.</div>
-          </div>
-          <button type="button" data-model-id="auto" data-model-name="Auto" style="height:26px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 9px;font-size:10px;font-weight:800;cursor:pointer;flex:0 0 auto;">Auto</button>
+        <div class="dropdown-header">Choose AI Engine</div>
+        <div class="dropdown-search-wrapper">
+          <svg class="dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
+          <input type="text" class="dropdown-search-input" placeholder="Search models...">
         </div>
-        <div style="display:grid;gap:3px;">
+        <div class="dropdown-group-title">Recommended</div>
+        <button type="button" class="model-option active" data-model-id="auto" data-model-name="Auto">
+          <span class="model-dot" style="background:var(--accent);"></span>
+          <span class="opt-meta">
+            <span class="opt-name">Auto</span>
+            <span class="opt-desc">Huggy chooses the best available model</span>
+          </span>
+          <span class="huggy-model-badge" style="color:${renderTierColor('Standard')}">Standard</span>
+        </button>
+        <div class="dropdown-group-title">Available models</div>
+        <div class="huggy-model-options">
           ${models.map(model => {
             const tier = model.tier || (model.id === 'auto' ? 'Auto' : 'Standard');
             const color = renderTierColor(tier);
-            const locked = model.locked ? '<span style="font-size:10px;color:#fbbf24;">Upgrade</span>' : '';
-            return `<button type="button" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:${model.id === selectedModelId ? 'rgba(255,255,255,.09)' : 'transparent'};color:#f4f4f5;border-radius:8px;padding:7px;cursor:pointer;text-align:left;">
-              <span style="display:grid;gap:1px;min-width:0;">
-                <span style="font-size:11px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(model.display_name || model.id)}</span>
-                <span style="font-size:9px;color:#71717a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(model.id)}</span>
+            const locked = model.locked ? '<span class="huggy-model-upgrade">Upgrade</span>' : '';
+            return `<button type="button" class="model-option" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" aria-disabled="${model.locked ? 'true' : 'false'}">
+              <span class="model-dot" style="background:${color};"></span>
+              <span class="opt-meta">
+                <span class="opt-name">${escapeHtml(model.display_name || model.id)}</span>
+                <span class="opt-desc">${escapeHtml(model.id)}</span>
               </span>
-              <span style="display:flex;align-items:center;gap:5px;flex:0 0 auto;">
-                <span style="font-size:9px;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 6px;">${escapeHtml(tier)}</span>
-                ${locked}
-              </span>
+              <span class="huggy-model-badge" style="color:${color};">${escapeHtml(tier)}</span>
+              ${locked}
             </button>`;
           }).join('')}
         </div>
       `;
+      const search = dropdown.querySelector<HTMLInputElement>('.dropdown-search-input');
+      search?.addEventListener('input', () => {
+        const query = search.value.trim().toLowerCase();
+        dropdown.querySelectorAll<HTMLElement>('.model-option').forEach(option => {
+          const haystack = `${option.dataset.modelName || ''} ${option.dataset.modelId || ''}`.toLowerCase();
+          option.style.display = haystack.includes(query) ? 'flex' : 'none';
+        });
+      });
+      search?.addEventListener('click', event => event.stopPropagation());
+      search?.addEventListener('keydown', event => event.stopPropagation());
+      setActiveOption();
       positionDropdown();
     } catch (error) {
-      dropdown.innerHTML = `<div style="padding:10px;color:#fca5a5;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
+      dropdown.innerHTML = `<div style="padding:10px;color:#b91c1c;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
       positionDropdown();
     }
   };
 
   window.addEventListener('resize', () => {
-    if (dropdown.style.display === 'block') positionDropdown();
+    if (dropdown.classList.contains('open')) positionDropdown();
   });
   root.addEventListener('click', event => {
     event.preventDefault();
@@ -339,8 +565,10 @@ async function ensureModelSelector() {
     event.stopPropagation();
     const target = (event.target as HTMLElement).closest('[data-model-id]') as HTMLElement | null;
     if (!target) return;
+    if (target.getAttribute('aria-disabled') === 'true') return;
     selectedModelId = target.dataset.modelId || 'auto';
     if (label) label.textContent = target.dataset.modelName || 'Auto';
+    setActiveOption();
     close();
     await apiFetch('/api/users/me/ai-preferences', {
       method: 'PATCH',
@@ -355,11 +583,11 @@ function ensurePlanBuildControls() {
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid rgba(244,244,245,.14);background:rgba(244,244,245,.08);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
-        <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">⌄</span>
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
+        <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">v</span>
       </button>
-      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:none;z-index:1000;">
-        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:rgba(244,244,245,.08);color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
+        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(180,113,86,.12));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
         <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
       </div>
     </div>
@@ -373,8 +601,8 @@ function setChatMode(mode: 'plan' | 'build') {
   const menu = document.getElementById('chat-mode-menu');
   if (label) label.textContent = mode === 'plan' ? 'Plan' : 'Build';
   if (button) {
-    button.style.background = mode === 'plan' ? 'rgba(96,165,250,.1)' : 'rgba(244,244,245,.08)';
-    button.style.color = mode === 'plan' ? '#bfdbfe' : 'var(--text)';
+    button.style.background = mode === 'plan' ? 'var(--accent-hover)' : 'var(--bg-input)';
+    button.style.color = mode === 'plan' ? 'var(--blue, var(--accent))' : 'var(--text)';
     button.setAttribute('aria-expanded', 'false');
   }
   if (menu) menu.style.display = 'none';
@@ -440,15 +668,15 @@ function ensureDatabaseView() {
 
   const panel = document.createElement('div');
   panel.id = 'screen-layout-database';
-  panel.style.cssText = 'display:none;flex:1;overflow:auto;padding:18px;background:#09090b;color:#f4f4f5;';
+  panel.style.cssText = 'display:none;flex:1;overflow:auto;padding:18px;background:var(--bg);color:var(--text);';
   panel.innerHTML = `
     <div style="display:grid;gap:14px;max-width:1120px;margin:0 auto;">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
         <div>
           <h2 style="font-size:18px;margin:0 0 4px;">Project database</h2>
-          <p style="font-size:12px;color:#a1a1aa;margin:0;">Shared Supabase backend isolated by project and organization.</p>
+          <p style="font-size:12px;color:var(--text-muted);margin:0;">Shared Supabase backend isolated by project and organization.</p>
         </div>
-        <button id="btn-add-secret" type="button" style="height:32px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
+        <button id="btn-add-secret" type="button" style="height:32px;border:1px solid var(--border);background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
       </div>
       <div id="database-content" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;"></div>
     </div>
@@ -513,13 +741,62 @@ async function ensureProjectForPrompt(prompt: string) {
     body: JSON.stringify({
       name: projectNameFromPrompt(initialPrompt),
       template: 'custom',
-      theme: 'dark',
+      theme: 'light',
       model: selectedModel(),
       prompt: initialPrompt,
     }),
   });
   currentProjectId = created.project.id;
   window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
+  await flushPendingPromptAttachments();
+}
+
+function dataUrlToBase64(dataUrl?: string) {
+  if (!dataUrl) return '';
+  const marker = 'base64,';
+  const index = dataUrl.indexOf(marker);
+  return index >= 0 ? dataUrl.slice(index + marker.length) : '';
+}
+
+async function uploadPromptAttachments(attachments: PendingPromptAttachment[]) {
+  if (!attachments.length) return;
+  if (!currentProjectId) {
+    await storePendingPromptAttachments(attachments);
+    appendMessage('system', `${attachments.length} file(s) will attach after the project is created.`);
+    return;
+  }
+
+  let uploaded = 0;
+  for (const attachment of attachments) {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/assets`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: attachment.name,
+        kind: attachment.type?.startsWith('image/') ? 'image' : 'file',
+        mime_type: attachment.type,
+        size_bytes: attachment.size,
+        content_base64: dataUrlToBase64(attachment.dataUrl),
+      }),
+    });
+    uploaded += 1;
+  }
+
+  appendMessage('system', `${uploaded} file(s) attached to Database > Storage.`);
+  if (document.getElementById('tab-btn-database')?.classList.contains('active')) {
+    void loadDatabase();
+  }
+}
+
+async function flushPendingPromptAttachments() {
+  if (!currentProjectId) return;
+  const pending = await consumePendingPromptAttachments();
+  if (!pending.length) return;
+  try {
+    await uploadPromptAttachments(pending);
+  } catch (error) {
+    await storePendingPromptAttachments(pending);
+    appendMessage('system', error instanceof Error ? error.message : 'Unable to attach pending files.');
+  }
 }
 
 async function loadProject() {
@@ -536,6 +813,7 @@ async function loadProject() {
   try {
     const payload = await ensureProject();
     if (projectName) projectName.textContent = payload.project.name;
+    if (currentProjectId) await flushPendingPromptAttachments();
     renderFiles(payload.files || []);
     if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
     restoreMessages(payload);
@@ -675,7 +953,7 @@ async function loadDatabase() {
   if (!currentProjectId) return;
   const target = document.getElementById('database-content');
   if (!target) return;
-  target.innerHTML = '<div style="color:#a1a1aa;font-size:12px;">Loading database...</div>';
+  target.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Loading database...</div>';
   try {
     const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
     const db = payload.database;
@@ -685,37 +963,37 @@ async function loadDatabase() {
     const activity = db.activity || [];
     const records = db.records_preview || [];
     target.innerHTML = `
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Tables</h3>
-        ${(db.tables || []).map((table: any) => `<div style="font-size:12px;color:#d4d4d8;">${escapeHtml(table.name)} <span style="color:#71717a;">${table.rows} rows</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No project data yet.</p>'}
+        ${(db.tables || []).map((table: any) => `<div style="font-size:12px;color:var(--text);">${escapeHtml(table.name)} <span style="color:var(--text-muted);">${table.rows} rows</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No project data yet.</p>'}
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">API keys</h3>
-        ${secrets.map((secret: any) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#d4d4d8;margin-bottom:7px;"><span>${escapeHtml(secret.variable)}</span><span style="color:#a1a1aa;">${escapeHtml(secret.masked_value)} · ${escapeHtml(secret.status)}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No API keys configured.</p>'}
+        ${secrets.map((secret: any) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text);margin-bottom:7px;"><span>${escapeHtml(secret.variable)}</span><span style="color:var(--text-muted);">${escapeHtml(secret.masked_value)} &middot; ${escapeHtml(secret.status)}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No API keys configured.</p>'}
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Security</h3>
-        <p style="font-size:12px;color:#a1a1aa;line-height:1.5;margin:0;">RLS required. Secrets masked. Service role is server-only.</p>
+        <p style="font-size:12px;color:var(--text-muted);line-height:1.5;margin:0;">RLS required. Secrets masked. Service role is server-only.</p>
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Records</h3>
-        ${records.map((record: any) => `<div style="font-size:11px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(record.path || record.table || 'record')}</div>`).join('') || '<p style="font-size:12px;color:#71717a;">No records yet.</p>'}
+        ${records.map((record: any) => `<div style="font-size:11px;color:var(--text);margin-bottom:6px;">${escapeHtml(record.path || record.table || 'record')}</div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No records yet.</p>'}
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Integrations</h3>
-        ${integrations.map((item: any) => `<div style="font-size:12px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.service)} <span style="color:#71717a;">${escapeHtml(item.status)}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No integrations detected.</p>'}
+        ${integrations.map((item: any) => `<div style="font-size:12px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.service)} <span style="color:var(--text-muted);">${escapeHtml(item.status)}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No integrations detected.</p>'}
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Storage</h3>
-        ${assets.map((item: any) => `<div style="font-size:12px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.name)} <span style="color:#71717a;">${escapeHtml(item.kind || 'asset')}</span></div>`).join('') || '<p style="font-size:12px;color:#71717a;">No assets uploaded.</p>'}
+        ${assets.map((item: any) => `<div style="font-size:12px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.name)} <span style="color:var(--text-muted);">${escapeHtml(item.kind || 'asset')}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No assets uploaded.</p>'}
       </div>
-      <div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.03);">
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
         <h3 style="margin:0 0 8px;font-size:13px;">Activity</h3>
-        ${activity.map((item: any) => `<div style="font-size:11px;color:#d4d4d8;margin-bottom:6px;">${escapeHtml(item.event_type)} - ${escapeHtml(item.message || '')}</div>`).join('') || '<p style="font-size:12px;color:#71717a;">No activity yet.</p>'}
+        ${activity.map((item: any) => `<div style="font-size:11px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.event_type)} - ${escapeHtml(item.message || '')}</div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No activity yet.</p>'}
       </div>
     `;
   } catch (error) {
-    target.innerHTML = `<div style="font-size:12px;color:#fca5a5;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
+    target.innerHTML = `<div style="font-size:12px;color:#b91c1c;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
   }
 }
 
@@ -727,21 +1005,21 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
     : [];
   const recommendation = payload.recommendation || choices[0] || '';
   host.innerHTML = `
-    <div id="clarification-block" style="border:1px solid rgba(96,165,250,.24);background:linear-gradient(180deg,rgba(59,130,246,.12),rgba(255,255,255,.035));border-radius:13px;padding:12px;color:#f4f4f5;box-shadow:0 18px 50px rgba(0,0,0,.28);">
+    <div id="clarification-block" style="border:1px solid var(--border-focus, var(--border));background:var(--bg-surface);border-radius:13px;padding:12px;color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.16);">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;">
         <div>
           <div style="font-size:11px;color:#93c5fd;font-weight:800;margin-bottom:4px;">Clarification needed</div>
           <div style="font-size:13px;line-height:1.45;font-weight:650;">${escapeHtml(question)}</div>
         </div>
-        <button type="button" data-action="dismiss" aria-label="Dismiss" style="border:0;background:transparent;color:#a1a1aa;cursor:pointer;font-size:18px;line-height:1;">×</button>
+        <button type="button" data-action="dismiss" aria-label="Dismiss" style="border:0;background:transparent;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;">&times;</button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
-        ${choices.map(choice => `<button type="button" data-choice="${escapeHtml(choice)}" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e4e4e7;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;">${escapeHtml(choice)}</button>`).join('')}
+        ${choices.map(choice => `<button type="button" data-choice="${escapeHtml(choice)}" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;">${escapeHtml(choice)}</button>`).join('')}
       </div>
-      <textarea data-free-answer placeholder="Answer briefly or choose an option..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid rgba(255,255,255,.1);background:#09090b;color:#f4f4f5;border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
+      <textarea data-free-answer placeholder="Answer briefly or choose an option..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:9px;">
-        <button type="button" data-action="recommend" style="height:30px;border:1px solid rgba(255,255,255,.12);background:transparent;color:#d4d4d8;border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use recommendation</button>
-        <button type="button" data-action="continue" style="height:30px;border:0;background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Continue</button>
+        <button type="button" data-action="recommend" style="height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use recommendation</button>
+        <button type="button" data-action="continue" style="height:30px;border:0;background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Continue</button>
       </div>
     </div>
   `;
@@ -750,7 +1028,7 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
   host.querySelectorAll('[data-choice]').forEach(button => {
     button.addEventListener('click', () => {
       selectedAnswer = (button as HTMLElement).dataset.choice || '';
-      host.querySelectorAll('[data-choice]').forEach(item => ((item as HTMLElement).style.background = 'rgba(255,255,255,.06)'));
+      host.querySelectorAll('[data-choice]').forEach(item => ((item as HTMLElement).style.background = 'var(--bg-input)'));
       (button as HTMLElement).style.background = 'rgba(96,165,250,.28)';
     });
   });
@@ -797,9 +1075,9 @@ function showApiKeyModal(requirements: any[]) {
   showMiniModal('Connect external API', `
     <p>Keys are stored server-side and masked in the Database tab.</p>
     ${rows.map((item, index) => `
-      <label style="display:grid;gap:5px;margin:10px 0;font-size:11px;color:#a1a1aa;">
-        ${escapeHtml(item.service)} · ${escapeHtml(item.variable)}
-        <input data-key-index="${index}" data-service="${escapeHtml(item.service)}" data-variable="${escapeHtml(item.variable)}" type="password" placeholder="${escapeHtml(item.variable)}" style="height:34px;border:1px solid rgba(255,255,255,.12);background:#09090b;color:#f4f4f5;border-radius:7px;padding:0 10px;">
+      <label style="display:grid;gap:5px;margin:10px 0;font-size:11px;color:var(--text-muted);">
+        ${escapeHtml(item.service)} &middot; ${escapeHtml(item.variable)}
+        <input data-key-index="${index}" data-service="${escapeHtml(item.service)}" data-variable="${escapeHtml(item.variable)}" type="password" placeholder="${escapeHtml(item.variable)}" style="height:34px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:7px;padding:0 10px;">
       </label>
     `).join('')}
     <div class="huggy-modal-actions">
@@ -831,7 +1109,7 @@ function showFixBugBox(errors: any[]) {
   const first = errors[0] || { message: 'Preview failed.' };
   showMiniModal('Fix bug', `
     <p>${escapeHtml(first.message || 'Preview failed.')}</p>
-    <p style="color:#71717a;">${escapeHtml(first.file || 'unknown file')}</p>
+    <p style="color:var(--text-muted);">${escapeHtml(first.file || 'unknown file')}</p>
     <div class="huggy-modal-actions">
       <button data-action="fix">Fix with AI</button>
       <button data-action="copy">Copy error</button>
@@ -853,12 +1131,12 @@ function showMiniModal(title: string, html: string, onAction: (action: string, r
   root.id = 'huggy-live-modal';
   root.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;z-index:99999;padding:16px;';
   root.innerHTML = `
-    <div style="width:min(420px,100%);border:1px solid rgba(255,255,255,.12);background:#18181b;color:#f4f4f5;border-radius:14px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.45);">
+    <div style="width:min(420px,100%);border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:14px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.22);">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px;">
         <h3 style="font-size:15px;margin:0;">${escapeHtml(title)}</h3>
-        <button data-action="close" style="border:0;background:transparent;color:#a1a1aa;font-size:18px;cursor:pointer;">×</button>
+        <button data-action="close" style="border:0;background:transparent;color:var(--text-muted);font-size:18px;cursor:pointer;">&times;</button>
       </div>
-      <div style="font-size:12px;color:#d4d4d8;line-height:1.5;">${html}</div>
+      <div style="font-size:12px;color:var(--text);line-height:1.5;">${html}</div>
     </div>
   `;
   root.querySelectorAll('button[data-action]').forEach(button => {
@@ -1007,6 +1285,11 @@ function init() {
   ensurePlanBuildControls();
   ensureDatabaseView();
   ensureResizableSidebar();
+  initPromptInputActions({
+    persistForBuilder: false,
+    onFiles: uploadPromptAttachments,
+    onNotice: (message, kind) => appendMessage(kind === 'error' ? 'system' : 'system', message),
+  });
   bindChat();
   hydrateDashboardPrompt();
   void loadProject();

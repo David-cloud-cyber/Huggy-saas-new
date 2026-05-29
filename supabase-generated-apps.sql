@@ -14,7 +14,8 @@ alter table public.projects add column if not exists name text;
 alter table public.projects add column if not exists slug text;
 alter table public.projects add column if not exists prompt text;
 alter table public.projects add column if not exists template text default 'custom';
-alter table public.projects add column if not exists theme text default 'dark';
+alter table public.projects add column if not exists theme text default 'light';
+alter table public.projects alter column theme set default 'light';
 alter table public.projects add column if not exists model_id text default 'auto';
 alter table public.projects add column if not exists status text default 'draft';
 alter table public.projects add column if not exists preview_status text default 'idle';
@@ -221,8 +222,17 @@ create table if not exists public.project_assets (
   name text not null,
   url text,
   kind text default 'image',
+  mime_type text,
+  size_bytes bigint default 0,
+  status text default 'uploaded',
+  storage_path text,
   created_at timestamptz default now() not null
 );
+
+alter table public.project_assets add column if not exists mime_type text;
+alter table public.project_assets add column if not exists size_bytes bigint default 0;
+alter table public.project_assets add column if not exists status text default 'uploaded';
+alter table public.project_assets add column if not exists storage_path text;
 
 alter table public.project_messages enable row level security;
 alter table public.project_versions enable row level security;

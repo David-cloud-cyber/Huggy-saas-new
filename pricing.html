@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -24,7 +24,7 @@
     </script>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'dark';
+            const theme = localStorage.getItem('huggy-theme') || 'light';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -432,7 +432,7 @@
                 <textarea placeholder="Describe the app you want to build..."></textarea>
                 <div class="input-actions">
                     <div class="actions-left">
-                        <button class="icon-btn btn-upload" data-tooltip="Upload files" type="button">
+                        <button class="icon-btn btn-upload" data-tooltip="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -448,7 +448,7 @@
                                 <line x1="19" y1="12" x2="22" y2="12"></line>
                             </svg>
                         </button>
-                        <button class="icon-btn btn-voice" data-tooltip="Voice input" type="button">
+                        <button class="icon-btn btn-voice" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>

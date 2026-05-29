@@ -1,4 +1,5 @@
 import { apiFetch } from './lib/api';
+import { initPromptInputActions } from './prompt-input-actions';
 
 type ProjectResponse = {
   success: boolean;
@@ -238,7 +239,7 @@ function bindLiveProjectCreation() {
     }
 
     const template = templateSelect?.value || 'dashboard';
-    const theme = themeSelect?.value || 'dark';
+    const theme = themeSelect?.value || 'light';
     const model = modelSelect?.value || 'auto';
     const features = selectedFeatures();
     const initialPrompt = sessionStorage.getItem('huggy-initial-prompt')?.trim() || localStorage.getItem('huggy-initial-prompt')?.trim() || '';
@@ -266,6 +267,7 @@ function bindLiveProjectCreation() {
 }
 
 function initDashboardLive() {
+  initPromptInputActions({ persistForBuilder: true });
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
   void loadLiveProjects();

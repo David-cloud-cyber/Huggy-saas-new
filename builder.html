@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
     (function() {
-      // Force dark theme as seen in the high-fidelity screenshot
-      document.documentElement.setAttribute('data-theme', 'dark');
+      const theme = localStorage.getItem('huggy-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -30,6 +30,25 @@
       --text-muted: #a1a1aa;
       --text-sub: #52525b;
       --text-dark: #3f3f46;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f7f4ef;
+      --bg-surface: #fffaf3;
+      --bg-panel: #f1ece4;
+      --bg-input: #ffffff;
+      --border: rgba(43, 35, 25, 0.14);
+      --border-light: rgba(43, 35, 25, 0.08);
+      --border-focus: rgba(180, 113, 86, 0.34);
+      --accent: #b47156;
+      --accent-spark: #d4953a;
+      --accent-dim: rgba(180, 113, 86, 0.10);
+      --accent-hover: rgba(180, 113, 86, 0.14);
+      --text: #18130d;
+      --text-muted: #675f55;
+      --text-sub: #968b7f;
+      --text-dark: #5d5348;
+      --blue: #3b7a8c;
     }
 
     * {
@@ -145,7 +164,7 @@
       align-items: center;
       gap: 6px;
       background: #181c1f00;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
       color: var(--text-muted);
       font-size: 12px;
       font-weight: 500;
@@ -155,13 +174,13 @@
     }
 
     .btn-integration:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--accent-dim, rgba(255, 255, 255, 0.05));
       color: var(--text);
     }
 
     .btn-upgrade {
       background: transparent;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
       color: var(--text);
       font-size: 12px;
       font-weight: 500;
@@ -171,7 +190,7 @@
     }
 
     .btn-upgrade:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--accent-dim, rgba(255, 255, 255, 0.05));
     }
 
     .btn-publish {
@@ -221,8 +240,8 @@
     }
 
     .pricing-modal-content {
-      background: rgb(24, 24, 27);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
       width: 95%;
       max-width: 900px;
       border-radius: 20px;
@@ -243,8 +262,8 @@
       position: absolute;
       top: 16px;
       right: 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
       color: var(--text-muted);
       cursor: pointer;
       display: flex;
@@ -291,10 +310,10 @@
     /* Modal Billing Switch */
     .p-billing-toggle {
       display: inline-flex;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-panel);
       padding: 3px;
       border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
       margin-top: 8px;
     }
 
@@ -408,9 +427,9 @@
 
     .p-plan-cta {
       width: 100%;
-      background: rgba(255, 255, 255, 0.04);
-      color: #ffffff;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
       font-size: 11px;
       font-weight: 600;
       padding: 8px 12px;
@@ -420,7 +439,7 @@
     }
 
     .p-plan-cta:hover {
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--accent-hover, rgba(255, 255, 255, 0.08));
     }
 
     .p-plan-card.recommended .p-plan-cta {
@@ -564,9 +583,9 @@
 
     .sidebar-empty-state,
     .code-empty-state {
-      border: 1px dashed rgba(255, 255, 255, 0.08);
+      border: 1px dashed var(--border);
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.025);
+      background: var(--bg-input);
       color: var(--text-muted);
       padding: 18px;
       text-align: left;
@@ -1443,13 +1462,13 @@
             
             <div class="input-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 12px; background: transparent;">
                 <div class="actions-left" style="display: flex; gap: 6px;">
-                    <button class="icon-btn" title="Upload files" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
+                    <button class="icon-btn" title="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
                     </button>
-                    <button class="icon-btn" title="Voice input" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
+                    <button class="icon-btn" title="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button" style="width: 24px; height: 24px; border-radius: 5px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); transition: all 150ms; cursor: pointer; background: transparent;">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -1458,18 +1477,19 @@
                 </div>
                 
                 <div class="actions-right" style="display: flex; align-items: center; gap: 8px;">
-                    <div class="model-select" id="model-select-btn" style="display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 10px; color: var(--text-sub); user-select: none; position: relative; transition: all 150ms; cursor: pointer; background: var(--bg-input);">
-                        <span id="current-model-label" style="font-family: 'JetBrains Mono'; font-weight: 600;">Auto</span>
-                        <svg id="chevron-icon" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 200ms;">
+                    <div class="model-select" id="model-select-btn" style="display:flex;align-items:center;gap:8px;min-height:30px;max-width:min(210px,34vw);padding:3px 10px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--text-muted);user-select:none;position:relative;transition:all 180ms cubic-bezier(0.22,1,0.36,1);cursor:pointer;background:var(--bg-input);">
+                        <span class="model-label-prefix">Model</span>
+                        <span id="current-model-label" style="font-family:'JetBrains Mono';font-weight:650;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Auto</span>
+                        <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="transition: transform 200ms;flex:0 0 auto;">
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                     </div>
                     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:70px;border:1px solid rgba(244,244,245,.14);background:rgba(244,244,245,.08);color:var(--text);border-radius:999px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
-                            <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.62;">⌄</span>
+                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:70px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
+                            <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.62;">v</span>
                         </button>
-                        <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:#111113;border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.5);display:none;z-index:1000;">
-                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:rgba(244,244,245,.08);color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+                        <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
+                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(180,113,86,.12));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
                             <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
                         </div>
                     </div>
@@ -1601,7 +1621,7 @@
                 <span>localhost:3000 /</span>
               </div>
             </div>
-            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #09090b; color: #a1a1aa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(255,255,255,0.08); padding: 24px; border-radius: 12px; background: #0c0c0e; } h3 { color: #f4f4f5; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #52525b; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
+            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #f7f4ef; color: #675f55; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(43,35,25,0.14); padding: 24px; border-radius: 12px; background: #fffaf3; } h3 { color: #18130d; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #675f55; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
           </div>
 
           <!-- SCREEN LAYOUT FOR CODE ANALYSIS -->
@@ -1623,9 +1643,9 @@
             <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px;">
               <div>
                 <h1 class="analysis-header" style="margin:0;">Project Database</h1>
-                <p style="font-size:12px;color:#71717a;margin:6px 0 0;">Live Supabase project state, secrets, integrations and storage.</p>
+                <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">Live Supabase project state, secrets, integrations and storage.</p>
               </div>
-              <button id="btn-add-secret" type="button" style="height:32px;border:1px solid rgba(255,255,255,.12);background:#f4f4f5;color:#09090b;border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
+              <button id="btn-add-secret" type="button" style="height:32px;border:1px solid var(--border);background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer;">Add API key</button>
             </div>
             <div id="database-content" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;"></div>
           </div>
@@ -1963,8 +1983,8 @@
           position: fixed;
           bottom: 24px;
           right: 24px;
-          background: #09090b;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--bg-surface);
+          border: 1px solid var(--border);
           border-left: 3px solid #10b981;
           border-radius: 8px;
           padding: 12px 16px;
@@ -1972,7 +1992,7 @@
           display: flex;
           align-items: center;
           gap: 12px;
-          color: #f4f4f5;
+          color: var(--text);
           font-family: inherit;
           font-size: 13px;
           z-index: 99999;

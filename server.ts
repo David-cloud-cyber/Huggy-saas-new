@@ -29,9 +29,23 @@ const port = Number(process.env.PORT || 3000);
 const DEFAULT_SUPABASE_URL = 'https://notgpriaragtiahcqjoa.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_rp4hpA--fkybGy0GczSMvA_KU9BitSa';
 const staticRoot = path.join(__dirname, 'dist');
+const MAX_PROJECT_ASSET_BYTES = 4 * 1024 * 1024;
+const ALLOWED_PROJECT_ASSET_MIME = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'text/plain',
+  'text/markdown',
+  'application/json',
+  'text/csv',
+  'application/pdf',
+  'application/octet-stream',
+]);
 
 // Standard middlewares
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 
 // ── LAZY-LOADED RESOURCES / CLIENT GAUARDS ───────────────────────────
 let supabase: any = null;
@@ -352,20 +366,20 @@ function buildFallbackAppHtml(title: string, prompt: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${safeTitle}</title>
   <style>
-    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; color: #f8fafc; background: #09090b; }
+    body { margin: 0; min-height: 100vh; color: #18130d; background: #f7f4ef; }
     main { min-height: 100vh; display: grid; place-items: center; padding: 40px 18px; background:
-      radial-gradient(circle at top left, rgba(20,184,166,.18), transparent 32%),
-      linear-gradient(135deg, #09090b, #111827 52%, #020617); }
-    section { width: min(960px, 100%); border: 1px solid rgba(255,255,255,.12); background: rgba(15,23,42,.78); border-radius: 18px; padding: clamp(24px, 5vw, 56px); box-shadow: 0 30px 90px rgba(0,0,0,.45); }
-    .eyebrow { color: #5eead4; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; }
+      radial-gradient(circle at top left, rgba(180,113,86,.15), transparent 32%),
+      linear-gradient(135deg, #f7f4ef, #fffaf3 52%, #f1ece4); }
+    section { width: min(960px, 100%); border: 1px solid rgba(43,35,25,.14); background: rgba(255,250,243,.86); border-radius: 18px; padding: clamp(24px, 5vw, 56px); box-shadow: 0 30px 90px rgba(43,35,25,.14); }
+    .eyebrow { color: #b47156; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; }
     h1 { margin: 14px 0 12px; font-size: clamp(34px, 7vw, 76px); line-height: .96; letter-spacing: 0; }
-    p { max-width: 680px; color: #cbd5e1; font-size: clamp(16px, 2.4vw, 21px); line-height: 1.7; }
+    p { max-width: 680px; color: #675f55; font-size: clamp(16px, 2.4vw, 21px); line-height: 1.7; }
     .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px; }
-    .card { border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 16px; background: rgba(255,255,255,.05); }
+    .card { border: 1px solid rgba(43,35,25,.12); border-radius: 12px; padding: 16px; background: rgba(255,255,255,.54); }
     .card strong { display:block; margin-bottom: 6px; }
-    a { display: inline-flex; margin-top: 28px; padding: 13px 18px; border-radius: 10px; color: #051311; background: #5eead4; text-decoration: none; font-weight: 800; }
+    a { display: inline-flex; margin-top: 28px; padding: 13px 18px; border-radius: 10px; color: #fffaf3; background: #b47156; text-decoration: none; font-weight: 800; }
     @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } section { border-radius: 12px; } }
   </style>
 </head>
@@ -1520,7 +1534,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     slug: await uniqueSlug(name, userId),
     prompt,
     template: String(req.body?.template || 'custom'),
-    theme: String(req.body?.theme || 'dark'),
+    theme: String(req.body?.theme || 'light'),
     model_id: String(req.body?.model || req.body?.modelId || 'auto'),
     status: 'draft',
     preview_status: 'idle',
@@ -2265,24 +2279,103 @@ app.delete('/api/projects/:id/database/secrets/:secretId', async (req: any, res:
   res.json({ success: true });
 });
 
+function sanitizeAssetName(value: unknown) {
+  const raw = String(value || 'asset').trim();
+  return raw
+    .replace(/[\\/]/g, '-')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[^a-zA-Z0-9._ -]/g, '-')
+    .slice(0, 120) || 'asset';
+}
+
+function decodeAssetPayload(contentBase64: unknown) {
+  if (typeof contentBase64 !== 'string' || !contentBase64.trim()) return null;
+  const clean = contentBase64.replace(/^data:[^;]+;base64,/i, '').trim();
+  if (!/^[a-zA-Z0-9+/]+={0,2}$/.test(clean)) {
+    throw new Error('Invalid asset encoding.');
+  }
+  const buffer = Buffer.from(clean, 'base64');
+  if (!buffer.length) throw new Error('Asset file is empty.');
+  if (buffer.length > MAX_PROJECT_ASSET_BYTES) {
+    throw new Error('Asset is too large. Maximum file size is 4 MB.');
+  }
+  return buffer;
+}
+
 app.post('/api/projects/:id/assets', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   if (!requireProjectCapability(req, res, 'build')) return;
-  const asset = {
-    id: randomUUID(),
+
+  const client = requireSupabase('Project asset persistence');
+  const id = randomUUID();
+  const name = sanitizeAssetName(req.body?.name);
+  const mimeType = String(req.body?.mime_type || req.body?.mimeType || 'application/octet-stream').toLowerCase();
+  if (!ALLOWED_PROJECT_ASSET_MIME.has(mimeType)) {
+    return res.status(400).json({ success: false, error: 'Unsupported asset type.' });
+  }
+
+  let url = String(req.body?.url || '');
+  let storagePath = '';
+  let sizeBytes = Number(req.body?.size_bytes || req.body?.size || 0) || 0;
+  let status = url ? 'linked' : 'configured';
+
+  try {
+    const buffer = decodeAssetPayload(req.body?.content_base64 || req.body?.contentBase64);
+    if (buffer) {
+      sizeBytes = buffer.length;
+      storagePath = `${project.id}/${id}-${name}`;
+      const { error: uploadError } = await client.storage
+        .from('project-assets')
+        .upload(storagePath, buffer, {
+          contentType: mimeType,
+          upsert: false,
+        });
+      if (uploadError) {
+        return res.status(500).json({
+          success: false,
+          error: 'Project asset storage is not configured. Create the Supabase Storage bucket "project-assets" and retry.',
+        });
+      }
+      const { data: publicUrl } = client.storage.from('project-assets').getPublicUrl(storagePath);
+      url = publicUrl?.publicUrl || '';
+      status = 'uploaded';
+    }
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Invalid asset payload.' });
+  }
+
+  const fullAsset = {
+    id,
     organization_id: project.organization_id,
     project_id: project.id,
-    name: String(req.body?.name || 'asset'),
-    url: String(req.body?.url || ''),
-    kind: String(req.body?.kind || 'image'),
+    name,
+    url,
+    kind: String(req.body?.kind || (mimeType.startsWith('image/') ? 'image' : 'file')),
+    mime_type: mimeType,
+    size_bytes: sizeBytes,
+    status,
+    storage_path: storagePath || null,
     created_at: new Date().toISOString(),
   };
-  const client = requireSupabase('Project asset persistence');
-  const { error } = await client.from('project_assets').insert([asset]);
+
+  let { error } = await client.from('project_assets').insert([fullAsset]);
+  if (error && /mime_type|size_bytes|status|storage_path/i.test(error.message || '')) {
+    const compactAsset = {
+      id: fullAsset.id,
+      organization_id: fullAsset.organization_id,
+      project_id: fullAsset.project_id,
+      name: fullAsset.name,
+      url: fullAsset.url,
+      kind: fullAsset.kind,
+      created_at: fullAsset.created_at,
+    };
+    const retry = await client.from('project_assets').insert([compactAsset]);
+    error = retry.error;
+  }
   if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, asset });
+  res.json({ success: true, asset: fullAsset });
 });
 
 app.get('/api/projects/:id/export', async (req: any, res: any) => {

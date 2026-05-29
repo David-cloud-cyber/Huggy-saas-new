@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -26,7 +26,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
     (function() {
-      const theme = localStorage.getItem('huggy-theme') || 'dark';
+      const theme = localStorage.getItem('huggy-theme') || 'light';
       document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
@@ -613,6 +613,7 @@
         transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
         cursor: pointer;
         background: var(--bg-input);
+        isolation: isolate;
     }
 
     .model-label-prefix {
@@ -728,15 +729,15 @@
     .dropdown {
         position: absolute;
         bottom: calc(100% + 12px);
-        right: -4px;
+        right: 0;
         background: var(--bg-surface);
         border: 1px solid var(--border);
         border-radius: 16px;
         padding: 8px;
-        min-width: 260px;
-        max-height: 380px;
+        min-width: min(320px, calc(100vw - 32px));
+        max-height: min(380px, 65vh);
         overflow-y: auto;
-        z-index: 1000;
+        z-index: 5000;
         box-shadow: 0 16px 48px rgba(0,0,0,0.6);
         opacity: 0;
         visibility: hidden;
@@ -744,6 +745,20 @@
         transition: all 280ms cubic-bezier(0.22, 1, 0.36, 1);
         pointer-events: none;
         backdrop-filter: blur(14px);
+    }
+
+    @media (max-width: 640px) {
+        .dropdown {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: 12px;
+            top: auto;
+            min-width: 0;
+            width: auto;
+            max-height: 68vh;
+            border-radius: 18px;
+        }
     }
 
     .dropdown.open {
@@ -1256,26 +1271,26 @@
 
     /* Codex-like dashboard refinement */
     .dashboard {
-      background: #09090b;
+      background: var(--bg);
     }
 
     .sidebar {
       width: 280px;
-      background: #0d0d0f;
-      border-right-color: rgba(255, 255, 255, 0.08);
+      background: var(--bg-surface);
+      border-right-color: var(--border);
     }
 
     .sidebar-logo,
     .topbar {
       height: 74px;
-      background: #09090b;
-      border-bottom-color: rgba(255, 255, 255, 0.08);
+      background: var(--bg);
+      border-bottom-color: var(--border);
     }
 
     .sidebar-profile,
     .sidebar-credits,
     .sidebar-footer {
-      border-color: rgba(255, 255, 255, 0.07);
+      border-color: var(--border);
     }
 
     .logo-text,
@@ -1288,7 +1303,7 @@
     }
 
     .main-area {
-      background: #09090b;
+      background: var(--bg);
     }
 
     .topbar {
@@ -1305,7 +1320,7 @@
 
     .section-label {
       margin-bottom: 10px;
-      color: #71717a;
+      color: var(--text-muted);
       letter-spacing: 0.08em;
     }
 
@@ -1319,8 +1334,8 @@
     .activity-list,
     .create-section,
     .sidebar-promo {
-      background: #111113;
-      border-color: rgba(255, 255, 255, 0.08);
+      background: var(--bg-surface);
+      border-color: var(--border);
       border-radius: 8px;
       box-shadow: none;
     }
@@ -1333,7 +1348,7 @@
     .project-card:hover {
       transform: none;
       box-shadow: none;
-      border-color: rgba(255, 255, 255, 0.14);
+      border-color: var(--border-focus);
     }
 
     .kpi-value {
@@ -1370,7 +1385,7 @@
       max-width: 780px;
       border-radius: 16px;
       border-color: transparent;
-      background: rgba(255, 255, 255, 0.035);
+      background: var(--bg-input);
       box-shadow: none;
     }
 
@@ -1402,9 +1417,9 @@
 
     .chip {
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-panel);
       color: #a1a1aa;
-      border-color: rgba(255, 255, 255, 0.08);
+      border-color: var(--border);
     }
 
     .projects-grid {
@@ -1417,8 +1432,8 @@
     }
 
     .empty-state {
-      background: #111113;
-      border-color: rgba(255, 255, 255, 0.08);
+      background: var(--bg-surface);
+      border-color: var(--border);
       border-radius: 8px;
       padding: 44px 28px;
     }
@@ -1629,13 +1644,13 @@
             <textarea id="ai-textarea" placeholder="E.g.: An HR dashboard with auth, interactive charts and CSV exports..."></textarea>
             <div class="input-actions">
                 <div class="actions-left">
-                    <button class="icon-btn" title="Upload files">
+                    <button class="icon-btn" title="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                             <line x1="12" y1="5" x2="12" y2="19"></line>
                             <line x1="5" y1="12" x2="19" y2="12"></line>
                         </svg>
                     </button>
-                    <button class="icon-btn" title="Voice input">
+                    <button class="icon-btn" title="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -2361,7 +2376,7 @@
         }
 
         const templateVal = newProjTemplateSelect ? newProjTemplateSelect.value : 'dashboard';
-        const themeVal = newProjThemeSelect ? newProjThemeSelect.value : 'dark';
+        const themeVal = newProjThemeSelect ? newProjThemeSelect.value : 'light';
         const modelVal = newProjModelSelect ? newProjModelSelect.value : 'anthropic/claude-sonnet-4.6';
 
         const hasDb = document.getElementById('features-db')?.checked || false;
@@ -2493,8 +2508,8 @@
         position: fixed;
         bottom: 24px;
         right: 24px;
-        background: #09090b;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
         border-left: 3px solid #10b981;
         border-radius: 8px;
         padding: 12px 16px;
@@ -2502,7 +2517,7 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        color: #f4f4f5;
+        color: var(--text);
         font-family: inherit;
         font-size: 13px;
         z-index: 99999;
@@ -2618,8 +2633,8 @@
           <div class="form-row">
              <span class="form-label">Display Mode</span>
              <select class="settings-select">
-               <option value="dark">Dark (default)</option>
-               <option value="light">Light</option>
+               <option value="light">Light (default)</option>
+               <option value="dark">Dark</option>
                <option value="system">System</option>
              </select>
           </div>
@@ -2763,7 +2778,7 @@
         }
 
         const template = templateSelect?.value || 'dashboard';
-        const prompt = `${name}\nTemplate: ${template}\nTheme: ${themeSelect?.value || 'dark'}\nModel: ${modelSelect?.value || 'auto'}`;
+        const prompt = `${name}\nTemplate: ${template}\nTheme: ${themeSelect?.value || 'light'}\nModel: ${modelSelect?.value || 'auto'}`;
         sessionStorage.setItem('huggy-initial-prompt', prompt);
         sessionStorage.setItem('huggy-requested-mode', 'build');
         localStorage.removeItem('huggy-initial-prompt');

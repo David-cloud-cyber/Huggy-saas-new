@@ -1,6 +1,6 @@
 function initBuilder() {
   // ── INITIAL THEME ───────────────────────────────────────────
-  const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
+  const savedTheme = localStorage.getItem('huggy-theme') || 'light';
   document.documentElement.setAttribute('data-theme', savedTheme);
 
   // Project identity is synchronized by builder-live.ts from the backend.

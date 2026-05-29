@@ -1,5 +1,6 @@
 // @ts-ignore
 import './index.css';
+import { initPromptInputActions } from './prompt-input-actions';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -23,7 +24,7 @@ function init() {
         window.addEventListener('load', liftCurtain);
     }
 
-    const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
+    const savedTheme = localStorage.getItem('huggy-theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     if (moonIcon && sunIcon) {
         if (savedTheme === 'dark') {
@@ -54,6 +55,8 @@ function init() {
         }, 3000);
     }
 
+    initPromptInputActions({ persistForBuilder: true });
+
     // 1. Refactored Input Wrappers Logic (supports multiple instances)
     const wrappers = document.querySelectorAll('.input-wrapper');
     wrappers.forEach((wrapper) => {
@@ -70,10 +73,7 @@ function init() {
         const promptModeOptions = wrapper.querySelectorAll('[data-prompt-mode-option]');
         let selectedPromptMode: 'build' | 'plan' = 'build';
         
-        const btnUpload = wrapper.querySelector('#btn-upload, .btn-upload, button[data-tooltip="Upload files"]') as HTMLButtonElement | null;
-        const fileInput = wrapper.querySelector('#file-input, input[type="file"]') as HTMLInputElement | null;
         const btnSearch = wrapper.querySelector('#btn-search, .btn-search, button[data-tooltip="Search snippets"]') as HTMLButtonElement | null;
-        const btnVoice = wrapper.querySelector('#btn-voice, .btn-voice, button[data-tooltip="Voice input"]') as HTMLButtonElement | null;
 
         // Auto-resize textarea
         textarea?.addEventListener('input', () => {
@@ -173,22 +173,6 @@ function init() {
 
         submitBtn?.addEventListener('click', handleSubmit);
 
-        // Upload files
-        btnUpload?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            fileInput?.click();
-        });
-        fileInput?.addEventListener('change', () => {
-            const files = fileInput.files;
-            if (files && files.length > 0) {
-                showToast(`Attached ${files.length} file(s)`);
-                if (textarea) {
-                    textarea.value += `\n[Attached: ${Array.from(files).map(f => f.name).join(', ')}]`;
-                    updateSubmit();
-                }
-            }
-        });
-
         // Search template trigger
         btnSearch?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -202,8 +186,8 @@ function init() {
                     <div style="display: grid; gap: 12px;">
                         <div class="snippet-item" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; hover:bg-white/5 transition: background 0.2s;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">SaaS Dashboard Template</div>
-                            <div style="font-size: 11px; color: var(--text-muted);">Responsive sidebar, dark theme, Recharts integration.</div>
-                            <span class="snippet-val" style="display:none;">Create a dark mode dashboard for my SaaS with real-time analytics chart.</span>
+                            <div style="font-size: 11px; color: var(--text-muted);">Responsive sidebar, light theme, Recharts integration.</div>
+                            <span class="snippet-val" style="display:none;">Create a light analytics dashboard for my SaaS with real-time charts.</span>
                         </div>
                         <div class="snippet-item" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">Mobile App Landing Page</div>
@@ -229,50 +213,6 @@ function init() {
                     });
                 });
             }, 50);
-        });
-
-        // Voice input
-        btnVoice?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                showToast("Speech recognition not supported in this browser");
-                return;
-            }
-
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'en-US';
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
-
-            btnVoice.style.color = 'var(--accent)';
-            btnVoice.classList.add('pulse');
-            showToast("Listening...");
-
-            recognition.onresult = (event: any) => {
-                const speechResult = event.results[0][0].transcript;
-                if (textarea) {
-                    textarea.value = speechResult;
-                    updateSubmit();
-                }
-                btnVoice.style.color = '';
-                btnVoice.classList.remove('pulse');
-            };
-
-            recognition.onspeechend = () => {
-                recognition.stop();
-                btnVoice.style.color = '';
-                btnVoice.classList.remove('pulse');
-            };
-
-            recognition.onerror = (event: any) => {
-                console.error(event.error);
-                btnVoice.style.color = '';
-                btnVoice.classList.remove('pulse');
-                showToast("Error recording voice");
-            };
-
-            recognition.start();
         });
 
         // Model Select & Dropdown
