@@ -17,6 +17,7 @@ import { CostEstimatorService, CreditWalletService, CreditLedgerService, CreditR
 import { DomainService, VercelDomainService } from './src/services/domain-service.ts';
 import { StripeService, SAAS_PLANS, TOPUP_PRODUCTS } from './src/services/billing-service.ts';
 import { AuditLogService, BillingAlertService, UsageMeteringService, MemberLimitService } from './src/services/platform-support.ts';
+import { buildWorldClassUiPolicy } from './src/services/design-generation-policy.ts';
 
 dotenv.config();
 
@@ -756,16 +757,19 @@ async function generateFilesWithAi(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
+  const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
 
   const result = await openRouter.chat(selectedModel, [
     {
       role: 'system',
       content: [
         'You are Huggy, a senior fullstack app generator.',
+        uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
         'Never include secrets, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
+        'The summary must mention the detected app type and the chosen design direction in one concise sentence.',
       ].join(' '),
     },
     {
@@ -774,6 +778,7 @@ async function generateFilesWithAi(input: {
         projectName: input.projectName,
         prompt: input.prompt,
         existingFiles: fileManifest || 'No existing files yet.',
+        uiGenerationPolicy: uiPolicy.userContext,
       }),
     },
   ], 1, 90000);
@@ -811,16 +816,19 @@ function buildGenerationMessages(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
+  const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
 
   return [
     {
       role: 'system' as const,
       content: [
         'You are Huggy, a senior fullstack app generator.',
+        uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
         'Never include secrets, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
+        'The summary must mention the detected app type and the chosen design direction in one concise sentence.',
       ].join(' '),
     },
     {
@@ -829,6 +837,7 @@ function buildGenerationMessages(input: {
         projectName: input.projectName,
         prompt: input.prompt,
         existingFiles: fileManifest || 'No existing files yet.',
+        uiGenerationPolicy: uiPolicy.userContext,
       }),
     },
   ];
