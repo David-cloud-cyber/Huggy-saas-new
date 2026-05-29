@@ -436,7 +436,6 @@
     .workspace-body {
       display: grid;
       grid-template-columns: var(--huggy-sidebar-width, 380px) minmax(0, 1fr);
-      grid-template-rows: 44px minmax(0, 1fr);
       flex: 1;
       overflow: hidden;
       position: relative;
@@ -461,7 +460,6 @@
     /* ── LEFT PANEL (CHAT & DESIGN) ───────────────────────────── */
     .sidebar-pane {
       grid-column: 1;
-      grid-row: 1 / 3;
       border-right: 1px solid var(--border);
       background: var(--bg-panel);
       display: flex;
@@ -860,19 +858,21 @@
     /* ── RIGHT COLUMN: CODE & PREVIEW WORKSPACE ─────────────── */
     .editor-pane {
       grid-column: 2;
-      grid-row: 2;
       background: var(--bg);
       display: flex;
       flex-direction: column;
       overflow: hidden;
       min-width: 0;
       min-height: 0;
+      padding-top: 44px;
     }
 
     /* Control mini-navbar matches screenshot precisamente */
     .sub-navbar {
-      grid-column: 2;
-      grid-row: 1;
+      position: absolute;
+      top: 0;
+      left: var(--huggy-sidebar-width, 380px);
+      right: 0;
       height: 44px;
       border-bottom: 1px solid var(--border);
       display: flex;
@@ -882,6 +882,10 @@
       background: var(--bg);
       flex: 0 0 44px;
       z-index: 80;
+    }
+
+    .workspace-body.sidebar-collapsed .sub-navbar {
+      left: 0;
     }
 
     .sub-nav-left {
