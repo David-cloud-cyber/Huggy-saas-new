@@ -858,6 +858,7 @@
     /* ── RIGHT COLUMN: CODE & PREVIEW WORKSPACE ─────────────── */
     .editor-pane {
       grid-column: 2;
+      grid-row: 1;
       background: var(--bg);
       display: flex;
       flex-direction: column;
@@ -869,10 +870,9 @@
 
     /* Control mini-navbar matches screenshot precisamente */
     .sub-navbar {
-      position: absolute;
-      top: 0;
-      left: var(--huggy-sidebar-width, 380px);
-      right: 0;
+      grid-column: 2;
+      grid-row: 1;
+      align-self: start;
       height: 44px;
       border-bottom: 1px solid var(--border);
       display: flex;
@@ -882,10 +882,6 @@
       background: var(--bg);
       flex: 0 0 44px;
       z-index: 80;
-    }
-
-    .workspace-body.sidebar-collapsed .sub-navbar {
-      left: 0;
     }
 
     .sub-nav-left {
@@ -1418,7 +1414,6 @@
                             </svg>
                         </button>
                     </div>
-                </div>
             </div>
           </div>
         </div>
