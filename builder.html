@@ -140,6 +140,9 @@
     }
 
     .project-selector {
+      border: 0;
+      background: transparent;
+      padding: 0;
       color: var(--text-muted);
       font-size: 13.5px;
       cursor: pointer;
@@ -151,6 +154,213 @@
 
     .project-selector:hover {
       color: var(--text);
+    }
+
+    .project-selector[aria-expanded="true"] {
+      color: var(--text);
+    }
+
+    .project-menu-panel {
+      position: fixed;
+      top: 56px;
+      left: 16px;
+      width: min(390px, calc(100vw - 24px));
+      max-height: min(680px, calc(100vh - 72px));
+      overflow: auto;
+      display: none;
+      z-index: 9000;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+      box-shadow: 0 22px 70px rgba(0,0,0,.34), 0 1px 0 rgba(255,255,255,.04) inset;
+      backdrop-filter: blur(22px) saturate(150%);
+    }
+
+    .project-menu-panel.open {
+      display: block;
+    }
+
+    .project-menu-action,
+    .project-menu-link {
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 760;
+      text-align: left;
+    }
+
+    .project-menu-action:hover,
+    .project-menu-link:hover {
+      background: var(--accent-dim, rgba(255,255,255,.06));
+    }
+
+    .project-menu-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 10px -10px;
+    }
+
+    .project-menu-workspace {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px 10px;
+    }
+
+    .project-menu-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      text-transform: uppercase;
+      flex: 0 0 auto;
+    }
+
+    .project-menu-name {
+      min-width: 0;
+      flex: 1;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 820;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-menu-badge {
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      background: var(--bg-panel);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 880;
+      letter-spacing: .04em;
+      flex: 0 0 auto;
+    }
+
+    .project-menu-card {
+      border: 1px solid var(--border-light);
+      border-radius: 16px;
+      background: var(--bg-panel);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .project-menu-card-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .project-menu-card-title {
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 860;
+    }
+
+    .project-menu-upgrade {
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 820;
+      padding: 4px 0;
+    }
+
+    .project-menu-credit-bar {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(128,128,128,.22);
+    }
+
+    .project-menu-credit-fill {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-spark));
+      transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .project-menu-muted {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .project-menu-field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .project-menu-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 820;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .project-menu-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .project-menu-input {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-input);
+      color: var(--text);
+      padding: 0 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .project-menu-input:focus {
+      border-color: var(--border-focus, var(--accent));
+      box-shadow: 0 0 0 3px var(--accent-dim, rgba(180,113,86,.12));
+    }
+
+    .project-menu-save {
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--text);
+      color: var(--bg);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 840;
+    }
+
+    .project-menu-save:disabled {
+      opacity: .48;
+      cursor: not-allowed;
     }
 
     .brand-right {
@@ -1302,6 +1512,43 @@
       flex: 1;
     }
 
+    .preview-device-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      height: 26px;
+      padding: 2px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-input);
+      flex: 0 0 auto;
+    }
+
+    .preview-device-btn {
+      height: 20px;
+      min-width: 58px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 760;
+      letter-spacing: .01em;
+      cursor: pointer;
+      transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms cubic-bezier(0.22, 1, 0.36, 1), transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .preview-device-btn:hover {
+      color: var(--text);
+    }
+
+    .preview-device-btn.active,
+    .preview-device-btn[aria-pressed="true"] {
+      background: var(--text);
+      color: var(--bg);
+      box-shadow: 0 1px 0 rgba(255,255,255,.08), 0 8px 20px rgba(0,0,0,.16);
+    }
+
     .preview-address-live-dot {
       width: 6px;
       height: 6px;
@@ -1310,12 +1557,88 @@
       box-shadow: 0 0 6px #22c55e;
     }
 
+    .preview-device-stage {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      overflow: auto;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        #000000;
+      background-size: 24px 24px;
+      padding: 0;
+    }
+
+    .preview-device-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      overflow: hidden;
+      background: #000000;
+      transition:
+        width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-radius 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        margin 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .preview-screen-panel[data-preview-device="tablet"] .preview-device-frame {
+      width: 768px;
+      max-width: calc(100% - 32px);
+      height: calc(100% - 32px);
+      margin: 16px 0;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 18px;
+      box-shadow: 0 22px 80px rgba(0,0,0,.36);
+    }
+
+    .preview-screen-panel[data-preview-device="mobile"] .preview-device-frame {
+      width: 390px;
+      max-width: calc(100% - 32px);
+      height: calc(100% - 32px);
+      margin: 16px 0;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 28px;
+      box-shadow: 0 24px 88px rgba(0,0,0,.42);
+    }
+
     .preview-iframe-view {
       border: none;
       flex: 1;
       width: 100%;
+      height: 100%;
       min-height: 0;
       background: #000000;
+    }
+
+    @media (max-width: 760px) {
+      .preview-address-row {
+        height: auto;
+        min-height: 42px;
+        flex-wrap: wrap;
+        align-content: center;
+        padding: 6px 8px;
+      }
+
+      .preview-address-glow {
+        min-width: 180px;
+      }
+
+      .preview-device-toggle {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .preview-device-btn {
+        min-width: 0;
+        flex: 1;
+      }
     }
 
     /* Analysis detailed report screen */
@@ -1576,12 +1899,12 @@
           </svg>
           <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
           <span class="brand-sep">/</span>
-          <span class="project-selector" id="project-combo-trigger">
-            Kernbase.studio 
+          <button class="project-selector" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+            <span id="project-name">Untitled app</span>
             <svg style="color: var(--text-sub); margin-left:2px;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="6 9 12 15 18 9"/>
             </svg>
-          </span>
+          </button>
         </span>
       </div>
 
@@ -1597,6 +1920,49 @@
         <div class="avatar-circle"></div>
       </div>
     </header>
+
+    <div class="project-menu-panel" id="project-menu-panel" role="menu" aria-hidden="true">
+      <button class="project-menu-link" type="button" id="project-menu-dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg>
+        <span>Go to Dashboard</span>
+      </button>
+      <div class="project-menu-divider"></div>
+      <div class="project-menu-workspace">
+        <div class="project-menu-avatar" id="project-menu-avatar">H</div>
+        <div class="project-menu-name" id="project-menu-title">Untitled app</div>
+        <div class="project-menu-badge">FREE</div>
+      </div>
+      <div class="project-menu-card">
+        <div class="project-menu-card-row">
+          <div class="project-menu-card-title">Credits</div>
+          <button class="project-menu-upgrade" type="button" id="project-menu-upgrade">
+            <span>Upgrade</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div class="project-menu-credit-bar" aria-hidden="true"><span class="project-menu-credit-fill" id="project-menu-credit-fill"></span></div>
+        <div class="project-menu-muted" id="project-menu-credit-status">Credits unavailable</div>
+      </div>
+      <div class="project-menu-card" style="margin-top:10px;">
+        <label class="project-menu-field">
+          <span class="project-menu-label">Project name</span>
+          <span class="project-menu-input-row">
+            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Untitled app" autocomplete="off">
+            <button class="project-menu-save" id="project-name-save" type="button">Save</button>
+          </span>
+        </label>
+        <div class="project-menu-muted" id="project-name-status">Rename the project metadata without changing generated files.</div>
+      </div>
+      <div class="project-menu-divider"></div>
+      <button class="project-menu-action" type="button" id="project-menu-free-credits">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/></svg>
+        <span>Get free credits</span>
+      </button>
+      <button class="project-menu-action" type="button" id="project-menu-settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.82V22a2 2 0 1 1-4 0v-.18A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.82-.33H2a2 2 0 1 1 0-4h.18A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-.6 1.65 1.65 0 0 0 .33-1.82V2a2 2 0 1 1 4 0v.18A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.36.36.69.6 1 .24.31.58.5 1 .6H22a2 2 0 1 1 0 4h-.18A1.65 1.65 0 0 0 19.4 15Z"/></svg>
+        <span>Settings</span>
+      </button>
+    </div>
 
     <!-- ── MAIN BODY ────────────────────────────────────────────── -->
     <main class="workspace-body">
@@ -1777,14 +2143,23 @@
           </div>
 
           <!-- SCREEN LAYOUT FOR LIVE SANDBOX PREVIEW (Toggled dynamically) -->
-          <div class="preview-screen-panel" id="screen-layout-preview" style="display: flex;">
+          <div class="preview-screen-panel" id="screen-layout-preview" data-preview-device="desktop" style="display: flex;">
             <div class="preview-address-row">
               <div class="preview-address-glow">
                 <span class="preview-address-live-dot"></span>
                 <span>localhost:3000 /</span>
               </div>
+              <div class="preview-device-toggle" role="group" aria-label="Preview viewport">
+                <button class="preview-device-btn active" type="button" data-preview-device-option="desktop" aria-pressed="true">Desktop</button>
+                <button class="preview-device-btn" type="button" data-preview-device-option="tablet" aria-pressed="false">Tablet</button>
+                <button class="preview-device-btn" type="button" data-preview-device-option="mobile" aria-pressed="false">Mobile</button>
+              </div>
             </div>
-            <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #f7f4ef; color: #675f55; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(43,35,25,0.14); padding: 24px; border-radius: 12px; background: #fffaf3; } h3 { color: #18130d; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #675f55; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element"></iframe>
+            <div class="preview-device-stage">
+              <div class="preview-device-frame">
+                <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #f7f4ef; color: #675f55; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(43,35,25,0.14); padding: 24px; border-radius: 12px; background: #fffaf3; } h3 { color: #18130d; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #675f55; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element" title="Project preview"></iframe>
+              </div>
+            </div>
           </div>
 
           <!-- SCREEN LAYOUT FOR CODE ANALYSIS -->

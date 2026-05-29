@@ -383,6 +383,7 @@ create table if not exists public.user_workspace_state (
   builder_selected_mode text default 'build',
   builder_selected_model text default 'auto',
   builder_active_tab text default 'preview',
+  builder_preview_device text default 'desktop',
   theme text default 'light',
   last_route text default '/dashboard.html',
   created_at timestamptz default now() not null,
@@ -396,6 +397,7 @@ create table if not exists public.project_workspace_state (
   selected_mode text default 'build',
   selected_model text default 'auto',
   active_tab text default 'preview',
+  preview_device text default 'desktop',
   sidebar_width integer default 380,
   pending_clarification jsonb,
   last_opened_at timestamptz default now() not null,
@@ -410,6 +412,7 @@ alter table public.user_workspace_state add column if not exists builder_draft_p
 alter table public.user_workspace_state add column if not exists builder_selected_mode text default 'build';
 alter table public.user_workspace_state add column if not exists builder_selected_model text default 'auto';
 alter table public.user_workspace_state add column if not exists builder_active_tab text default 'preview';
+alter table public.user_workspace_state add column if not exists builder_preview_device text default 'desktop';
 alter table public.user_workspace_state add column if not exists theme text default 'light';
 alter table public.user_workspace_state add column if not exists last_route text default '/dashboard.html';
 alter table public.user_workspace_state add column if not exists created_at timestamptz default now();
@@ -420,6 +423,7 @@ alter table public.project_workspace_state add column if not exists draft_prompt
 alter table public.project_workspace_state add column if not exists selected_mode text default 'build';
 alter table public.project_workspace_state add column if not exists selected_model text default 'auto';
 alter table public.project_workspace_state add column if not exists active_tab text default 'preview';
+alter table public.project_workspace_state add column if not exists preview_device text default 'desktop';
 alter table public.project_workspace_state add column if not exists sidebar_width integer default 380;
 alter table public.project_workspace_state add column if not exists pending_clarification jsonb;
 alter table public.project_workspace_state add column if not exists last_opened_at timestamptz default now();

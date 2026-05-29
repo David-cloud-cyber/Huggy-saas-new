@@ -417,16 +417,24 @@ function slugify(value: string): string {
     .slice(0, 48) || `project-${Date.now()}`;
 }
 
-async function uniqueSlug(base: string, ownerId: string): Promise<string> {
+function sanitizeProjectName(value: unknown) {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+async function uniqueSlug(base: string, ownerId: string, excludeProjectId = ''): Promise<string> {
   const candidate = slugify(base);
   const client = requireSupabase('Project slug generation');
   const { data, error } = await client
     .from('projects')
-    .select('slug')
+    .select('id, slug')
     .eq('owner_id', ownerId)
     .ilike('slug', `${candidate}%`);
   if (error) throw new Error(`Project slug lookup failed: ${error.message}`);
-  const existing = new Set((data || []).map((row: any) => row.slug));
+  const existing = new Set((data || []).filter((row: any) => row.id !== excludeProjectId).map((row: any) => row.slug));
   if (!existing.has(candidate)) return candidate;
   for (let i = 2; i < 1000; i += 1) {
     const next = `${candidate}-${i}`;
@@ -1352,6 +1360,10 @@ function normalizeWorkspaceTab(value: any): 'preview' | 'code' | 'database' | 'a
   return ['preview', 'code', 'database', 'analysis'].includes(String(value)) ? String(value) as any : 'preview';
 }
 
+function normalizeWorkspacePreviewDevice(value: any): 'desktop' | 'tablet' | 'mobile' {
+  return ['desktop', 'tablet', 'mobile'].includes(String(value)) ? String(value) as any : 'desktop';
+}
+
 function sanitizeWorkspaceText(value: any, max = 8000) {
   return String(value || '').replace(/\u0000/g, '').slice(0, max);
 }
@@ -1359,6 +1371,11 @@ function sanitizeWorkspaceText(value: any, max = 8000) {
 function isMissingWorkspaceTableError(error: any) {
   const message = String(error?.message || '');
   return /user_workspace_state|project_workspace_state|schema cache|relation .* does not exist/i.test(message);
+}
+
+function isMissingPreviewDeviceColumnError(error: any) {
+  const message = String(error?.message || '');
+  return /preview_device|builder_preview_device|schema cache|column .* does not exist/i.test(message);
 }
 
 async function getUserWorkspaceState(userId: string) {
@@ -1379,13 +1396,20 @@ async function upsertUserWorkspaceState(userId: string, patch: Record<string, an
     builder_selected_mode: patch.builder_selected_mode === undefined ? undefined : normalizeWorkspaceMode(patch.builder_selected_mode),
     builder_selected_model: patch.builder_selected_model === undefined ? undefined : sanitizeWorkspaceText(patch.builder_selected_model, 120) || 'auto',
     builder_active_tab: patch.builder_active_tab === undefined ? undefined : normalizeWorkspaceTab(patch.builder_active_tab),
+    builder_preview_device: patch.builder_preview_device === undefined ? undefined : normalizeWorkspacePreviewDevice(patch.builder_preview_device),
     theme: patch.theme === undefined ? undefined : (patch.theme === 'dark' ? 'dark' : 'light'),
     last_route: patch.last_route === undefined ? undefined : sanitizeWorkspaceText(patch.last_route, 512),
     updated_at: new Date().toISOString(),
   };
   Object.keys(row).forEach(key => (row as any)[key] === undefined && delete (row as any)[key]);
   const client = requireSupabase('User workspace state persistence');
-  const { data, error } = await client.from('user_workspace_state').upsert([row], { onConflict: 'owner_id' }).select('*').maybeSingle();
+  let { data, error } = await client.from('user_workspace_state').upsert([row], { onConflict: 'owner_id' }).select('*').maybeSingle();
+  if (error && isMissingPreviewDeviceColumnError(error) && 'builder_preview_device' in row) {
+    delete (row as any).builder_preview_device;
+    const retry = await client.from('user_workspace_state').upsert([row], { onConflict: 'owner_id' }).select('*').maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error && isMissingWorkspaceTableError(error)) return null;
   if (error) throw new Error(`Supabase user workspace state update failed: ${error.message}`);
   return data;
@@ -1408,13 +1432,20 @@ async function upsertProjectWorkspaceState(userId: string, projectId: string, pa
     selected_mode: patch.selected_mode === undefined ? undefined : normalizeWorkspaceMode(patch.selected_mode),
     selected_model: patch.selected_model === undefined ? undefined : sanitizeWorkspaceText(patch.selected_model, 120) || 'auto',
     active_tab: patch.active_tab === undefined ? undefined : normalizeWorkspaceTab(patch.active_tab),
+    preview_device: patch.preview_device === undefined ? undefined : normalizeWorkspacePreviewDevice(patch.preview_device),
     sidebar_width: patch.sidebar_width === undefined ? undefined : Math.min(520, Math.max(280, Number(patch.sidebar_width || 380))),
     pending_clarification: patch.pending_clarification === undefined ? undefined : (patch.pending_clarification || null),
     last_opened_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
   Object.keys(row).forEach(key => (row as any)[key] === undefined && delete (row as any)[key]);
-  const { data, error } = await client.from('project_workspace_state').upsert([row], { onConflict: 'project_id' }).select('*').maybeSingle();
+  let { data, error } = await client.from('project_workspace_state').upsert([row], { onConflict: 'project_id' }).select('*').maybeSingle();
+  if (error && isMissingPreviewDeviceColumnError(error) && 'preview_device' in row) {
+    delete (row as any).preview_device;
+    const retry = await client.from('project_workspace_state').upsert([row], { onConflict: 'project_id' }).select('*').maybeSingle();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error && isMissingWorkspaceTableError(error)) return null;
   if (error) throw new Error(`Supabase project workspace state update failed: ${error.message}`);
   await upsertUserWorkspaceState(userId, { last_project_id: projectId, last_route: `/builder.html?project=${projectId}` });
@@ -2038,7 +2069,7 @@ app.get('/api/projects', async (req: any, res: any) => {
 
 app.post('/api/projects', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
-  const name = String(req.body?.name || '').trim();
+  const name = sanitizeProjectName(req.body?.name);
   const prompt = String(req.body?.prompt || req.body?.description || '').trim();
 
   if (!name) {
@@ -2072,6 +2103,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     builder_selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
     builder_selected_model: project.model_id,
     builder_active_tab: 'preview',
+    builder_preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
     last_route: `/builder.html?project=${project.id}`,
   });
   await upsertProjectWorkspaceState(userId, project.id, {
@@ -2079,6 +2111,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
     selected_model: project.model_id,
     active_tab: 'preview',
+    preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
     sidebar_width: 380,
   });
 
@@ -2115,6 +2148,26 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
       html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
     },
   });
+});
+
+app.patch('/api/projects/:id', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+
+  const name = sanitizeProjectName(req.body?.name);
+  if (name.length < 2) {
+    return res.status(400).json({ success: false, error: 'Project name must contain at least 2 characters.' });
+  }
+
+  const updatedProject = {
+    ...project,
+    name,
+    slug: await uniqueSlug(name, userId, project.id),
+    updated_at: new Date().toISOString(),
+  };
+  await saveProject(updatedProject);
+  res.json({ success: true, project: updatedProject });
 });
 
 app.get('/api/projects/:id/state', async (req: any, res: any) => {

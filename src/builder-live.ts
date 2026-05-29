@@ -50,6 +50,7 @@ type WorkspaceState = {
   selected_model?: string;
   active_tab?: 'preview' | 'code' | 'database' | 'analysis';
   sidebar_width?: number;
+  preview_device?: PreviewDevice;
 };
 
 type UserWorkspaceState = {
@@ -58,7 +59,10 @@ type UserWorkspaceState = {
   builder_selected_mode?: 'plan' | 'build';
   builder_selected_model?: string;
   builder_active_tab?: 'preview' | 'code' | 'database' | 'analysis';
+  builder_preview_device?: PreviewDevice;
 };
+
+type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 
 type AiModel = {
   id: string;
@@ -93,6 +97,8 @@ let lastBuildSessionId = '';
 let activeAbort: AbortController | null = null;
 let selectedChatMode: 'plan' | 'build' = 'build';
 let selectedModelId = 'auto';
+let selectedPreviewDevice: PreviewDevice = 'desktop';
+let currentProjectName = 'Untitled app';
 let initialBuilderHandoff: { prompt: string; mode: 'plan' | 'build' } | null = null;
 let analysisPollTimer: number | null = null;
 let analysisRange = '30d';
@@ -141,12 +147,61 @@ function selectedModel() {
   return selectedModelId || 'auto';
 }
 
+function displayProjectName(value?: string) {
+  const clean = String(value || '').trim();
+  return clean || 'Untitled app';
+}
+
+function projectInitial(value?: string) {
+  const clean = displayProjectName(value).replace(/[^a-zA-Z0-9]/g, '');
+  return (clean[0] || 'H').toUpperCase();
+}
+
+function setProjectNameDisplay(value?: string) {
+  currentProjectName = displayProjectName(value);
+  const name = document.getElementById('project-name');
+  const menuTitle = document.getElementById('project-menu-title');
+  const avatar = document.getElementById('project-menu-avatar');
+  const input = document.getElementById('project-name-input') as HTMLInputElement | null;
+  if (name) name.textContent = currentProjectName;
+  if (menuTitle) menuTitle.textContent = currentProjectName;
+  if (avatar) avatar.textContent = projectInitial(currentProjectName);
+  if (input && document.activeElement !== input) input.value = currentProjectName;
+}
+
 function activeBuilderView(): 'preview' | 'code' | 'database' | 'analysis' {
   const active = document.querySelector('.sub-nav-tab.active')?.id || '';
   if (active.includes('code')) return 'code';
   if (active.includes('database')) return 'database';
   if (active.includes('analysis')) return 'analysis';
   return 'preview';
+}
+
+function normalizePreviewDevice(value: unknown): PreviewDevice {
+  return value === 'tablet' || value === 'mobile' ? value : 'desktop';
+}
+
+function setPreviewDevice(device: PreviewDevice, persist = true) {
+  selectedPreviewDevice = normalizePreviewDevice(device);
+  const panel = document.getElementById('screen-layout-preview') as HTMLElement | null;
+  if (panel) panel.dataset.previewDevice = selectedPreviewDevice;
+  document.querySelectorAll<HTMLButtonElement>('[data-preview-device-option]').forEach(button => {
+    const active = button.dataset.previewDeviceOption === selectedPreviewDevice;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  if (persist) scheduleWorkspaceSave({ preview_device: selectedPreviewDevice });
+}
+
+function bindPreviewDeviceToggle() {
+  setPreviewDevice(selectedPreviewDevice, false);
+  document.querySelectorAll<HTMLButtonElement>('[data-preview-device-option]').forEach(button => {
+    if (button.dataset.boundPreviewDevice === 'true') return;
+    button.dataset.boundPreviewDevice = 'true';
+    button.addEventListener('click', () => {
+      setPreviewDevice(normalizePreviewDevice(button.dataset.previewDeviceOption));
+    });
+  });
 }
 
 function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = false) {
@@ -158,6 +213,7 @@ function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = 
       selected_mode: selectedChatMode,
       selected_model: selectedModelId,
       active_tab: activeBuilderView(),
+      preview_device: selectedPreviewDevice,
       ...patch,
     };
     try {
@@ -174,6 +230,7 @@ function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = 
             builder_selected_mode: body.selected_mode,
             builder_selected_model: body.selected_model,
             builder_active_tab: body.active_tab,
+            builder_preview_device: body.preview_device,
             last_route: '/builder.html?new=1',
           }),
         });
@@ -216,6 +273,7 @@ function applyWorkspaceState(state?: WorkspaceState | null) {
     selectedModelId = state.selected_model;
     syncModelLabelFromSelection();
   }
+  if (state.preview_device) setPreviewDevice(normalizePreviewDevice(state.preview_device), false);
   if (state.sidebar_width) {
     localStorage.setItem('huggy-sidebar-width', String(state.sidebar_width));
     applySidebarWidthPreference(state.sidebar_width);
@@ -281,10 +339,141 @@ function addInlineAction(card: HTMLElement | null, label: string, action: () => 
   card.appendChild(button);
 }
 
+function positionProjectMenu() {
+  const trigger = document.getElementById('project-combo-trigger') as HTMLElement | null;
+  const panel = document.getElementById('project-menu-panel') as HTMLElement | null;
+  if (!trigger || !panel) return;
+  const rect = trigger.getBoundingClientRect();
+  const maxLeft = window.innerWidth - Math.min(390, window.innerWidth - 24) - 12;
+  panel.style.left = `${Math.max(12, Math.min(rect.left, maxLeft))}px`;
+  panel.style.top = `${Math.min(rect.bottom + 10, window.innerHeight - 80)}px`;
+}
+
+function closeProjectMenu() {
+  const panel = document.getElementById('project-menu-panel');
+  const trigger = document.getElementById('project-combo-trigger');
+  panel?.classList.remove('open');
+  panel?.setAttribute('aria-hidden', 'true');
+  trigger?.setAttribute('aria-expanded', 'false');
+}
+
+async function loadProjectMenuCredits() {
+  const status = document.getElementById('project-menu-credit-status');
+  const fill = document.getElementById('project-menu-credit-fill') as HTMLElement | null;
+  if (status) status.textContent = 'Loading credits...';
+  if (fill) fill.style.width = '0%';
+  try {
+    const wallet = await apiFetch<{ success: boolean; balance?: number }>('/api/billing/wallet');
+    const balance = Number(wallet.balance || 0);
+    if (status) status.textContent = `${balance} credits available`;
+    if (fill) fill.style.width = balance > 0 ? '100%' : '0%';
+  } catch {
+    if (status) status.textContent = 'Credits unavailable';
+    if (fill) fill.style.width = '0%';
+  }
+}
+
+function openProjectMenu() {
+  const panel = document.getElementById('project-menu-panel');
+  const trigger = document.getElementById('project-combo-trigger');
+  if (!panel || !trigger) return;
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    closeProjectMenu();
+    return;
+  }
+  setProjectNameDisplay(currentProjectName);
+  positionProjectMenu();
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  trigger.setAttribute('aria-expanded', 'true');
+  void loadProjectMenuCredits();
+}
+
+function validateProjectName(value: string) {
+  const clean = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (clean.length < 2) return { ok: false, value: clean, error: 'Use at least 2 characters.' };
+  if (clean.length > 80) return { ok: false, value: clean.slice(0, 80), error: 'Use 80 characters or fewer.' };
+  return { ok: true, value: clean, error: '' };
+}
+
+async function saveProjectNameFromMenu() {
+  const input = document.getElementById('project-name-input') as HTMLInputElement | null;
+  const status = document.getElementById('project-name-status');
+  const button = document.getElementById('project-name-save') as HTMLButtonElement | null;
+  const validation = validateProjectName(input?.value || '');
+  if (!validation.ok) {
+    if (status) status.textContent = validation.error;
+    return;
+  }
+  if (!currentProjectId) {
+    setProjectNameDisplay(validation.value);
+    if (status) status.textContent = 'Name saved for the next project.';
+    return;
+  }
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Saving';
+    }
+    const response = await apiFetch<{ success: boolean; project: { name: string; slug?: string } }>(`/api/projects/${encodeURIComponent(currentProjectId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: validation.value }),
+    });
+    setProjectNameDisplay(response.project?.name || validation.value);
+    if (status) status.textContent = 'Project name saved.';
+  } catch (error) {
+    if (status) status.textContent = error instanceof Error ? error.message : 'Unable to save project name.';
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Save';
+    }
+  }
+}
+
+function bindProjectMenu() {
+  const trigger = document.getElementById('project-combo-trigger');
+  if (!trigger || trigger.dataset.boundProjectMenu === 'true') return;
+  trigger.dataset.boundProjectMenu = 'true';
+  trigger.addEventListener('click', event => {
+    event.preventDefault();
+    openProjectMenu();
+  });
+  document.getElementById('project-menu-dashboard')?.addEventListener('click', () => {
+    window.location.href = '/dashboard.html';
+  });
+  document.getElementById('project-menu-upgrade')?.addEventListener('click', () => {
+    closeProjectMenu();
+    (document.querySelector('.btn-upgrade') as HTMLButtonElement | null)?.click();
+  });
+  document.getElementById('project-menu-free-credits')?.addEventListener('click', () => {
+    showMiniModal('Get free credits', '<p>Free credit campaigns are not configured yet. Upgrade or buy credits to continue building without interruption.</p>', () => {});
+  });
+  document.getElementById('project-menu-settings')?.addEventListener('click', () => {
+    showMiniModal('Project settings', '<p>Project settings are controlled from this menu for now. Rename your app here, then manage secrets in Database.</p>', () => {});
+  });
+  document.getElementById('project-name-save')?.addEventListener('click', () => void saveProjectNameFromMenu());
+  document.getElementById('project-name-input')?.addEventListener('keydown', event => {
+    if ((event as KeyboardEvent).key === 'Enter') void saveProjectNameFromMenu();
+  });
+  document.addEventListener('click', event => {
+    const panel = document.getElementById('project-menu-panel');
+    if (!panel?.classList.contains('open')) return;
+    if (panel.contains(event.target as Node) || trigger.contains(event.target as Node)) return;
+    closeProjectMenu();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeProjectMenu();
+  });
+  window.addEventListener('resize', positionProjectMenu);
+}
+
 function setPreview(html: string, status = 'ready') {
   currentPreviewHtml = html;
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (frame) frame.srcdoc = html;
+  setPreviewDevice(selectedPreviewDevice, false);
 
   activateBuilderView('preview');
 
@@ -844,7 +1033,7 @@ async function ensureProject() {
       success: true,
       project: {
         id: '',
-        name: 'New Huggy app',
+        name: currentProjectName || 'Untitled app',
         preview_status: 'idle',
       },
       files: [],
@@ -872,10 +1061,13 @@ function projectNameFromPrompt(prompt: string) {
 async function ensureProjectForPrompt(prompt: string) {
   if (currentProjectId) return;
   const initialPrompt = prompt || getInitialDashboardPrompt() || 'Create a polished fullstack web application.';
+  const selectedName = currentProjectName && currentProjectName !== 'Untitled app'
+    ? currentProjectName
+    : projectNameFromPrompt(initialPrompt);
   const created = await apiFetch<ProjectPayload>('/api/projects', {
     method: 'POST',
     body: JSON.stringify({
-      name: projectNameFromPrompt(initialPrompt),
+      name: selectedName,
       template: 'custom',
       theme: 'light',
       model: selectedModel(),
@@ -883,6 +1075,7 @@ async function ensureProjectForPrompt(prompt: string) {
     }),
   });
   currentProjectId = created.project.id;
+  setProjectNameDisplay(created.project.name || selectedName);
   window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
   await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/workspace-state`, {
     method: 'PATCH',
@@ -891,6 +1084,7 @@ async function ensureProjectForPrompt(prompt: string) {
       selected_mode: selectedChatMode,
       selected_model: selectedModelId,
       active_tab: 'preview',
+      preview_device: selectedPreviewDevice,
       sidebar_width: Number(localStorage.getItem('huggy-sidebar-width') || 380),
     }),
   }).catch(() => null);
@@ -903,6 +1097,7 @@ async function ensureProjectForPrompt(prompt: string) {
       builder_selected_mode: selectedChatMode,
       builder_selected_model: selectedModelId,
       builder_active_tab: 'preview',
+      builder_preview_device: selectedPreviewDevice,
       last_route: `/builder.html?project=${currentProjectId}`,
     }),
   }).catch(() => null);
@@ -979,10 +1174,11 @@ async function loadProject() {
           selected_mode: userWorkspaceState.builder_selected_mode || 'build',
           selected_model: userWorkspaceState.builder_selected_model || 'auto',
           active_tab: userWorkspaceState.builder_active_tab || 'preview',
+          preview_device: userWorkspaceState.builder_preview_device || 'desktop',
         });
       }
     }
-    if (projectName) projectName.textContent = payload.project.name;
+    if (projectName) setProjectNameDisplay(payload.project.name);
     if (currentProjectId) await flushPendingPromptAttachments();
     renderFiles(payload.files || []);
     applyWorkspaceState(payload.workspace_state || null);
@@ -990,6 +1186,7 @@ async function loadProject() {
     restoreMessages(payload);
     const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
     if (activeTab) activateBuilderView(activeTab);
+    setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     updateMessage(loading, 'Project synchronized. Use Plan to think, or Build to update the app.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
@@ -1579,6 +1776,9 @@ function hydrateDashboardPrompt() {
   const prompt = getInitialDashboardPrompt();
   setChatMode(mode);
   if (!input || !prompt || input.value.trim()) return;
+  if (!currentProjectId && currentProjectName === 'Untitled app') {
+    setProjectNameDisplay(projectNameFromPrompt(prompt));
+  }
   input.value = prompt;
   input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
   submit?.classList.add('active');
@@ -1639,6 +1839,8 @@ function init() {
   ensurePlanBuildControls();
   ensureDatabaseView();
   ensureResizableSidebar();
+  bindProjectMenu();
+  bindPreviewDeviceToggle();
   initPromptInputActions({
     persistForBuilder: false,
     onFiles: uploadPromptAttachments,
