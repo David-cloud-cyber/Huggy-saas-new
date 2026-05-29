@@ -37,17 +37,6 @@ type ProjectPayload = {
   };
 };
 
-type DeployPayload = {
-  success: boolean;
-  event?: string;
-  deployment?: {
-    deployment_url: string;
-    status: string;
-  };
-  credits?: { required: number; balance: number };
-  error?: string;
-};
-
 type AiModel = {
   id: string;
   display_name: string;
@@ -101,13 +90,8 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
   if (!scroll) return null;
 
   const card = document.createElement('div');
-  card.className = 'message-card';
-  const color = kind === 'user' ? '#d946ef' : kind === 'system' ? '#60a5fa' : '#f4f4f5';
-  const name = kind === 'user' ? 'User' : kind === 'system' ? 'Huggy Build' : 'Huggy AI';
+  card.className = `message-card message-card-${kind}`;
   card.innerHTML = `
-    <div class="msg-header-line">
-      <span class="msg-sender-identity" style="color:${color};">${name}</span>
-    </div>
     <p class="msg-body-paragraph" style="white-space:pre-wrap;"></p>
   `;
   const paragraph = card.querySelector('.msg-body-paragraph');
@@ -141,7 +125,6 @@ function setPreview(html: string, status = 'ready') {
 
   const address = document.querySelector('.preview-address-glow span:last-child');
   if (address) address.textContent = `${status}.huggy.local / ${currentProjectId.slice(0, 8)}`;
-  updateDeployState(status === 'ready');
 }
 
 function renderFiles(files: GeneratedFile[]) {
@@ -195,29 +178,15 @@ function selectFile(filePath: string) {
 
 function ensureToolbar() {
   const nav = document.querySelector('.sub-nav-right');
-  if (!nav || document.getElementById('btn-live-deploy')) return;
+  if (!nav || document.getElementById('btn-live-cancel')) return;
 
   const style = 'height:28px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:7px;padding:0 10px;font-size:11px;cursor:pointer;';
   nav.insertAdjacentHTML('afterbegin', `
-    <button id="btn-live-refresh-preview" type="button" style="${style}">Refresh</button>
-    <button id="btn-live-open-preview" type="button" style="${style}">Open</button>
     <button id="btn-live-cancel" type="button" style="${style}display:none;">Cancel</button>
-    <button id="btn-live-deploy" type="button" disabled style="${style}background:#3f3f46;color:#a1a1aa;font-weight:700;">Deploy</button>
   `);
 
-  document.getElementById('btn-live-refresh-preview')?.addEventListener('click', refreshPreview);
-  document.getElementById('btn-live-open-preview')?.addEventListener('click', openPreview);
-  document.getElementById('btn-live-deploy')?.addEventListener('click', deployProject);
   document.getElementById('btn-live-cancel')?.addEventListener('click', cancelBuild);
   document.getElementById('action-download-zip')?.addEventListener('click', exportCode);
-}
-
-function updateDeployState(enabled: boolean) {
-  const button = document.getElementById('btn-live-deploy') as HTMLButtonElement | null;
-  if (!button) return;
-  button.disabled = !enabled;
-  button.style.background = enabled ? '#f4f4f5' : '#3f3f46';
-  button.style.color = enabled ? '#09090b' : '#a1a1aa';
 }
 
 function setBusy(busy: boolean) {
@@ -537,7 +506,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   setBusy(true);
   activeAbort = new AbortController();
 
-  appendMessage('user', `${requestedMode === 'plan' ? 'Plan' : 'Build'}: ${prompt}`);
+  appendMessage('user', prompt);
   const status = appendMessage('assistant', requestedMode === 'plan' ? 'Preparing a plan without changing files...' : 'Planning, generating, building preview...');
   if (requestedMode === 'build') activateBuilderView('preview');
   let streamedText = '';
@@ -607,52 +576,6 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   } finally {
     setBusy(false);
     activeAbort = null;
-  }
-}
-
-async function refreshPreview() {
-  if (!currentProjectId) return;
-  const status = appendMessage('system', 'Refreshing preview from generated files...');
-  try {
-    const payload = await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/preview`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
-    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
-    updateMessage(status, 'Preview refreshed from the persisted files.');
-  } catch (error) {
-    updateMessage(status, error instanceof Error ? error.message : 'Preview refresh failed.');
-  }
-}
-
-function openPreview() {
-  if (!currentPreviewHtml) return;
-  const blob = new Blob([currentPreviewHtml], { type: 'text/html' });
-  window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer');
-}
-
-async function deployProject() {
-  const button = document.getElementById('btn-live-deploy') as HTMLButtonElement | null;
-  if (!currentProjectId || !button) return;
-  button.disabled = true;
-  button.textContent = 'Deploying...';
-  const status = appendMessage('system', 'queued -> building -> deploying -> assigning_domain');
-  try {
-    const payload = await apiFetch<DeployPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/deploy`, {
-      method: 'POST',
-      body: JSON.stringify({ userCredits: 100 }),
-    });
-    if (payload.event === 'credits_insufficient') {
-      showCreditsModal(payload.credits?.required || 2, payload.credits?.balance || 0);
-      updateMessage(status, 'Credits are not enough to deploy.');
-      return;
-    }
-    updateMessage(status, `ready -> ${payload.deployment?.deployment_url || 'Deployment started'}`);
-  } catch (error) {
-    updateMessage(status, error instanceof Error ? error.message : 'Deployment failed.');
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Deploy';
   }
 }
 
