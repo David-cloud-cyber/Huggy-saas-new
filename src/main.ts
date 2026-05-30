@@ -1,5 +1,7 @@
 // @ts-ignore
 import './index.css';
+import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
+import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 
@@ -9,6 +11,9 @@ function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
 }
 
 function init() {
+    initHuggyMotion();
+    normalizeAiChatInputs();
+
     const themeBtn = getElement<HTMLButtonElement>('theme-btn');
     const curtain = getElement<HTMLDivElement>('curtain');
     const rotatingWord = getElement<HTMLSpanElement>('rotating-word');
@@ -57,6 +62,7 @@ function init() {
     }
 
     initPromptInputActions({ persistForBuilder: true });
+    normalizeAiChatInputs();
 
     // 1. Refactored Input Wrappers Logic (supports multiple instances)
     const wrappers = document.querySelectorAll('.input-wrapper');
@@ -316,6 +322,7 @@ function init() {
     });
 
     initProviderModelSelectors();
+    normalizeAiChatInputs();
 
     // 3. Rotating words
     if (rotatingWord) {

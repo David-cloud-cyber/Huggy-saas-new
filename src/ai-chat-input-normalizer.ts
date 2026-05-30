@@ -1,0 +1,203 @@
+let inputStyleInstalled = false;
+
+const arrowIcon = `
+  <svg class="huggy-submit-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 19V5m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+`;
+
+function installAiInputStyle() {
+  if (inputStyleInstalled || typeof document === 'undefined') return;
+  const style = document.createElement('style');
+  style.id = 'huggy-ai-input-normalizer-style';
+  style.textContent = `
+    :root {
+      --chat-action-height: 24px;
+      --chat-action-radius: 5px;
+      --chat-action-font: 10px;
+      --chat-action-icon: 12px;
+    }
+
+    .huggy-ai-input.input-wrapper,
+    .huggy-ai-input {
+      border: 1px solid var(--border, rgba(9,9,11,.16)) !important;
+      background: var(--bg-input, #fff) !important;
+      color: var(--text, #09090b) !important;
+      box-shadow: 0 1px 0 rgba(9,9,11,.04) inset, 0 12px 32px rgba(9,9,11,.08) !important;
+      overflow: visible !important;
+      text-align: left !important;
+    }
+
+    .huggy-ai-input.input-wrapper::before,
+    .huggy-ai-input.input-wrapper::after {
+      display: none !important;
+    }
+
+    .huggy-ai-input:focus-within {
+      border-color: var(--border-focus, rgba(9,9,11,.42)) !important;
+      box-shadow: 0 0 0 3px rgba(9,9,11,.06), 0 12px 32px rgba(9,9,11,.09) !important;
+    }
+
+    .huggy-ai-input textarea,
+    .huggy-ai-input #ai-textarea,
+    .huggy-ai-input #chat-textarea-box {
+      color: var(--text, #09090b) !important;
+      text-align: left !important;
+    }
+
+    .huggy-ai-input textarea::placeholder {
+      color: var(--text-sub, #52525b) !important;
+      opacity: .82 !important;
+    }
+
+    .huggy-ai-input .input-actions {
+      align-items: center !important;
+      gap: 6px !important;
+    }
+
+    .huggy-ai-input .submit-wrapper {
+      display: inline-flex !important;
+      align-items: center !important;
+      width: auto !important;
+      height: var(--chat-action-height) !important;
+    }
+
+    .huggy-ai-input .submit-wrapper::before,
+    .huggy-ai-input .submit-wrapper::after {
+      display: none !important;
+    }
+
+    .huggy-ai-input .icon-btn,
+    .huggy-ai-input .submit-btn,
+    .huggy-ai-input .model-select,
+    .huggy-ai-input .prompt-mode-btn,
+    .huggy-ai-input #btn-chat-mode {
+      min-height: var(--chat-action-height) !important;
+      height: var(--chat-action-height) !important;
+      border-radius: var(--chat-action-radius) !important;
+      border: 1px solid var(--border, rgba(9,9,11,.16)) !important;
+      background: transparent !important;
+      color: var(--text-sub, #52525b) !important;
+      box-shadow: none !important;
+      font-size: var(--chat-action-font) !important;
+      font-weight: 750 !important;
+      line-height: 1 !important;
+    }
+
+    .huggy-ai-input .icon-btn,
+    .huggy-ai-input .submit-btn {
+      width: var(--chat-action-height) !important;
+      min-width: var(--chat-action-height) !important;
+      padding: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+
+    .huggy-ai-input .icon-btn svg,
+    .huggy-ai-input .submit-btn svg,
+    .huggy-ai-input .model-select svg,
+    .huggy-ai-input .prompt-mode-btn svg,
+    .huggy-ai-input #btn-chat-mode svg {
+      width: var(--chat-action-icon) !important;
+      height: var(--chat-action-icon) !important;
+      flex: 0 0 auto !important;
+    }
+
+    .huggy-ai-input .model-select,
+    .huggy-ai-input .prompt-mode-btn,
+    .huggy-ai-input #btn-chat-mode {
+      width: auto !important;
+      min-width: 0 !important;
+      max-width: min(156px, 36vw) !important;
+      padding: 0 7px !important;
+      gap: 5px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      white-space: nowrap !important;
+    }
+
+    .huggy-ai-input .model-label-prefix,
+    .huggy-ai-input .current-model-label,
+    .huggy-ai-input #current-model-label,
+    .huggy-ai-input .prompt-mode-label {
+      font-size: var(--chat-action-font) !important;
+      line-height: 1 !important;
+    }
+
+    .huggy-ai-input .submit-btn span {
+      display: none !important;
+    }
+
+    .huggy-ai-input .submit-btn.active,
+    .huggy-ai-input .submit-btn:not(:disabled).active {
+      background: var(--text, #09090b) !important;
+      color: var(--bg, #fff) !important;
+      border-color: var(--text, #09090b) !important;
+      cursor: pointer !important;
+      pointer-events: auto !important;
+    }
+
+    .huggy-ai-input .submit-btn:not(.active) {
+      opacity: .72 !important;
+    }
+
+    .huggy-ai-input .icon-btn:hover,
+    .huggy-ai-input .model-select:hover,
+    .huggy-ai-input .prompt-mode-btn:hover,
+    .huggy-ai-input #btn-chat-mode:hover {
+      border-color: var(--border-focus, rgba(9,9,11,.42)) !important;
+      color: var(--text, #09090b) !important;
+      background: var(--bg-elevated, #f6f7f9) !important;
+    }
+
+    [data-theme="dark"] .huggy-ai-input.input-wrapper,
+    [data-theme="dark"] .huggy-ai-input {
+      box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 12px 34px rgba(0,0,0,.22) !important;
+    }
+
+    @media (max-width: 480px) {
+      .huggy-ai-input .input-actions {
+        gap: 4px !important;
+      }
+
+      .huggy-ai-input .model-select {
+        max-width: 132px !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  inputStyleInstalled = true;
+}
+
+export function normalizeAiChatInputs(root: ParentNode = document) {
+  if (typeof document === 'undefined') return;
+  installAiInputStyle();
+
+  root.querySelectorAll<HTMLElement>('.input-wrapper').forEach(wrapper => {
+    if (!wrapper.querySelector('textarea') || !wrapper.querySelector('.input-actions')) return;
+    wrapper.classList.add('huggy-ai-input');
+    wrapper.dataset.aiChatInput = 'true';
+
+    wrapper.querySelectorAll<HTMLButtonElement>('button').forEach(button => {
+      if (!button.getAttribute('type')) button.type = 'button';
+    });
+
+    const submit = wrapper.querySelector<HTMLButtonElement>('.submit-btn');
+    if (submit) {
+      submit.setAttribute('aria-label', submit.getAttribute('aria-label') || 'Send prompt');
+      submit.title = submit.title || 'Send prompt';
+      if (!submit.querySelector('svg')) {
+        submit.insertAdjacentHTML('beforeend', arrowIcon);
+      }
+    }
+
+    const modelSelect = wrapper.querySelector<HTMLElement>('.model-select');
+    if (modelSelect) {
+      modelSelect.setAttribute('role', modelSelect.getAttribute('role') || 'button');
+      modelSelect.setAttribute('tabindex', modelSelect.getAttribute('tabindex') || '0');
+      modelSelect.setAttribute('aria-label', modelSelect.getAttribute('aria-label') || 'Choose AI model');
+    }
+  });
+}

@@ -1,4 +1,6 @@
 import { apiFetch, apiStream } from './lib/api';
+import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
+import { initHuggyMotion } from './huggy-motion';
 import {
   consumePendingPromptAttachments,
   initPromptInputActions,
@@ -7,6 +9,7 @@ import {
 } from './prompt-input-actions';
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
+import { ensureSettingsPanel, openSettings } from './settings-panel';
 
 type GeneratedFile = {
   path: string;
@@ -468,7 +471,8 @@ function bindProjectMenu() {
     showMiniModal('Get free credits', '<p>Free credit campaigns are not configured yet. Upgrade or buy credits to continue building without interruption.</p>', () => {});
   });
   document.getElementById('project-menu-settings')?.addEventListener('click', () => {
-    showMiniModal('Project settings', '<p>Project settings are controlled from this menu for now. Rename your app here, then manage secrets in Database.</p>', () => {});
+    closeProjectMenu();
+    openSettings('ai-usage');
   });
   document.getElementById('project-name-save')?.addEventListener('click', () => void saveProjectNameFromMenu());
   document.getElementById('project-name-input')?.addEventListener('keydown', event => {
@@ -2281,9 +2285,13 @@ function ensureResizableSidebar() {
 }
 
 function init() {
+  initHuggyMotion();
+  ensureSettingsPanel();
+  normalizeAiChatInputs();
   ensureToolbar();
   void ensureModelSelector();
   ensurePlanBuildControls();
+  normalizeAiChatInputs();
   ensureDatabaseView();
   ensureResizableSidebar();
   bindProjectMenu();
@@ -2293,6 +2301,7 @@ function init() {
     onFiles: uploadPromptAttachments,
     onNotice: (message, kind) => appendMessage(kind === 'error' ? 'system' : 'system', message),
   });
+  normalizeAiChatInputs();
   bindChat();
   hydrateDashboardPrompt();
   void loadProject();

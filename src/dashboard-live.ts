@@ -1,6 +1,9 @@
 import { apiFetch } from './lib/api';
+import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
+import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
+import { ensureSettingsPanel, openSettings } from './settings-panel';
 
 type ProjectResponse = {
   success: boolean;
@@ -440,6 +443,8 @@ async function loadAiUsageSettings(force = false) {
 }
 
 function bindAiUsageSettings() {
+  ensureSettingsPanel();
+  document.getElementById('btn-settings')?.addEventListener('click', () => openSettings('profile'));
   document.getElementById('btn-settings')?.addEventListener('click', () => {
     window.setTimeout(() => {
       if (document.querySelector('.settings-tab[data-tab="ia"]')?.classList.contains('active')) {
@@ -505,8 +510,12 @@ function bindLiveProjectCreation() {
 function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
+  initHuggyMotion();
+  ensureSettingsPanel();
+  normalizeAiChatInputs();
   initPromptInputActions({ persistForBuilder: true });
   initProviderModelSelectors();
+  normalizeAiChatInputs();
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
   bindDashboardWorkspacePersistence();
