@@ -40,7 +40,7 @@ function injectProviderSelectorStyle() {
       height: 8px;
       border-radius: 999px;
       background: var(--accent);
-      box-shadow: 0 0 0 3px rgba(180,113,86,.10);
+      box-shadow: 0 0 0 3px rgba(9,9,11,.08);
       flex: 0 0 auto;
     }
     .huggy-provider-model-select .current-model-label,
@@ -98,11 +98,11 @@ function injectProviderSelectorStyle() {
     .huggy-auto-model-option.active,
     .huggy-provider-card:hover,
     .huggy-provider-card.active {
-      background: var(--accent-hover, rgba(180,113,86,.12));
+      background: var(--accent-hover, rgba(9,9,11,.08));
       border-color: var(--border-focus, var(--border));
     }
     .huggy-provider-card.open {
-      background: var(--accent-hover, rgba(180,113,86,.14));
+      background: var(--accent-hover, rgba(9,9,11,.10));
       border-color: var(--border-focus, var(--border));
       transform: translateX(2px);
     }
@@ -243,11 +243,11 @@ function injectProviderSelectorStyle() {
         transform 150ms cubic-bezier(0.34,1.56,0.64,1);
     }
     .huggy-model-item:hover {
-      background: var(--accent-dim, rgba(180,113,86,.10));
+      background: var(--accent-dim, rgba(9,9,11,.08));
       transform: translateX(2px);
     }
     .huggy-model-item.selected {
-      background: var(--accent-hover, rgba(180,113,86,.14));
+      background: var(--accent-hover, rgba(9,9,11,.10));
     }
     .huggy-model-item.selected::before {
       content: "";

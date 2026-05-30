@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#18130d" />
+  <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Builder Workspace" />
@@ -61,21 +61,21 @@
     }
 
     :root[data-theme="light"] {
-      --bg: #f7f4ef;
-      --bg-surface: #fffaf3;
-      --bg-panel: #f1ece4;
+      --bg: #ffffff;
+      --bg-surface: #ffffff;
+      --bg-panel: #f8fafc;
       --bg-input: #ffffff;
-      --border: rgba(43, 35, 25, 0.14);
-      --border-light: rgba(43, 35, 25, 0.08);
-      --border-focus: rgba(180, 113, 86, 0.34);
-      --accent: #b47156;
-      --accent-spark: #d4953a;
-      --accent-dim: rgba(180, 113, 86, 0.10);
-      --accent-hover: rgba(180, 113, 86, 0.14);
-      --text: #18130d;
-      --text-muted: #675f55;
-      --text-sub: #968b7f;
-      --text-dark: #5d5348;
+      --border: rgba(9, 9, 11, 0.10);
+      --border-light: rgba(9, 9, 11, 0.06);
+      --border-focus: rgba(9, 9, 11, 0.28);
+      --accent: #09090b;
+      --accent-spark: #52525b;
+      --accent-dim: rgba(9, 9, 11, 0.06);
+      --accent-hover: rgba(9, 9, 11, 0.10);
+      --text: #09090b;
+      --text-muted: #52525b;
+      --text-sub: #a1a1aa;
+      --text-dark: #3f3f46;
       --blue: #3b7a8c;
     }
 
@@ -384,7 +384,7 @@
 
     .project-menu-input:focus {
       border-color: var(--border-focus, var(--accent));
-      box-shadow: 0 0 0 3px var(--accent-dim, rgba(180,113,86,.12));
+      box-shadow: 0 0 0 3px var(--accent-dim, rgba(9,9,11,.08));
     }
 
     .project-menu-save {
@@ -2200,7 +2200,7 @@
                             <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.62;">v</span>
                         </button>
                         <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
-                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(180,113,86,.12));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
                             <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
                         </div>
                     </div>
@@ -2339,7 +2339,7 @@
             </div>
             <div class="preview-device-stage">
               <div class="preview-device-frame">
-                <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #f7f4ef; color: #675f55; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(43,35,25,0.14); padding: 24px; border-radius: 12px; background: #fffaf3; } h3 { color: #18130d; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #675f55; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element" title="Project preview"></iframe>
+                <iframe srcdoc="<!DOCTYPE html><html><head><style>body { background: #ffffff; color: #52525b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; } .card { text-align: center; max-width: 320px; border: 1px dashed rgba(9,9,11,0.14); padding: 24px; border-radius: 12px; background: #ffffff; } h3 { color: #09090b; margin: 0 0 8px 0; font-weight: 600; font-size: 14px; } p { margin: 0; font-size: 12px; line-height: 1.6; color: #52525b; }</style></head><body><div class='card'><h3>No preview yet</h3><p>Run Build to generate real project files and preview output.</p></div></body></html>" class="preview-iframe-view" id="preview-iframe-element" title="Project preview"></iframe>
               </div>
             </div>
           </div>

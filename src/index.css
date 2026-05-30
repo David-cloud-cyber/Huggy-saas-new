@@ -5,35 +5,35 @@
     --bg-surface: #0F0F0F;
     --bg-elevated: #161616;
     --bg-input: #111111;
-    --accent: #F0EBE3;
-    --accent-dim: rgba(240, 235, 227, 0.07);
-    --accent-hover: rgba(240, 235, 227, 0.11);
+    --accent: #F4F4F5;
+    --accent-dim: rgba(244, 244, 245, 0.07);
+    --accent-hover: rgba(244, 244, 245, 0.11);
     --text: #F2F2F2;
     --text-muted: #606060;
     --text-sub: #2E2E2E;
     --border: rgba(255, 255, 255, 0.06);
-    --border-focus: rgba(240, 235, 227, 0.22);
-    --caret: #F0EBE3;
+    --border-focus: rgba(244, 244, 245, 0.22);
+    --caret: #F4F4F5;
     --nav-bg: rgba(6, 6, 6, 0.82);
     --nav-line: rgba(255, 255, 255, 0.06);
 }
 
 :root[data-theme="light"] {
-    --bg: #F8F5F0;
+    --bg: #FFFFFF;
     --bg-surface: #FFFFFF;
-    --bg-elevated: #F0EDE8;
+    --bg-elevated: #F6F7F9;
     --bg-input: #FFFFFF;
-    --accent: #0C0C0C;
-    --accent-dim: rgba(12, 12, 12, 0.06);
-    --accent-hover: rgba(12, 12, 12, 0.10);
-    --text: #0C0C0C;
-    --text-muted: #888888;
-    --text-sub: #BBBBBB;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-focus: rgba(12, 12, 12, 0.25);
-    --caret: #0C0C0C;
-    --nav-bg: rgba(248, 245, 240, 0.85);
-    --nav-line: rgba(0, 0, 0, 0.06);
+    --accent: #09090B;
+    --accent-dim: rgba(9, 9, 11, 0.06);
+    --accent-hover: rgba(9, 9, 11, 0.10);
+    --text: #09090B;
+    --text-muted: #52525B;
+    --text-sub: #A1A1AA;
+    --border: rgba(9, 9, 11, 0.10);
+    --border-focus: rgba(9, 9, 11, 0.28);
+    --caret: #09090B;
+    --nav-bg: rgba(255, 255, 255, 0.88);
+    --nav-line: rgba(9, 9, 11, 0.08);
 }
 
 *, *::before, *::after {
@@ -1961,7 +1961,7 @@ h1 {
 }
 
 @keyframes btn-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 235, 227, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(244, 244, 245, 0); }
     50% { box-shadow: 0 0 20px 2px var(--accent-dim); }
 }
 

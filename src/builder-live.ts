@@ -628,7 +628,7 @@ function ensureBuilderModelSelectorStyle() {
       height: 8px;
       border-radius: 999px;
       background: var(--accent);
-      box-shadow: 0 0 0 3px rgba(180,113,86,.10);
+      box-shadow: 0 0 0 3px rgba(9,9,11,.08);
       flex: 0 0 auto;
     }
     .huggy-builder-model-trigger #current-model-label {
@@ -690,7 +690,7 @@ function ensureBuilderModelSelectorStyle() {
     .huggy-builder-provider-card:hover,
     .huggy-builder-provider-card.active,
     .huggy-builder-provider-card.open {
-      background: var(--accent-hover, rgba(180,113,86,.12));
+      background: var(--accent-hover, rgba(9,9,11,.08));
       border-color: var(--border-focus, var(--border));
     }
     .huggy-builder-provider-card.open {
@@ -820,11 +820,11 @@ function ensureBuilderModelSelectorStyle() {
       transition: background 150ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.34,1.56,0.64,1);
     }
     .huggy-builder-model-item:hover {
-      background: var(--accent-hover, rgba(180,113,86,.12));
+      background: var(--accent-hover, rgba(9,9,11,.08));
       transform: translateX(2px);
     }
     .huggy-builder-model-item.selected {
-      background: var(--accent-hover, rgba(180,113,86,.14));
+      background: var(--accent-hover, rgba(9,9,11,.10));
     }
     .huggy-builder-model-item.selected::before {
       content: "";
@@ -915,7 +915,7 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-model-dropdown .model-option:hover,
     .huggy-model-dropdown .model-option.active {
-      background: var(--accent-hover, rgba(180,113,86,.12));
+      background: var(--accent-hover, rgba(9,9,11,.08));
       transform: translateX(3px);
     }
     .huggy-model-dropdown .model-option[aria-disabled="true"] {
@@ -1233,7 +1233,7 @@ function ensurePlanBuildControls() {
         <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">v</span>
       </button>
       <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
-        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(180,113,86,.12));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
         <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
       </div>
     </div>

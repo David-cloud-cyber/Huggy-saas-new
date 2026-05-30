@@ -31,8 +31,8 @@ async function main() {
     ],
     start_url: '/',
     display: 'standalone',
-    background_color: '#fafaf9',
-    theme_color: '#18130d',
+    background_color: '#ffffff',
+    theme_color: '#ffffff',
   }, null, 2) + '\n');
 }
 

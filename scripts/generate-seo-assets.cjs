@@ -38,15 +38,6 @@ const generatedPages = [
     faq: ['Can templates still be customized?', 'Yes. Start with a template prompt, then use Plan or Build to adapt every screen, data model and flow.'],
   },
   {
-    slug: 'templates/restaurant-app',
-    title: 'AI Restaurant App Builder Template',
-    description: 'Generate a restaurant website or app with menus, reservations, local SEO, mobile-first UX and deploy-ready pages.',
-    h1: 'Create a restaurant app people can find',
-    prompt: 'Create a restaurant web app with menu, reservations, location, reviews, local SEO pages and a premium mobile-first design.',
-    cards: ['Menu and reservation flows.', 'Local SEO sections and Open Graph previews.', 'Mobile-first layout for visitors searching nearby.'],
-    faq: ['Does this support local SEO?', 'The template prompt asks Huggy to generate structured sections, titles, meta and local discovery content.'],
-  },
-  {
     slug: 'templates/saas-dashboard',
     title: 'AI SaaS Dashboard Template',
     description: 'Generate a SaaS dashboard with metrics, billing-ready UI, settings, user workflows and Supabase-ready schema notes.',
@@ -236,15 +227,6 @@ const generatedPages = [
     faq: ['Can Huggy fix SEO issues?', 'Huggy can audit generated pages and create prompts to improve metadata, headings, alt text and structure.'],
   },
   {
-    slug: 'seo-aeo',
-    title: 'AI Search and SEO Automation for Generated Apps',
-    description: 'Make generated apps easier for Google and AI answer engines to understand with structured content, metadata and semantic HTML.',
-    h1: 'SEO and AI search should be built into the app',
-    prompt: 'Create an AI-search-ready web app with semantic HTML, FAQ, schema.org JSON-LD, Open Graph and sitemap-ready pages.',
-    cards: ['Semantic HTML.', 'Structured data.', 'Answer-engine-friendly page sections.'],
-    faq: ['What is AEO?', 'Answer Engine Optimization means making content clear enough for AI answer systems to cite and summarize accurately.'],
-  },
-  {
     slug: 'tools/seo-audit',
     title: 'Free SEO Audit Tool for AI-Generated Apps',
     description: 'Use this free Huggy tool page to audit metadata, headings, social preview and search-readiness before sending a prompt to the builder.',
@@ -327,7 +309,7 @@ function faviconHead() {
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#18130d" />`;
+  <meta name="theme-color" content="#ffffff" />`;
 }
 
 function baseHead(page, url, breadcrumbs = []) {
@@ -546,8 +528,8 @@ ${faviconHead()}
 function generatePublicAssets(urls) {
   write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
   write('public/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${url === siteUrl + '/' ? '1.0' : '0.8'}</priority></url>`).join('\n')}\n</urlset>\n`);
-  write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#18130d}.icon-fill{fill:#fffaf3}@media (prefers-color-scheme:dark){.icon-bg{fill:#fffaf3}.icon-fill{fill:#18130d}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);
-  write('public/og-huggy.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#f7f4ef"/><circle cx="1040" cy="100" r="260" fill="#d4953a" opacity=".18"/><circle cx="150" cy="540" r="300" fill="#3b7a8c" opacity=".14"/><rect x="84" y="82" width="1032" height="466" rx="42" fill="#fffaf3" stroke="#2b2319" stroke-opacity=".12"/><text x="138" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#18130d">Huggy</text><text x="138" y="310" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#18130d">Build apps people can use and find.</text><text x="138" y="386" font-family="Arial, sans-serif" font-size="28" fill="#675f55">AI app builder with database, preview, deploy and SEO-ready output.</text></svg>\n`);
+  write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#09090b}.icon-fill{fill:#ffffff}@media (prefers-color-scheme:dark){.icon-bg{fill:#ffffff}.icon-fill{fill:#09090b}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);
+  write('public/og-huggy.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#ffffff"/><circle cx="1040" cy="100" r="260" fill="#09090b" opacity=".05"/><circle cx="150" cy="540" r="300" fill="#3b7a8c" opacity=".10"/><rect x="84" y="82" width="1032" height="466" rx="42" fill="#ffffff" stroke="#09090b" stroke-opacity=".12"/><text x="138" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#09090b">Huggy</text><text x="138" y="310" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#09090b">Build apps people can use and find.</text><text x="138" y="386" font-family="Arial, sans-serif" font-size="28" fill="#52525b">AI app builder with database, preview, deploy and SEO-ready output.</text></svg>\n`);
 }
 
 function main() {

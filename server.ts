@@ -817,18 +817,18 @@ function buildFallbackAppHtml(title: string, prompt: string): string {
   <style>
     :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; color: #18130d; background: #f7f4ef; }
+    body { margin: 0; min-height: 100vh; color: #09090b; background: #ffffff; }
     main { min-height: 100vh; display: grid; place-items: center; padding: 40px 18px; background:
-      radial-gradient(circle at top left, rgba(180,113,86,.15), transparent 32%),
-      linear-gradient(135deg, #f7f4ef, #fffaf3 52%, #f1ece4); }
-    section { width: min(960px, 100%); border: 1px solid rgba(43,35,25,.14); background: rgba(255,250,243,.86); border-radius: 18px; padding: clamp(24px, 5vw, 56px); box-shadow: 0 30px 90px rgba(43,35,25,.14); }
-    .eyebrow { color: #b47156; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; }
+      radial-gradient(circle at top left, rgba(9,9,11,.06), transparent 32%),
+      linear-gradient(135deg, #ffffff, #f8fafc 52%, #f6f7f9); }
+    section { width: min(960px, 100%); border: 1px solid rgba(9,9,11,.12); background: rgba(255,255,255,.92); border-radius: 18px; padding: clamp(24px, 5vw, 56px); box-shadow: 0 30px 90px rgba(9,9,11,.12); }
+    .eyebrow { color: #27272a; text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 700; }
     h1 { margin: 14px 0 12px; font-size: clamp(34px, 7vw, 76px); line-height: .96; letter-spacing: 0; }
-    p { max-width: 680px; color: #675f55; font-size: clamp(16px, 2.4vw, 21px); line-height: 1.7; }
+    p { max-width: 680px; color: #52525b; font-size: clamp(16px, 2.4vw, 21px); line-height: 1.7; }
     .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 28px; }
-    .card { border: 1px solid rgba(43,35,25,.12); border-radius: 12px; padding: 16px; background: rgba(255,255,255,.54); }
+    .card { border: 1px solid rgba(9,9,11,.10); border-radius: 12px; padding: 16px; background: rgba(255,255,255,.82); }
     .card strong { display:block; margin-bottom: 6px; }
-    a { display: inline-flex; margin-top: 28px; padding: 13px 18px; border-radius: 10px; color: #fffaf3; background: #b47156; text-decoration: none; font-weight: 800; }
+    a { display: inline-flex; margin-top: 28px; padding: 13px 18px; border-radius: 10px; color: #ffffff; background: #09090b; text-decoration: none; font-weight: 800; }
     @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } section { border-radius: 12px; } }
   </style>
 </head>

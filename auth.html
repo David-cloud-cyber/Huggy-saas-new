@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#18130d" />
+  <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Sign In" />
@@ -67,30 +67,30 @@
             --bg-surface: #0F0F0F;
             --bg-elevated: #161616;
             --bg-input: #111111;
-            --accent: #F0EBE3;
-            --accent-dim: rgba(240, 235, 227, 0.07);
-            --accent-hover: rgba(240, 235, 227, 0.11);
+            --accent: #F4F4F5;
+            --accent-dim: rgba(244, 244, 245, 0.07);
+            --accent-hover: rgba(244, 244, 245, 0.11);
             --text: #F2F2F2;
             --text-muted: #606060;
             --text-sub: #2E2E2E;
             --border: rgba(255, 255, 255, 0.06);
-            --border-focus: rgba(240, 235, 227, 0.22);
+            --border-focus: rgba(244, 244, 245, 0.22);
             --error: #F87171;
         }
 
         :root[data-theme="light"] {
-            --bg: #F8F5F0;
+            --bg: #FFFFFF;
             --bg-surface: #FFFFFF;
-            --bg-elevated: #F0EDE8;
+            --bg-elevated: #F6F7F9;
             --bg-input: #FFFFFF;
-            --accent: #0C0C0C;
-            --accent-dim: rgba(12, 12, 12, 0.06);
-            --accent-hover: rgba(12, 12, 12, 0.10);
-            --text: #0C0C0C;
-            --text-muted: #888888;
-            --text-sub: #BBBBBB;
-            --border: rgba(0, 0, 0, 0.08);
-            --border-focus: rgba(12, 12, 12, 0.25);
+            --accent: #09090B;
+            --accent-dim: rgba(9, 9, 11, 0.06);
+            --accent-hover: rgba(9, 9, 11, 0.10);
+            --text: #09090B;
+            --text-muted: #52525B;
+            --text-sub: #A1A1AA;
+            --border: rgba(9, 9, 11, 0.10);
+            --border-focus: rgba(9, 9, 11, 0.28);
             --error: #DC2626;
         }
 
@@ -567,7 +567,7 @@
             const current = html.getAttribute('data-theme');
             const next = current === 'dark' ? 'light' : 'dark';
             
-            curtain.style.background = next === 'dark' ? '#060606' : '#F8F5F0';
+            curtain.style.background = next === 'dark' ? '#060606' : '#FFFFFF';
             curtain.style.transformOrigin = 'top';
             curtain.classList.add('falling');
 
