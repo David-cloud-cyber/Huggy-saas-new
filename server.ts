@@ -489,6 +489,33 @@ function sanitizeProjectName(value: unknown) {
     .slice(0, 80);
 }
 
+function isGreetingPrompt(value: string) {
+  const normalized = value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[!?.,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return false;
+  const greetings = new Set([
+    'bonjour',
+    'bonsoir',
+    'salut',
+    'coucou',
+    'hello',
+    'hi',
+    'hey',
+    'yo',
+    'good morning',
+    'good afternoon',
+    'good evening',
+  ]);
+  if (greetings.has(normalized)) return true;
+  const words = normalized.split(' ');
+  return words.length <= 3 && words.some(word => greetings.has(word));
+}
+
 async function uniqueSlug(base: string, ownerId: string, excludeProjectId = ''): Promise<string> {
   const candidate = slugify(base);
   const client = requireSupabase('Project slug generation');
@@ -982,6 +1009,18 @@ class AgentOrchestrator {
       };
     }
 
+    if (isGreetingPrompt(text)) {
+      return {
+        intent: 'conversation',
+        confidence: 0.95,
+        requestedMode,
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: false,
+        userVisibleReason: 'This is a greeting, so Huggy will answer without changing files.',
+      };
+    }
+
     if (!text || text.length < 4) {
       return {
         intent: 'clarification_required',
@@ -1095,6 +1134,9 @@ function createPlanResponse(project: GeneratedProject, prompt: string, files: Ge
 }
 
 function createConversationResponse(project: GeneratedProject, prompt: string) {
+  if (isGreetingPrompt(prompt)) {
+    return `Bonjour. Je suis prêt à t'aider sur ${project.name}. Dis-moi ce que tu veux créer, modifier, corriger ou analyser, et je m'adapterai au mode Build ou Plan.`;
+  }
   return `I can help with ${project.name}. This message looks like a question, so I will not change files or rebuild the preview.\n\n${prompt}`;
 }
 
@@ -1611,21 +1653,42 @@ async function saveAgentEvent(event: AgentEvent) {
 
   const client = requireSupabase('Agent event persistence');
   const { error } = await client.from('agent_events').insert([row]);
-  if (error) throw new Error(`Supabase agent event persistence failed: ${error.message}`);
+  if (error) {
+    console.warn('[huggy:agent_event_persistence_skipped]', { message: error.message });
+  }
   return row;
 }
 
 async function saveProjectMessage(data: any) {
   const row = { id: data.id || randomUUID(), ...data, created_at: data.created_at || new Date().toISOString() };
   const client = requireSupabase('Project message persistence');
-  const { error } = await client.from('project_messages').insert([row]);
-  if (error) throw new Error(`Supabase project message persistence failed: ${error.message}`);
+  let { error } = await client.from('project_messages').insert([row]);
+  if (error && /intent|requested_mode|organization_id|schema cache|column .* does not exist/i.test(error.message || '')) {
+    const compactRow = {
+      id: row.id,
+      project_id: row.project_id,
+      user_id: row.user_id,
+      role: row.role,
+      content: row.content,
+      created_at: row.created_at,
+    };
+    const retry = await client.from('project_messages').insert([compactRow]);
+    error = retry.error;
+  }
+  if (error) {
+    if (/project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+      console.warn('[huggy:project_message_persistence_skipped]', { message: error.message });
+      return row;
+    }
+    throw new Error(`Supabase project message persistence failed: ${error.message}`);
+  }
   return row;
 }
 
 async function listProjectMessages(projectId: string) {
   const client = requireSupabase('Project message listing');
   const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
+  if (error && /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase project message listing failed: ${error.message}`);
   return data || [];
 }
@@ -1636,6 +1699,7 @@ async function listProjectMessagesPage(projectId: string, limitValue: any, befor
   let query = client.from('project_messages').select('*').eq('project_id', projectId).order('created_at', { ascending: false }).limit(limit);
   if (beforeValue) query = query.lt('created_at', String(beforeValue));
   const { data, error } = await query;
+  if (error && /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase project message page failed: ${error.message}`);
   return (data || []).reverse();
 }
@@ -1806,6 +1870,7 @@ async function getLastProjectPlan(projectId: string): Promise<string> {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error && /project_messages|intent|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return '';
   if (error) throw new Error(`Supabase project plan lookup failed: ${error.message}`);
   return data?.content || '';
 }
@@ -1813,6 +1878,7 @@ async function getLastProjectPlan(projectId: string): Promise<string> {
 async function listAgentEvents(projectId: string) {
   const client = requireSupabase('Agent event listing');
   const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
+  if (error && /agent_events|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase agent event listing failed: ${error.message}`);
   return data || [];
 }
@@ -1823,6 +1889,7 @@ async function listAgentEventsPage(projectId: string, limitValue: any, beforeVal
   let query = client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number', { ascending: false }).limit(limit);
   if (beforeValue) query = query.lt('sequence_number', Number(beforeValue));
   const { data, error } = await query;
+  if (error && /agent_events|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase agent event page failed: ${error.message}`);
   return (data || []).reverse();
 }
@@ -1978,13 +2045,16 @@ async function createBuildSession(project: GeneratedProject, userId: string) {
   };
   const client = requireSupabase('Build session persistence');
   const { error } = await client.from('build_sessions').insert([row]);
-  if (error) throw new Error(`Supabase build session persistence failed: ${error.message}`);
+  if (error) {
+    console.warn('[huggy:build_session_persistence_skipped]', { message: error.message });
+  }
   return row;
 }
 
 async function getBuildSession(buildSessionId: string) {
   const client = requireSupabase('Build session lookup');
   const { data, error } = await client.from('build_sessions').select('*').eq('id', buildSessionId).maybeSingle();
+  if (error && /build_sessions|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return null;
   if (error) throw new Error(`Supabase build session lookup failed: ${error.message}`);
   return data;
 }
@@ -1992,6 +2062,7 @@ async function getBuildSession(buildSessionId: string) {
 async function updateBuildSessionStatus(buildSessionId: string, status: string, extra: Record<string, unknown> = {}) {
   const client = requireSupabase('Build session update');
   const { error } = await client.from('build_sessions').update({ status, ...extra }).eq('id', buildSessionId);
+  if (error && /build_sessions|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return;
   if (error) throw new Error(`Supabase build session update failed: ${error.message}`);
 }
 
@@ -2622,62 +2693,70 @@ app.get('/api/projects', async (req: any, res: any) => {
 });
 
 app.post('/api/projects', async (req: any, res: any) => {
-  const userId = getUserOrgId(req);
-  const name = sanitizeProjectName(req.body?.name);
-  const prompt = String(req.body?.prompt || req.body?.description || '').trim();
+  try {
+    const userId = getUserOrgId(req);
+    const name = sanitizeProjectName(req.body?.name);
+    const prompt = String(req.body?.prompt || req.body?.description || '').trim();
 
-  if (!name) {
-    return res.status(400).json({ success: false, error: 'Project name is required.' });
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Project name is required.' });
+    }
+
+    const now = new Date().toISOString();
+    const project: GeneratedProject = {
+      id: randomUUID(),
+      owner_id: userId,
+      organization_id: userId,
+      name,
+      slug: await uniqueSlug(name, userId),
+      prompt,
+      template: String(req.body?.template || 'custom'),
+      theme: String(req.body?.theme || 'light'),
+      model_id: normalizeModelSelectionId(req.body?.model || req.body?.modelId || 'auto'),
+      status: 'draft',
+      preview_status: 'idle',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
+    project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
+    await saveProject(project, files);
+    await upsertUserWorkspaceState(userId, {
+      last_project_id: project.id,
+      dashboard_draft_prompt: '',
+      builder_draft_prompt: '',
+      builder_selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+      builder_selected_model: project.model_id,
+      builder_active_tab: 'preview',
+      builder_preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
+      last_route: `/builder.html?project=${project.id}`,
+    });
+    await upsertProjectWorkspaceState(userId, project.id, {
+      draft_prompt: '',
+      selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+      selected_model: project.model_id,
+      active_tab: 'preview',
+      preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
+      sidebar_width: 380,
+    });
+
+    res.status(201).json({
+      success: true,
+      project,
+      files,
+      preview: {
+        status: project.preview_status,
+        html: project.preview_html,
+      },
+    });
+  } catch (error: any) {
+    const message = error?.statusCode === 503
+      ? 'Project storage is not configured.'
+      : error?.message || 'Project could not be created.';
+    console.error('[huggy:project_create_failed]', { message: error?.message || String(error) });
+    res.status(error?.statusCode || 500).json({ success: false, error: message, message });
   }
-
-  const now = new Date().toISOString();
-  const project: GeneratedProject = {
-    id: randomUUID(),
-    owner_id: userId,
-    organization_id: userId,
-    name,
-    slug: await uniqueSlug(name, userId),
-    prompt,
-    template: String(req.body?.template || 'custom'),
-    theme: String(req.body?.theme || 'light'),
-    model_id: normalizeModelSelectionId(req.body?.model || req.body?.modelId || 'auto'),
-    status: 'draft',
-    preview_status: 'idle',
-    created_at: now,
-    updated_at: now,
-  };
-
-  const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
-  project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
-  await saveProject(project, files);
-  await upsertUserWorkspaceState(userId, {
-    last_project_id: project.id,
-    dashboard_draft_prompt: '',
-    builder_draft_prompt: '',
-    builder_selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
-    builder_selected_model: project.model_id,
-    builder_active_tab: 'preview',
-    builder_preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
-    last_route: `/builder.html?project=${project.id}`,
-  });
-  await upsertProjectWorkspaceState(userId, project.id, {
-    draft_prompt: '',
-    selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
-    selected_model: project.model_id,
-    active_tab: 'preview',
-    preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
-    sidebar_width: 380,
-  });
-
-  res.status(201).json({
-    success: true,
-    project,
-    files,
-    preview: {
-      status: project.preview_status,
-      html: project.preview_html,
-    },
-  });
 });
 
 app.get('/api/projects/:id', async (req: any, res: any) => {
@@ -3046,7 +3125,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   };
 
   const helpers = getDbHelpers();
-  const wallet = await helpers.getWallet(userId);
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = intentRouter.decide({
@@ -3057,6 +3135,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   });
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   const estimate = estimateActionCost(prompt, decision, requestedModelSelection);
+  const wallet = estimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
   await saveProjectMessage({
     organization_id: project.organization_id,
     project_id: project.id,
