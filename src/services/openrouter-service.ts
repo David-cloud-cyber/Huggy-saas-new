@@ -33,7 +33,11 @@ export class OpenRouterService {
   private config: OpenRouterConfig;
 
   constructor(config: OpenRouterConfig) {
-    this.config = config;
+    this.config = {
+      apiKey: this.cleanHeaderValue(config.apiKey),
+      siteUrl: this.cleanHeaderValue(config.siteUrl) || 'https://huggy.fun',
+      appName: this.cleanHeaderValue(config.appName) || 'Huggy',
+    };
   }
 
   /**
@@ -48,12 +52,7 @@ export class OpenRouterService {
       validateAllowedModel(fb);
     }
 
-    const payload = {
-      model: modelId,
-      messages: messages,
-      models: [modelId, ...fallbackModels],
-      route: 'fallback'
-    };
+    const payload = this.buildChatPayload(modelId, fallbackModels, messages);
 
     let attempt = 0;
     let delay = 1000; // start with 1s backoff
@@ -66,12 +65,7 @@ export class OpenRouterService {
 
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.maskApiKey(this.config.apiKey)}`,
-            'HTTP-Referer': this.config.siteUrl,
-            'X-Title': this.config.appName,
-            'Content-Type': 'application/json'
-          },
+          headers: this.buildHeaders(),
           signal: controller.signal as any,
           body: JSON.stringify(payload)
         });
@@ -148,18 +142,10 @@ export class OpenRouterService {
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.maskApiKey(this.config.apiKey)}`,
-          'HTTP-Referer': this.config.siteUrl,
-          'X-Title': this.config.appName,
-          'Content-Type': 'application/json'
-        },
+        headers: this.buildHeaders(),
         signal: controller.signal as any,
         body: JSON.stringify({
-          model: modelId,
-          messages,
-          models: [modelId, ...fallbackModels],
-          route: 'fallback',
+          ...this.buildChatPayload(modelId, fallbackModels, messages),
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -224,13 +210,44 @@ export class OpenRouterService {
     }
   }
 
-  private maskApiKey(key: string): string {
-    // Return key, or if it looks unmasked, fetch standard configuration safely
-    if (key.includes('***')) {
-      const actualFromEnv = process.env.OPENROUTER_API_KEY || '';
-      return actualFromEnv;
+  private cleanHeaderValue(value: string): string {
+    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  }
+
+  private resolveApiKey(): string {
+    const fromRuntime = this.cleanHeaderValue(process.env.OPENROUTER_API_KEY || '');
+    const candidate = fromRuntime || this.config.apiKey;
+    if (!candidate || candidate.includes('***')) return '';
+    return candidate;
+  }
+
+  private buildHeaders() {
+    const apiKey = this.resolveApiKey();
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is not configured.');
     }
-    return key;
+
+    return {
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': this.config.siteUrl,
+      'X-Title': this.config.appName,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  private buildChatPayload(modelId: string, fallbackModels: AllowedModelId[], messages: ChatMessage[]) {
+    const models = [modelId, ...fallbackModels].filter((model, index, list) => list.indexOf(model) === index);
+    if (models.length > 1) {
+      return {
+        models,
+        messages,
+      };
+    }
+
+    return {
+      model: modelId,
+      messages,
+    };
   }
 
   private estimateUsdCost(model: string, prompt: number, completion: number): number {

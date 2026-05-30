@@ -162,7 +162,7 @@ app.get('/api/health', (_req, res) => {
     integrations: {
       supabase_url: Boolean(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL),
       supabase_service_role: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+      openrouter: Boolean(getOpenRouterApiKey()),
       vercel: Boolean(getVercelToken()),
       stripe: Boolean(process.env.STRIPE_SECRET_KEY),
     },
@@ -197,10 +197,23 @@ const RATE_LIMITS = new Map<string, number[]>();
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
 
 // Instantiate Core Services
+function getOpenRouterApiKey() {
+  return String(process.env.OPENROUTER_API_KEY || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+}
+
+function getOpenRouterSiteUrl() {
+  return String(
+    process.env.OPENROUTER_SITE_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    process.env.APP_URL ||
+    'https://huggy.fun'
+  ).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+}
+
 const openRouter = new OpenRouterService({
-  apiKey: process.env.OPENROUTER_API_KEY || '',
-  siteUrl: process.env.OPENROUTER_SITE_URL || 'https://huggy.app',
-  appName: process.env.OPENROUTER_APP_NAME || 'Huggy SaaS'
+  apiKey: getOpenRouterApiKey(),
+  siteUrl: getOpenRouterSiteUrl(),
+  appName: String(process.env.OPENROUTER_APP_NAME || 'Huggy').trim()
 });
 
 const modelRouter = new ModelRouter();
@@ -1404,7 +1417,7 @@ async function generateFilesWithAi(input: {
   modelId?: string;
   existingFiles: GeneratedFile[];
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
-  const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
+  const hasLiveKey = Boolean(getOpenRouterApiKey());
   if (!hasLiveKey) {
     throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
   }
@@ -3128,7 +3141,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send('queued', 'Generation queued.', { build_session_id: buildSessionId });
     await send('routing', 'Selecting the model and preparing project context.', { mode: requestedModelSelection });
 
-    const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
+    const hasLiveKey = Boolean(getOpenRouterApiKey());
     let generatedText = '';
     let model: string = requestedModelSelection !== 'auto'
       ? normalizeProviderModelForBackend(requestedModelSelection)
