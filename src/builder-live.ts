@@ -134,6 +134,7 @@ let analysisRange = '30d';
 let projectWorkspaceState: WorkspaceState | null = null;
 let userWorkspaceState: UserWorkspaceState | null = null;
 let workspaceSaveTimer: number | null = null;
+let chatShimmerStyleInstalled = false;
 
 function escapeHtml(value: string): string {
   return value
@@ -321,6 +322,76 @@ function chatScroll() {
   return document.getElementById('sidebar-scroll-area');
 }
 
+function ensureChatShimmerStyle() {
+  if (chatShimmerStyleInstalled || typeof document === 'undefined') return;
+  const style = document.createElement('style');
+  style.id = 'huggy-chat-shimmer-style';
+  style.textContent = `
+    .message-card.message-card-shimmer {
+      overflow: hidden;
+      position: relative;
+    }
+
+    .message-card.message-card-shimmer .msg-body-paragraph {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-sub, #52525b);
+      font-weight: 650;
+    }
+
+    .message-card.message-card-shimmer .msg-body-paragraph::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: .68;
+      box-shadow: 12px 0 0 currentColor, 24px 0 0 currentColor;
+      transform: translateX(0);
+      animation: huggy-chat-dots 900ms cubic-bezier(.22, 1, .36, 1) infinite;
+    }
+
+    .message-card.message-card-shimmer::after {
+      content: "";
+      display: block;
+      width: min(260px, 82%);
+      height: 8px;
+      margin-top: 12px;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, rgba(9,9,11,.05), rgba(9,9,11,.14), rgba(9,9,11,.05));
+      background-size: 240% 100%;
+      animation: huggy-chat-shimmer 1.15s cubic-bezier(.22, 1, .36, 1) infinite;
+    }
+
+    [data-theme="dark"] .message-card.message-card-shimmer::after {
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.18), rgba(255,255,255,.06));
+      background-size: 240% 100%;
+    }
+
+    @keyframes huggy-chat-shimmer {
+      from { background-position: 100% 0; }
+      to { background-position: -100% 0; }
+    }
+
+    @keyframes huggy-chat-dots {
+      0%, 100% { opacity: .34; transform: translateX(0); }
+      50% { opacity: .82; transform: translateX(2px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .message-card.message-card-shimmer::after,
+      .message-card.message-card-shimmer .msg-body-paragraph::before {
+        animation: none !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  chatShimmerStyleInstalled = true;
+}
+
 function ensureInlineBlockHost() {
   let host = document.getElementById('chat-inline-blocks');
   if (host) return host;
@@ -338,6 +409,7 @@ function clearInlineBlocks() {
 }
 
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
+  ensureChatShimmerStyle();
   const scroll = chatScroll();
   if (!scroll) return null;
 
@@ -351,6 +423,20 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
   scroll.appendChild(card);
   scroll.scrollTop = scroll.scrollHeight;
   return card;
+}
+
+function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
+  if (!card) return;
+  ensureChatShimmerStyle();
+  card.classList.add('message-card-shimmer');
+  card.setAttribute('aria-busy', 'true');
+  updateMessage(card, label);
+}
+
+function clearMessageShimmer(card: HTMLElement | null) {
+  if (!card) return;
+  card.classList.remove('message-card-shimmer');
+  card.removeAttribute('aria-busy');
 }
 
 function updateMessage(card: HTMLElement | null, body: string) {
@@ -1611,7 +1697,8 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   clearInlineBlocks();
 
   appendMessage('user', displayText);
-  const status = appendMessage('assistant', requestedMode === 'plan' ? 'Preparing a plan without changing files...' : 'Planning, generating, building preview...');
+  const status = appendMessage('assistant', requestedMode === 'plan' ? 'Planning' : 'Thinking');
+  setMessageShimmer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
   if (requestedMode === 'build') activateBuilderView('preview');
   let streamedText = '';
   try {
@@ -1626,29 +1713,42 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       const payload = event.payload || {};
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (eventType === 'token') {
+        clearMessageShimmer(status);
         streamedText += event.message || '';
         updateMessage(status, streamedText || 'Streaming code generation...');
         return;
       }
-      if (eventType === 'planning' || eventType === 'answering') {
+      if (eventType === 'agent_thinking' || eventType === 'intent_detected') {
+        setMessageShimmer(status, eventType === 'intent_detected' ? 'Thinking' : 'Thinking');
+        return;
+      }
+      if (eventType === 'planning' || (eventType === 'answering' && !payload.text)) {
+        setMessageShimmer(status, eventType === 'planning' ? 'Planning' : 'Thinking');
+        return;
+      }
+      if (eventType === 'plan_ready' || eventType === 'answering') {
+        clearMessageShimmer(status);
         updateMessage(status, payload.text || event.message || '');
-        if (eventType === 'planning') {
+        if (eventType === 'plan_ready' && !payload.auto_plan_required) {
           lastPlan = payload.text || event.message || '';
           addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
         }
         return;
       }
       if (eventType === 'clarification_required') {
+        clearMessageShimmer(status);
         updateMessage(status, payload.text || event.message || 'I need one more detail before building.');
         showClarificationBlock(payload, prompt, requestedMode);
         return;
       }
       if (eventType === 'credits_insufficient') {
+        clearMessageShimmer(status);
         updateMessage(status, 'Upgrade required.');
         showCreditsModal();
         return;
       }
       if (eventType === 'external_api_keys_required') {
+        clearMessageShimmer(status);
         updateMessage(status, 'External API keys are needed or can be skipped.');
         showApiKeyModal(payload.requirements || []);
         return;
@@ -1657,10 +1757,16 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         showFixBugBox(payload.errors || [{ message: event.message }]);
       }
       if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building' || eventType === 'auto_fix_started' || eventType === 'patch_applied') {
-        updateMessage(status, event.message || 'Working...');
+        const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
+          ? 'Building'
+          : eventType === 'auto_fix_started'
+            ? 'Checking'
+            : 'Thinking';
+        setMessageShimmer(status, label);
         return;
       }
       if (eventType === 'preview_ready') {
+        clearMessageShimmer(status);
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
@@ -1670,13 +1776,16 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         return;
       }
       if (eventType === 'done') {
+        clearMessageShimmer(status);
         setBusy(false);
       }
       if (eventType === 'error') {
+        clearMessageShimmer(status);
         updateMessage(status, event.message || 'Generation failed.');
       }
     }, activeAbort.signal);
   } catch (error) {
+    clearMessageShimmer(status);
     if ((error as Error).name === 'AbortError') {
       updateMessage(status, 'Build cancelled.');
     } else {

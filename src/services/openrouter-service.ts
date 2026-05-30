@@ -180,6 +180,9 @@ export class OpenRouterService {
             } catch {
               continue;
             }
+            if (data?.error) {
+              throw new Error(`OpenRouter API Error: ${data.error.message || JSON.stringify(data.error)}`);
+            }
             model = data?.model || model;
             const text = data?.choices?.[0]?.delta?.content || data?.choices?.[0]?.text || '';
             if (text) {

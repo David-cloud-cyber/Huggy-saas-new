@@ -20,6 +20,9 @@ function extractApiMessage(payload: unknown, fallback: string): string {
     if (typeof record.message === 'string' && record.message.trim()) return record.message;
     if (typeof record.error === 'string' && record.error.trim()) return record.error;
   }
+  if (/failed with 5\d\d/i.test(fallback)) {
+    return 'Huggy could not complete the request because the server or AI provider returned an error. Please retry in a moment.';
+  }
   return fallback;
 }
 

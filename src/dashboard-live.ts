@@ -80,9 +80,11 @@ type ModelRateResponse = {
 };
 
 let dashboardInitialized = false;
+let dashboardChromeInitialized = false;
 let dashboardWorkspaceTimer: number | null = null;
 let dashboardWorkspaceState: UserWorkspaceState | null = null;
 let aiUsageLoaded = false;
+let aiUsageSettingsBound = false;
 
 function getTemplateDescription(template: string): string {
   const labels: Record<string, string> = {
@@ -443,18 +445,27 @@ async function loadAiUsageSettings(force = false) {
 }
 
 function bindAiUsageSettings() {
+  if (aiUsageSettingsBound) return;
+  aiUsageSettingsBound = true;
   ensureSettingsPanel();
-  document.getElementById('btn-settings')?.addEventListener('click', () => openSettings('profile'));
-  document.getElementById('btn-settings')?.addEventListener('click', () => {
-    window.setTimeout(() => {
-      if (document.querySelector('.settings-tab[data-tab="ia"]')?.classList.contains('active')) {
-        void loadAiUsageSettings();
-      }
-    }, 0);
+  document.addEventListener('click', event => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('#btn-settings')) return;
+    event.preventDefault();
+    openSettings('profile');
   });
-  document.querySelector('.settings-tab[data-tab="ia"]')?.addEventListener('click', () => {
-    void loadAiUsageSettings();
-  });
+}
+
+function initDashboardChrome() {
+  if (dashboardChromeInitialized) return;
+  dashboardChromeInitialized = true;
+  initHuggyMotion();
+  ensureSettingsPanel();
+  normalizeAiChatInputs();
+  initPromptInputActions({ persistForBuilder: true });
+  initProviderModelSelectors();
+  normalizeAiChatInputs();
+  bindAiUsageSettings();
 }
 
 function bindLiveProjectCreation() {
@@ -510,16 +521,10 @@ function bindLiveProjectCreation() {
 function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
-  initHuggyMotion();
-  ensureSettingsPanel();
-  normalizeAiChatInputs();
-  initPromptInputActions({ persistForBuilder: true });
-  initProviderModelSelectors();
-  normalizeAiChatInputs();
+  initDashboardChrome();
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
   bindDashboardWorkspacePersistence();
-  bindAiUsageSettings();
   void hydrateWorkspaceState();
   void loadLiveProjects();
   void loadLiveWallet();
@@ -530,3 +535,9 @@ window.addEventListener('huggy:auth-ready', event => {
   initDashboardLive();
 });
 if (document.documentElement.dataset.authReady === 'true') initDashboardLive();
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDashboardChrome);
+} else {
+  initDashboardChrome();
+}
