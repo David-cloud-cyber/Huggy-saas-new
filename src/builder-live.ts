@@ -5,6 +5,8 @@ import {
   storePendingPromptAttachments,
   type PendingPromptAttachment,
 } from './prompt-input-actions';
+import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
+import { providerIconSvg } from './model-provider-icons';
 
 type GeneratedFile = {
   path: string;
@@ -571,15 +573,41 @@ function renderTierColor(tier = 'Standard') {
   return '#52525b';
 }
 
+function buildLocalProviderGroups(): AiModelProviderGroup[] {
+  return (Object.keys(PROVIDER_META) as Array<keyof typeof PROVIDER_META>)
+    .map(provider => ({
+      provider,
+      meta: PROVIDER_META[provider],
+      models: MODEL_REGISTRY
+        .filter(model => model.provider === provider)
+        .map(model => ({
+          id: model.id,
+          display_name: model.label,
+          tier: model.tier,
+          provider: model.provider,
+          description: model.description,
+          plan_minimum: model.minPlan,
+          badges: {
+            new: 'isNew' in model ? Boolean(model.isNew) : false,
+            fast: 'isFast' in model ? Boolean(model.isFast) : false,
+            premium: 'isPremium' in model ? Boolean(model.isPremium) : false,
+          },
+          locked: false,
+          capabilities: { maxContextTokens: model.contextWindow },
+        })),
+    }))
+    .filter(group => group.models.length > 0);
+}
+
 function ensureBuilderModelSelectorStyle() {
   if (document.getElementById('huggy-builder-model-selector-style')) return;
   const style = document.createElement('style');
   style.id = 'huggy-builder-model-selector-style';
   style.textContent = `
     .chat-input-row {
-      --chat-action-height: 34px;
-      --chat-action-radius: 999px;
-      --chat-action-font: 11px;
+      --chat-action-height: 24px;
+      --chat-action-radius: 5px;
+      --chat-action-font: 10px;
     }
     .chat-input-row #btn-chat-mode,
     .chat-input-row .huggy-builder-model-trigger {
@@ -588,22 +616,26 @@ function ensureBuilderModelSelectorStyle() {
       border-radius: var(--chat-action-radius) !important;
       font-size: var(--chat-action-font) !important;
       align-items: center !important;
+      border: 1px solid var(--border) !important;
+      background: transparent !important;
+      color: var(--text-sub) !important;
+      box-shadow: none !important;
     }
     .huggy-builder-model-trigger {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      max-width: min(176px, 38vw);
-      padding: 0 8px;
-      border-radius: 999px;
+      gap: 5px;
+      max-width: min(156px, 36vw);
+      padding: 0 7px;
+      border-radius: 5px;
       border: 1px solid var(--border);
-      font-size: 10.5px;
+      font-size: 10px;
       color: var(--text-muted);
       user-select: none;
       position: relative;
       transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms cubic-bezier(0.22, 1, 0.36, 1), background 180ms cubic-bezier(0.22, 1, 0.36, 1);
       cursor: pointer;
-      background: var(--bg-input);
+      background: transparent;
       flex: 0 1 auto;
       white-space: nowrap;
     }
@@ -624,12 +656,19 @@ function ensureBuilderModelSelectorStyle() {
       border-right: 1px solid var(--border);
     }
     .huggy-builder-model-trigger .provider-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: var(--accent);
-      box-shadow: 0 0 0 2px rgba(9,9,11,.08);
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
       flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .huggy-builder-model-trigger .provider-dot svg,
+    .huggy-provider-icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     .huggy-builder-model-trigger #current-model-label {
       min-width: 0;
@@ -641,7 +680,7 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-builder-model-trigger #chevron-icon {
       flex: 0 0 auto;
-      transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+      transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
     }
     .huggy-builder-model-trigger[aria-expanded="true"] #chevron-icon {
       transform: rotate(180deg);
@@ -700,8 +739,9 @@ function ensureBuilderModelSelectorStyle() {
       width: 18px;
       height: 18px;
       border-radius: 5px;
-      background: var(--provider-color);
-      color: var(--provider-text);
+      background: var(--bg-input);
+      color: var(--provider-color);
+      border: 1px solid var(--border);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -709,6 +749,7 @@ function ensureBuilderModelSelectorStyle() {
       font-weight: 850;
       line-height: 1;
       flex: 0 0 auto;
+      --provider-icon-bg: var(--bg-input);
     }
     .huggy-provider-card-main {
       min-width: 0;
@@ -741,7 +782,7 @@ function ensureBuilderModelSelectorStyle() {
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: background 160ms cubic-bezier(0.22,1,0.36,1), color 160ms cubic-bezier(0.22,1,0.36,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1);
+      transition: background 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.22,1,0.36,1);
     }
     .huggy-provider-expand-btn:hover,
     .huggy-provider-expand-btn.open {
@@ -767,7 +808,7 @@ function ensureBuilderModelSelectorStyle() {
       pointer-events: none;
       overflow: hidden;
       z-index: 3200;
-      transition: opacity 180ms cubic-bezier(0,0,0.2,1), transform 260ms cubic-bezier(0.34,1.56,0.64,1);
+      transition: opacity 120ms cubic-bezier(0,0,0.2,1), transform 150ms cubic-bezier(0.22,1,0.36,1);
     }
     .huggy-builder-model-panel.visible {
       opacity: 1;
@@ -816,8 +857,8 @@ function ensureBuilderModelSelectorStyle() {
       text-align: left;
       cursor: pointer;
       position: relative;
-      animation: huggy-builder-model-enter 220ms cubic-bezier(0.34,1.56,0.64,1) both;
-      transition: background 150ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.34,1.56,0.64,1);
+      animation: huggy-builder-model-enter 130ms cubic-bezier(0.22,1,0.36,1) both;
+      transition: background 120ms cubic-bezier(0.22,1,0.36,1), transform 120ms cubic-bezier(0.22,1,0.36,1);
     }
     .huggy-builder-model-item:hover {
       background: var(--accent-hover, rgba(9,9,11,.08));
@@ -1009,7 +1050,7 @@ async function ensureModelSelector() {
   root.style.cssText = '';
   root.innerHTML = `
     <span class="model-label-prefix">Model</span>
-    <span class="provider-dot"></span>
+    <span class="provider-dot">${providerIconSvg('auto')}</span>
     <span id="current-model-label">Auto</span>
     <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 12 15 18 9"></polyline>
@@ -1025,8 +1066,9 @@ async function ensureModelSelector() {
 
   const label = root.querySelector('#current-model-label') as HTMLElement;
   const providerDot = root.querySelector('.provider-dot') as HTMLElement | null;
-  let providerGroups: AiModelProviderGroup[] = [];
+  let providerGroups: AiModelProviderGroup[] = buildLocalProviderGroups();
   let activeProvider = '';
+  let hydrateModelsPromise: Promise<void> | null = null;
   const positionDropdown = () => {
     const rect = root.getBoundingClientRect();
     if (window.matchMedia('(max-width: 640px)').matches) {
@@ -1058,6 +1100,7 @@ async function ensureModelSelector() {
     const group = providerGroups.find(item => item.models.some(model => model.id === selectedModelId));
     return group?.meta || null;
   };
+  const selectedModel = () => providerGroups.flatMap(group => group.models).find(model => model.id === selectedModelId);
   const setActiveOption = () => {
     dropdown.querySelectorAll<HTMLElement>('[data-model-id]').forEach(option => {
       option.classList.toggle('active', (option.dataset.modelId || 'auto') === selectedModelId);
@@ -1074,13 +1117,15 @@ async function ensureModelSelector() {
       }
     });
     const meta = selectedProviderMeta();
-    if (providerDot) providerDot.style.background = meta?.color || 'var(--accent)';
+    if (providerDot) {
+      providerDot.innerHTML = providerIconSvg(meta?.icon || 'auto');
+      providerDot.style.color = meta?.color || 'var(--accent)';
+    }
     if (label) {
       const selected = dropdown.querySelector<HTMLElement>(`[data-model-id="${CSS.escape(selectedModelId)}"]`);
-      label.textContent = selected?.dataset.modelName || (selectedModelId === 'auto' ? 'Auto' : selectedModelId);
+      label.textContent = selected?.dataset.modelName || selectedModel()?.display_name || (selectedModelId === 'auto' ? 'Auto' : selectedModelId);
     }
   };
-  const providerInitial = (name: string) => (name.trim()[0] || 'M').toUpperCase();
   const renderModelPanel = (group: AiModelProviderGroup) => `
     <div class="huggy-model-list-header">
       <span class="huggy-model-list-title">${escapeHtml(group.meta.label)}</span>
@@ -1107,6 +1152,33 @@ async function ensureModelSelector() {
       }).join('')}
     </div>
   `;
+  const renderDropdownContent = () => `
+    <div class="dropdown-header">Models</div>
+    <button type="button" class="huggy-auto-model-option active" data-model-id="auto" data-model-name="Auto">
+      <span class="huggy-provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">${providerIconSvg('auto')}</span>
+      <span class="huggy-provider-card-main">
+        <span class="huggy-provider-name">Auto</span>
+        <span class="huggy-provider-sub">Best fit</span>
+      </span>
+      <span class="huggy-model-badge" style="color:${renderTierColor('Standard')}">Standard</span>
+    </button>
+    <div class="huggy-builder-provider-list">
+      ${providerGroups.map(group => {
+        const activeModel = group.models.find(model => model.id === selectedModelId);
+        return `<div class="huggy-builder-provider-card" data-provider="${escapeHtml(group.provider)}" style="--provider-color:${escapeHtml(group.meta.color)};--provider-text:${escapeHtml(group.meta.textColor)};">
+          <span class="huggy-provider-icon">${providerIconSvg(group.meta.icon)}</span>
+          <span class="huggy-provider-card-main">
+            <span class="huggy-provider-name">${escapeHtml(group.meta.label)}</span>
+            <span class="huggy-provider-sub">${escapeHtml(activeModel?.display_name || `${group.models.length} models`)}</span>
+          </span>
+          <button class="huggy-provider-expand-btn" type="button" aria-label="Open ${escapeHtml(group.meta.label)} models" data-provider-arrow="${escapeHtml(group.provider)}">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="huggy-builder-model-panel" role="listbox" aria-label="Provider models"></div>
+  `;
   const toggleProviderPanel = (provider: string) => {
     const panel = dropdown.querySelector<HTMLElement>('.huggy-builder-model-panel');
     const group = providerGroups.find(item => item.provider === provider);
@@ -1123,6 +1195,54 @@ async function ensureModelSelector() {
     panel.classList.add('visible');
     setActiveOption();
   };
+  const renderDropdown = () => {
+    const previousProvider = activeProvider;
+    dropdown.innerHTML = renderDropdownContent();
+    dropdown.dataset.loaded = 'true';
+    setActiveOption();
+    if (previousProvider) {
+      activeProvider = '';
+      toggleProviderPanel(previousProvider);
+    }
+  };
+  const hydrateModelGroups = async () => {
+    if (hydrateModelsPromise) return hydrateModelsPromise;
+    hydrateModelsPromise = (async () => {
+      try {
+        const payload = await apiFetch<{ models: AiModel[]; providers?: AiModelProviderGroup[] }>('/api/ai/models');
+        const models = (payload.models || []).filter(model => model.id !== 'auto');
+        providerGroups = (payload.providers && payload.providers.length)
+          ? payload.providers
+          : Object.values(models.reduce<Record<string, AiModelProviderGroup>>((acc, model) => {
+            const provider = model.provider || model.id.split('/')[0] || 'other';
+            if (!acc[provider]) {
+              acc[provider] = {
+                provider,
+                meta: { label: provider, color: renderTierColor(model.tier), textColor: '#fff', icon: provider },
+                models: [],
+              };
+            }
+            acc[provider].models.push(model);
+            return acc;
+          }, {}));
+        const validIds = new Set(models.map(model => model.id));
+        if (selectedModelId !== 'auto' && !validIds.has(selectedModelId)) {
+          selectedModelId = 'auto';
+          scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
+        }
+        if (dropdown.classList.contains('open')) {
+          renderDropdown();
+          positionDropdown();
+        } else {
+          setActiveOption();
+        }
+      } catch {
+        // The local registry already rendered the selector; network hydration is optional.
+      }
+    })();
+    return hydrateModelsPromise;
+  };
+  window.setTimeout(() => void hydrateModelGroups(), 0);
   const open = async () => {
     const shouldOpen = !dropdown.classList.contains('open');
     if (!shouldOpen) {
@@ -1132,64 +1252,8 @@ async function ensureModelSelector() {
     dropdown.classList.add('open');
     root.setAttribute('aria-expanded', 'true');
     positionDropdown();
-    if (dropdown.dataset.loaded === 'true') return;
-    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:12px;">Loading models...</div>';
-    try {
-      const payload = await apiFetch<{ models: AiModel[]; providers?: AiModelProviderGroup[] }>('/api/ai/models');
-      const models = (payload.models || []).filter(model => model.id !== 'auto');
-      providerGroups = (payload.providers && payload.providers.length)
-        ? payload.providers
-        : Object.values(models.reduce<Record<string, AiModelProviderGroup>>((acc, model) => {
-          const provider = model.provider || model.id.split('/')[0] || 'other';
-          if (!acc[provider]) {
-            acc[provider] = {
-              provider,
-              meta: { label: provider, color: renderTierColor(model.tier), textColor: '#fff', icon: provider },
-              models: [],
-            };
-          }
-          acc[provider].models.push(model);
-          return acc;
-        }, {}));
-      const validIds = new Set(models.map(model => model.id));
-      if (selectedModelId !== 'auto' && !validIds.has(selectedModelId)) {
-        selectedModelId = 'auto';
-        scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
-      }
-      dropdown.dataset.loaded = 'true';
-      dropdown.innerHTML = `
-        <div class="dropdown-header">Models</div>
-        <button type="button" class="huggy-auto-model-option active" data-model-id="auto" data-model-name="Auto">
-          <span class="huggy-provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">A</span>
-          <span class="huggy-provider-card-main">
-            <span class="huggy-provider-name">Auto</span>
-            <span class="huggy-provider-sub">Best fit</span>
-          </span>
-          <span class="huggy-model-badge" style="color:${renderTierColor('Standard')}">Standard</span>
-        </button>
-        <div class="huggy-builder-provider-list">
-          ${providerGroups.map(group => {
-            const activeModel = group.models.find(model => model.id === selectedModelId);
-            return `<div class="huggy-builder-provider-card" data-provider="${escapeHtml(group.provider)}" style="--provider-color:${escapeHtml(group.meta.color)};--provider-text:${escapeHtml(group.meta.textColor)};">
-              <span class="huggy-provider-icon">${escapeHtml(providerInitial(group.meta.label))}</span>
-              <span class="huggy-provider-card-main">
-                <span class="huggy-provider-name">${escapeHtml(group.meta.label)}</span>
-                <span class="huggy-provider-sub">${escapeHtml(activeModel?.display_name || `${group.models.length} models`)}</span>
-              </span>
-              <button class="huggy-provider-expand-btn" type="button" aria-label="Open ${escapeHtml(group.meta.label)} models" data-provider-arrow="${escapeHtml(group.provider)}">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
-            </div>`;
-          }).join('')}
-        </div>
-        <div class="huggy-builder-model-panel" role="listbox" aria-label="Provider models"></div>
-      `;
-      setActiveOption();
-      positionDropdown();
-    } catch (error) {
-      dropdown.innerHTML = `<div style="padding:10px;color:#b91c1c;font-size:12px;">${escapeHtml(error instanceof Error ? error.message : 'Unable to load models')}</div>`;
-      positionDropdown();
-    }
+    if (dropdown.dataset.loaded !== 'true') renderDropdown();
+    void hydrateModelGroups();
   };
 
   window.addEventListener('resize', () => {
@@ -1229,7 +1293,7 @@ function ensurePlanBuildControls() {
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(9,9,11,.04);">
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
         <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">v</span>
       </button>
       <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
@@ -1247,7 +1311,7 @@ function setChatMode(mode: 'plan' | 'build') {
   const menu = document.getElementById('chat-mode-menu');
   if (label) label.textContent = mode === 'plan' ? 'Plan' : 'Build';
   if (button) {
-    button.style.background = mode === 'plan' ? 'var(--accent-hover)' : 'var(--bg-input)';
+    button.style.background = mode === 'plan' ? 'var(--accent-hover)' : 'transparent';
     button.style.color = mode === 'plan' ? 'var(--blue, var(--accent))' : 'var(--text)';
     button.setAttribute('aria-expanded', 'false');
   }

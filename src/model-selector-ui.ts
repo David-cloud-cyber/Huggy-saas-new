@@ -5,6 +5,7 @@ import {
   normalizeModelSelectionId,
   type ModelProvider,
 } from './config/ai-models';
+import { providerIconSvg } from './model-provider-icons';
 
 type SelectorOptions = {
   selector?: string;
@@ -36,12 +37,19 @@ function injectProviderSelectorStyle() {
       isolation: isolate;
     }
     .huggy-provider-model-select .provider-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: var(--accent);
-      box-shadow: 0 0 0 2px rgba(9,9,11,.08);
+      width: 14px;
+      height: 14px;
+      color: var(--accent);
       flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .huggy-provider-model-select .provider-dot svg,
+    .provider-icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     .huggy-provider-model-select .current-model-label,
     .huggy-provider-model-select #current-model-label {
@@ -110,8 +118,9 @@ function injectProviderSelectorStyle() {
       width: 18px;
       height: 18px;
       border-radius: 5px;
-      color: var(--provider-text);
-      background: var(--provider-color);
+      color: var(--provider-color);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -119,6 +128,7 @@ function injectProviderSelectorStyle() {
       font-weight: 850;
       line-height: 1;
       flex: 0 0 auto;
+      --provider-icon-bg: var(--bg-input);
     }
     .provider-card-main {
       min-width: 0;
@@ -158,9 +168,9 @@ function injectProviderSelectorStyle() {
       justify-content: center;
       cursor: pointer;
       transition:
-        background 160ms cubic-bezier(0.22,1,0.36,1),
-        color 160ms cubic-bezier(0.22,1,0.36,1),
-        transform 220ms cubic-bezier(0.34,1.56,0.64,1);
+        background 120ms cubic-bezier(0.22,1,0.36,1),
+        color 120ms cubic-bezier(0.22,1,0.36,1),
+        transform 150ms cubic-bezier(0.22,1,0.36,1);
     }
     .provider-expand-btn:hover,
     .provider-expand-btn.open {
@@ -187,8 +197,8 @@ function injectProviderSelectorStyle() {
       overflow: hidden;
       z-index: 5200;
       transition:
-        opacity 180ms cubic-bezier(0,0,0.2,1),
-        transform 260ms cubic-bezier(0.34,1.56,0.64,1);
+        opacity 120ms cubic-bezier(0,0,0.2,1),
+        transform 150ms cubic-bezier(0.22,1,0.36,1);
     }
     .huggy-model-list-panel.visible {
       opacity: 1;
@@ -237,7 +247,7 @@ function injectProviderSelectorStyle() {
       text-align: left;
       cursor: pointer;
       position: relative;
-      animation: huggy-model-enter 220ms cubic-bezier(0.34,1.56,0.64,1) both;
+      animation: huggy-model-enter 130ms cubic-bezier(0.22,1,0.36,1) both;
       transition:
         background 150ms cubic-bezier(0.22,1,0.36,1),
         transform 150ms cubic-bezier(0.34,1.56,0.64,1);
@@ -322,8 +332,13 @@ function injectProviderSelectorStyle() {
   document.head.appendChild(style);
 }
 
-function providerInitial(provider: ModelProvider) {
-  return PROVIDER_META[provider].label.slice(0, 1).toUpperCase();
+function selectorIcon(icon: string) {
+  return providerIconSvg(icon);
+}
+
+function selectionIcon(modelId: string) {
+  const provider = modelId === 'auto' ? null : modelProvider(modelId);
+  return selectorIcon(provider ? PROVIDER_META[provider].icon : 'auto');
 }
 
 function modelLabel(modelId: string) {
@@ -343,7 +358,10 @@ function updateAllSelectors(selectedId: string, storageKey: string) {
     const dot = root.querySelector<HTMLElement>('.provider-dot');
     const selectedProvider = normalized === 'auto' ? null : modelProvider(normalized);
     if (label) label.textContent = modelLabel(normalized);
-    if (dot) dot.style.background = selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)';
+    if (dot) {
+      dot.innerHTML = selectionIcon(normalized);
+      dot.style.color = selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)';
+    }
     root.querySelectorAll<HTMLElement>('[data-model-id]').forEach(item => {
       item.classList.toggle('active', item.dataset.modelId === normalized);
       item.classList.toggle('selected', item.dataset.modelId === normalized);
@@ -409,13 +427,13 @@ export function initProviderModelSelectors(options: SelectorOptions = {}) {
     root.setAttribute('aria-expanded', 'false');
     root.innerHTML = `
       <span class="model-label-prefix">Model</span>
-      <span class="provider-dot" style="background:${selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)'}"></span>
+      <span class="provider-dot" style="color:${selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)'}">${selectionIcon(selectedId)}</span>
       <span class="${id ? '' : 'current-model-label'}" ${id ? 'id="current-model-label"' : ''}>${escapeHtml(modelLabel(selectedId))}</span>
       <svg class="provider-chevron" id="${id ? 'chevron-icon' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"></polyline></svg>
       <div class="dropdown huggy-provider-model-menu" id="${id ? 'model-dropdown' : ''}">
         <div class="dropdown-header">Models</div>
         <button type="button" class="huggy-auto-model-option${selectedId === 'auto' ? ' active' : ''}" data-model-id="auto" data-model-name="Auto">
-          <span class="provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">A</span>
+          <span class="provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">${selectorIcon('auto')}</span>
           <span class="provider-card-main">
             <span class="provider-name">Auto</span>
             <span class="provider-count">Best fit</span>
@@ -427,7 +445,7 @@ export function initProviderModelSelectors(options: SelectorOptions = {}) {
             const isActive = selectedProvider === provider;
             return `
               <div class="huggy-provider-card${isActive ? ' active' : ''}" data-provider="${provider}" style="--provider-color:${meta.color};--provider-text:${meta.textColor};">
-                <span class="provider-icon">${providerInitial(provider)}</span>
+                <span class="provider-icon">${selectorIcon(meta.icon)}</span>
                 <span class="provider-card-main">
                   <span class="provider-name-row">
                     <span class="provider-name">${escapeHtml(meta.label)}</span>
