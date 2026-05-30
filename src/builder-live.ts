@@ -592,12 +592,12 @@ function ensureBuilderModelSelectorStyle() {
     .huggy-builder-model-trigger {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      max-width: min(230px, 38vw);
-      padding: 0 11px;
+      gap: 6px;
+      max-width: min(176px, 38vw);
+      padding: 0 8px;
       border-radius: 999px;
       border: 1px solid var(--border);
-      font-size: 11px;
+      font-size: 10.5px;
       color: var(--text-muted);
       user-select: none;
       position: relative;
@@ -620,15 +620,15 @@ function ensureBuilderModelSelectorStyle() {
       letter-spacing: 0.08em;
       font-size: 9px;
       opacity: 0.62;
-      padding-right: 8px;
+      padding-right: 6px;
       border-right: 1px solid var(--border);
     }
     .huggy-builder-model-trigger .provider-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 999px;
       background: var(--accent);
-      box-shadow: 0 0 0 3px rgba(9,9,11,.08);
+      box-shadow: 0 0 0 2px rgba(9,9,11,.08);
       flex: 0 0 auto;
     }
     .huggy-builder-model-trigger #current-model-label {
@@ -648,16 +648,16 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-model-dropdown {
       position: fixed;
-      width: 302px;
+      width: 224px;
       max-width: calc(100vw - 24px);
-      max-height: min(420px, calc(100vh - 36px));
+      max-height: min(320px, calc(100vh - 36px));
       overflow: visible;
       border: 1px solid var(--border);
       background: var(--bg-surface);
       color: var(--text);
-      border-radius: 16px;
-      padding: 8px;
-      box-shadow: 0 18px 54px rgba(0,0,0,.20), 0 4px 16px rgba(0,0,0,.10);
+      border-radius: 12px;
+      padding: 6px;
+      box-shadow: 0 14px 36px rgba(0,0,0,.16), 0 3px 10px rgba(0,0,0,.08);
       display: none;
       z-index: 3000;
       backdrop-filter: blur(18px);
@@ -667,20 +667,20 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-builder-provider-list {
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
     .huggy-auto-model-option,
     .huggy-builder-provider-card {
       width: 100%;
-      min-height: 38px;
+      min-height: 30px;
       border: 1px solid var(--border);
       background: var(--bg-input);
       color: var(--text);
-      border-radius: 10px;
-      padding: 7px 8px;
+      border-radius: 8px;
+      padding: 5px 6px;
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 6px;
       text-align: left;
       cursor: pointer;
       transition: background 160ms cubic-bezier(0.22,1,0.36,1), border-color 160ms cubic-bezier(0.22,1,0.36,1), transform 160ms cubic-bezier(0.34,1.56,0.64,1);
@@ -697,15 +697,15 @@ function ensureBuilderModelSelectorStyle() {
       transform: translateX(2px);
     }
     .huggy-provider-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 7px;
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
       background: var(--provider-color);
       color: var(--provider-text);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: 9px;
       font-weight: 850;
       line-height: 1;
       flex: 0 0 auto;
@@ -718,25 +718,25 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-provider-name {
       color: var(--text);
-      font-size: 12px;
-      font-weight: 750;
+      font-size: 11px;
+      font-weight: 720;
       line-height: 1.2;
     }
     .huggy-provider-sub {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .huggy-provider-expand-btn {
-      width: 26px;
-      height: 26px;
+      width: 22px;
+      height: 22px;
       border: 1px solid var(--border);
       background: transparent;
       color: var(--text-muted);
-      border-radius: 8px;
+      border-radius: 7px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -753,15 +753,15 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-builder-model-panel {
       position: absolute;
-      left: calc(100% + 8px);
+      left: calc(100% + 6px);
       top: 0;
-      width: 296px;
-      max-height: min(430px, 70vh);
+      width: 236px;
+      max-height: min(320px, 66vh);
       border: 1px solid var(--border);
       background: var(--bg-surface);
       color: var(--text);
-      border-radius: 16px;
-      box-shadow: 0 18px 54px rgba(0,0,0,.22), 0 4px 16px rgba(0,0,0,.10);
+      border-radius: 12px;
+      box-shadow: 0 14px 36px rgba(0,0,0,.16), 0 3px 10px rgba(0,0,0,.08);
       opacity: 0;
       transform: translateX(-8px) scale(.97);
       pointer-events: none;
@@ -779,11 +779,11 @@ function ensureBuilderModelSelectorStyle() {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 11px 12px 8px;
+      padding: 8px 10px 6px;
       border-bottom: 1px solid var(--border);
     }
     .huggy-model-list-title {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 850;
       letter-spacing: .08em;
       text-transform: uppercase;
@@ -793,26 +793,26 @@ function ensureBuilderModelSelectorStyle() {
       border: 1px solid var(--border);
       border-radius: 999px;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
-      padding: 2px 7px;
+      padding: 1px 6px;
     }
     .huggy-model-list-scroll {
-      max-height: 360px;
+      max-height: 272px;
       overflow-y: auto;
-      padding: 6px;
+      padding: 4px;
       display: grid;
-      gap: 4px;
+      gap: 2px;
     }
     .huggy-builder-model-item {
       width: 100%;
       border: 0;
       background: transparent;
       color: var(--text);
-      border-radius: 10px;
-      padding: 9px 10px;
+      border-radius: 8px;
+      padding: 6px 8px;
       display: grid;
-      gap: 4px;
+      gap: 2px;
       text-align: left;
       cursor: pointer;
       position: relative;
@@ -837,20 +837,20 @@ function ensureBuilderModelSelectorStyle() {
       background: var(--accent);
     }
     .huggy-model-item-name {
-      font-size: 12px;
-      font-weight: 750;
+      font-size: 11px;
+      font-weight: 720;
       color: var(--text);
       line-height: 1.25;
     }
     .huggy-model-item-meta {
-      font-size: 10px;
+      font-size: 9px;
       color: var(--text-muted);
       line-height: 1.35;
     }
     .huggy-model-item-badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 3px;
     }
     .huggy-model-badge.new { color: #166534; background: #dcfce7; border-color: #bbf7d0; }
     .huggy-model-badge.fast { color: #854d0e; background: #fef9c3; border-color: #fde68a; }
@@ -865,9 +865,9 @@ function ensureBuilderModelSelectorStyle() {
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--text-muted);
-      padding: 8px 10px 10px;
+      padding: 6px 8px 7px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
     .huggy-model-dropdown .dropdown-search-wrapper {
       display: flex;
@@ -953,8 +953,8 @@ function ensureBuilderModelSelectorStyle() {
     .huggy-model-badge {
       border: 1px solid currentColor;
       border-radius: 999px;
-      padding: 2px 7px;
-      font-size: 9px;
+      padding: 1px 5px;
+      font-size: 8px;
       font-weight: 800;
       flex: 0 0 auto;
     }
@@ -975,8 +975,8 @@ function ensureBuilderModelSelectorStyle() {
         top: auto !important;
         width: auto !important;
         max-width: none;
-        max-height: 68vh;
-        border-radius: 18px;
+        max-height: 64vh;
+        border-radius: 14px;
       }
       .huggy-builder-model-panel {
         position: fixed;
@@ -985,8 +985,8 @@ function ensureBuilderModelSelectorStyle() {
         bottom: 0;
         top: auto;
         width: 100%;
-        max-height: 82dvh;
-        border-radius: 22px 22px 0 0;
+        max-height: 76dvh;
+        border-radius: 16px 16px 0 0;
         transform: translateY(100%);
       }
       .huggy-builder-model-panel.visible {
@@ -1036,7 +1036,7 @@ async function ensureModelSelector() {
       dropdown.style.top = 'auto';
       return;
     }
-    const width = Math.min(344, window.innerWidth - 24);
+    const width = Math.min(248, window.innerWidth - 24);
     const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
     dropdown.style.width = `${width}px`;
     dropdown.style.left = `${left}px`;
@@ -1099,9 +1099,9 @@ async function ensureModelSelector() {
           locked,
         ].filter(Boolean).join('');
         const context = Number(model.capabilities?.maxContextTokens || 0);
-        return `<button type="button" class="huggy-builder-model-item${selectedModelId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" aria-disabled="${model.locked ? 'true' : 'false'}" style="animation-delay:${index * 35}ms">
+        return `<button type="button" class="huggy-builder-model-item${selectedModelId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" aria-disabled="${model.locked ? 'true' : 'false'}" style="animation-delay:${index * 25}ms">
           <span class="huggy-model-item-name">${escapeHtml(model.display_name || model.id)}</span>
-          <span class="huggy-model-item-meta">${escapeHtml(model.description || model.id)}${context ? ` · ${Math.round(context / 1000)}K ctx` : ''}</span>
+          <span class="huggy-model-item-meta">${escapeHtml(tier)}${context ? ` · ${Math.round(context / 1000)}K ctx` : ''}</span>
           <span class="huggy-model-item-badges">${badges}</span>
         </button>`;
       }).join('')}
@@ -1158,12 +1158,12 @@ async function ensureModelSelector() {
       }
       dropdown.dataset.loaded = 'true';
       dropdown.innerHTML = `
-        <div class="dropdown-header">Choose AI Engine</div>
+        <div class="dropdown-header">Models</div>
         <button type="button" class="huggy-auto-model-option active" data-model-id="auto" data-model-name="Auto">
           <span class="huggy-provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">A</span>
           <span class="huggy-provider-card-main">
             <span class="huggy-provider-name">Auto</span>
-            <span class="huggy-provider-sub">Huggy routes to the best fit</span>
+            <span class="huggy-provider-sub">Best fit</span>
           </span>
           <span class="huggy-model-badge" style="color:${renderTierColor('Standard')}">Standard</span>
         </button>

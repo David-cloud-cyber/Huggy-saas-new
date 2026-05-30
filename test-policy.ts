@@ -7,6 +7,21 @@ import {
   classifyGeneratedAppType,
 } from './src/services/design-generation-policy.ts';
 
+const EXPECTED_ALLOWED_MODELS = [
+  'google/gemini-3-flash-preview',
+  'google/gemini-3.5-flash',
+  'openai/gpt-5-mini',
+  'google/gemini-3-pro-preview',
+  'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-opus-4.7',
+  'openai/gpt-5.5',
+  'openai/gpt-5.5-pro',
+  'deepseek/deepseek-v4-flash',
+  'deepseek/deepseek-v4-pro',
+  'anthropic/claude-opus-4.8',
+  'anthropic/claude-opus-4.8-fast',
+] as const;
+
 async function runTests() {
   console.log('Starting AI Policy Tests...');
 
@@ -14,11 +29,16 @@ async function runTests() {
   const model = AI_ALLOWED_MODELS[0];
   validateAllowedModel(model);
   assert.ok(model);
-  console.log(`Success: Allowed model ${model} passed validation.`);
-  validateAllowedModel('anthropic/claude-opus-4.8');
-  validateAllowedModel('anthropic/claude-opus-4.8-fast');
-  assert.ok(!AI_ALLOWED_MODELS.includes('google/gemini-3-flash-preview' as any));
-  console.log('Success: Model registry v2 includes Opus 4.8 and excludes deprecated Gemini 3 preview.');
+  assert.deepEqual([...AI_ALLOWED_MODELS].sort(), [...EXPECTED_ALLOWED_MODELS].sort());
+  EXPECTED_ALLOWED_MODELS.forEach(validateAllowedModel);
+  [
+    'google/gemini-2.5-flash',
+    'openai/gpt-4o',
+    'meta-llama/llama-4-maverick',
+    'mistralai/codestral-2501',
+    'x-ai/grok-3',
+  ].forEach(disallowed => assert.ok(!AI_ALLOWED_MODELS.includes(disallowed as any), `${disallowed} must not be allowed`));
+  console.log(`Success: Strict allowed model registry has ${AI_ALLOWED_MODELS.length} approved models only.`);
 
   // Test 2: Forbidden model
   assert.throws(

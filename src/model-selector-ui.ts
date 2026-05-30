@@ -30,23 +30,23 @@ function injectProviderSelectorStyle() {
   style.textContent = `
     .huggy-provider-model-select {
       position: relative;
-      min-height: 34px;
-      max-width: min(220px, 42vw);
-      padding: 0 10px;
+      min-height: 28px;
+      max-width: min(176px, 40vw);
+      padding: 0 8px;
       isolation: isolate;
     }
     .huggy-provider-model-select .provider-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 999px;
       background: var(--accent);
-      box-shadow: 0 0 0 3px rgba(9,9,11,.08);
+      box-shadow: 0 0 0 2px rgba(9,9,11,.08);
       flex: 0 0 auto;
     }
     .huggy-provider-model-select .current-model-label,
     .huggy-provider-model-select #current-model-label {
       min-width: 0;
-      max-width: 132px;
+      max-width: 104px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -54,8 +54,8 @@ function injectProviderSelectorStyle() {
       font-weight: 650;
     }
     .huggy-provider-model-select .provider-chevron {
-      width: 13px;
-      height: 13px;
+      width: 11px;
+      height: 11px;
       flex: 0 0 auto;
       transition: transform 180ms cubic-bezier(0.22,1,0.36,1);
     }
@@ -63,17 +63,17 @@ function injectProviderSelectorStyle() {
       transform: rotate(180deg);
     }
     .huggy-provider-model-menu {
-      width: 292px;
+      width: 224px;
       overflow: visible;
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
     .huggy-provider-model-menu.open {
       overflow: visible;
     }
     .huggy-provider-list {
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
     .huggy-auto-model-option,
     .huggy-provider-card {
@@ -81,12 +81,12 @@ function injectProviderSelectorStyle() {
       border: 1px solid var(--border);
       background: var(--bg-input);
       color: var(--text);
-      border-radius: 10px;
-      min-height: 38px;
-      padding: 7px 8px;
+      border-radius: 8px;
+      min-height: 30px;
+      padding: 5px 6px;
       display: flex;
       align-items: center;
-      gap: 9px;
+      gap: 6px;
       text-align: left;
       cursor: pointer;
       transition:
@@ -107,15 +107,15 @@ function injectProviderSelectorStyle() {
       transform: translateX(2px);
     }
     .provider-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 7px;
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
       color: var(--provider-text);
       background: var(--provider-color);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: 9px;
       font-weight: 850;
       line-height: 1;
       flex: 0 0 auto;
@@ -134,25 +134,25 @@ function injectProviderSelectorStyle() {
     }
     .provider-name {
       color: var(--text);
-      font-size: 12px;
-      font-weight: 750;
+      font-size: 11px;
+      font-weight: 720;
     }
     .provider-selected-label,
     .provider-count {
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .provider-expand-btn {
-      width: 26px;
-      height: 26px;
+      width: 22px;
+      height: 22px;
       border: 1px solid var(--border);
       background: transparent;
       color: var(--text-muted);
-      border-radius: 8px;
+      border-radius: 7px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -172,15 +172,15 @@ function injectProviderSelectorStyle() {
     }
     .huggy-model-list-panel {
       position: absolute;
-      left: calc(100% + 8px);
+      left: calc(100% + 6px);
       top: 0;
-      width: 292px;
-      max-height: min(430px, 70vh);
+      width: 236px;
+      max-height: min(320px, 66vh);
       border: 1px solid var(--border);
       background: var(--bg-elevated, var(--bg-surface));
       color: var(--text);
-      border-radius: 16px;
-      box-shadow: 0 18px 54px rgba(0,0,0,.22), 0 4px 16px rgba(0,0,0,.10);
+      border-radius: 12px;
+      box-shadow: 0 14px 36px rgba(0,0,0,.16), 0 3px 10px rgba(0,0,0,.08);
       opacity: 0;
       transform: translateX(-8px) scale(.97);
       pointer-events: none;
@@ -200,11 +200,11 @@ function injectProviderSelectorStyle() {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 11px 12px 8px;
+      padding: 8px 10px 6px;
       border-bottom: 1px solid var(--border);
     }
     .huggy-model-list-title {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 850;
       letter-spacing: .08em;
       text-transform: uppercase;
@@ -214,26 +214,26 @@ function injectProviderSelectorStyle() {
       border: 1px solid var(--border);
       border-radius: 999px;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
-      padding: 2px 7px;
+      padding: 1px 6px;
     }
     .huggy-model-list-scroll {
-      max-height: 360px;
+      max-height: 272px;
       overflow-y: auto;
-      padding: 6px;
+      padding: 4px;
       display: grid;
-      gap: 4px;
+      gap: 2px;
     }
     .huggy-model-item {
       width: 100%;
       border: 0;
       background: transparent;
       color: var(--text);
-      border-radius: 10px;
-      padding: 9px 10px;
+      border-radius: 8px;
+      padding: 6px 8px;
       display: grid;
-      gap: 4px;
+      gap: 2px;
       text-align: left;
       cursor: pointer;
       position: relative;
@@ -260,25 +260,25 @@ function injectProviderSelectorStyle() {
       background: var(--accent);
     }
     .model-item-name {
-      font-size: 12px;
-      font-weight: 750;
+      font-size: 11px;
+      font-weight: 720;
       color: var(--text);
       line-height: 1.25;
     }
     .model-item-meta {
-      font-size: 10px;
+      font-size: 9px;
       color: var(--text-muted);
       line-height: 1.35;
     }
     .model-item-badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 3px;
     }
     .huggy-model-badge {
       border-radius: 999px;
-      padding: 2px 6px;
-      font-size: 9px;
+      padding: 1px 5px;
+      font-size: 8px;
       font-weight: 850;
       letter-spacing: .05em;
       text-transform: uppercase;
@@ -310,8 +310,8 @@ function injectProviderSelectorStyle() {
         bottom: 0;
         top: auto;
         width: 100%;
-        max-height: 82dvh;
-        border-radius: 22px 22px 0 0;
+        max-height: 76dvh;
+        border-radius: 16px 16px 0 0;
         transform: translateY(100%);
       }
       .huggy-model-list-panel.visible {
@@ -371,9 +371,9 @@ function renderModelPanel(provider: ModelProvider, selectedId: string) {
     </div>
     <div class="huggy-model-list-scroll">
       ${models.map((model, index) => `
-        <button type="button" class="huggy-model-item${selectedId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.label)}" style="animation-delay:${index * 35}ms">
+        <button type="button" class="huggy-model-item${selectedId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.label)}" style="animation-delay:${index * 25}ms">
           <span class="model-item-name">${escapeHtml(model.label)}</span>
-          <span class="model-item-meta">${escapeHtml(model.description)} · ${Math.round(model.contextWindow / 1000)}K ctx</span>
+          <span class="model-item-meta">${escapeHtml(model.tier)} · ${Math.round(model.contextWindow / 1000)}K ctx</span>
           <span class="model-item-badges">
             <span class="huggy-model-badge">${escapeHtml(model.tier)}</span>
             ${model.isNew ? '<span class="huggy-model-badge new">New</span>' : ''}
@@ -413,12 +413,12 @@ export function initProviderModelSelectors(options: SelectorOptions = {}) {
       <span class="${id ? '' : 'current-model-label'}" ${id ? 'id="current-model-label"' : ''}>${escapeHtml(modelLabel(selectedId))}</span>
       <svg class="provider-chevron" id="${id ? 'chevron-icon' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"></polyline></svg>
       <div class="dropdown huggy-provider-model-menu" id="${id ? 'model-dropdown' : ''}">
-        <div class="dropdown-header">Choose AI Engine</div>
+        <div class="dropdown-header">Models</div>
         <button type="button" class="huggy-auto-model-option${selectedId === 'auto' ? ' active' : ''}" data-model-id="auto" data-model-name="Auto">
           <span class="provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">A</span>
           <span class="provider-card-main">
             <span class="provider-name">Auto</span>
-            <span class="provider-count">Huggy routes to the best fit</span>
+            <span class="provider-count">Best fit</span>
           </span>
         </button>
         <div class="huggy-provider-list">

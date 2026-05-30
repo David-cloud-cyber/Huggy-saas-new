@@ -2144,19 +2144,24 @@ app.get('/api/billing/plans', (req, res) => {
 
 // GET /billing/wallet
 app.get('/api/billing/wallet', async (req, res) => {
-  const orgId = (req.query.orgId as string) || (req as any).user?.id || DEFAULT_ORG_ID;
+  const orgId = getUserOrgId(req);
   const helpers = getDbHelpers();
   const balance = await helpers.getWallet(orgId);
   res.json({
     success: true,
     organization_id: orgId,
-    balance: balance
+    balance,
+    buckets: {
+      monthly_credits: null,
+      daily_promo_credits: null,
+      topup_credits: null,
+    },
   });
 });
 
 // GET /billing/ledger
 app.get('/api/billing/ledger', async (req, res) => {
-  const orgId = (req.query.orgId as string) || (req as any).user?.id || DEFAULT_ORG_ID;
+  const orgId = getUserOrgId(req);
   const client = requireSupabase('Credit ledger listing');
   const { data, error } = await client.from('credit_ledger').select('*').eq('wallet_id', orgId).order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
@@ -2257,7 +2262,6 @@ app.get('/api/ai/models', (req, res) => {
 // POST /ai/estimate
 app.post('/api/ai/estimate', (req, res) => {
   res.json({
-    success: true,
     allowed: true,
     requires_upgrade: false,
     suggested_action: 'continue'
@@ -2782,9 +2786,8 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
     hasFiles: files.length > 0,
     lastPlan,
   });
+  void decision;
   res.json({
-    success: true,
-    intent: decision,
     allowed: true,
     requires_upgrade: false,
     suggested_action: 'continue',

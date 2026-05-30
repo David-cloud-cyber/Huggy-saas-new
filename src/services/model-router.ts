@@ -79,20 +79,20 @@ export class ModelRouter {
 
     switch (context.mode) {
       case 'Fast':
-        selectedModel = firstAffordable(['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'anthropic/claude-haiku-4-5']);
+        selectedModel = firstAffordable(['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash']);
         break;
 
       case 'Balanced':
-        selectedModel = firstAffordable(['google/gemini-2.0-flash-exp', 'meta-llama/llama-3.3-70b-instruct', 'openai/o4-mini', 'mistralai/mistral-medium-3']);
+        selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
         break;
 
       case 'Pro':
-        selectedModel = firstAffordable(['anthropic/claude-sonnet-4-5', 'google/gemini-2.5-pro', 'openai/gpt-4o']);
+        selectedModel = firstAffordable(['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'openai/gpt-5.5']);
         break;
 
       case 'Premium':
       case 'Max Quality':
-        selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/o3']);
+        selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-opus-4.7']);
         break;
 
       case 'Auto':
@@ -103,16 +103,16 @@ export class ModelRouter {
 
         if (complexity === 'simple') {
           // Simple Chat / small modification: Economy Model
-          selectedModel = firstAffordable(['deepseek/deepseek-chat-v3-0324', 'openai/gpt-4o-mini', 'anthropic/claude-haiku-4-5', 'google/gemini-2.5-flash']);
+          selectedModel = firstAffordable(['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
         } else if (complexity === 'complex') {
           // High complexity multi-file modification
-          selectedModel = firstAffordable(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4-5', 'openai/gpt-4o']);
+          selectedModel = firstAffordable(['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'openai/gpt-5.5']);
         } else if (complexity === 'extreme' && context.userCredits > 50) {
           // Power task: Standard default to sonnet or premium on higher tiers.
-          selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/o3', 'anthropic/claude-sonnet-4-5']);
+          selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
         } else {
           // Medium/Default Task: Balanced Standard or high-tier fallback
-          selectedModel = firstAffordable(['google/gemini-2.5-flash', 'openai/o4-mini', 'mistralai/codestral-2501', 'meta-llama/llama-3.3-70b-instruct']);
+          selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
         }
         break;
       }
