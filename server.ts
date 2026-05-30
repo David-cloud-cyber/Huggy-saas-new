@@ -229,24 +229,66 @@ function requireSupabase(feature: string) {
   return client;
 }
 
-function normalizeProviderError(error: any): string {
+function diagnoseProviderError(error: any) {
   const message = String(error?.message || error || 'Generation failed.');
   if (/not configured|OPENROUTER_API_KEY/i.test(message)) {
-    return 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy.';
+    return {
+      message: 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy.',
+      diagnostic_code: 'OPENROUTER_NOT_CONFIGURED',
+      suggested_action: 'configure_openrouter_key',
+      status: 503,
+    };
   }
   if (/OpenRouter HTTP 401|OpenRouter HTTP 403|invalid api key|unauthorized/i.test(message)) {
-    return 'OpenRouter key invalid or unauthorized. Update OPENROUTER_API_KEY on Railway and redeploy.';
+    return {
+      message: 'OpenRouter key invalid or unauthorized. Update OPENROUTER_API_KEY on Railway and redeploy.',
+      diagnostic_code: 'OPENROUTER_KEY_INVALID',
+      suggested_action: 'update_openrouter_key',
+      status: 503,
+    };
   }
   if (/OpenRouter HTTP 404|model.*not.*found|not found/i.test(message)) {
-    return 'The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.';
+    return {
+      message: 'The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.',
+      diagnostic_code: 'MODEL_UNAVAILABLE',
+      suggested_action: 'use_auto',
+      status: 502,
+    };
   }
   if (/OpenRouter HTTP 429|rate limit|too many requests/i.test(message)) {
-    return 'OpenRouter rate limit reached. Please wait a moment and try again.';
+    return {
+      message: 'OpenRouter rate limit reached. Please wait a moment and try again.',
+      diagnostic_code: 'PROVIDER_RATE_LIMITED',
+      suggested_action: 'retry_later',
+      status: 429,
+    };
   }
-  if (/OpenRouter HTTP 5|provider|upstream|timeout|AbortError/i.test(message)) {
-    return 'OpenRouter provider error. The request was not completed; try again or choose another allowed model.';
+  if (/timeout|AbortError|aborted/i.test(message)) {
+    return {
+      message: 'The AI provider took too long to respond. Please retry or choose Auto.',
+      diagnostic_code: 'PROVIDER_TIMEOUT',
+      suggested_action: 'retry_or_use_auto',
+      status: 504,
+    };
   }
-  return message;
+  if (/OpenRouter HTTP 5|provider|upstream/i.test(message)) {
+    return {
+      message: 'The AI provider is temporarily unavailable. Please retry or choose another allowed model.',
+      diagnostic_code: 'PROVIDER_UNAVAILABLE',
+      suggested_action: 'retry_or_use_auto',
+      status: 502,
+    };
+  }
+  return {
+    message,
+    diagnostic_code: error?.statusCode >= 500 ? 'SERVER_ERROR' : 'GENERATION_FAILED',
+    suggested_action: 'retry',
+    status: error?.statusCode || 500,
+  };
+}
+
+function normalizeProviderError(error: any): string {
+  return diagnoseProviderError(error).message;
 }
 
 function isUuid(value: unknown): value is string {
@@ -3407,6 +3449,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 });
 
 app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
+  const requestId = `req_${randomUUID()}`;
   try {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
@@ -3428,7 +3471,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   res.flushHeaders?.();
 
   let sequence = 0;
+  let streamClosed = false;
+  const streamStartedAt = Date.now();
   const send = async (event_type: string, message: string, payload: Record<string, unknown> = {}) => {
+    if (streamClosed || res.destroyed || res.writableEnded) return;
     sequence += 1;
     const event = await saveAgentEvent({
       organization_id: project.organization_id,
@@ -3437,17 +3483,38 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       sequence_number: sequence,
       event_type,
       message,
-      payload,
+      payload: { request_id: requestId, ...payload },
     });
 
     res.write(`event: ${event_type}\n`);
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  let workingTimer: ReturnType<typeof setInterval> | null = null;
+  const endStream = () => {
+    if (streamClosed) return;
+    streamClosed = true;
+    if (workingTimer) clearInterval(workingTimer);
+    res.end();
+  };
+
+  workingTimer = setInterval(() => {
+    void send('working_tick', 'Still working.', {
+      elapsed_seconds: Math.max(0, Math.floor((Date.now() - streamStartedAt) / 1000)),
+    }).catch(error => {
+      console.warn('[huggy:working_tick_failed]', { request_id: requestId, message: error?.message || String(error) });
+    });
+  }, 10_000);
+
+  res.on('close', () => {
+    streamClosed = true;
+    if (workingTimer) clearInterval(workingTimer);
+  });
+
   const helpers = getDbHelpers();
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
-  await send('agent_thinking', 'Thinking through the request.', {});
+  await send('agent_thinking', 'Thinking through the request.', { request_id: requestId });
   const decision = await resolveAgentDecision({
     prompt,
     requestedMode: req.body?.requestedMode || 'build',
@@ -3480,7 +3547,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       action: 'upgrade_required',
       suggested_action: 'use_auto',
     });
-    res.end();
+    endStream();
     return;
   }
 
@@ -3494,8 +3561,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     try {
       agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: requestedModelSelection });
     } catch (error: any) {
-      await send('error', normalizeProviderError(error), { code: 'AgentResponseFailed' });
-      res.end();
+      const diagnostic = diagnoseProviderError(error);
+      await send('error', diagnostic.message, {
+        code: 'AgentResponseFailed',
+        diagnostic_code: diagnostic.diagnostic_code,
+        suggested_action: diagnostic.suggested_action,
+      });
+      endStream();
       return;
     }
     const content = agentText.text;
@@ -3525,7 +3597,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       files: existingFiles,
     });
     await send('done', 'No file changes were made.', {});
-    res.end();
+    endStream();
     return;
   }
 
@@ -3533,7 +3605,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   if (requirements.length && !req.body?.skipExternalKeys && !req.body?.externalKeysConfirmed) {
     await send('external_api_keys_required', 'This build can connect external APIs before continuing.', { requirements });
     await send('waiting_for_api_keys', 'Waiting for API keys or skip confirmation.', {});
-    res.end();
+    endStream();
     return;
   }
   if (requirements.length && req.body?.skipExternalKeys) {
@@ -3594,7 +3666,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         const session = await getBuildSession(buildSessionId);
         if (session?.status === 'cancelled') {
           await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId });
-          res.end();
+          endStream();
           return;
         }
         if (event.type === 'token') {
@@ -3678,7 +3750,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
     await updateBuildSessionStatus(buildSessionId, 'completed');
     await send('done', 'Generation completed.', {});
-    res.end();
+    endStream();
   } catch (error: any) {
     await updateBuildSessionStatus(buildSessionId, 'failed').catch(() => null);
     await helpers.addLedger(userId, 'refund', estimate.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
@@ -3691,31 +3763,53 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       source: 'builder_stream',
     });
 
+    const diagnostic = diagnoseProviderError(error);
     console.error('[huggy:generate_stream_failed]', {
+      request_id: requestId,
       project_id: project.id,
       user_id: userId,
       model: requestedModelSelection,
+      diagnostic_code: diagnostic.diagnostic_code,
       message: error.message,
     });
-    await send('error', normalizeProviderError(error), { code: 'GenerationFailed' });
-    res.end();
+    await send('error', diagnostic.message, {
+      code: 'GenerationFailed',
+      diagnostic_code: diagnostic.diagnostic_code,
+      suggested_action: diagnostic.suggested_action,
+    });
+    endStream();
   }
   } catch (error: any) {
-    const message = normalizeProviderError(error);
+    const diagnostic = diagnoseProviderError(error);
+    const message = diagnostic.message;
     console.error('[huggy:generate_stream_preflight_failed]', {
+      request_id: requestId,
       project_id: req.params?.id,
       user_id: req.user?.id,
+      diagnostic_code: diagnostic.diagnostic_code,
       message: error?.message || String(error),
     });
     if (!res.headersSent) {
-      const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : 500);
-      return res.status(status).json({ success: false, error: message, message });
+      const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : diagnostic.status);
+      return res.status(status).json({
+        success: false,
+        error: message,
+        message,
+        diagnostic_code: diagnostic.diagnostic_code,
+        request_id: requestId,
+        suggested_action: diagnostic.suggested_action,
+      });
     }
     res.write('event: error\n');
     res.write(`data: ${JSON.stringify({
       event_type: 'error',
       message,
-      payload: { code: 'GenerationFailed' },
+      payload: {
+        code: 'GenerationFailed',
+        diagnostic_code: diagnostic.diagnostic_code,
+        request_id: requestId,
+        suggested_action: diagnostic.suggested_action,
+      },
       created_at: new Date().toISOString(),
     })}\n\n`);
     res.end();

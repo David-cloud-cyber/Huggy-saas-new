@@ -16,12 +16,21 @@ export class ApiError extends Error {
 
 function extractApiMessage(payload: unknown, fallback: string): string {
   if (typeof payload === 'object' && payload) {
-    const record = payload as { error?: unknown; message?: unknown };
-    if (typeof record.message === 'string' && record.message.trim()) return record.message;
-    if (typeof record.error === 'string' && record.error.trim()) return record.error;
+    const record = payload as { error?: unknown; message?: unknown; diagnostic_code?: unknown; request_id?: unknown };
+    const base = typeof record.message === 'string' && record.message.trim()
+      ? record.message.trim()
+      : typeof record.error === 'string' && record.error.trim()
+        ? record.error.trim()
+        : '';
+    if (base) {
+      const requestId = typeof record.request_id === 'string' && record.request_id.trim()
+        ? ` Request ID: ${record.request_id.trim()}.`
+        : '';
+      return `${base}${requestId}`;
+    }
   }
   if (/failed with 5\d\d/i.test(fallback)) {
-    return 'Huggy could not complete the request because the server or AI provider returned an error. Please retry in a moment.';
+    return 'The request could not be completed. Please retry in a moment. If it keeps happening, check the server logs for the request ID.';
   }
   return fallback;
 }

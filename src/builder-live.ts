@@ -124,6 +124,10 @@ let isGenerating = false;
 let lastPlan = '';
 let lastBuildSessionId = '';
 let activeAbort: AbortController | null = null;
+let stopRequested = false;
+let workingTimer: number | null = null;
+let activeWorkingCard: HTMLElement | null = null;
+let activeWorkingLabel = 'Thinking';
 let selectedChatMode: 'plan' | 'build' = 'build';
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
@@ -314,12 +318,47 @@ function applyWorkspaceState(state?: WorkspaceState | null) {
   if (input && !handoff.prompt && !input.value.trim() && state.draft_prompt) {
     input.value = state.draft_prompt;
     input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
-    submit?.classList.add('active');
+    if (submit) syncSubmitButtonState();
   }
 }
 
 function chatScroll() {
   return document.getElementById('sidebar-scroll-area');
+}
+
+function formatWorkingDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}m ${seconds}s`;
+}
+
+function renderWorkingLabel(label = activeWorkingLabel) {
+  if (!activeWorkingCard) return;
+  activeWorkingLabel = label || 'Thinking';
+  const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
+  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
+  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}`);
+}
+
+function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
+  if (!card) return;
+  if (workingTimer !== null) window.clearInterval(workingTimer);
+  activeWorkingCard = card;
+  activeWorkingLabel = label;
+  card.dataset.workingStartedAt = String(Date.now());
+  renderWorkingLabel(label);
+  workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
+}
+
+function stopWorkingTimer(card?: HTMLElement | null) {
+  if (workingTimer !== null) {
+    window.clearInterval(workingTimer);
+    workingTimer = null;
+  }
+  const target = card || activeWorkingCard;
+  if (target) delete target.dataset.workingStartedAt;
+  activeWorkingCard = null;
 }
 
 function ensureChatShimmerStyle() {
@@ -430,11 +469,21 @@ function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
   ensureChatShimmerStyle();
   card.classList.add('message-card-shimmer');
   card.setAttribute('aria-busy', 'true');
+  if (isGenerating) {
+    if (!card.dataset.workingStartedAt) card.dataset.workingStartedAt = String(Date.now());
+    activeWorkingCard = card;
+    if (workingTimer === null) {
+      workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
+    }
+    renderWorkingLabel(label);
+    return;
+  }
   updateMessage(card, label);
 }
 
 function clearMessageShimmer(card: HTMLElement | null) {
   if (!card) return;
+  stopWorkingTimer(card);
   card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
 }
@@ -452,6 +501,15 @@ function addInlineAction(card: HTMLElement | null, label: string, action: () => 
   button.style.cssText = 'margin-top:10px;height:30px;border:1px solid var(--border);background:var(--text);color:var(--bg);border-radius:7px;padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;';
   button.addEventListener('click', action);
   card.appendChild(button);
+}
+
+function formatAgentErrorMessage(event: any) {
+  const payload = event?.payload || {};
+  const base = String(event?.message || payload.message || 'Generation failed.').trim();
+  const requestId = typeof payload.request_id === 'string' && payload.request_id.trim()
+    ? ` Request ID: ${payload.request_id.trim()}.`
+    : '';
+  return `${base}${requestId}`;
 }
 
 function positionProjectMenu() {
@@ -650,10 +708,40 @@ function ensureToolbar() {
   document.getElementById('action-download-zip')?.addEventListener('click', exportCode);
 }
 
+const sendIconSvg = `
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <line x1="12" y1="19" x2="12" y2="5"></line>
+    <polyline points="5 12 12 5 19 12"></polyline>
+  </svg>
+`;
+
+const stopIconSvg = `
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+  </svg>
+`;
+
+function syncSubmitButtonState() {
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  const submit = document.getElementById('chat-submit-btn') as HTMLButtonElement | null;
+  if (!submit) return;
+  const hasPrompt = Boolean(input?.value.trim());
+  const shouldStop = isGenerating;
+  submit.innerHTML = shouldStop ? stopIconSvg : sendIconSvg;
+  submit.classList.toggle('active', shouldStop || hasPrompt);
+  submit.classList.toggle('is-generating', shouldStop);
+  submit.setAttribute('aria-label', shouldStop ? 'Stop generation' : 'Send message');
+  submit.setAttribute('title', shouldStop ? 'Stop generation' : 'Send message');
+  submit.setAttribute('aria-disabled', shouldStop || hasPrompt ? 'false' : 'true');
+  submit.style.pointerEvents = 'auto';
+  submit.style.cursor = shouldStop || hasPrompt ? 'pointer' : 'not-allowed';
+}
+
 function setBusy(busy: boolean) {
   isGenerating = busy;
   const cancel = document.getElementById('btn-live-cancel') as HTMLButtonElement | null;
   if (cancel) cancel.style.display = busy ? 'inline-flex' : 'none';
+  syncSubmitButtonState();
 }
 
 function renderTierColor(tier = 'Standard') {
@@ -1692,6 +1780,7 @@ function restoreMessages(payload: ProjectPayload) {
 
 async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build', useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   if (isGenerating || !prompt.trim()) return;
+  stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
   clearInlineBlocks();
@@ -1699,6 +1788,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   appendMessage('user', displayText);
   const status = appendMessage('assistant', requestedMode === 'plan' ? 'Planning' : 'Thinking');
   setMessageShimmer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
+  startWorkingTimer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
   if (requestedMode === 'build') activateBuilderView('preview');
   let streamedText = '';
   try {
@@ -1720,6 +1810,11 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       }
       if (eventType === 'agent_thinking' || eventType === 'intent_detected') {
         setMessageShimmer(status, eventType === 'intent_detected' ? 'Thinking' : 'Thinking');
+        return;
+      }
+      if (eventType === 'working_tick') {
+        const elapsed = Number(payload.elapsed_seconds || 0);
+        if (elapsed >= 30) setMessageShimmer(status, 'Still working');
         return;
       }
       if (eventType === 'planning' || (eventType === 'answering' && !payload.text)) {
@@ -1775,29 +1870,38 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }
+      if (eventType === 'cancelled') {
+        clearMessageShimmer(status);
+        updateMessage(status, event.message || 'Generation stopped.');
+        setBusy(false);
+        return;
+      }
       if (eventType === 'done') {
         clearMessageShimmer(status);
         setBusy(false);
       }
       if (eventType === 'error') {
         clearMessageShimmer(status);
-        updateMessage(status, event.message || 'Generation failed.');
+        updateMessage(status, formatAgentErrorMessage(event));
       }
     }, activeAbort.signal);
   } catch (error) {
     clearMessageShimmer(status);
     if ((error as Error).name === 'AbortError') {
-      updateMessage(status, 'Build cancelled.');
+      updateMessage(status, stopRequested ? 'Generation stopped.' : 'Build cancelled.');
     } else {
       updateMessage(status, error instanceof Error ? error.message : 'Generation failed.');
     }
   } finally {
     setBusy(false);
     activeAbort = null;
+    stopRequested = false;
   }
 }
 
 async function cancelBuild() {
+  if (!isGenerating) return;
+  stopRequested = true;
   activeAbort?.abort();
   if (currentProjectId) {
     await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {
@@ -2269,19 +2373,22 @@ function bindChat() {
   oldSubmit.replaceWith(submit);
   submit.style.pointerEvents = 'auto';
   submit.style.cursor = 'pointer';
+  syncSubmitButtonState();
 
   const send = (mode: 'plan' | 'build') => {
+    if (isGenerating) return;
     const value = input.value.trim();
     if (!value) return;
     input.value = '';
     input.style.height = '48px';
     submit.classList.remove('active');
+    syncSubmitButtonState();
     scheduleWorkspaceSave({ draft_prompt: '', selected_mode: mode }, true);
     void generateFromPrompt(value, mode);
   };
 
   input.addEventListener('input', () => {
-    submit.classList.toggle('active', input.value.trim().length > 0);
+    syncSubmitButtonState();
     scheduleWorkspaceSave();
   });
 
@@ -2289,6 +2396,7 @@ function bindChat() {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (isGenerating) return;
       send(selectedChatMode);
     }
   }, true);
@@ -2296,6 +2404,10 @@ function bindChat() {
   submit.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (isGenerating) {
+      void cancelBuild();
+      return;
+    }
     send(selectedChatMode);
   }, true);
 
@@ -2327,6 +2439,7 @@ function bindChat() {
   });
 
   setChatMode(selectedChatMode);
+  syncSubmitButtonState();
 }
 
 function hydrateDashboardPrompt() {
@@ -2341,7 +2454,7 @@ function hydrateDashboardPrompt() {
   }
   input.value = prompt;
   input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
-  submit?.classList.add('active');
+  if (submit) syncSubmitButtonState();
 }
 
 function ensureResizableSidebar() {
