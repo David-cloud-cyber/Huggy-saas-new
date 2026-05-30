@@ -50,13 +50,14 @@
       --bg-surface: #0c0c0e;
       --bg-panel: #121214;
       --bg-input: #1c1c1f;
-      --border: rgba(255, 255, 255, 0.08);
-      --border-light: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.14);
+      --border-light: rgba(255, 255, 255, 0.12);
+      --border-mid: rgba(255, 255, 255, 0.18);
       --accent: #d946ef;
       --accent-spark: #c084fc;
       --text: #f4f4f5;
-      --text-muted: #a1a1aa;
-      --text-sub: #52525b;
+      --text-muted: #b8b8c0;
+      --text-sub: #80808a;
       --text-dark: #3f3f46;
     }
 
@@ -65,16 +66,17 @@
       --bg-surface: #ffffff;
       --bg-panel: #f8fafc;
       --bg-input: #ffffff;
-      --border: rgba(9, 9, 11, 0.10);
-      --border-light: rgba(9, 9, 11, 0.06);
-      --border-focus: rgba(9, 9, 11, 0.28);
+      --border: rgba(9, 9, 11, 0.16);
+      --border-light: rgba(9, 9, 11, 0.10);
+      --border-mid: rgba(9, 9, 11, 0.20);
+      --border-focus: rgba(9, 9, 11, 0.42);
       --accent: #09090b;
       --accent-spark: #52525b;
-      --accent-dim: rgba(9, 9, 11, 0.06);
-      --accent-hover: rgba(9, 9, 11, 0.10);
+      --accent-dim: rgba(9, 9, 11, 0.08);
+      --accent-hover: rgba(9, 9, 11, 0.12);
       --text: #09090b;
-      --text-muted: #52525b;
-      --text-sub: #a1a1aa;
+      --text-muted: #3f3f46;
+      --text-sub: #52525b;
       --text-dark: #3f3f46;
       --blue: #3b7a8c;
     }
@@ -82,7 +84,7 @@
     * {
       box-sizing: border-box;
       scrollbar-width: thin !important;
-      scrollbar-color: rgba(255, 255, 255, 0.03) transparent !important;
+      scrollbar-color: var(--border-mid) transparent !important;
     }
 
     /* Make all vertical and horizontal scrollbars almost invisible */
@@ -94,11 +96,11 @@
       background: transparent !important;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.04) !important;
+      background: var(--border-mid) !important;
       border-radius: 99px !important;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.15) !important;
+      background: var(--border-focus, var(--border-mid)) !important;
     }
 
     body {
@@ -181,7 +183,7 @@
     }
 
     .project-selector:hover {
-      color: var(--text);
+      color: #ffffff;
     }
 
     .project-selector[aria-expanded="true"] {
@@ -201,7 +203,7 @@
       border: 1px solid var(--border);
       border-radius: 14px;
       background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
-      box-shadow: 0 16px 46px rgba(0,0,0,.30), 0 1px 0 rgba(255,255,255,.04) inset;
+      box-shadow: 0 16px 46px rgba(9,9,11,.16), 0 1px 0 rgba(9,9,11,.04) inset;
       backdrop-filter: blur(22px) saturate(150%);
     }
 
@@ -235,7 +237,7 @@
 
     .project-menu-action:hover,
     .project-menu-link:hover {
-      background: var(--accent-dim, rgba(255,255,255,.06));
+      background: var(--accent-dim, rgba(9,9,11,.08));
     }
 
     .project-menu-divider {
@@ -283,7 +285,7 @@
       display: inline-flex;
       align-items: center;
       background: var(--bg-panel);
-      color: var(--text-muted);
+      color: var(--text);
       font-size: 10px;
       font-weight: 880;
       letter-spacing: .04em;
@@ -424,7 +426,7 @@
     }
 
     .btn-integration:hover {
-      background: var(--accent-dim, rgba(255, 255, 255, 0.05));
+      background: var(--accent-dim, rgba(9, 9, 11, 0.08));
       color: var(--text);
     }
 
@@ -440,7 +442,7 @@
     }
 
     .btn-upgrade:hover {
-      background: var(--accent-dim, rgba(255, 255, 255, 0.05));
+      background: var(--accent-dim, rgba(9, 9, 11, 0.08));
     }
 
     .btn-publish {
@@ -527,7 +529,7 @@
     }
 
     .pricing-modal-close:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--accent-hover);
       color: var(--text);
     }
 
@@ -545,7 +547,7 @@
       font-size: 24px;
       font-weight: 700;
       letter-spacing: -0.02em;
-      color: #ffffff;
+      color: var(--text);
       margin: 0;
     }
 
@@ -593,8 +595,8 @@
     }
 
     .p-plan-card {
-      background: rgba(255, 255, 255, 0.015);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
       border-radius: 14px;
       padding: 20px;
       display: flex;
@@ -627,7 +629,7 @@
     .p-plan-name {
       font-size: 13px;
       font-weight: 600;
-      color: #ffffff;
+      color: var(--text);
       margin-bottom: 2px;
     }
 
@@ -664,7 +666,7 @@
 
     .p-feature-item {
       font-size: 10.5px;
-      color: #e4e4e7;
+      color: var(--text-muted);
       display: flex;
       align-items: center;
       gap: 6px;
@@ -689,7 +691,7 @@
     }
 
     .p-plan-cta:hover {
-      background: var(--accent-hover, rgba(255, 255, 255, 0.08));
+      background: var(--accent-hover, rgba(9, 9, 11, 0.12));
     }
 
     .p-plan-card.recommended .p-plan-cta {
@@ -811,13 +813,13 @@
     }
 
     .pane-tab-btn.active {
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--accent-dim);
       color: var(--text);
     }
 
     .pane-tab-btn:hover:not(.active) {
       color: var(--text);
-      background: rgba(255, 255, 255, 0.02);
+      background: color-mix(in srgb, var(--accent-dim) 62%, transparent);
     }
 
     /* Sidebar Conversation Flow Scroll area */
@@ -911,7 +913,7 @@
       gap: 6px;
       font-size: 12.5px;
       font-weight: 500;
-      color: #e2e8f0;
+      color: var(--text);
     }
 
     .msg-sender-spark {
@@ -931,7 +933,7 @@
     .msg-body-paragraph {
       font-size: 13px;
       line-height: 1.7;
-      color: #d4d4d8;
+      color: var(--text-muted);
       font-weight: 400;
       margin: 0;
       max-width: 92%;
@@ -944,12 +946,12 @@
     }
 
     .message-card-assistant .msg-body-paragraph {
-      color: #f4f4f5;
+      color: var(--text);
     }
 
     .message-card-user .msg-body-paragraph {
       max-width: min(92%, 520px);
-      color: #e4e4e7;
+      color: var(--text);
       text-align: left;
     }
 
@@ -981,10 +983,10 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 6px 12px;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--bg-input);
       margin: 4px 0;
     }
 
@@ -1001,8 +1003,8 @@
     }
 
     .btn-show-all-tools {
-      background: rgba(255, 255, 255, 0.06);
-      color: #e4e4e7;
+      background: var(--accent-dim);
+      color: var(--text);
       border: none;
       font-size: 11px;
       font-weight: 500;
@@ -1012,7 +1014,7 @@
     }
 
     .btn-show-all-tools:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--accent-hover);
     }
 
     /* Modified file container */
@@ -1020,8 +1022,8 @@
       display: flex;
       flex-direction: column;
       gap: 4px;
-      background: rgba(0, 0, 0, 0.15);
-      border: 1px solid rgba(255, 255, 255, 0.03);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 6px;
     }
@@ -1032,7 +1034,7 @@
       justify-content: space-between;
       padding: 6px 10px;
       border-radius: 5px;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--bg-surface);
       font-family: "JetBrains Mono", monospace;
       font-size: 11.5px;
     }
@@ -1245,10 +1247,10 @@
       flex-wrap: nowrap;
       max-width: 100%;
       overflow-x: auto;
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--bg-input);
       border-radius: 6px;
       padding: 2px;
-      border: 1px solid rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
       scrollbar-width: none;
     }
 
@@ -1274,7 +1276,7 @@
     }
 
     .sub-nav-tab.active {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--accent-dim);
       color: var(--text);
     }
 
@@ -1300,7 +1302,7 @@
 
     .sub-nav-action-btn:hover {
       color: var(--text);
-      background-color: rgba(255, 255, 255, 0.04);
+      background-color: var(--accent-dim);
     }
 
     /* Viewport Frame Holder */
@@ -1353,7 +1355,7 @@
       display: flex;
       gap: 12px;
       padding: 10px 16px 8px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-light);
     }
 
     .explorer-tab-link {
@@ -1389,13 +1391,13 @@
       padding: 4px 6px;
       font-family: "JetBrains Mono", monospace;
       font-size: 11.5px;
-      color: #e4e4e7;
+      color: var(--text);
       cursor: pointer;
       border-radius: 4px;
     }
 
     .tree-folder-title:hover {
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--accent-dim);
     }
 
     .tree-folder-expand-icon {
@@ -1426,12 +1428,12 @@
     }
 
     .tree-file:hover {
-      background: rgba(255, 255, 255, 0.02);
+      background: color-mix(in srgb, var(--accent-dim) 62%, transparent);
       color: var(--text);
     }
 
     .tree-file.selected {
-      background: rgba(255, 255, 255, 0.04);
+      background: var(--accent-dim);
       color: var(--text);
     }
 
@@ -1503,7 +1505,7 @@
     }
 
     .editor-line-content {
-      color: #d4d4d8;
+      color: var(--text-muted);
       white-space: pre;
     }
 
@@ -1543,7 +1545,7 @@
       align-items: center;
       gap: 6px;
       background: var(--bg-input);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
       border-radius: 5px;
       font-family: "JetBrains Mono", monospace;
       font-size: 11px;
@@ -1586,7 +1588,7 @@
     .preview-device-btn[aria-pressed="true"] {
       background: var(--text);
       color: var(--bg);
-      box-shadow: 0 1px 0 rgba(255,255,255,.08), 0 8px 20px rgba(0,0,0,.16);
+      box-shadow: 0 1px 0 rgba(9,9,11,.05), 0 8px 20px rgba(9,9,11,.14);
     }
 
     .preview-address-live-dot {
@@ -1606,9 +1608,9 @@
       align-items: stretch;
       overflow: auto;
       background:
-        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(255,255,255,.025) 1px, transparent 1px),
-        #000000;
+        linear-gradient(90deg, rgba(9,9,11,.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(9,9,11,.04) 1px, transparent 1px),
+        var(--bg-elevated, #f6f7f9);
       background-size: 24px 24px;
       padding: 0;
     }
@@ -1619,7 +1621,7 @@
       min-height: 0;
       display: flex;
       overflow: hidden;
-      background: #000000;
+      background: var(--bg-surface);
       transition:
         width 220ms cubic-bezier(0.22, 1, 0.36, 1),
         max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -1633,9 +1635,9 @@
       max-width: calc(100% - 32px);
       height: calc(100% - 32px);
       margin: 16px 0;
-      border: 1px solid rgba(255,255,255,.1);
+      border: 1px solid var(--border);
       border-radius: 18px;
-      box-shadow: 0 22px 80px rgba(0,0,0,.36);
+      box-shadow: 0 22px 80px rgba(9,9,11,.20);
     }
 
     .preview-screen-panel[data-preview-device="mobile"] .preview-device-frame {
@@ -1643,9 +1645,9 @@
       max-width: calc(100% - 32px);
       height: calc(100% - 32px);
       margin: 16px 0;
-      border: 1px solid rgba(255,255,255,.12);
+      border: 1px solid var(--border);
       border-radius: 28px;
-      box-shadow: 0 24px 88px rgba(0,0,0,.42);
+      box-shadow: 0 24px 88px rgba(9,9,11,.22);
     }
 
     .preview-iframe-view {
@@ -1654,7 +1656,7 @@
       width: 100%;
       height: 100%;
       min-height: 0;
-      background: #000000;
+      background: var(--bg-surface);
     }
 
     @media (max-width: 760px) {
@@ -2168,7 +2170,7 @@
 
         <!-- Chat submit block at footer -->
         <div class="chat-input-row">
-          <div class="input-wrapper" style="width: 100%; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-input); box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px rgba(0,0,0,0.3); transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1); position: relative; overflow: visible; text-align: left;">
+          <div class="input-wrapper" style="width: 100%; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-input); box-shadow: 0 1px 0 rgba(9,9,11,0.04) inset, 0 10px 30px rgba(9,9,11,0.12); transition: all 300ms cubic-bezier(0.22, 1, 0.36, 1); position: relative; overflow: visible; text-align: left;">
             <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
             
             <div class="input-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 12px; background: transparent;">
@@ -2196,7 +2198,7 @@
                         </svg>
                     </div>
                     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:70px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
+                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:70px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-shadow:inset 0 1px 0 rgba(9,9,11,.04);">
                             <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.62;">v</span>
                         </button>
                         <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
@@ -2719,8 +2721,8 @@
         toast.innerHTML = `
           <div style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981; flex-shrink: 0;"></div>
           <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-weight: 500; color: #ffffff;">Project Saved</span>
-            <span style="font-size: 11px; color: #a1a1aa;">Ctrl+S simulation saved successfully</span>
+            <span style="font-weight: 500; color: var(--text);">Project Saved</span>
+            <span style="font-size: 11px; color: var(--text-muted);">Ctrl+S simulation saved successfully</span>
           </div>
           <button style="background: none; border: none; padding: 4px; color: #52525b; cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
         `;
@@ -2826,8 +2828,8 @@
           toast.innerHTML = `
             <div style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7; box-shadow: 0 0 8px #a855f7; flex-shrink: 0;"></div>
             <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
-              <span style="font-weight: 500; color: #ffffff;">Activating ${planName} Plan</span>
-              <span style="font-size: 11px; color: #a1a1aa;">Redirecting to billing checkout...</span>
+              <span style="font-weight: 500; color: var(--text);">Activating ${planName} Plan</span>
+              <span style="font-size: 11px; color: var(--text-muted);">Redirecting to billing checkout...</span>
             </div>
           `;
           

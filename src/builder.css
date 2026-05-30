@@ -19,12 +19,12 @@ svg { display: block; flex-shrink: 0; }
   --accent-active:rgba(244,244,245,0.16);
 
   --text:         #F2F2F2;
-  --text-muted:   #606060;
-  --text-sub:     #2E2E2E;
+  --text-muted:   #B8B8C0;
+  --text-sub:     #80808A;
 
-  --border:       rgba(255,255,255,0.06);
-  --border-mid:   rgba(255,255,255,0.09);
-  --border-focus: rgba(244,244,245,0.22);
+  --border:       rgba(255,255,255,0.12);
+  --border-mid:   rgba(255,255,255,0.18);
+  --border-focus: rgba(244,244,245,0.34);
 
   --success:      #4ADE80;
   --success-dim:  rgba(74,222,128,0.10);
@@ -44,17 +44,17 @@ svg { display: block; flex-shrink: 0; }
   --bg-panel:     #F8FAFC;
 
   --accent:       #09090B;
-  --accent-dim:   rgba(9,9,11,0.06);
-  --accent-hover: rgba(9,9,11,0.10);
+  --accent-dim:   rgba(9,9,11,0.08);
+  --accent-hover: rgba(9,9,11,0.12);
   --accent-active:rgba(9,9,11,0.15);
 
   --text:         #09090B;
-  --text-muted:   #52525B;
-  --text-sub:     #A1A1AA;
+  --text-muted:   #3F3F46;
+  --text-sub:     #52525B;
 
-  --border:       rgba(9,9,11,0.10);
-  --border-mid:   rgba(9,9,11,0.14);
-  --border-focus: rgba(9,9,11,0.28);
+  --border:       rgba(9,9,11,0.16);
+  --border-mid:   rgba(9,9,11,0.20);
+  --border-focus: rgba(9,9,11,0.42);
 
   --success:      #16A34A;
   --success-dim:  rgba(22,163,74,0.10);
@@ -440,7 +440,7 @@ body {
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--bg-input);
-  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 0 rgba(9,9,11,0.04) inset, 0 10px 30px rgba(9,9,11,0.12);
   transition: all 400ms cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
   overflow: visible;
@@ -461,7 +461,7 @@ body {
 @keyframes rotateGlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .input-wrapper:focus-within::before { opacity: 1; }
-.input-wrapper:focus-within { border-color: transparent; box-shadow: 0 0 20px rgba(66, 133, 244, 0.15); }
+.input-wrapper:focus-within { border-color: transparent; box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.14), 0 10px 30px rgba(9,9,11,0.12); }
 
 #ai-textarea {
   width: 100%;
@@ -557,7 +557,7 @@ body {
   background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: 12px; padding: 6px;
   min-width: 220px; z-index: 100;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 16px 48px rgba(9,9,11,0.18), inset 0 1px 0 rgba(9,9,11,0.04);
   opacity: 0; visibility: hidden;
   max-height: 420px; overflow-y: auto;
   transform: translateY(-8px) scale(0.96);
@@ -930,10 +930,10 @@ body {
 .preview-frame-wrapper {
   flex: 1; position: relative; overflow: hidden;
   background-image:
-    linear-gradient(45deg, rgba(255,255,255,0.015) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255,255,255,0.015) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.015) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.015) 75%);
+    linear-gradient(45deg, rgba(9,9,11,0.035) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(9,9,11,0.035) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(9,9,11,0.035) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(9,9,11,0.035) 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0;
   display: flex; align-items: center; justify-content: center;

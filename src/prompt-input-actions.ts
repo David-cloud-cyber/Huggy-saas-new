@@ -74,13 +74,13 @@ function notify(message: string, kind: 'info' | 'success' | 'error' = 'info') {
     'bottom:18px',
     'z-index:99999',
     'max-width:min(360px,calc(100vw - 32px))',
-    'border:1px solid rgba(255,255,255,.12)',
+    'border:1px solid var(--border,rgba(9,9,11,.16))',
     'border-radius:12px',
     'padding:10px 12px',
     'font:12px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-    'color:#f4f4f5',
-    kind === 'error' ? 'background:#3f1519' : kind === 'success' ? 'background:#153622' : 'background:#18181b',
-    'box-shadow:0 18px 60px rgba(0,0,0,.35)',
+    'color:var(--text,#09090b)',
+    kind === 'error' ? 'background:#fff1f2' : kind === 'success' ? 'background:#f0fdf4' : 'background:var(--bg-surface,#ffffff)',
+    'box-shadow:0 18px 60px rgba(9,9,11,.16)',
   ].join(';');
   toast.textContent = message;
   document.body.appendChild(toast);
@@ -157,7 +157,7 @@ function ensureStyles() {
       height: 6px;
       border-radius: 999px;
       flex: 0 0 auto;
-      background: #a1a1aa;
+      background: var(--text-sub, #52525b);
     }
     .prompt-attachment-status.is-uploaded { background: #22c55e; }
     .prompt-attachment-status.is-failed { background: #ef4444; }

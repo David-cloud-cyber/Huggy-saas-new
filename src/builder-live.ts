@@ -568,7 +568,7 @@ function renderTierColor(tier = 'Standard') {
   if (/premium/i.test(tier)) return '#c084fc';
   if (/pro/i.test(tier)) return '#60a5fa';
   if (/economy/i.test(tier)) return '#34d399';
-  return '#a1a1aa';
+  return '#52525b';
 }
 
 function ensureBuilderModelSelectorStyle() {
@@ -1229,7 +1229,7 @@ function ensurePlanBuildControls() {
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);">
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:28px;min-width:78px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;box-shadow:inset 0 1px 0 rgba(9,9,11,.04);">
         <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">v</span>
       </button>
       <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
@@ -2186,7 +2186,7 @@ function ensureResizableSidebar() {
   const handle = document.createElement('div');
   handle.id = 'huggy-sidebar-resizer';
   handle.title = 'Resize chat panel';
-  handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 380px) - 4px);width:8px;cursor:col-resize;z-index:20;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);opacity:.45;touch-action:none;';
+  handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 380px) - 4px);width:8px;cursor:col-resize;z-index:20;background:linear-gradient(90deg,transparent,rgba(9,9,11,.16),transparent);opacity:.45;touch-action:none;';
   body.style.position = 'relative';
   body.appendChild(handle);
   window.addEventListener('resize', () => applyWidth(Number(localStorage.getItem('huggy-sidebar-width') || 380)));
