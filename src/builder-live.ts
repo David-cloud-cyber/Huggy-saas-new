@@ -61,6 +61,7 @@ type UserWorkspaceState = {
 };
 
 type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
+type EmptyPreviewMode = 'idle' | 'working';
 
 type AiModel = {
   id: string;
@@ -139,6 +140,8 @@ let projectWorkspaceState: WorkspaceState | null = null;
 let userWorkspaceState: UserWorkspaceState | null = null;
 let workspaceSaveTimer: number | null = null;
 let chatShimmerStyleInstalled = false;
+let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
+let emptyPreviewLabel = '';
 
 function escapeHtml(value: string): string {
   return value
@@ -147,6 +150,282 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
+  const isWorking = mode === 'working';
+  const status = escapeHtml(label || (isWorking ? 'Assembling preview' : 'Ready when you are'));
+  const stateClass = isWorking ? 'working' : 'idle';
+  return `<!DOCTYPE html>
+<html lang="en" data-preview-state="${stateClass}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-soft: #f6f7f9;
+  --text: #09090b;
+  --muted: #52525b;
+  --line: rgba(9,9,11,.14);
+  --line-strong: rgba(9,9,11,.22);
+  --accent: #09090b;
+  --glow: rgba(9,9,11,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #09090b;
+    --panel: #111113;
+    --panel-soft: #18181b;
+    --text: #f8fafc;
+    --muted: #b8bbc3;
+    --line: rgba(255,255,255,.12);
+    --line-strong: rgba(255,255,255,.22);
+    --accent: #ffffff;
+    --glow: rgba(255,255,255,.10);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px),
+    radial-gradient(circle at 50% 38%, var(--glow), transparent 34%),
+    var(--bg);
+  background-size: 48px 48px, 48px 48px, 100% 100%, auto;
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.studio {
+  position: relative;
+  width: min(680px, calc(100vw - 48px));
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+}
+.orbit {
+  position: absolute;
+  inset: 54px 76px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 28px;
+}
+.connector {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58%;
+  height: 1px;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+}
+.connector.vertical {
+  width: 1px;
+  height: 54%;
+  background: linear-gradient(180deg, transparent, var(--line-strong), transparent);
+}
+.pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  box-shadow: 0 0 0 6px var(--glow);
+  opacity: .9;
+}
+.tile {
+  position: absolute;
+  width: 156px;
+  min-height: 106px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow: 0 18px 54px rgba(9,9,11,.08), 0 4px 12px rgba(9,9,11,.04);
+  padding: 14px;
+}
+.tile.prompt { left: 8px; top: 38px; }
+.tile.interface { right: 8px; top: 38px; }
+.tile.data { left: 8px; bottom: 38px; }
+.tile.preview { right: 8px; bottom: 38px; }
+.tile-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.line {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  margin-top: 8px;
+}
+.line.short { width: 64%; }
+.line.mid { width: 82%; }
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.block {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.status {
+  position: relative;
+  z-index: 2;
+  width: min(282px, 70vw);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: 0 20px 80px rgba(9,9,11,.10);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.status strong {
+  color: var(--text);
+  font-weight: 760;
+}
+.working .pulse { animation: pulse 1.4s cubic-bezier(.22,1,.36,1) infinite; }
+.working .connector::after,
+.working .connector.vertical::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: translateX(-100%);
+  animation: flow 1.45s cubic-bezier(.22,1,.36,1) infinite;
+}
+.working .connector.vertical::after {
+  background: linear-gradient(180deg, transparent, var(--accent), transparent);
+  transform: translateY(-100%);
+  animation-name: flowY;
+}
+.working .tile {
+  animation: lift 1.8s cubic-bezier(.22,1,.36,1) infinite;
+}
+.working .tile.interface { animation-delay: .12s; }
+.working .tile.data { animation-delay: .24s; }
+.working .tile.preview { animation-delay: .36s; }
+.working .line,
+.working .block {
+  position: relative;
+  overflow: hidden;
+}
+.working .line::after,
+.working .block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.35s cubic-bezier(.22,1,.36,1) infinite;
+}
+@media (prefers-color-scheme: dark) {
+  .working .line::after,
+  .working .block::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.13), transparent); }
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+@keyframes flow { to { transform: translateX(100%); } }
+@keyframes flowY { to { transform: translateY(100%); } }
+@keyframes pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(.9); opacity: .55; }
+  50% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+}
+@keyframes lift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (max-width: 620px) {
+  .studio { width: min(390px, calc(100vw - 28px)); min-height: 420px; }
+  .orbit { inset: 48px 42px; }
+  .connector { width: 44%; }
+  .connector.vertical { height: 60%; }
+  .tile { width: 132px; min-height: 96px; padding: 12px; border-radius: 15px; }
+  .tile.prompt, .tile.data { left: 0; }
+  .tile.interface, .tile.preview { right: 0; }
+  .status { width: min(248px, 76vw); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+  <main class="studio ${stateClass}" aria-label="Preview preparation">
+    <div class="orbit"></div>
+    <div class="connector"></div>
+    <div class="connector vertical"></div>
+    <div class="pulse"></div>
+    <section class="tile prompt" aria-label="Prompt">
+      <div class="tile-label"><span class="dot"></span>Prompt</div>
+      <div class="line mid"></div><div class="line"></div><div class="line short"></div>
+    </section>
+    <section class="tile interface" aria-label="Interface">
+      <div class="tile-label"><span class="dot"></span>Interface</div>
+      <div class="blocks"><span class="block"></span><span class="block"></span><span class="block"></span></div>
+    </section>
+    <section class="tile data" aria-label="Data">
+      <div class="tile-label"><span class="dot"></span>Data</div>
+      <div class="line"></div><div class="line mid"></div><div class="line short"></div>
+    </section>
+    <section class="tile preview" aria-label="Preview">
+      <div class="tile-label"><span class="dot"></span>Preview</div>
+      <div class="blocks"><span class="block"></span><span class="block"></span><span class="block"></span></div>
+    </section>
+    <div class="status" role="status" aria-live="polite"><span class="dot"></span><strong>${status}</strong></div>
+  </main>
+</body>
+</html>`;
+}
+
+function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
+  if (currentPreviewHtml.trim()) return;
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  const resolvedLabel = label || (mode === 'working' ? 'Assembling preview' : 'Ready when you are');
+  if (emptyPreviewMode === mode && emptyPreviewLabel === resolvedLabel && frame.dataset.emptyPreview === 'true') return;
+  emptyPreviewMode = mode;
+  emptyPreviewLabel = resolvedLabel;
+  frame.dataset.emptyPreview = 'true';
+  frame.dataset.emptyPreviewMode = mode;
+  frame.srcdoc = emptyPreviewHtml(mode, resolvedLabel);
+  setPreviewDevice(selectedPreviewDevice, false);
+  const address = document.querySelector('.preview-address-glow span:last-child');
+  const statusSlug = resolvedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'working';
+  if (address) address.textContent = mode === 'working' ? `${statusSlug}.huggy.local` : 'preview.huggy.local / waiting';
 }
 
 function getProjectIdFromUrl() {
@@ -636,8 +915,14 @@ function bindProjectMenu() {
 
 function setPreview(html: string, status = 'ready') {
   currentPreviewHtml = html;
+  emptyPreviewMode = 'ready';
+  emptyPreviewLabel = '';
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
-  if (frame) frame.srcdoc = html;
+  if (frame) {
+    frame.dataset.emptyPreview = 'false';
+    frame.dataset.emptyPreviewMode = 'ready';
+    frame.srcdoc = html;
+  }
   setPreviewDevice(selectedPreviewDevice, false);
 
   activateBuilderView('preview');
@@ -1753,7 +2038,11 @@ async function loadProject() {
     if (currentProjectId) await flushPendingPromptAttachments();
     renderFiles(payload.files || []);
     applyWorkspaceState(payload.workspace_state || null);
-    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
+    if (payload.preview?.html) {
+      setPreview(payload.preview.html, payload.preview.status);
+    } else {
+      setEmptyPreviewState('idle');
+    }
     restoreMessages(payload);
     const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
     if (activeTab) activateBuilderView(activeTab);
@@ -1789,7 +2078,10 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   const status = appendMessage('assistant', requestedMode === 'plan' ? 'Planning' : 'Thinking');
   setMessageShimmer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
   startWorkingTimer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
-  if (requestedMode === 'build') activateBuilderView('preview');
+  if (requestedMode === 'build') {
+    activateBuilderView('preview');
+    setEmptyPreviewState('working', 'Thinking');
+  }
   let streamedText = '';
   try {
     await ensureProjectForPrompt(prompt);
@@ -1810,15 +2102,21 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       }
       if (eventType === 'agent_thinking' || eventType === 'intent_detected') {
         setMessageShimmer(status, eventType === 'intent_detected' ? 'Thinking' : 'Thinking');
+        if (requestedMode === 'build') setEmptyPreviewState('working', 'Thinking');
         return;
       }
       if (eventType === 'working_tick') {
         const elapsed = Number(payload.elapsed_seconds || 0);
-        if (elapsed >= 30) setMessageShimmer(status, 'Still working');
+        if (elapsed >= 30) {
+          setMessageShimmer(status, 'Still working');
+          if (requestedMode === 'build') setEmptyPreviewState('working', 'Still working');
+        }
         return;
       }
       if (eventType === 'planning' || (eventType === 'answering' && !payload.text)) {
-        setMessageShimmer(status, eventType === 'planning' ? 'Planning' : 'Thinking');
+        const label = eventType === 'planning' ? 'Planning' : 'Thinking';
+        setMessageShimmer(status, label);
+        if (requestedMode === 'build') setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'plan_ready' || eventType === 'answering') {
@@ -1828,24 +2126,28 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
           lastPlan = payload.text || event.message || '';
           addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
         }
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready for build');
         return;
       }
       if (eventType === 'clarification_required') {
         clearMessageShimmer(status);
         updateMessage(status, payload.text || event.message || 'I need one more detail before building.');
         showClarificationBlock(payload, prompt, requestedMode);
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Waiting for details');
         return;
       }
       if (eventType === 'credits_insufficient') {
         clearMessageShimmer(status);
         updateMessage(status, 'Upgrade required.');
         showCreditsModal();
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
       if (eventType === 'external_api_keys_required') {
         clearMessageShimmer(status);
         updateMessage(status, 'External API keys are needed or can be skipped.');
         showApiKeyModal(payload.requirements || []);
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Waiting for keys');
         return;
       }
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
@@ -1858,6 +2160,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
             ? 'Checking'
             : 'Thinking';
         setMessageShimmer(status, label);
+        if (requestedMode === 'build') setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'preview_ready') {
@@ -1873,24 +2176,29 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       if (eventType === 'cancelled') {
         clearMessageShimmer(status);
         updateMessage(status, event.message || 'Generation stopped.');
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Generation stopped');
         setBusy(false);
         return;
       }
       if (eventType === 'done') {
         clearMessageShimmer(status);
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
         setBusy(false);
       }
       if (eventType === 'error') {
         clearMessageShimmer(status);
         updateMessage(status, formatAgentErrorMessage(event));
+        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
       }
     }, activeAbort.signal);
   } catch (error) {
     clearMessageShimmer(status);
     if ((error as Error).name === 'AbortError') {
       updateMessage(status, stopRequested ? 'Generation stopped.' : 'Build cancelled.');
+      if (requestedMode === 'build') setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       updateMessage(status, error instanceof Error ? error.message : 'Generation failed.');
+      if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
     setBusy(false);
@@ -1909,6 +2217,7 @@ async function cancelBuild() {
       body: JSON.stringify({ buildSessionId: lastBuildSessionId }),
     }).catch(() => null);
   }
+  setEmptyPreviewState('idle', 'Generation stopped');
   setBusy(false);
 }
 
