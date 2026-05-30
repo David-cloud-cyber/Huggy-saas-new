@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /auth.html
+Disallow: /dashboard.html
+Disallow: /builder.html
+Sitemap: https://huggy.fun/sitemap.xml

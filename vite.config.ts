@@ -1,6 +1,30 @@
 import tailwindcss from '@tailwindcss/vite';
+import fs from 'fs';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
+
+function discoverHtmlInputs(root: string) {
+  const ignored = new Set(['dist', 'node_modules', '.git', '.vscode', '.railway']);
+  const inputs: Record<string, string> = {};
+
+  function walk(dir: string) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ignored.has(entry.name) || entry.name.startsWith('.')) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.html')) continue;
+      const relative = path.relative(root, fullPath).replace(/\\/g, '/');
+      const key = relative.replace(/\/index\.html$/, '').replace(/\.html$/, '').replace(/\//g, '_') || 'main';
+      inputs[key] = fullPath;
+    }
+  }
+
+  walk(root);
+  return inputs;
+}
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -23,24 +47,7 @@ export default defineConfig(({mode}) => {
     },
     build: {
       rollupOptions: {
-        input: {
-          main: path.resolve(__dirname, 'index.html'),
-          auth: path.resolve(__dirname, 'auth.html'),
-          builder: path.resolve(__dirname, 'builder.html'),
-          about: path.resolve(__dirname, 'about.html'),
-          apiReference: path.resolve(__dirname, 'api-reference.html'),
-          blog: path.resolve(__dirname, 'blog.html'),
-          careers: path.resolve(__dirname, 'careers.html'),
-          community: path.resolve(__dirname, 'community.html'),
-          documentation: path.resolve(__dirname, 'documentation.html'),
-          enterprise: path.resolve(__dirname, 'enterprise.html'),
-          features: path.resolve(__dirname, 'features.html'),
-          pricing: path.resolve(__dirname, 'pricing.html'),
-          privacy: path.resolve(__dirname, 'privacy.html'),
-          security: path.resolve(__dirname, 'security.html'),
-          showcase: path.resolve(__dirname, 'showcase.html'),
-          dashboard: path.resolve(__dirname, 'dashboard.html'),
-        },
+        input: discoverHtmlInputs(__dirname),
       },
     },
   };

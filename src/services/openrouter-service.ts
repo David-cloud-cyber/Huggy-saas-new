@@ -241,7 +241,12 @@ export class OpenRouterService {
     if (lower.includes('claude-3-5') || lower.includes('sonnet')) {
       inputRate = 0.000003;  // $3.00 per million
       outputRate = 0.000015; // $15.00 per million
-    } else if (lower.includes('claude-opus') || lower.includes('gpt-5.5-pro')) {
+    } else if (
+      lower.includes('claude-opus') ||
+      lower.includes('/o3') ||
+      lower.includes('mistral-large') ||
+      lower.includes('grok-3')
+    ) {
       inputRate = 0.000015;  // $15.00 per million
       outputRate = 0.000075; // $75.00 per million
     } else if (lower.includes('flash') || lower.includes('nano')) {

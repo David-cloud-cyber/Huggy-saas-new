@@ -1,5 +1,6 @@
 // @ts-ignore
 import './index.css';
+import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 
 // Helper to handle potential null elements gracefully
@@ -313,6 +314,8 @@ function init() {
         dropdownSearch?.addEventListener('keydown', (e) => e.stopPropagation());
         dropdownSearch?.addEventListener('click', (e) => e.stopPropagation());
     });
+
+    initProviderModelSelectors();
 
     // 3. Rotating words
     if (rotatingWord) {

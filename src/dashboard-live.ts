@@ -1,4 +1,5 @@
 import { apiFetch } from './lib/api';
+import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 
 type ProjectResponse = {
@@ -40,9 +41,45 @@ type UserWorkspaceState = {
   last_route?: string;
 };
 
+type AiUsageResponse = {
+  success: boolean;
+  wallet?: {
+    balance?: number | null;
+    monthly_credits?: number | null;
+    daily_promo_credits?: number | null;
+    topup_credits?: number | null;
+  };
+  history?: Array<{
+    id: string;
+    project_name?: string;
+    model_name?: string;
+    mode?: string;
+    credits_charged?: number;
+    status?: string;
+    created_at?: string;
+  }>;
+};
+
+type ModelRateResponse = {
+  success: boolean;
+  models?: Array<{
+    id: string;
+    display_name: string;
+    tier: string;
+    availability: string;
+    credits: {
+      plan: string;
+      build: string;
+      fix: string;
+      deploy: string;
+    };
+  }>;
+};
+
 let dashboardInitialized = false;
 let dashboardWorkspaceTimer: number | null = null;
 let dashboardWorkspaceState: UserWorkspaceState | null = null;
+let aiUsageLoaded = false;
 
 function getTemplateDescription(template: string): string {
   const labels: Record<string, string> = {
@@ -313,6 +350,108 @@ async function loadLiveWallet() {
   }
 }
 
+function formatCredits(value: unknown) {
+  if (value === null || value === undefined || value === '') return '--';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  return Number.isInteger(number) ? String(number) : number.toFixed(1);
+}
+
+function formatDate(iso?: string) {
+  if (!iso) return 'Recently';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(iso));
+  } catch {
+    return 'Recently';
+  }
+}
+
+function renderAiUsage(data: AiUsageResponse, rates: ModelRateResponse) {
+  const balance = document.getElementById('ai-usage-balance');
+  const monthly = document.getElementById('ai-usage-monthly');
+  const daily = document.getElementById('ai-usage-daily');
+  const topups = document.getElementById('ai-usage-topups');
+  if (balance) balance.textContent = formatCredits(data.wallet?.balance);
+  if (monthly) monthly.textContent = formatCredits(data.wallet?.monthly_credits);
+  if (daily) daily.textContent = formatCredits(data.wallet?.daily_promo_credits);
+  if (topups) topups.textContent = formatCredits(data.wallet?.topup_credits);
+
+  const history = document.getElementById('ai-usage-history');
+  if (history) {
+    const rows = data.history || [];
+    history.innerHTML = rows.length ? rows.map(item => `
+      <div class="usage-row">
+        <div class="usage-row-head">
+          <span class="usage-row-title">${escapeHtml(item.mode || 'AI action')}</span>
+          <span class="usage-credit-pill">${escapeHtml(formatCredits(item.credits_charged))} credits</span>
+        </div>
+        <div class="usage-row-meta">
+          ${escapeHtml(item.model_name || 'Auto')} · ${escapeHtml(item.project_name || 'Project')} · ${escapeHtml(item.status || 'completed')} · ${escapeHtml(formatDate(item.created_at))}
+        </div>
+      </div>
+    `).join('') : '<div class="usage-empty">AI usage history will appear here after your first Plan, Build, Fix or Deploy action.</div>';
+  }
+
+  const rateList = document.getElementById('model-credit-rates');
+  if (rateList) {
+    const models = rates.models || [];
+    rateList.innerHTML = models.length ? models.map(model => `
+      <div class="model-rate-row">
+        <div class="model-rate-head">
+          <div>
+            <div class="model-rate-title">${escapeHtml(model.display_name)}</div>
+            <div class="model-rate-meta">${escapeHtml(model.availability === 'all' ? 'Available to all plans' : `${model.availability} plan and above`)}</div>
+          </div>
+          <span class="model-tier-pill">${escapeHtml(model.tier)}</span>
+        </div>
+        <div class="model-credit-grid">
+          <div class="model-credit-cell"><span>Plan</span><strong>${escapeHtml(model.credits.plan)}</strong></div>
+          <div class="model-credit-cell"><span>Build</span><strong>${escapeHtml(model.credits.build)}</strong></div>
+          <div class="model-credit-cell"><span>Fix</span><strong>${escapeHtml(model.credits.fix)}</strong></div>
+          <div class="model-credit-cell"><span>Deploy</span><strong>${escapeHtml(model.credits.deploy)}</strong></div>
+        </div>
+      </div>
+    `).join('') : '<div class="usage-empty">Model credit rates are unavailable right now.</div>';
+  }
+}
+
+async function loadAiUsageSettings(force = false) {
+  if (aiUsageLoaded && !force) return;
+  const history = document.getElementById('ai-usage-history');
+  const rateList = document.getElementById('model-credit-rates');
+  if (history) history.innerHTML = '<div class="usage-empty">Loading AI usage...</div>';
+  if (rateList) rateList.innerHTML = '<div class="usage-empty">Loading model credit rates...</div>';
+  try {
+    const [usage, rates] = await Promise.all([
+      apiFetch<AiUsageResponse>('/api/users/me/ai-usage'),
+      apiFetch<ModelRateResponse>('/api/users/me/model-credit-rates'),
+    ]);
+    renderAiUsage(usage, rates);
+    aiUsageLoaded = true;
+  } catch (error) {
+    if (history) history.innerHTML = `<div class="usage-empty">${escapeHtml(error instanceof Error ? error.message : 'Unable to load AI usage.')}</div>`;
+    if (rateList) rateList.innerHTML = '<div class="usage-empty">Model credit rates are unavailable right now.</div>';
+  }
+}
+
+function bindAiUsageSettings() {
+  document.getElementById('btn-settings')?.addEventListener('click', () => {
+    window.setTimeout(() => {
+      if (document.querySelector('.settings-tab[data-tab="ia"]')?.classList.contains('active')) {
+        void loadAiUsageSettings();
+      }
+    }, 0);
+  });
+  document.querySelector('.settings-tab[data-tab="ia"]')?.addEventListener('click', () => {
+    void loadAiUsageSettings();
+  });
+}
+
 function bindLiveProjectCreation() {
   const oldButton = document.getElementById('btn-new-proj-create') as HTMLButtonElement | null;
   if (!oldButton) return;
@@ -367,9 +506,11 @@ function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
   initPromptInputActions({ persistForBuilder: true });
+  initProviderModelSelectors();
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
   bindDashboardWorkspacePersistence();
+  bindAiUsageSettings();
   void hydrateWorkspaceState();
   void loadLiveProjects();
   void loadLiveWallet();

@@ -15,6 +15,10 @@ async function runTests() {
   validateAllowedModel(model);
   assert.ok(model);
   console.log(`Success: Allowed model ${model} passed validation.`);
+  validateAllowedModel('anthropic/claude-opus-4.8');
+  validateAllowedModel('anthropic/claude-opus-4.8-fast');
+  assert.ok(!AI_ALLOWED_MODELS.includes('google/gemini-3-flash-preview' as any));
+  console.log('Success: Model registry v2 includes Opus 4.8 and excludes deprecated Gemini 3 preview.');
 
   // Test 2: Forbidden model
   assert.throws(
@@ -32,9 +36,13 @@ async function runTests() {
   );
   console.log('Success: Malicious model ID blocked.');
 
-  // Test 4: Auto model
-  validateAllowedModel('auto');
-  console.log('Success: Auto model passed validation.');
+  // Test 4: Auto is a UI routing mode, never a provider model ID.
+  assert.throws(
+    () => validateAllowedModel('auto'),
+    ForbiddenModelError,
+    'Auto should not be sent to provider model validation',
+  );
+  console.log('Success: Auto is not accepted as a provider model.');
 
   // Test 5: UI generation policy adapts to the requested app type.
   assert.equal(

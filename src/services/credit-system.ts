@@ -11,9 +11,10 @@ export interface ActionCostComponents {
 }
 
 export class CostEstimatorService {
-  // Average selling credit price in US cents/dollars: ranges from $0.16 (volume) to $0.20 (standard Starter)
+  // Average selling credit price in US dollars: ranges from volume tiers to standard Pro top-ups.
   private sell_value_per_credit = 0.20;
-  private minimum_margin_multiplier = 2.5;
+  // 3.4x cost coverage targets at least ~70% gross margin before payment fees.
+  private minimum_margin_multiplier = 3.4;
 
   /**
    * Anti-negative margin formula to guarantee sustainable margins per request.

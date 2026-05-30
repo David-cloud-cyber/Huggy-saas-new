@@ -3,7 +3,35 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Huggy — Builder & Workspace</title>
+  <title>Huggy — Builder Workspace</title>
+  <!-- HUGGY_SEO_START -->
+  <meta name="description" content="Your private Huggy builder workspace." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="canonical" href="https://huggy.fun/builder.html" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#18130d" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Huggy" />
+  <meta property="og:title" content="Huggy — Builder Workspace" />
+  <meta property="og:description" content="Your private Huggy builder workspace." />
+  <meta property="og:url" content="https://huggy.fun/builder.html" />
+  <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Huggy — Builder Workspace" />
+  <meta name="twitter:description" content="Your private Huggy builder workspace." />
+  <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Huggy — Builder Workspace",
+  "description": "Your private Huggy builder workspace.",
+  "url": "https://huggy.fun/builder.html"
+}</script>
+  <!-- HUGGY_SEO_END -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
@@ -1857,6 +1885,144 @@
       white-space: nowrap;
     }
 
+    .analysis-seo-card {
+      border: 1px solid var(--border);
+      background: var(--bg-panel);
+      border-radius: 18px;
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .analysis-seo-summary {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .analysis-seo-score {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: var(--text);
+      font-size: 22px;
+      font-weight: 850;
+      font-variant-numeric: tabular-nums;
+      background:
+        linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
+        conic-gradient(from 160deg, #16a34a, #2563eb, #a855f7, #16a34a) border-box;
+      border: 1px solid transparent;
+    }
+
+    .analysis-seo-kicker {
+      display: block;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .analysis-seo-card h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+
+    .analysis-seo-card p {
+      margin: 5px 0 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.55;
+      max-width: 760px;
+    }
+
+    .analysis-seo-action {
+      height: 34px;
+      border: 1px solid var(--text);
+      background: var(--text);
+      color: var(--bg);
+      border-radius: 10px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .analysis-seo-checks {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .analysis-seo-check {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      background: var(--bg);
+      min-width: 0;
+    }
+
+    .analysis-seo-check span,
+    .analysis-seo-check small {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .analysis-seo-check span {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .analysis-seo-check strong {
+      display: inline-flex;
+      margin: 8px 0 5px;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text);
+      background: rgba(107, 114, 128, .14);
+    }
+
+    .analysis-seo-check.is-pass strong {
+      color: #166534;
+      background: rgba(34, 197, 94, .14);
+    }
+
+    .analysis-seo-check.is-warn strong {
+      color: #92400e;
+      background: rgba(245, 158, 11, .16);
+    }
+
+    .analysis-seo-check.is-fail strong {
+      color: #991b1b;
+      background: rgba(239, 68, 68, .14);
+    }
+
+    .analysis-seo-check small {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    .analysis-seo-recommendations {
+      display: grid;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .analysis-empty,
     .analysis-error,
     .analysis-loading {
@@ -1885,12 +2051,16 @@
       .analysis-screen-panel { padding: 18px; }
       .analysis-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .analysis-breakdown-grid { grid-template-columns: 1fr; }
+      .analysis-seo-summary { grid-template-columns: auto minmax(0, 1fr); }
+      .analysis-seo-action { grid-column: 1 / -1; }
+      .analysis-seo-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 520px) {
       .analysis-topbar { align-items: flex-start; flex-direction: column; }
       .analysis-metrics-grid { grid-template-columns: 1fr; }
       .analysis-chart-card { padding: 14px; }
+      .analysis-seo-checks { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -2210,7 +2380,7 @@
       
       <div class="p-modal-header">
         <h2 class="p-modal-title">Upgrade your workspace plan</h2>
-        <p class="p-modal-subtitle">Start for free, scale as you grow. Choose the creative horsepower your projects deserve.</p>
+        <p class="p-modal-subtitle">Credits for AI generation, plus Huggy backend, auth, database, preview, hosting and deployment workflows.</p>
         
         <div class="p-billing-toggle">
           <button class="p-toggle-btn active" id="p-toggle-monthly">Monthly</button>
@@ -2219,11 +2389,11 @@
       </div>
 
       <div class="p-plans-grid">
-        <!-- STARTER PLAN -->
+        <!-- PRO PLAN -->
         <div class="p-plan-card">
-          <div class="p-plan-name">Starter</div>
-          <div class="p-plan-price" id="p-price-starter">$20<span>/mo</span></div>
-          <p class="p-plan-desc">Ideal for launching private MVPs and small interactive web tools.</p>
+          <div class="p-plan-name">Pro</div>
+          <div class="p-plan-price" id="p-price-starter">$25<span>/mo</span></div>
+          <p class="p-plan-desc">For founders building production-ready apps with real backend services.</p>
           <ul class="p-plan-features">
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -2231,37 +2401,37 @@
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              3 active projects (Private)
-            </li>
-            <li class="p-feature-item">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              1 Custom domain
-            </li>
-            <li class="p-feature-item">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              Full code export
-            </li>
-          </ul>
-          <button class="p-plan-cta" data-plan="Starter">Select Starter</button>
-        </div>
-
-        <!-- PRO PLAN -->
-        <div class="p-plan-card recommended">
-          <div class="p-plan-name" style="color: #c084fc;">Pro</div>
-          <div class="p-plan-price" id="p-price-pro">$49<span>/mo</span></div>
-          <p class="p-plan-desc">Ultimate configuration for professional developers and builders.</p>
-          <ul class="p-plan-features">
-            <li class="p-feature-item">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              300 credits / month
-            </li>
-            <li class="p-feature-item">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
               10 active projects (Private)
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              5 Custom domains included
+              3 Custom domains
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Top-ups: $15 for 50 credits
+            </li>
+          </ul>
+          <button class="p-plan-cta" data-plan="Pro">Select Pro</button>
+        </div>
+
+        <!-- PRO SCALE PLAN -->
+        <div class="p-plan-card recommended">
+          <div class="p-plan-name" style="color: #c084fc;">Pro 400</div>
+          <div class="p-plan-price" id="p-price-pro">$100<span>/mo</span></div>
+          <p class="p-plan-desc">For teams shipping multiple full-stack builds every month.</p>
+          <ul class="p-plan-features">
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              400 credits / month
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              25 active projects (Private)
+            </li>
+            <li class="p-feature-item">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              6 Custom domains included
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -2269,36 +2439,36 @@
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              GitHub Sync & Deployments
+              Monthly rollover while subscribed
             </li>
           </ul>
           <button class="p-plan-cta" data-plan="Pro">Go Pro Now</button>
         </div>
 
-        <!-- STUDIO PLAN -->
+        <!-- BUSINESS PLAN -->
         <div class="p-plan-card">
-          <div class="p-plan-name">Studio</div>
-          <div class="p-plan-price" id="p-price-studio">$99<span>/mo</span></div>
-          <p class="p-plan-desc">For small teams, agencies and production level collaboration.</p>
+          <div class="p-plan-name">Business</div>
+          <div class="p-plan-price" id="p-price-studio">$50<span>/mo</span></div>
+          <p class="p-plan-desc">For organizations that need roles, controls and shared workflows.</p>
           <ul class="p-plan-features">
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              700 credits / month
+              100 credits / month
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              30 active projects
+              50 active projects
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              15 Custom domains included
+              10 Custom domains included
             </li>
             <li class="p-feature-item">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              Team real-time editing
+              Top-ups: $30 for 50 credits
             </li>
           </ul>
-          <button class="p-plan-cta" data-plan="Studio">Select Studio</button>
+          <button class="p-plan-cta" data-plan="Business">Select Business</button>
         </div>
       </div>
     </div>
@@ -2606,15 +2776,15 @@
         if (billing === "monthly") {
           btnMonthly.classList.add("active");
           btnYearly.classList.remove("active");
-          if (priceStarter) priceStarter.innerHTML = "$20<span>/mo</span>";
-          if (pricePro) pricePro.innerHTML = "$49<span>/mo</span>";
-          if (priceStudio) priceStudio.innerHTML = "$99<span>/mo</span>";
+          if (priceStarter) priceStarter.innerHTML = "$25<span>/mo</span>";
+          if (pricePro) pricePro.innerHTML = "$100<span>/mo</span>";
+          if (priceStudio) priceStudio.innerHTML = "$50<span>/mo</span>";
         } else {
           btnYearly.classList.add("active");
           btnMonthly.classList.remove("active");
-          if (priceStarter) priceStarter.innerHTML = "$16<span>/mo</span>";
-          if (pricePro) pricePro.innerHTML = "$39.20<span>/mo</span>";
-          if (priceStudio) priceStudio.innerHTML = "$79.20<span>/mo</span>";
+          if (priceStarter) priceStarter.innerHTML = "$20<span>/mo</span>";
+          if (pricePro) pricePro.innerHTML = "$80<span>/mo</span>";
+          if (priceStudio) priceStudio.innerHTML = "$40<span>/mo</span>";
         }
       }
 

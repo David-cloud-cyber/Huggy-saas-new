@@ -1,29 +1,93 @@
 import Stripe from 'stripe';
-import { UserPlan } from '../config/ai-models.ts';
 
 export interface PlanConfig {
   id: string;
   name: string;
   amount: number;
   credits: number;
+  dailyCredits?: number;
+  monthlyCreditCap?: number;
   maxProjects: number;
   customDomains: number;
+  topupPricePer50?: number;
+  rollover: 'none' | 'monthly' | 'annual_period';
+  features: string[];
 }
 
 export const SAAS_PLANS: Record<string, PlanConfig> = {
-  free: { id: 'plan_free', name: 'Free', amount: 0, credits: 20, maxProjects: 1, customDomains: 0 },
-  starter: { id: 'plan_starter', name: 'Starter', amount: 20, credits: 100, maxProjects: 3, customDomains: 1 },
-  pro: { id: 'plan_pro', name: 'Pro', amount: 49, credits: 300, maxProjects: 10, customDomains: 5 },
-  studio: { id: 'plan_studio', name: 'Studio', amount: 99, credits: 700, maxProjects: 30, customDomains: 15 },
-  business: { id: 'plan_business', name: 'Business', amount: 199, credits: 1500, maxProjects: 999, customDomains: 50 },
+  free: {
+    id: 'plan_free',
+    name: 'Free',
+    amount: 0,
+    credits: 30,
+    dailyCredits: 5,
+    monthlyCreditCap: 30,
+    maxProjects: 1,
+    customDomains: 0,
+    rollover: 'none',
+    features: ['5 daily promo credits', '30 monthly credit cap', 'Public previews', 'Huggy backend basics'],
+  },
+  pro: {
+    id: 'plan_pro_100',
+    name: 'Pro',
+    amount: 25,
+    credits: 100,
+    dailyCredits: 5,
+    monthlyCreditCap: 150,
+    maxProjects: 10,
+    customDomains: 3,
+    topupPricePer50: 15,
+    rollover: 'monthly',
+    features: ['100 monthly credits', '5 daily promo credits', 'Private projects', 'Supabase backend, auth and database', 'Vercel publishing', 'Code export'],
+  },
+  pro_200: { id: 'plan_pro_200', name: 'Pro 200', amount: 50, credits: 200, dailyCredits: 5, monthlyCreditCap: 250, maxProjects: 15, customDomains: 4, topupPricePer50: 15, rollover: 'monthly', features: ['200 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_400: { id: 'plan_pro_400', name: 'Pro 400', amount: 100, credits: 400, dailyCredits: 5, monthlyCreditCap: 450, maxProjects: 25, customDomains: 6, topupPricePer50: 15, rollover: 'monthly', features: ['400 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_800: { id: 'plan_pro_800', name: 'Pro 800', amount: 200, credits: 800, dailyCredits: 5, monthlyCreditCap: 850, maxProjects: 40, customDomains: 10, topupPricePer50: 15, rollover: 'monthly', features: ['800 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_1200: { id: 'plan_pro_1200', name: 'Pro 1200', amount: 294, credits: 1200, dailyCredits: 5, monthlyCreditCap: 1250, maxProjects: 60, customDomains: 15, topupPricePer50: 15, rollover: 'monthly', features: ['1,200 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_2000: { id: 'plan_pro_2000', name: 'Pro 2000', amount: 480, credits: 2000, dailyCredits: 5, monthlyCreditCap: 2050, maxProjects: 100, customDomains: 25, topupPricePer50: 15, rollover: 'monthly', features: ['2,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_5000: { id: 'plan_pro_5000', name: 'Pro 5000', amount: 1125, credits: 5000, dailyCredits: 5, monthlyCreditCap: 5050, maxProjects: 200, customDomains: 50, topupPricePer50: 15, rollover: 'monthly', features: ['5,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  pro_10000: { id: 'plan_pro_10000', name: 'Pro 10000', amount: 2250, credits: 10000, dailyCredits: 5, monthlyCreditCap: 10050, maxProjects: 500, customDomains: 100, topupPricePer50: 15, rollover: 'monthly', features: ['10,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
+  business: {
+    id: 'plan_business_100',
+    name: 'Business',
+    amount: 50,
+    credits: 100,
+    maxProjects: 50,
+    customDomains: 10,
+    topupPricePer50: 30,
+    rollover: 'monthly',
+    features: ['100 monthly credits', 'Team controls', 'Roles and permissions', 'Shared templates', 'Supabase backend, auth and database', 'Full-stack hosting', 'Priority support'],
+  },
+  business_200: { id: 'plan_business_200', name: 'Business 200', amount: 100, credits: 200, maxProjects: 75, customDomains: 15, topupPricePer50: 30, rollover: 'monthly', features: ['200 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_400: { id: 'plan_business_400', name: 'Business 400', amount: 200, credits: 400, maxProjects: 100, customDomains: 25, topupPricePer50: 30, rollover: 'monthly', features: ['400 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_800: { id: 'plan_business_800', name: 'Business 800', amount: 400, credits: 800, maxProjects: 200, customDomains: 50, topupPricePer50: 30, rollover: 'monthly', features: ['800 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_1200: { id: 'plan_business_1200', name: 'Business 1200', amount: 588, credits: 1200, maxProjects: 300, customDomains: 75, topupPricePer50: 30, rollover: 'monthly', features: ['1,200 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_2000: { id: 'plan_business_2000', name: 'Business 2000', amount: 960, credits: 2000, maxProjects: 500, customDomains: 100, topupPricePer50: 30, rollover: 'monthly', features: ['2,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_5000: { id: 'plan_business_5000', name: 'Business 5000', amount: 2250, credits: 5000, maxProjects: 1000, customDomains: 250, topupPricePer50: 30, rollover: 'monthly', features: ['5,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  business_10000: { id: 'plan_business_10000', name: 'Business 10000', amount: 4300, credits: 10000, maxProjects: 2000, customDomains: 500, topupPricePer50: 30, rollover: 'monthly', features: ['10,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
+  enterprise: {
+    id: 'plan_enterprise',
+    name: 'Enterprise',
+    amount: 0,
+    credits: 0,
+    maxProjects: 9999,
+    customDomains: 9999,
+    rollover: 'annual_period',
+    features: ['Volume pricing', 'SSO', 'Advanced security', 'Custom model and usage policy', 'Dedicated support'],
+  },
 };
 
 export const TOPUP_PRODUCTS = [
-  { id: 'topup_100', credits: 100, price: 20.00 },
-  { id: 'topup_250', credits: 250, price: 47.00 },
-  { id: 'topup_500', credits: 500, price: 90.00 },
-  { id: 'topup_1000', credits: 1000, price: 170.00 },
-  { id: 'topup_2500', credits: 2500, price: 400.00 }
+  { id: 'topup_pro_50', plan: 'pro', credits: 50, price: 15.00, expiresMonths: 12 },
+  { id: 'topup_pro_100', plan: 'pro', credits: 100, price: 30.00, expiresMonths: 12 },
+  { id: 'topup_pro_250', plan: 'pro', credits: 250, price: 75.00, expiresMonths: 12 },
+  { id: 'topup_pro_500', plan: 'pro', credits: 500, price: 150.00, expiresMonths: 12 },
+  { id: 'topup_pro_1000', plan: 'pro', credits: 1000, price: 300.00, expiresMonths: 12 },
+  { id: 'topup_business_50', plan: 'business', credits: 50, price: 30.00, expiresMonths: 12 },
+  { id: 'topup_business_100', plan: 'business', credits: 100, price: 60.00, expiresMonths: 12 },
+  { id: 'topup_business_250', plan: 'business', credits: 250, price: 150.00, expiresMonths: 12 },
+  { id: 'topup_business_500', plan: 'business', credits: 500, price: 300.00, expiresMonths: 12 },
+  { id: 'topup_business_1000', plan: 'business', credits: 1000, price: 600.00, expiresMonths: 12 },
 ];
 
 export class StripeService {
@@ -84,7 +148,7 @@ export class StripeService {
               currency: 'usd',
               product_data: {
                 name: `Huggy SaaS - ${plan.name} Plan`,
-                description: `Monthly billing for ${plan.name} - Includes ${plan.credits} AI credits and custom domains.`,
+                description: `Monthly billing for ${plan.name}. Includes ${plan.credits || 'custom volume'} AI credits plus Huggy backend, auth, database, preview, hosting and deploy workflows.`,
               },
               unit_amount: Math.round(plan.amount * 100),
               recurring: { interval: 'month' }
@@ -232,8 +296,8 @@ export class StripeService {
           .maybeSingle();
 
         if (customer) {
-          const planId = sub.metadata?.plan_id || 'starter'; // fallback
-          const plan = SAAS_PLANS[planId] || SAAS_PLANS.starter;
+          const planId = sub.metadata?.plan_id || 'pro';
+          const plan = SAAS_PLANS[planId] || SAAS_PLANS.pro;
           await this.syncSubscription(customer.id, sub, plan.id, plan.credits);
         }
         break;

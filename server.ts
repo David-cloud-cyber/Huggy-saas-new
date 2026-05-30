@@ -12,7 +12,25 @@ import fetch from 'node-fetch';
 import { OpenRouterService } from './src/services/openrouter-service.ts';
 import { ModelRouter, type RoutingContext } from './src/services/model-router.ts';
 import { ForbiddenModelError, validateAllowedModel } from './src/services/ai-validator.ts';
-import { AI_ALLOWED_MODELS, AI_MODEL_TIERS, AI_MODEL_CAPABILITIES, UserPlan } from './src/config/ai-models.ts';
+import {
+  AI_ALLOWED_MODELS,
+  AI_AUTO_MODEL_OPTION,
+  AI_MODEL_DISPLAY_NAMES,
+  AI_MODEL_TIERS,
+  AI_MODEL_CAPABILITIES,
+  DEFAULT_PROVIDER_MODEL_ID,
+  MODEL_REGISTRY,
+  MODEL_ACTION_CREDIT_FLOORS,
+  MODEL_CREDIT_RATES,
+  PROVIDER_META,
+  UserPlan,
+  getModelsByProvider,
+  isAllowedModelId,
+  normalizeModelSelectionId,
+  type AllowedModelId,
+  type ModelDefinition,
+  type ModelProvider,
+} from './src/config/ai-models.ts';
 import { CostEstimatorService, CreditWalletService, CreditLedgerService, CreditReservationService } from './src/services/credit-system.ts';
 import { DomainService, VercelDomainService } from './src/services/domain-service.ts';
 import { StripeService, SAAS_PLANS, TOPUP_PRODUCTS } from './src/services/billing-service.ts';
@@ -170,6 +188,7 @@ app.use('/api/billing/portal', requireAuth);
 app.use('/api/ai/estimate', requireAuth);
 app.use('/api/ai/route', requireAuth);
 app.use('/api/users/me', requireAuth);
+app.use('/api/admin', requireAuth);
 app.use('/api/projects', requireAuth);
 
 // Runtime data must live in Supabase. The only in-memory state kept here is
@@ -363,6 +382,26 @@ type PreviewBuildResult = {
   summary: string;
 };
 
+type SeoAuditCheck = {
+  key: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+};
+
+type SeoAudit = {
+  score: number;
+  checks: SeoAuditCheck[];
+  recommendations: string[];
+  preview: {
+    title: string;
+    description: string;
+    h1: string;
+    ogTitle: string;
+    structuredData: boolean;
+  };
+};
+
 type ExternalApiRequirement = {
   service: string;
   variable: string;
@@ -377,6 +416,18 @@ function getUserOrgId(req: any): string {
 
 function getUserProjectRole(_req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
   return 'owner';
+}
+
+function isPlatformAdmin(req: any) {
+  const metadata = req.user?.app_metadata || {};
+  const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
+  return metadata.role === 'platform_admin' || roles.includes('platform_admin');
+}
+
+function requirePlatformAdmin(req: any, res: any) {
+  if (isPlatformAdmin(req)) return true;
+  res.status(403).json({ success: false, error: 'Platform admin access required.' });
+  return false;
 }
 
 function requireProjectCapability(req: any, res: any, capability: 'build' | 'deploy' | 'secrets' | 'view') {
@@ -486,6 +537,274 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#039;');
 }
 
+function stripHtmlTags(value: string): string {
+  return String(value || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function summarizeForMeta(value: string, fallback = 'Production-ready web app generated with Huggy.'): string {
+  const clean = stripHtmlTags(value || fallback).replace(/\s+/g, ' ').trim();
+  const source = clean || fallback;
+  return source.length > 155 ? `${source.slice(0, 152).trim()}...` : source;
+}
+
+function getFirstRegexMatch(value: string, regex: RegExp): string {
+  const match = String(value || '').match(regex);
+  return String(match?.[1] || '').trim();
+}
+
+function hasRegex(value: string, regex: RegExp): boolean {
+  return regex.test(String(value || ''));
+}
+
+function safeJsonLd(value: Record<string, any>): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+function insertIntoHead(html: string, block: string): string {
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${block}\n</head>`);
+  }
+  return `${block}\n${html}`;
+}
+
+function enhanceHtmlSeo(
+  html: string,
+  projectName = 'Huggy app',
+  promptOrDescription = '',
+  slugOrId = '',
+  environment: 'preview' | 'production' = 'preview',
+): string {
+  let output = String(html || '');
+  if (!/<html[\s>]/i.test(output)) return output;
+
+  const title = getFirstRegexMatch(output, /<title[^>]*>([\s\S]*?)<\/title>/i) || projectName;
+  const description =
+    getFirstRegexMatch(output, /<meta\s+name=["']description["']\s+content=["']([^"']+)["'][^>]*>/i) ||
+    summarizeForMeta(promptOrDescription || stripHtmlTags(output), `Explore ${projectName}, a production-ready app generated with Huggy.`);
+  const slug = slugify(slugOrId || projectName || 'huggy-app') || 'huggy-app';
+  const canonical = `https://huggy.fun/generated/${slug}`;
+  const robots = environment === 'production' ? 'index, follow' : 'noindex, nofollow';
+
+  if (hasRegex(output, /<meta\s+name=["']robots["'][^>]*>/i)) {
+    output = output.replace(/<meta\s+name=["']robots["'][^>]*>/i, `<meta name="robots" content="${robots}">`);
+  }
+
+  const additions: string[] = [];
+  if (!hasRegex(output, /<title[^>]*>[\s\S]*?<\/title>/i)) {
+    additions.push(`<title>${escapeHtml(title)}</title>`);
+  }
+  if (!hasRegex(output, /<meta\s+name=["']description["']/i)) {
+    additions.push(`<meta name="description" content="${escapeHtml(description)}">`);
+  }
+  if (!hasRegex(output, /<meta\s+name=["']robots["']/i)) {
+    additions.push(`<meta name="robots" content="${robots}">`);
+  }
+  if (!hasRegex(output, /<link\s+rel=["']canonical["']/i)) {
+    additions.push(`<link rel="canonical" href="${canonical}">`);
+  }
+  if (!hasRegex(output, /<meta\s+property=["']og:title["']/i)) {
+    additions.push(`<meta property="og:title" content="${escapeHtml(title)}">`);
+  }
+  if (!hasRegex(output, /<meta\s+property=["']og:description["']/i)) {
+    additions.push(`<meta property="og:description" content="${escapeHtml(description)}">`);
+  }
+  if (!hasRegex(output, /<meta\s+property=["']og:type["']/i)) {
+    additions.push('<meta property="og:type" content="website">');
+  }
+  if (!hasRegex(output, /<meta\s+name=["']twitter:card["']/i)) {
+    additions.push('<meta name="twitter:card" content="summary_large_image">');
+  }
+  if (!hasRegex(output, /<meta\s+name=["']twitter:title["']/i)) {
+    additions.push(`<meta name="twitter:title" content="${escapeHtml(title)}">`);
+  }
+  if (!hasRegex(output, /<meta\s+name=["']twitter:description["']/i)) {
+    additions.push(`<meta name="twitter:description" content="${escapeHtml(description)}">`);
+  }
+  if (!hasRegex(output, /<script\s+type=["']application\/ld\+json["']/i)) {
+    additions.push(`<script type="application/ld+json">${safeJsonLd({
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: title,
+      description,
+      applicationCategory: 'WebApplication',
+      operatingSystem: 'Web',
+      creator: {
+        '@type': 'Organization',
+        name: 'Huggy',
+        url: 'https://huggy.fun',
+      },
+    })}</script>`);
+  }
+
+  if (additions.length) {
+    output = insertIntoHead(output, `\n<!-- Huggy SEO-ready metadata -->\n${additions.join('\n')}`);
+  }
+
+  return output;
+}
+
+function auditHtmlSeo(html: string, files: GeneratedFile[]): SeoAudit {
+  const title = stripHtmlTags(getFirstRegexMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i));
+  const description = getFirstRegexMatch(html, /<meta\s+name=["']description["']\s+content=["']([^"']+)["'][^>]*>/i);
+  const h1Matches = String(html || '').match(/<h1[\s>][\s\S]*?<\/h1>/gi) || [];
+  const h1 = stripHtmlTags(h1Matches[0] || '');
+  const imageTags = String(html || '').match(/<img[\s\S]*?>/gi) || [];
+  const imagesWithoutAlt = imageTags.filter(tag => !/\salt\s*=\s*["'][^"']+["']/i.test(tag)).length;
+  const hasSitemap = files.some(file => /(^|\/)sitemap\.xml$/i.test(file.path));
+  const hasRobots = files.some(file => /(^|\/)robots\.txt$/i.test(file.path));
+
+  const checks: SeoAuditCheck[] = [
+    {
+      key: 'title',
+      label: 'Page title',
+      status: title.length >= 10 && title.length <= 65 ? 'pass' : title ? 'warn' : 'fail',
+      detail: title ? `${title.length} characters` : 'Missing title tag',
+    },
+    {
+      key: 'description',
+      label: 'Meta description',
+      status: description.length >= 70 && description.length <= 165 ? 'pass' : description ? 'warn' : 'fail',
+      detail: description ? `${description.length} characters` : 'Missing meta description',
+    },
+    {
+      key: 'h1',
+      label: 'Primary H1',
+      status: h1Matches.length === 1 ? 'pass' : h1Matches.length > 1 ? 'warn' : 'fail',
+      detail: h1Matches.length === 1 ? stripHtmlTags(h1Matches[0]).slice(0, 80) : `${h1Matches.length} H1 tags found`,
+    },
+    {
+      key: 'open_graph',
+      label: 'Open Graph',
+      status: hasRegex(html, /<meta\s+property=["']og:title["']/i) && hasRegex(html, /<meta\s+property=["']og:description["']/i) ? 'pass' : 'fail',
+      detail: 'Required for polished social previews',
+    },
+    {
+      key: 'canonical',
+      label: 'Canonical URL',
+      status: hasRegex(html, /<link\s+rel=["']canonical["']/i) ? 'pass' : 'warn',
+      detail: 'Prevents duplicate indexing when published',
+    },
+    {
+      key: 'structured_data',
+      label: 'Structured data',
+      status: hasRegex(html, /<script\s+type=["']application\/ld\+json["']/i) ? 'pass' : 'warn',
+      detail: 'Helps Google and AI search understand the page',
+    },
+    {
+      key: 'image_alt',
+      label: 'Image alt text',
+      status: imagesWithoutAlt === 0 ? 'pass' : 'warn',
+      detail: imagesWithoutAlt ? `${imagesWithoutAlt} image${imagesWithoutAlt === 1 ? '' : 's'} need alt text` : 'All images include alt text',
+    },
+    {
+      key: 'semantic_main',
+      label: 'Semantic main landmark',
+      status: hasRegex(html, /<main[\s>]/i) ? 'pass' : 'warn',
+      detail: 'Improves accessibility and crawl structure',
+    },
+    {
+      key: 'sitemap',
+      label: 'Project sitemap',
+      status: hasSitemap ? 'pass' : 'warn',
+      detail: hasSitemap ? 'sitemap.xml found' : 'Add sitemap.xml before publishing multi-page apps',
+    },
+    {
+      key: 'robots',
+      label: 'Project robots',
+      status: hasRobots ? 'pass' : 'warn',
+      detail: hasRobots ? 'robots.txt found' : 'Add robots.txt before publishing public apps',
+    },
+  ];
+
+  const weights: number[] = checks.map(check => check.status === 'pass' ? 10 : check.status === 'warn' ? 6 : 0);
+  const score = Math.round(weights.reduce((sum, item) => sum + item, 0) / (checks.length * 10) * 100);
+  const recommendations = checks
+    .filter(check => check.status !== 'pass')
+    .slice(0, 5)
+    .map(check => `${check.label}: ${check.detail}.`);
+
+  return {
+    score,
+    checks,
+    recommendations,
+    preview: {
+      title,
+      description,
+      h1,
+      ogTitle: getFirstRegexMatch(html, /<meta\s+property=["']og:title["']\s+content=["']([^"']+)["'][^>]*>/i),
+      structuredData: hasRegex(html, /<script\s+type=["']application\/ld\+json["']/i),
+    },
+  };
+}
+
+function buildProjectSeoAudit(project: GeneratedProject, files: GeneratedFile[]): SeoAudit {
+  const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
+  const html = enhanceHtmlSeo(
+    indexFile?.content || buildFallbackAppHtml(project.name, project.prompt || 'Generated with Huggy.'),
+    project.name,
+    project.prompt || project.name,
+    project.slug || project.id,
+    'production',
+  );
+  return auditHtmlSeo(html, files);
+}
+
+function withProjectSeoSupport(files: GeneratedFile[], projectName: string, promptOrDescription = ''): GeneratedFile[] {
+  const slug = slugify(projectName || 'huggy-app') || 'huggy-app';
+  const baseUrl = `https://huggy.fun/generated/${slug}`;
+  const now = new Date().toISOString();
+  const output = normalizeGeneratedFiles(files).map(file => {
+    if (file.path.endsWith('.html')) {
+      return {
+        ...file,
+        content: enhanceHtmlSeo(file.content, projectName, promptOrDescription || projectName, slug, 'production'),
+      };
+    }
+    return file;
+  });
+
+  if (!output.some(file => /(^|\/)robots\.txt$/i.test(file.path))) {
+    output.push({
+      path: 'robots.txt',
+      language: 'text',
+      updated_at: now,
+      content: [
+        'User-agent: *',
+        'Allow: /',
+        `Sitemap: ${baseUrl}/sitemap.xml`,
+        '',
+      ].join('\n'),
+    });
+  }
+
+  if (!output.some(file => /(^|\/)sitemap\.xml$/i.test(file.path))) {
+    output.push({
+      path: 'sitemap.xml',
+      language: 'xml',
+      updated_at: now,
+      content: [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        '  <url>',
+        `    <loc>${baseUrl}/</loc>`,
+        `    <lastmod>${now.slice(0, 10)}</lastmod>`,
+        '    <changefreq>weekly</changefreq>',
+        '    <priority>0.8</priority>',
+        '  </url>',
+        '</urlset>',
+        '',
+      ].join('\n'),
+    });
+  }
+
+  return output;
+}
+
 function buildFallbackAppHtml(title: string, prompt: string): string {
   const safeTitle = escapeHtml(title);
   const safePrompt = escapeHtml(prompt);
@@ -590,14 +909,30 @@ function injectAnalyticsSnippet(html: string, projectId?: string, environment: '
   return `${html}\n${snippet}`;
 }
 
-function renderPreviewHtml(files: GeneratedFile[], projectName = 'Huggy app', projectId?: string, environment: 'preview' | 'production' = 'preview'): string {
+function renderPreviewHtml(
+  files: GeneratedFile[],
+  projectName = 'Huggy app',
+  projectId?: string,
+  environment: 'preview' | 'production' = 'preview',
+  promptOrDescription = '',
+  slugOrId = '',
+): string {
   const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
   const html = indexFile?.content || buildFallbackAppHtml(projectName, 'Preview ready. Generate or edit this project to replace the placeholder.');
-  return injectAnalyticsSnippet(html, projectId, environment);
+  const seoHtml = enhanceHtmlSeo(html, projectName, promptOrDescription || projectName, slugOrId || projectId || projectName, environment);
+  return injectAnalyticsSnippet(seoHtml, projectId, environment);
+}
+
+function getProjectPreviewHtml(project: GeneratedProject, files: GeneratedFile[], environment: 'preview' | 'production' = 'preview'): string {
+  if (project.preview_html) {
+    const seoHtml = enhanceHtmlSeo(project.preview_html, project.name, project.prompt || project.name, project.slug || project.id, environment);
+    return injectAnalyticsSnippet(seoHtml, project.id, environment);
+  }
+  return renderPreviewHtml(files, project.name, project.id, environment, project.prompt || project.name, project.slug || project.id);
 }
 
 function createTemplateFiles(projectName: string, prompt: string): GeneratedFile[] {
-  return normalizeGeneratedFiles([
+  return withProjectSeoSupport([
     {
       path: 'index.html',
       language: 'html',
@@ -613,7 +948,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
       language: 'markdown',
       content: `# ${projectName}\n\nGenerated from this prompt:\n\n${prompt || 'No prompt provided.'}\n\nThis MVP is static-preview ready and includes Supabase schema notes for the backend layer.\n`,
     },
-  ]);
+  ], projectName, prompt);
 }
 
 class AgentOrchestrator {
@@ -792,15 +1127,28 @@ function pseudoEncryptSecret(value: string) {
   return `sha256:${salt}:${digest}`;
 }
 
-function estimateActionCost(prompt: string, intent: IntentDecision) {
+function modelCreditFloor(modelId: unknown, fallback = 0) {
+  return typeof modelId === 'string' && modelId !== 'auto'
+    ? MODEL_ACTION_CREDIT_FLOORS[modelId as AllowedModelId] || fallback
+    : fallback;
+}
+
+function normalizeProviderModelForBackend(value: unknown): AllowedModelId {
+  return isAllowedModelId(value) ? value : DEFAULT_PROVIDER_MODEL_ID;
+}
+
+function estimateActionCost(prompt: string, intent: IntentDecision, modelId?: unknown) {
   if (intent.intent === 'conversation' || intent.intent === 'clarification_required') return { finalCredits: 0, minimum_action_credits: 0 };
+  const selectedModelFloor = modelId === 'auto' && intent.intent !== 'plan'
+    ? MODEL_ACTION_CREDIT_FLOORS[DEFAULT_PROVIDER_MODEL_ID]
+    : modelCreditFloor(modelId);
   if (intent.intent === 'plan') return costEstimator.calculateRequiredCredits({
     openrouter_cost_usd: 0.0005,
     infra_cost_usd: 0.0001,
     storage_cost_usd: 0,
     build_cost_usd: 0,
     domain_operation_cost_usd: 0,
-    minimum_action_credits: 0.5,
+    minimum_action_credits: Math.max(1, selectedModelFloor),
     complexity_surcharge: prompt.length > 600 ? 0.5 : 0,
   });
   return costEstimator.calculateRequiredCredits({
@@ -809,9 +1157,117 @@ function estimateActionCost(prompt: string, intent: IntentDecision) {
     storage_cost_usd: 0.0001,
     build_cost_usd: 0.001,
     domain_operation_cost_usd: 0,
-    minimum_action_credits: 2,
+    minimum_action_credits: Math.max(2, selectedModelFloor),
     complexity_surcharge: prompt.length > 400 ? 2 : 0,
   });
+}
+
+function providerModelToDisplayName(modelId: string) {
+  return AI_MODEL_DISPLAY_NAMES[modelId as AllowedModelId] || modelId.split('/').pop()?.replace(/[-_]/g, ' ') || modelId;
+}
+
+function buildPublicModelList() {
+  const autoCapabilities = {
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsVision: true,
+    supportsJsonMode: true,
+    maxContextTokens: Math.max(...AI_ALLOWED_MODELS.map(id => AI_MODEL_CAPABILITIES[id]?.maxContextTokens || 0)),
+  };
+
+  return [
+    {
+      id: AI_AUTO_MODEL_OPTION.id,
+      display_name: AI_AUTO_MODEL_OPTION.display_name,
+      tier: AI_AUTO_MODEL_OPTION.tier,
+      capabilities: autoCapabilities,
+      description: AI_AUTO_MODEL_OPTION.description,
+      locked: false,
+    },
+    ...AI_ALLOWED_MODELS.map(id => {
+      const definition = MODEL_REGISTRY.find(model => model.id === id) as ModelDefinition | undefined;
+      return {
+        id,
+        display_name: definition?.label || providerModelToDisplayName(id),
+        tier: AI_MODEL_TIERS[id],
+        capabilities: AI_MODEL_CAPABILITIES[id],
+        provider: definition?.provider,
+        description: definition?.description,
+        plan_minimum: definition?.minPlan,
+        badges: {
+          new: Boolean(definition?.isNew),
+          fast: Boolean(definition?.isFast),
+          premium: Boolean(definition?.isPremium),
+        },
+        locked: false,
+      };
+    }),
+  ];
+}
+
+function buildPublicModelProviderGroups() {
+  const byProvider = getModelsByProvider();
+  return (Object.keys(byProvider) as ModelProvider[]).map(provider => ({
+    provider,
+    meta: PROVIDER_META[provider],
+    models: byProvider[provider].map(model => ({
+      id: model.id,
+      display_name: model.label,
+      tier: model.tier,
+      provider: model.provider,
+      capabilities: AI_MODEL_CAPABILITIES[model.id as AllowedModelId],
+      description: model.description,
+      plan_minimum: model.minPlan,
+      badges: {
+        new: Boolean(model.isNew),
+        fast: Boolean(model.isFast),
+        premium: Boolean(model.isPremium),
+      },
+      locked: false,
+    })),
+  }));
+}
+
+function sanitizeCreditLedgerEntry(row: any) {
+  const rawAmount = Number(row?.amount || 0);
+  return {
+    id: row?.id || row?.reference_id || randomUUID(),
+    type: String(row?.type || 'usage'),
+    credits: Math.abs(rawAmount),
+    direction: rawAmount < 0 ? 'debit' : 'credit',
+    balance_after: typeof row?.balance_after === 'number' ? row.balance_after : null,
+    description: sanitizeWorkspaceText(String(row?.description || '').replace(/\$[\d,.]+/g, '').replace(/cost|margin|provider/gi, 'usage'), 160),
+    reference_id: row?.reference_id || null,
+    created_at: row?.created_at || new Date().toISOString(),
+  };
+}
+
+function sanitizeAiUsageRow(row: any) {
+  const usage = Array.isArray(row?.ai_request_usage) ? row.ai_request_usage[0] : row?.ai_request_usage;
+  const project = Array.isArray(row?.projects) ? row.projects[0] : row?.projects;
+  const credits = Number(usage?.final_cost_credits || row?.credits_charged || row?.credits || Math.abs(Number(row?.amount || 0)) || 0);
+  return {
+    id: row?.id || row?.reference_id || randomUUID(),
+    project_id: row?.project_id || null,
+    project_name: project?.name || row?.project_name || 'Project',
+    model_id: row?.model_id || row?.model || null,
+    model_name: row?.model_id || row?.model ? providerModelToDisplayName(row.model_id || row.model) : 'Auto',
+    mode: row?.request_type || row?.mode || row?.type || 'AI action',
+    credits_charged: credits,
+    status: row?.status || usage?.status || (Number(row?.amount || 0) > 0 ? 'refunded' : 'completed'),
+    created_at: row?.created_at || new Date().toISOString(),
+  };
+}
+
+function publicCreditGateResponse() {
+  return {
+    success: false,
+    event: 'credits_insufficient',
+    error: 'UpgradeRequired',
+    message: 'Upgrade required',
+    action: 'upgrade_required',
+    suggested_action: 'use_auto',
+  };
 }
 
 function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
@@ -842,7 +1298,7 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
     }
   }
 
-  const html = renderPreviewHtml(files, project.name, project.id, 'preview');
+  const html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
   if (!html.trim() || /__HUGGY_FORCE_ERROR__/i.test(html)) {
     errors.push({ file: 'index.html', message: 'Preview HTML is empty or intentionally failing.', severity: 'high' });
   }
@@ -953,7 +1409,9 @@ async function generateFilesWithAi(input: {
     throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
   }
 
-  const selectedModel = input.modelId && input.modelId !== 'auto' ? input.modelId : 'anthropic/claude-sonnet-4.6';
+  const selectedModel = input.modelId && input.modelId !== 'auto'
+    ? normalizeProviderModelForBackend(input.modelId)
+    : DEFAULT_PROVIDER_MODEL_ID;
   validateAllowedModel(selectedModel);
 
   const fileManifest = input.existingFiles
@@ -970,6 +1428,8 @@ async function generateFilesWithAi(input: {
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
+        'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
         'Never include secrets, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
         'The summary must mention the detected app type and the chosen design direction in one concise sentence.',
@@ -997,7 +1457,7 @@ async function generateFilesWithAi(input: {
     };
   }
 
-  const files = normalizeGeneratedFiles(parsed.files);
+  const files = withProjectSeoSupport(normalizeGeneratedFiles(parsed.files), input.projectName, input.prompt);
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
@@ -1029,6 +1489,8 @@ function buildGenerationMessages(input: {
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
+        'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
         'Never include secrets, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
         'The summary must mention the detected app type and the chosen design direction in one concise sentence.',
@@ -1046,7 +1508,7 @@ function buildGenerationMessages(input: {
   ];
 }
 
-function parseGeneratedOutput(projectName: string, rawText: string) {
+function parseGeneratedOutput(projectName: string, rawText: string, promptOrDescription = '') {
   const cleaned = rawText.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
   let parsed: any;
   try {
@@ -1058,7 +1520,7 @@ function parseGeneratedOutput(projectName: string, rawText: string) {
     };
   }
 
-  const files = normalizeGeneratedFiles(parsed.files);
+  const files = withProjectSeoSupport(normalizeGeneratedFiles(parsed.files), projectName, promptOrDescription || projectName);
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
@@ -1581,11 +2043,13 @@ async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFi
 
   const deploymentFiles = normalizeGeneratedFiles(files).map(file => ({
     file: file.path,
-    data: file.path.endsWith('.html') ? injectAnalyticsSnippet(file.content, project.id, 'production') : file.content,
+    data: file.path.endsWith('.html')
+      ? injectAnalyticsSnippet(enhanceHtmlSeo(file.content, project.name, project.prompt || project.name, project.slug || project.id, 'production'), project.id, 'production')
+      : file.content,
   }));
 
   if (!deploymentFiles.some(file => file.file === 'index.html')) {
-    deploymentFiles.unshift({ file: 'index.html', data: renderPreviewHtml(files, project.name, project.id, 'production') });
+    deploymentFiles.unshift({ file: 'index.html', data: renderPreviewHtml(files, project.name, project.id, 'production', project.prompt || project.name, project.slug || project.id) });
   }
 
   const params = new URLSearchParams();
@@ -1696,7 +2160,7 @@ app.get('/api/billing/ledger', async (req, res) => {
   const client = requireSupabase('Credit ledger listing');
   const { data, error } = await client.from('credit_ledger').select('*').eq('wallet_id', orgId).order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
-  return res.json({ success: true, ledger: data || [] });
+  return res.json({ success: true, ledger: (data || []).map(sanitizeCreditLedgerEntry) });
 });
 
 // POST /billing/checkout/subscription
@@ -1709,7 +2173,7 @@ app.post('/api/billing/checkout/subscription', async (req, res) => {
     const redirectUrl = await billing.createSubscriptionCheckout(
       orgId,
       email || 'test@huggy.app',
-      planKey || 'starter',
+      planKey || 'pro',
       successUrl || `${req.protocol}://${req.get('host')}/settings?success=true`,
       cancelUrl || `${req.protocol}://${req.get('host')}/settings?cancel=true`
     );
@@ -1729,7 +2193,7 @@ app.post('/api/billing/checkout/topup', async (req, res) => {
     const redirectUrl = await billing.createTopupCheckout(
       orgId,
       email || 'test@huggy.app',
-      productId || 'topup_100',
+      productId || 'topup_pro_50',
       successUrl || `${req.protocol}://${req.get('host')}/settings?success=true`,
       cancelUrl || `${req.protocol}://${req.get('host')}/settings?cancel=true`
     );
@@ -1783,37 +2247,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }) as any
 
 // GET /ai/models
 app.get('/api/ai/models', (req, res) => {
-  const modelsInfo = AI_ALLOWED_MODELS.map(id => ({
-    id,
-    display_name: id === 'auto' ? 'Auto Mode' : id.split('/').pop() || id,
-    tier: AI_MODEL_TIERS[id],
-    capabilities: AI_MODEL_CAPABILITIES[id],
-  }));
-
   res.json({
     success: true,
-    models: modelsInfo
+    models: buildPublicModelList(),
+    providers: buildPublicModelProviderGroups(),
   });
 });
 
 // POST /ai/estimate
 app.post('/api/ai/estimate', (req, res) => {
-  const { openrouter_cost_usd, infra_cost_usd, storage_cost_usd, build_cost_usd, domain_operation_cost_usd, minimum_action_credits, complexity_surcharge } = req.body;
-  
-  const comp = {
-    openrouter_cost_usd: openrouter_cost_usd || 0,
-    infra_cost_usd: infra_cost_usd || 0,
-    storage_cost_usd: storage_cost_usd || 0,
-    build_cost_usd: build_cost_usd || 0,
-    domain_operation_cost_usd: domain_operation_cost_usd || 0,
-    minimum_action_credits: minimum_action_credits || 1,
-    complexity_surcharge: complexity_surcharge || 0
-  };
-
-  const estimation = costEstimator.calculateRequiredCredits(comp);
   res.json({
     success: true,
-    estimation
+    allowed: true,
+    requires_upgrade: false,
+    suggested_action: 'continue'
   });
 });
 
@@ -1837,6 +2284,42 @@ app.post('/api/ai/route', async (req, res) => {
   }
 });
 
+app.get('/api/admin/billing/margins', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin billing margins');
+  const { data, error } = await client
+    .from('ai_request_usage')
+    .select('id,request_id,provider_cost_usd,platform_cost_usd,final_cost_credits,status,created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, rows: data || [] });
+});
+
+app.get('/api/admin/ai-costs', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin AI costs');
+  const { data, error } = await client
+    .from('ai_requests')
+    .select('id,organization_id,project_id,model_id,request_type,status,created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, rows: data || [] });
+});
+
+app.get('/api/admin/provider-usage', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin provider usage');
+  const { data, error } = await client
+    .from('provider_usage')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, rows: data || [] });
+});
+
 // PATCH /users/me/ai-preferences
 app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
   const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
@@ -1855,6 +2338,66 @@ app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
   const { error } = await client.from('user_ai_preferences').upsert([updated]);
   if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, preferences: updated });
+});
+
+app.get('/api/users/me/model-credit-rates', async (_req: any, res) => {
+  res.json({
+    success: true,
+    models: MODEL_CREDIT_RATES,
+  });
+});
+
+app.get('/api/users/me/ai-usage', async (req: any, res) => {
+  const userId = getUserOrgId(req);
+  const helpers = getDbHelpers();
+  const client = requireSupabase('AI usage');
+  const balance = await helpers.getWallet(userId);
+
+  let history: any[] = [];
+  try {
+    const { data, error } = await client
+      .from('ai_requests')
+      .select('id, project_id, model_id, request_type, status, created_at, ai_request_usage(final_cost_credits,status), projects(name)')
+      .eq('organization_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (!error && Array.isArray(data)) history = data.map(sanitizeAiUsageRow);
+  } catch {
+    history = [];
+  }
+
+  if (!history.length) {
+    const { data } = await client
+      .from('credit_ledger')
+      .select('id,type,amount,balance_after,description,reference_id,created_at')
+      .eq('wallet_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    history = (data || [])
+      .filter((row: any) => ['usage', 'refund'].includes(String(row.type || '')))
+      .map((row: any) => {
+        const sanitized = sanitizeCreditLedgerEntry(row);
+        const match = String(row.description || '').match(/with\s+([A-Za-z0-9_.:/-]+)/i) || String(row.description || '').match(/on:([A-Za-z0-9_.:/-]+)/i);
+        return sanitizeAiUsageRow({
+          ...sanitized,
+          amount: row.amount,
+          model_id: match?.[1],
+          request_type: row.type === 'refund' ? 'Refund' : 'AI action',
+          status: row.type === 'refund' ? 'refunded' : 'completed',
+        });
+      });
+  }
+
+  res.json({
+    success: true,
+    wallet: {
+      balance,
+      monthly_credits: null,
+      daily_promo_credits: null,
+      topup_credits: null,
+    },
+    history,
+  });
 });
 
 app.get('/api/users/me/workspace-state', async (req: any, res) => {
@@ -1931,26 +2474,6 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
     // 1. Check Wallet Balance
     const balance = await clientHelpers.getWallet(orgId);
 
-    // Dynamic initial estimation component
-    const actionCostComp = {
-      openrouter_cost_usd: 0.00001, // default baseline
-      infra_cost_usd: 0.0001,
-      storage_cost_usd: 0.00002,
-      build_cost_usd: 0.001,
-      domain_operation_cost_usd: 0,
-      minimum_action_credits: 1,
-      complexity_surcharge: taskComplexity === 'complex' ? 1.5 : 0
-    };
-
-    const initialEstimate = costEstimator.calculateRequiredCredits(actionCostComp);
-    if (balance < initialEstimate.finalCredits) {
-      return res.status(402).json({
-        success: false,
-        error: 'InsufficientCreditsError',
-        message: `Your balance (${balance} credits) is below the minimum required credits (${initialEstimate.finalCredits} credits) to run this task.`
-      });
-    }
-
     // 2. Select Model
     const routingCtx: RoutingContext = {
       plan: req.body.plan || 'free',
@@ -1960,6 +2483,22 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
     };
 
     const targetModel = await modelRouter.selectModel(routingCtx, customModelId);
+
+    // Dynamic initial estimation component
+    const actionCostComp = {
+      openrouter_cost_usd: 0.00001, // default baseline
+      infra_cost_usd: 0.0001,
+      storage_cost_usd: 0.00002,
+      build_cost_usd: 0.001,
+      domain_operation_cost_usd: 0,
+      minimum_action_credits: Math.max(1, modelCreditFloor(targetModel)),
+      complexity_surcharge: taskComplexity === 'complex' ? 1.5 : 0
+    };
+
+    const initialEstimate = costEstimator.calculateRequiredCredits(actionCostComp);
+    if (balance < initialEstimate.finalCredits) {
+      return res.status(402).json(publicCreditGateResponse());
+    }
 
     // 3. Reserve Credits safely
     const refId = `req_${Math.random().toString(36).substring(2, 13)}`;
@@ -1976,7 +2515,7 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
         storage_cost_usd: 0.00002,
         build_cost_usd: 0.001,
         domain_operation_cost_usd: 0,
-        minimum_action_credits: 1,
+        minimum_action_credits: Math.max(1, modelCreditFloor(completionResult.model)),
         complexity_surcharge: taskComplexity === 'complex' ? 1.5 : 0
       };
 
@@ -1991,8 +2530,6 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
         success: true,
         model: completionResult.model,
         text: completionResult.text,
-        credits_charged: finalEstimate.finalCredits,
-        remaining_balance: await clientHelpers.getWallet(orgId),
         routing_mode: mode || 'Auto'
       });
 
@@ -2086,7 +2623,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     prompt,
     template: String(req.body?.template || 'custom'),
     theme: String(req.body?.theme || 'light'),
-    model_id: String(req.body?.model || req.body?.modelId || 'auto'),
+    model_id: normalizeModelSelectionId(req.body?.model || req.body?.modelId || 'auto'),
     status: 'draft',
     preview_status: 'idle',
     created_at: now,
@@ -2094,7 +2631,7 @@ app.post('/api/projects', async (req: any, res: any) => {
   };
 
   const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
-  project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview');
+  project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
   await saveProject(project, files);
   await upsertUserWorkspaceState(userId, {
     last_project_id: project.id,
@@ -2145,7 +2682,7 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
     workspace_state: workspaceState,
     preview: {
       status: project.preview_status || 'idle',
-      html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
+      html: getProjectPreviewHtml(project, files, 'preview'),
     },
   });
 });
@@ -2181,8 +2718,6 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
   const secrets = await listProjectSecrets(project.id);
   const errors = await listBuildErrors(project.id);
   const workspaceState = await getProjectWorkspaceState(project.id);
-  const helpers = getDbHelpers();
-  const balance = await helpers.getWallet(userId);
   await upsertUserWorkspaceState(userId, { last_project_id: project.id, last_route: `/builder.html?project=${project.id}` });
   res.json({
     success: true,
@@ -2193,11 +2728,10 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
     versions,
     secrets,
     errors,
-    credits: { balance },
     workspace_state: workspaceState,
     preview: {
       status: project.preview_status || 'idle',
-      html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(files, project.name, project.id, 'preview'), project.id, 'preview'),
+      html: getProjectPreviewHtml(project, files, 'preview'),
     },
   });
 });
@@ -2207,13 +2741,31 @@ app.get('/api/projects/:id/analysis', async (req: any, res: any) => {
     const userId = getUserOrgId(req);
     const project = await loadProject(req.params.id, userId);
     if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    const files = await loadProjectFiles(project.id);
     const analysis = await loadProjectAnalysis(project, String(req.query?.range || '30d'));
-    res.json({ success: true, project_id: project.id, range: String(req.query?.range || '30d'), ...analysis });
+    const seo = buildProjectSeoAudit(project, files);
+    res.json({ success: true, project_id: project.id, range: String(req.query?.range || '30d'), ...analysis, seo });
   } catch (error: any) {
     const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : 500);
     res.status(status).json({
       success: false,
       error: status === 503 ? 'Analytics storage is not configured.' : error?.message || 'Analysis unavailable.',
+    });
+  }
+});
+
+app.get('/api/projects/:id/seo-audit', async (req: any, res: any) => {
+  try {
+    const userId = getUserOrgId(req);
+    const project = await loadProject(req.params.id, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    const files = await loadProjectFiles(project.id);
+    res.json({ success: true, project_id: project.id, seo: buildProjectSeoAudit(project, files) });
+  } catch (error: any) {
+    const status = error?.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      error: error?.message || 'SEO audit unavailable.',
     });
   }
 });
@@ -2230,8 +2782,13 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
     hasFiles: files.length > 0,
     lastPlan,
   });
-  const estimate = estimateActionCost(String(req.body?.prompt || ''), decision);
-  res.json({ success: true, intent: decision, estimate });
+  res.json({
+    success: true,
+    intent: decision,
+    allowed: true,
+    requires_upgrade: false,
+    suggested_action: 'continue',
+  });
 });
 
 app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
@@ -2295,6 +2852,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
+  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   await saveProjectMessage({
     organization_id: project.organization_id,
     project_id: project.id,
@@ -2307,7 +2865,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   await upsertProjectWorkspaceState(userId, project.id, {
     draft_prompt: '',
     selected_mode: decision.requestedMode,
-    selected_model: req.body?.modelId || project.model_id || 'auto',
+    selected_model: requestedModelSelection,
     active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
   });
 
@@ -2331,21 +2889,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       intent: decision,
       text: content,
       files: existingFiles,
-      preview: { status: project.preview_status || 'idle', html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(existingFiles, project.name, project.id, 'preview'), project.id, 'preview') },
-      credits: { estimated: 0, charged: 0, remaining: await helpers.getWallet(userId) },
+      preview: { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') },
     });
   }
 
   const wallet = await helpers.getWallet(userId);
-  const cost = estimateActionCost(prompt, decision);
+  const cost = estimateActionCost(prompt, decision, requestedModelSelection);
 
   if (wallet < cost.finalCredits) {
     return res.status(200).json({
-      success: false,
-      event: 'credits_insufficient',
-      error: 'InsufficientCreditsError',
-      message: `Your balance (${wallet} credits) is below the required ${cost.finalCredits} credits.`,
-      credits: { balance: wallet, required: cost.finalCredits },
+      ...publicCreditGateResponse(),
     });
   }
 
@@ -2356,7 +2909,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const generation = await generateFilesWithAi({
       projectName: project.name,
       prompt: req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt,
-      modelId: req.body?.modelId || project.model_id || 'auto',
+      modelId: requestedModelSelection,
       existingFiles,
     });
 
@@ -2399,7 +2952,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       storage_cost_usd: 0.0001,
       build_cost_usd: 0.001,
       domain_operation_cost_usd: 0,
-      minimum_action_credits: 2,
+      minimum_action_credits: Math.max(2, modelCreditFloor(generation.model)),
       complexity_surcharge: prompt.length > 400 ? 2 : 0,
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
@@ -2419,11 +2972,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         status: pipeline.status,
         html: previewHtml,
       },
-      credits: {
-        estimated: cost.finalCredits,
-        charged: finalCost.finalCredits,
-        remaining: finalBalance,
-      },
     });
   } catch (error: any) {
     await helpers.addLedger(userId, 'refund', cost.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
@@ -2431,7 +2979,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       user_id: userId,
       organization_id: userId,
       project_id: project.id,
-      requested_model: req.body?.modelId || project.model_id || 'auto',
+      requested_model: requestedModelSelection,
       reason: `Generation failed: ${error.message}`,
       source: 'builder',
     });
@@ -2491,7 +3039,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
-  const estimate = estimateActionCost(prompt, decision);
+  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
+  const estimate = estimateActionCost(prompt, decision, requestedModelSelection);
   await saveProjectMessage({
     organization_id: project.organization_id,
     project_id: project.id,
@@ -2504,13 +3053,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   await upsertProjectWorkspaceState(userId, project.id, {
     draft_prompt: '',
     selected_mode: decision.requestedMode,
-    selected_model: req.body?.modelId || project.model_id || 'auto',
+    selected_model: requestedModelSelection,
     active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
   });
   await send('intent_detected', decision.userVisibleReason, { intent: decision });
 
   if (wallet < estimate.finalCredits) {
-    await send('credits_insufficient', 'Credits are not enough for this action.', { code: 'InsufficientCreditsError', required: estimate.finalCredits, balance: wallet });
+    await send('credits_insufficient', 'Upgrade required', {
+      code: 'UpgradeRequired',
+      action: 'upgrade_required',
+      suggested_action: 'use_auto',
+    });
     res.end();
     return;
   }
@@ -2541,9 +3094,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       choices: decision.clarification?.choices || [],
       recommendation: decision.clarification?.recommendation,
       original_prompt: prompt,
-      preview: { status: project.preview_status || 'idle', html: injectAnalyticsSnippet(project.preview_html || renderPreviewHtml(existingFiles, project.name, project.id, 'preview'), project.id, 'preview') },
+      preview: { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') },
       files: existingFiles,
-      credits: { estimated: estimate.finalCredits, charged: 0, remaining: wallet },
     });
     await send('done', 'No file changes were made.', {});
     res.end();
@@ -2570,14 +3122,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   await helpers.createReservation(userId, estimate.finalCredits, refId);
 
   try {
-    await send('queued', 'Generation queued.', { estimated_credits: estimate.finalCredits, build_session_id: buildSessionId });
-    await send('routing', 'Selecting the model and preparing project context.', { mode: req.body?.modelId || project.model_id || 'auto' });
+    await send('queued', 'Generation queued.', { build_session_id: buildSessionId });
+    await send('routing', 'Selecting the model and preparing project context.', { mode: requestedModelSelection });
 
     const hasLiveKey = Boolean(process.env.OPENROUTER_API_KEY);
     let generatedText = '';
-    let model = req.body?.modelId && req.body.modelId !== 'auto'
-      ? String(req.body.modelId)
-      : 'anthropic/claude-sonnet-4.6';
+    let model: string = requestedModelSelection !== 'auto'
+      ? normalizeProviderModelForBackend(requestedModelSelection)
+      : DEFAULT_PROVIDER_MODEL_ID;
+    validateAllowedModel(model);
     let costUsd = 0;
 
     if (!hasLiveKey) {
@@ -2603,13 +3156,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         } else {
           model = event.model;
           costUsd = event.cost_usd;
-          await send('usage', 'Token usage received.', { model: event.model, usage: event.usage, cost_usd: event.cost_usd });
         }
       }
     }
 
     await send('build_started', 'Normalizing generated files and building preview.', {});
-    const parsed = parseGeneratedOutput(project.name, generatedText);
+    const parsed = parseGeneratedOutput(project.name, generatedText, prompt);
 
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
@@ -2660,7 +3212,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       storage_cost_usd: 0.0001,
       build_cost_usd: 0.001,
       domain_operation_cost_usd: 0,
-      minimum_action_credits: 2,
+      minimum_action_credits: Math.max(2, modelCreditFloor(model)),
       complexity_surcharge: prompt.length > 400 ? 2 : 0,
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
@@ -2674,11 +3226,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       diff,
       auto_fix: autoFix,
       errors: pipeline.errors,
-      credits: {
-        estimated: estimate.finalCredits,
-        charged: finalCost.finalCredits,
-        remaining: finalBalance,
-      },
     });
 
     await updateBuildSessionStatus(buildSessionId, 'completed');
@@ -2691,7 +3238,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       user_id: userId,
       organization_id: userId,
       project_id: project.id,
-      requested_model: req.body?.modelId || project.model_id || 'auto',
+      requested_model: requestedModelSelection,
       reason: `Streaming generation failed: ${error.message}`,
       source: 'builder_stream',
     });
@@ -2699,7 +3246,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     console.error('[huggy:generate_stream_failed]', {
       project_id: project.id,
       user_id: userId,
-      model: req.body?.modelId || project.model_id || 'auto',
+      model: requestedModelSelection,
       message: error.message,
     });
     await send('error', normalizeProviderError(error), { code: 'GenerationFailed' });
@@ -2733,7 +3280,7 @@ app.post('/api/projects/:id/preview', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
   const files = await loadProjectFiles(project.id);
-  const html = renderPreviewHtml(files, project.name, project.id, 'preview');
+  const html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
   const updatedProject = {
     ...project,
     preview_status: 'ready',
@@ -3024,7 +3571,7 @@ app.get('/api/projects/:id/domains', async (req, res) => {
 // POST /projects/:id/domains
 app.post('/api/projects/:id/domains', async (req: any, res: any) => {
   const projectId = req.params.id;
-  const { domain, type, orgId = DEFAULT_ORG_ID, plan = 'starter' } = req.body;
+  const { domain, type, orgId = DEFAULT_ORG_ID, plan = 'pro' } = req.body;
 
   try {
     const vercelProxy = createVercelDomainProxy();
@@ -3101,10 +3648,7 @@ app.post('/api/projects/:id/deploy', async (req: any, res: any) => {
 
   if (userCredits < 2) {
     return res.status(200).json({
-      success: false,
-      event: 'credits_insufficient',
-      error: 'Insufficient credits',
-      credits: { required: 2, balance: userCredits },
+      ...publicCreditGateResponse(),
     });
   }
 

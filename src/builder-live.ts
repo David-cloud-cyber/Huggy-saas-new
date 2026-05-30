@@ -35,13 +35,6 @@ type ProjectPayload = {
   intent?: { intent: string };
   diff?: { created: string[]; modified: string[]; deleted: string[]; summary: string };
   errors?: Array<{ message: string; file?: string }>;
-  credits?: {
-    estimated?: number;
-    charged?: number;
-    remaining?: number;
-    balance?: number;
-    required?: number;
-  };
 };
 
 type WorkspaceState = {
@@ -68,8 +61,27 @@ type AiModel = {
   id: string;
   display_name: string;
   tier?: string;
+  provider?: string;
+  description?: string;
+  plan_minimum?: string;
+  badges?: {
+    new?: boolean;
+    fast?: boolean;
+    premium?: boolean;
+  };
   locked?: boolean;
   capabilities?: Record<string, unknown>;
+};
+
+type AiModelProviderGroup = {
+  provider: string;
+  meta: {
+    label: string;
+    color: string;
+    textColor: string;
+    icon: string;
+  };
+  models: AiModel[];
 };
 
 type AnalysisPayload = {
@@ -86,6 +98,18 @@ type AnalysisPayload = {
   pages: Array<{ page: string; visitors: number }>;
   countries: Array<{ country_code: string; country_name: string; visitors: number }>;
   devices: Array<{ device: 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown'; visitors: number; percentage: number }>;
+  seo?: {
+    score: number;
+    recommendations: string[];
+    checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }>;
+    preview?: {
+      title?: string;
+      description?: string;
+      h1?: string;
+      ogTitle?: string;
+      structuredData?: boolean;
+    };
+  };
 };
 
 let currentProjectId = '';
@@ -360,17 +384,8 @@ function closeProjectMenu() {
 async function loadProjectMenuCredits() {
   const status = document.getElementById('project-menu-credit-status');
   const fill = document.getElementById('project-menu-credit-fill') as HTMLElement | null;
-  if (status) status.textContent = 'Loading credits...';
-  if (fill) fill.style.width = '0%';
-  try {
-    const wallet = await apiFetch<{ success: boolean; balance?: number }>('/api/billing/wallet');
-    const balance = Number(wallet.balance || 0);
-    if (status) status.textContent = `${balance} credits available`;
-    if (fill) fill.style.width = balance > 0 ? '100%' : '0%';
-  } catch {
-    if (status) status.textContent = 'Credits unavailable';
-    if (fill) fill.style.width = '0%';
-  }
+  if (status) status.textContent = 'View credit usage in Settings.';
+  if (fill) fill.style.width = '100%';
 }
 
 function openProjectMenu() {
@@ -561,13 +576,25 @@ function ensureBuilderModelSelectorStyle() {
   const style = document.createElement('style');
   style.id = 'huggy-builder-model-selector-style';
   style.textContent = `
+    .chat-input-row {
+      --chat-action-height: 34px;
+      --chat-action-radius: 999px;
+      --chat-action-font: 11px;
+    }
+    .chat-input-row #btn-chat-mode,
+    .chat-input-row .huggy-builder-model-trigger {
+      height: var(--chat-action-height) !important;
+      min-height: var(--chat-action-height) !important;
+      border-radius: var(--chat-action-radius) !important;
+      font-size: var(--chat-action-font) !important;
+      align-items: center !important;
+    }
     .huggy-builder-model-trigger {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      min-height: 30px;
-      max-width: min(210px, 34vw);
-      padding: 3px 10px;
+      max-width: min(230px, 38vw);
+      padding: 0 11px;
       border-radius: 999px;
       border: 1px solid var(--border);
       font-size: 11px;
@@ -596,6 +623,14 @@ function ensureBuilderModelSelectorStyle() {
       padding-right: 8px;
       border-right: 1px solid var(--border);
     }
+    .huggy-builder-model-trigger .provider-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(180,113,86,.10);
+      flex: 0 0 auto;
+    }
     .huggy-builder-model-trigger #current-model-label {
       min-width: 0;
       overflow: hidden;
@@ -613,10 +648,10 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-model-dropdown {
       position: fixed;
-      width: 344px;
+      width: 302px;
       max-width: calc(100vw - 24px);
       max-height: min(420px, calc(100vh - 36px));
-      overflow: auto;
+      overflow: visible;
       border: 1px solid var(--border);
       background: var(--bg-surface);
       color: var(--text);
@@ -629,6 +664,200 @@ function ensureBuilderModelSelectorStyle() {
     }
     .huggy-model-dropdown.open {
       display: block;
+    }
+    .huggy-builder-provider-list {
+      display: grid;
+      gap: 6px;
+    }
+    .huggy-auto-model-option,
+    .huggy-builder-provider-card {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 7px 8px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 160ms cubic-bezier(0.22,1,0.36,1), border-color 160ms cubic-bezier(0.22,1,0.36,1), transform 160ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .huggy-auto-model-option:hover,
+    .huggy-auto-model-option.active,
+    .huggy-builder-provider-card:hover,
+    .huggy-builder-provider-card.active,
+    .huggy-builder-provider-card.open {
+      background: var(--accent-hover, rgba(180,113,86,.12));
+      border-color: var(--border-focus, var(--border));
+    }
+    .huggy-builder-provider-card.open {
+      transform: translateX(2px);
+    }
+    .huggy-provider-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: var(--provider-color);
+      color: var(--provider-text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 850;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .huggy-provider-card-main {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+      flex: 1 1 auto;
+    }
+    .huggy-provider-name {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.2;
+    }
+    .huggy-provider-sub {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .huggy-provider-expand-btn {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 160ms cubic-bezier(0.22,1,0.36,1), color 160ms cubic-bezier(0.22,1,0.36,1), transform 220ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .huggy-provider-expand-btn:hover,
+    .huggy-provider-expand-btn.open {
+      background: var(--bg-panel, var(--bg-input));
+      color: var(--text);
+    }
+    .huggy-provider-expand-btn.open {
+      transform: rotate(90deg);
+    }
+    .huggy-builder-model-panel {
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 0;
+      width: 296px;
+      max-height: min(430px, 70vh);
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text);
+      border-radius: 16px;
+      box-shadow: 0 18px 54px rgba(0,0,0,.22), 0 4px 16px rgba(0,0,0,.10);
+      opacity: 0;
+      transform: translateX(-8px) scale(.97);
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 3200;
+      transition: opacity 180ms cubic-bezier(0,0,0.2,1), transform 260ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .huggy-builder-model-panel.visible {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+      pointer-events: auto;
+    }
+    .huggy-model-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 12px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .huggy-model-list-title {
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .huggy-model-list-count {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+    }
+    .huggy-model-list-scroll {
+      max-height: 360px;
+      overflow-y: auto;
+      padding: 6px;
+      display: grid;
+      gap: 4px;
+    }
+    .huggy-builder-model-item {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 10px;
+      display: grid;
+      gap: 4px;
+      text-align: left;
+      cursor: pointer;
+      position: relative;
+      animation: huggy-builder-model-enter 220ms cubic-bezier(0.34,1.56,0.64,1) both;
+      transition: background 150ms cubic-bezier(0.22,1,0.36,1), transform 150ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .huggy-builder-model-item:hover {
+      background: var(--accent-hover, rgba(180,113,86,.12));
+      transform: translateX(2px);
+    }
+    .huggy-builder-model-item.selected {
+      background: var(--accent-hover, rgba(180,113,86,.14));
+    }
+    .huggy-builder-model-item.selected::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 22%;
+      bottom: 22%;
+      width: 3px;
+      border-radius: 0 999px 999px 0;
+      background: var(--accent);
+    }
+    .huggy-model-item-name {
+      font-size: 12px;
+      font-weight: 750;
+      color: var(--text);
+      line-height: 1.25;
+    }
+    .huggy-model-item-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+    .huggy-model-item-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .huggy-model-badge.new { color: #166534; background: #dcfce7; border-color: #bbf7d0; }
+    .huggy-model-badge.fast { color: #854d0e; background: #fef9c3; border-color: #fde68a; }
+    .huggy-model-badge.premium { color: #6b21a8; background: #f3e8ff; border-color: #e9d5ff; }
+    @keyframes huggy-builder-model-enter {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
     }
     .huggy-model-dropdown .dropdown-header {
       font-size: 10px;
@@ -749,6 +978,20 @@ function ensureBuilderModelSelectorStyle() {
         max-height: 68vh;
         border-radius: 18px;
       }
+      .huggy-builder-model-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        max-height: 82dvh;
+        border-radius: 22px 22px 0 0;
+        transform: translateY(100%);
+      }
+      .huggy-builder-model-panel.visible {
+        transform: translateY(0);
+      }
     }
   `;
   document.head.appendChild(style);
@@ -766,6 +1009,7 @@ async function ensureModelSelector() {
   root.style.cssText = '';
   root.innerHTML = `
     <span class="model-label-prefix">Model</span>
+    <span class="provider-dot"></span>
     <span id="current-model-label">Auto</span>
     <svg id="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
       <polyline points="6 9 12 15 18 9"></polyline>
@@ -780,6 +1024,9 @@ async function ensureModelSelector() {
   document.body.appendChild(dropdown);
 
   const label = root.querySelector('#current-model-label') as HTMLElement;
+  const providerDot = root.querySelector('.provider-dot') as HTMLElement | null;
+  let providerGroups: AiModelProviderGroup[] = [];
+  let activeProvider = '';
   const positionDropdown = () => {
     const rect = root.getBoundingClientRect();
     if (window.matchMedia('(max-width: 640px)').matches) {
@@ -797,11 +1044,84 @@ async function ensureModelSelector() {
     dropdown.style.bottom = `${Math.max(12, window.innerHeight - rect.top + 8)}px`;
     dropdown.style.top = 'auto';
   };
-  const close = () => { dropdown.classList.remove('open'); root.setAttribute('aria-expanded', 'false'); };
+  const closeProviderPanel = () => {
+    activeProvider = '';
+    dropdown.querySelector<HTMLElement>('.huggy-builder-model-panel')?.classList.remove('visible');
+    dropdown.querySelectorAll('.huggy-provider-expand-btn.open, .huggy-builder-provider-card.open').forEach(item => item.classList.remove('open'));
+  };
+  const close = () => {
+    dropdown.classList.remove('open');
+    root.setAttribute('aria-expanded', 'false');
+    closeProviderPanel();
+  };
+  const selectedProviderMeta = () => {
+    const group = providerGroups.find(item => item.models.some(model => model.id === selectedModelId));
+    return group?.meta || null;
+  };
   const setActiveOption = () => {
     dropdown.querySelectorAll<HTMLElement>('[data-model-id]').forEach(option => {
       option.classList.toggle('active', (option.dataset.modelId || 'auto') === selectedModelId);
+      option.classList.toggle('selected', (option.dataset.modelId || 'auto') === selectedModelId);
     });
+    dropdown.querySelectorAll<HTMLElement>('[data-provider]').forEach(card => {
+      const group = providerGroups.find(item => item.provider === card.dataset.provider);
+      const active = Boolean(group?.models.some(model => model.id === selectedModelId));
+      card.classList.toggle('active', active);
+      const sub = card.querySelector<HTMLElement>('.huggy-provider-sub');
+      if (sub && group) {
+        const selected = group.models.find(model => model.id === selectedModelId);
+        sub.textContent = selected ? selected.display_name : `${group.models.length} models`;
+      }
+    });
+    const meta = selectedProviderMeta();
+    if (providerDot) providerDot.style.background = meta?.color || 'var(--accent)';
+    if (label) {
+      const selected = dropdown.querySelector<HTMLElement>(`[data-model-id="${CSS.escape(selectedModelId)}"]`);
+      label.textContent = selected?.dataset.modelName || (selectedModelId === 'auto' ? 'Auto' : selectedModelId);
+    }
+  };
+  const providerInitial = (name: string) => (name.trim()[0] || 'M').toUpperCase();
+  const renderModelPanel = (group: AiModelProviderGroup) => `
+    <div class="huggy-model-list-header">
+      <span class="huggy-model-list-title">${escapeHtml(group.meta.label)}</span>
+      <span class="huggy-model-list-count">${group.models.length} models</span>
+    </div>
+    <div class="huggy-model-list-scroll">
+      ${group.models.map((model, index) => {
+        const tier = model.tier || 'Standard';
+        const locked = model.locked ? '<span class="huggy-model-badge">Upgrade</span>' : '';
+        const badges = [
+          `<span class="huggy-model-badge">${escapeHtml(tier)}</span>`,
+          model.badges?.new ? '<span class="huggy-model-badge new">New</span>' : '',
+          model.badges?.fast ? '<span class="huggy-model-badge fast">Fast</span>' : '',
+          model.badges?.premium ? '<span class="huggy-model-badge premium">Premium</span>' : '',
+          model.plan_minimum && model.plan_minimum !== 'free' ? '<span class="huggy-model-badge">Upgrade</span>' : '',
+          locked,
+        ].filter(Boolean).join('');
+        const context = Number(model.capabilities?.maxContextTokens || 0);
+        return `<button type="button" class="huggy-builder-model-item${selectedModelId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" aria-disabled="${model.locked ? 'true' : 'false'}" style="animation-delay:${index * 35}ms">
+          <span class="huggy-model-item-name">${escapeHtml(model.display_name || model.id)}</span>
+          <span class="huggy-model-item-meta">${escapeHtml(model.description || model.id)}${context ? ` · ${Math.round(context / 1000)}K ctx` : ''}</span>
+          <span class="huggy-model-item-badges">${badges}</span>
+        </button>`;
+      }).join('')}
+    </div>
+  `;
+  const toggleProviderPanel = (provider: string) => {
+    const panel = dropdown.querySelector<HTMLElement>('.huggy-builder-model-panel');
+    const group = providerGroups.find(item => item.provider === provider);
+    if (!panel || !group) return;
+    if (activeProvider === provider) {
+      closeProviderPanel();
+      return;
+    }
+    activeProvider = provider;
+    dropdown.querySelectorAll('.huggy-provider-expand-btn.open, .huggy-builder-provider-card.open').forEach(item => item.classList.remove('open'));
+    dropdown.querySelector<HTMLElement>(`[data-provider="${CSS.escape(provider)}"]`)?.classList.add('open');
+    dropdown.querySelector<HTMLElement>(`[data-provider-arrow="${CSS.escape(provider)}"]`)?.classList.add('open');
+    panel.innerHTML = renderModelPanel(group);
+    panel.classList.add('visible');
+    setActiveOption();
   };
   const open = async () => {
     const shouldOpen = !dropdown.classList.contains('open');
@@ -815,52 +1135,55 @@ async function ensureModelSelector() {
     if (dropdown.dataset.loaded === 'true') return;
     dropdown.innerHTML = '<div style="padding:10px;color:var(--text-muted);font-size:12px;">Loading models...</div>';
     try {
-      const payload = await apiFetch<{ models: AiModel[] }>('/api/ai/models');
+      const payload = await apiFetch<{ models: AiModel[]; providers?: AiModelProviderGroup[] }>('/api/ai/models');
       const models = (payload.models || []).filter(model => model.id !== 'auto');
+      providerGroups = (payload.providers && payload.providers.length)
+        ? payload.providers
+        : Object.values(models.reduce<Record<string, AiModelProviderGroup>>((acc, model) => {
+          const provider = model.provider || model.id.split('/')[0] || 'other';
+          if (!acc[provider]) {
+            acc[provider] = {
+              provider,
+              meta: { label: provider, color: renderTierColor(model.tier), textColor: '#fff', icon: provider },
+              models: [],
+            };
+          }
+          acc[provider].models.push(model);
+          return acc;
+        }, {}));
+      const validIds = new Set(models.map(model => model.id));
+      if (selectedModelId !== 'auto' && !validIds.has(selectedModelId)) {
+        selectedModelId = 'auto';
+        scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
+      }
       dropdown.dataset.loaded = 'true';
       dropdown.innerHTML = `
         <div class="dropdown-header">Choose AI Engine</div>
-        <div class="dropdown-search-wrapper">
-          <svg class="dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-          <input type="text" class="dropdown-search-input" placeholder="Search models...">
-        </div>
-        <div class="dropdown-group-title">Recommended</div>
-        <button type="button" class="model-option active" data-model-id="auto" data-model-name="Auto">
-          <span class="model-dot" style="background:var(--accent);"></span>
-          <span class="opt-meta">
-            <span class="opt-name">Auto</span>
-            <span class="opt-desc">Huggy chooses the best available model</span>
+        <button type="button" class="huggy-auto-model-option active" data-model-id="auto" data-model-name="Auto">
+          <span class="huggy-provider-icon" style="--provider-color:var(--accent);--provider-text:var(--bg);">A</span>
+          <span class="huggy-provider-card-main">
+            <span class="huggy-provider-name">Auto</span>
+            <span class="huggy-provider-sub">Huggy routes to the best fit</span>
           </span>
           <span class="huggy-model-badge" style="color:${renderTierColor('Standard')}">Standard</span>
         </button>
-        <div class="dropdown-group-title">Available models</div>
-        <div class="huggy-model-options">
-          ${models.map(model => {
-            const tier = model.tier || (model.id === 'auto' ? 'Auto' : 'Standard');
-            const color = renderTierColor(tier);
-            const locked = model.locked ? '<span class="huggy-model-upgrade">Upgrade</span>' : '';
-            return `<button type="button" class="model-option" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.display_name || model.id)}" aria-disabled="${model.locked ? 'true' : 'false'}">
-              <span class="model-dot" style="background:${color};"></span>
-              <span class="opt-meta">
-                <span class="opt-name">${escapeHtml(model.display_name || model.id)}</span>
-                <span class="opt-desc">${escapeHtml(model.id)}</span>
+        <div class="huggy-builder-provider-list">
+          ${providerGroups.map(group => {
+            const activeModel = group.models.find(model => model.id === selectedModelId);
+            return `<div class="huggy-builder-provider-card" data-provider="${escapeHtml(group.provider)}" style="--provider-color:${escapeHtml(group.meta.color)};--provider-text:${escapeHtml(group.meta.textColor)};">
+              <span class="huggy-provider-icon">${escapeHtml(providerInitial(group.meta.label))}</span>
+              <span class="huggy-provider-card-main">
+                <span class="huggy-provider-name">${escapeHtml(group.meta.label)}</span>
+                <span class="huggy-provider-sub">${escapeHtml(activeModel?.display_name || `${group.models.length} models`)}</span>
               </span>
-              <span class="huggy-model-badge" style="color:${color};">${escapeHtml(tier)}</span>
-              ${locked}
-            </button>`;
+              <button class="huggy-provider-expand-btn" type="button" aria-label="Open ${escapeHtml(group.meta.label)} models" data-provider-arrow="${escapeHtml(group.provider)}">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>`;
           }).join('')}
         </div>
+        <div class="huggy-builder-model-panel" role="listbox" aria-label="Provider models"></div>
       `;
-      const search = dropdown.querySelector<HTMLInputElement>('.dropdown-search-input');
-      search?.addEventListener('input', () => {
-        const query = search.value.trim().toLowerCase();
-        dropdown.querySelectorAll<HTMLElement>('.model-option').forEach(option => {
-          const haystack = `${option.dataset.modelName || ''} ${option.dataset.modelId || ''}`.toLowerCase();
-          option.style.display = haystack.includes(query) ? 'flex' : 'none';
-        });
-      });
-      search?.addEventListener('click', event => event.stopPropagation());
-      search?.addEventListener('keydown', event => event.stopPropagation());
       setActiveOption();
       positionDropdown();
     } catch (error) {
@@ -879,6 +1202,12 @@ async function ensureModelSelector() {
   });
   dropdown.addEventListener('click', async event => {
     event.stopPropagation();
+    const providerTarget = (event.target as HTMLElement).closest('[data-provider-arrow]') as HTMLElement | null;
+    if (providerTarget) {
+      event.preventDefault();
+      toggleProviderPanel(providerTarget.dataset.providerArrow || '');
+      return;
+    }
     const target = (event.target as HTMLElement).closest('[data-model-id]') as HTMLElement | null;
     if (!target) return;
     if (target.getAttribute('aria-disabled') === 'true') return;
@@ -1247,8 +1576,8 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         return;
       }
       if (eventType === 'credits_insufficient') {
-        updateMessage(status, 'Credits are not enough for this action.');
-        showCreditsModal(payload.required || payload.credits?.required || 0, payload.balance || 0);
+        updateMessage(status, 'Upgrade required.');
+        showCreditsModal();
         return;
       }
       if (eventType === 'external_api_keys_required') {
@@ -1267,9 +1596,8 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
-        const credits = payload.credits?.charged ? ` Credits used: ${payload.credits.charged}.` : '';
         const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
-        updateMessage(status, `${event.message || 'Application generated and preview updated.'}${diff}${credits}`);
+        updateMessage(status, `${event.message || 'Application generated and preview updated.'}${diff}`);
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }
@@ -1467,6 +1795,50 @@ function renderAnalysisBreakdown(
   `;
 }
 
+function renderSeoAudit(seo?: AnalysisPayload['seo']) {
+  if (!seo) {
+    return `
+      <section class="analysis-seo-card">
+        <div>
+          <span class="analysis-seo-kicker">SEO readiness</span>
+          <h3>SEO audit unavailable</h3>
+          <p>No generated project files were available for an SEO review yet.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  const checks = (seo.checks || []).slice(0, 8);
+  const recommendations = (seo.recommendations || []).slice(0, 3);
+  return `
+    <section class="analysis-seo-card">
+      <div class="analysis-seo-summary">
+        <div class="analysis-seo-score" aria-label="SEO score">${Math.max(0, Math.min(100, Math.round(seo.score || 0)))}</div>
+        <div>
+          <span class="analysis-seo-kicker">SEO & AI-search readiness</span>
+          <h3>${seo.score >= 90 ? 'Search foundation looks strong' : 'SEO fixes are available'}</h3>
+          <p>${seo.preview?.title ? escapeHtml(seo.preview.title) : 'Huggy checks title, meta, H1, Open Graph, structured data, alt text, sitemap and robots.'}</p>
+        </div>
+        <button class="analysis-seo-action" id="btn-fix-seo" type="button">Fix SEO with AI</button>
+      </div>
+      <div class="analysis-seo-checks">
+        ${checks.map(check => `
+          <div class="analysis-seo-check is-${escapeHtml(check.status)}">
+            <span>${escapeHtml(check.label)}</span>
+            <strong>${escapeHtml(check.status)}</strong>
+            <small>${escapeHtml(check.detail)}</small>
+          </div>
+        `).join('')}
+      </div>
+      ${recommendations.length ? `
+        <div class="analysis-seo-recommendations">
+          ${recommendations.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
+        </div>
+      ` : ''}
+    </section>
+  `;
+}
+
 function renderAnalysis(payload: AnalysisPayload) {
   const target = document.getElementById('analysis-content');
   if (!target) return;
@@ -1512,6 +1884,7 @@ function renderAnalysis(payload: AnalysisPayload) {
     <section class="analysis-chart-card">
       ${renderAnalysisChart(payload.timeseries || [])}
     </section>
+    ${renderSeoAudit(payload.seo)}
     <div class="analysis-breakdown-grid">
       ${renderAnalysisBreakdown('Source', sourceRows)}
       ${renderAnalysisBreakdown('Page', pageRows)}
@@ -1523,6 +1896,13 @@ function renderAnalysis(payload: AnalysisPayload) {
   document.getElementById('analysis-range-select')?.addEventListener('change', event => {
     analysisRange = (event.target as HTMLSelectElement).value || '30d';
     void loadAnalysis();
+  });
+  document.getElementById('btn-fix-seo')?.addEventListener('click', () => {
+    const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+    if (!input) return;
+    input.value = 'Optimize this app for Google and AI search. Add strong title and meta descriptions, Open Graph tags, one clear H1, image alt text, structured data, sitemap.xml and robots.txt without changing the core product.';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
   });
 }
 
@@ -1603,20 +1983,23 @@ async function resumeFromClarification(answer: string, originalPrompt: string, r
   await generateFromPrompt(response.prompt || `${originalPrompt}\n\nClarification answer: ${answer}`, response.requestedMode || requestedMode, false, {}, answer);
 }
 
-function showCreditsModal(required: number, balance: number) {
-  showMiniModal('Credits required', `
-    <p>You need ${required} credits, but your balance is ${balance}.</p>
+function showCreditsModal() {
+  showMiniModal('Upgrade required', `
+    <p>Your current balance or plan does not support this action with the selected model.</p>
     <div class="huggy-modal-actions">
       <button data-action="upgrade">Upgrade plan</button>
       <button data-action="topup">Buy credits</button>
-      <button data-action="economy">Use cheaper model</button>
+      <button data-action="auto">Use Auto</button>
+      <button data-action="cancel">Cancel</button>
     </div>
   `, (action) => {
     if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
-    if (action === 'economy') {
-      selectedModelId = 'openai/gpt-5-nano';
+    if (action === 'auto') {
+      selectedModelId = 'auto';
       const label = document.getElementById('current-model-label');
-      if (label) label.textContent = 'GPT-5 Nano';
+      if (label) label.textContent = 'Auto';
+      syncModelLabelFromSelection();
+      scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
     }
   });
 }

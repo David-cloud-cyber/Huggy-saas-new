@@ -1,44 +1,28 @@
-export const AI_ALLOWED_MODELS = [
-  'openai/gpt-5.5',
-  'openai/gpt-5.5-pro',
-  'anthropic/claude-opus-4.7',
-  'anthropic/claude-sonnet-4.6',
-  'google/gemini-3-pro',
-  'google/gemini-3-flash',
-  'google/gemini-3.5-flash',
-  'openai/gpt-5-mini',
-  'openai/gpt-5-nano',
-  'deepseek/deepseek-coder',
-  'qwen/qwen-coder',
-  'mistralai/codestral',
-  'auto'
-] as const;
+export const UserPlan = {
+  FREE: 'free',
+  PRO: 'pro',
+  BUSINESS: 'business',
+} as const;
 
-export type AllowedModelId = (typeof AI_ALLOWED_MODELS)[number];
+export type UserPlan = (typeof UserPlan)[keyof typeof UserPlan];
 
 export const AIModelTier = {
+  ECONOMY: 'Economy',
   STANDARD: 'Standard',
   PRO: 'Pro',
-  PREMIUM: 'Premium'
+  PREMIUM: 'Premium',
 } as const;
 
 export type AIModelTier = (typeof AIModelTier)[keyof typeof AIModelTier];
 
-export const AI_MODEL_TIERS: Record<AllowedModelId, AIModelTier> = {
-  'openai/gpt-5.5': AIModelTier.PRO,
-  'openai/gpt-5.5-pro': AIModelTier.PREMIUM,
-  'anthropic/claude-opus-4.7': AIModelTier.PREMIUM,
-  'anthropic/claude-sonnet-4.6': AIModelTier.PRO,
-  'google/gemini-3-pro': AIModelTier.STANDARD,
-  'google/gemini-3-flash': AIModelTier.STANDARD,
-  'google/gemini-3.5-flash': AIModelTier.STANDARD,
-  'openai/gpt-5-mini': AIModelTier.STANDARD,
-  'openai/gpt-5-nano': AIModelTier.STANDARD,
-  'deepseek/deepseek-coder': AIModelTier.STANDARD,
-  'qwen/qwen-coder': AIModelTier.STANDARD,
-  'mistralai/codestral': AIModelTier.STANDARD,
-  'auto': AIModelTier.STANDARD,
-};
+export type ModelProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'meta'
+  | 'mistral'
+  | 'xai'
+  | 'deepseek';
 
 export interface ModelCapabilities {
   supportsStreaming: boolean;
@@ -48,58 +32,370 @@ export interface ModelCapabilities {
   maxContextTokens: number;
 }
 
-export const AI_MODEL_CAPABILITIES: Record<AllowedModelId, ModelCapabilities> = {
-  'openai/gpt-5.5': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 128000 },
-  'openai/gpt-5.5-pro': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 128000 },
-  'anthropic/claude-opus-4.7': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 200000 },
-  'anthropic/claude-sonnet-4.6': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 200000 },
-  'google/gemini-3-pro': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 2000000 },
-  'google/gemini-3-flash': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 1000000 },
-  'google/gemini-3.5-flash': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 1000000 },
-  'openai/gpt-5-mini': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 128000 },
-  'openai/gpt-5-nano': { supportsStreaming: true, supportsTools: false, supportsVision: false, supportsJsonMode: false, maxContextTokens: 32000 },
-  'deepseek/deepseek-coder': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 64000 },
-  'qwen/qwen-coder': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 64000 },
-  'mistralai/codestral': { supportsStreaming: true, supportsTools: true, supportsVision: false, supportsJsonMode: true, maxContextTokens: 32000 },
-  'auto': { supportsStreaming: true, supportsTools: true, supportsVision: true, supportsJsonMode: true, maxContextTokens: 128000 },
-};
+export interface ModelDefinition {
+  id: string;
+  label: string;
+  provider: ModelProvider;
+  contextWindow: number;
+  tier: AIModelTier;
+  minPlan: UserPlan;
+  creditFloor: number;
+  isNew?: boolean;
+  isFast?: boolean;
+  isPremium?: boolean;
+  description: string;
+  capabilities?: Partial<Omit<ModelCapabilities, 'maxContextTokens'>>;
+}
 
-export const AI_MODEL_FALLBACKS: Record<AllowedModelId, AllowedModelId[]> = {
-  'openai/gpt-5.5-pro': ['openai/gpt-5.5'],
-  'openai/gpt-5.5': ['anthropic/claude-sonnet-4.6'],
-  'anthropic/claude-opus-4.7': ['anthropic/claude-sonnet-4.6'],
-  'anthropic/claude-sonnet-4.6': ['google/gemini-3-pro'],
-  'google/gemini-3-pro': ['google/gemini-3-flash'],
-  'openai/gpt-5-mini': ['google/gemini-3-flash'],
-  'openai/gpt-5-nano': ['google/gemini-3-flash'],
-  'deepseek/deepseek-coder': ['qwen/qwen-coder'],
-  'qwen/qwen-coder': ['deepseek/deepseek-coder'],
-  'mistralai/codestral': ['deepseek/deepseek-coder'],
-  'google/gemini-3-flash': [],
-  'google/gemini-3.5-flash': ['google/gemini-3-flash'],
-  'auto': ['google/gemini-3.5-flash', 'google/gemini-3-flash'],
-};
+export const MODEL_REGISTRY = [
+  {
+    id: 'anthropic/claude-opus-4.8',
+    label: 'Claude Opus 4.8',
+    provider: 'anthropic',
+    contextWindow: 200000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.BUSINESS,
+    creditFloor: 30,
+    isPremium: true,
+    isNew: true,
+    description: 'Most capable Claude for complex reasoning and coding.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'anthropic/claude-opus-4.8-fast',
+    label: 'Claude Opus 4.8 Fast',
+    provider: 'anthropic',
+    contextWindow: 200000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.BUSINESS,
+    creditFloor: 45,
+    isPremium: true,
+    isFast: true,
+    isNew: true,
+    description: 'Opus-level capability with faster turnaround.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'anthropic/claude-sonnet-4-5',
+    label: 'Claude Sonnet 4.5',
+    provider: 'anthropic',
+    contextWindow: 200000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 18,
+    description: 'Strong balance of intelligence, coding quality and speed.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'anthropic/claude-haiku-4-5',
+    label: 'Claude Haiku 4.5',
+    provider: 'anthropic',
+    contextWindow: 200000,
+    tier: AIModelTier.ECONOMY,
+    minPlan: UserPlan.FREE,
+    creditFloor: 2,
+    isFast: true,
+    description: 'Fast lightweight Claude model for small edits and planning.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'openai/gpt-4o',
+    label: 'GPT-4o',
+    provider: 'openai',
+    contextWindow: 128000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 12,
+    isPremium: true,
+    description: 'Multimodal flagship for vision, product reasoning and code.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'openai/gpt-4o-mini',
+    label: 'GPT-4o Mini',
+    provider: 'openai',
+    contextWindow: 128000,
+    tier: AIModelTier.ECONOMY,
+    minPlan: UserPlan.FREE,
+    creditFloor: 2,
+    isFast: true,
+    description: 'Efficient GPT-4 quality for quick prompts and edits.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'openai/o3',
+    label: 'o3',
+    provider: 'openai',
+    contextWindow: 200000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.BUSINESS,
+    creditFloor: 33,
+    isPremium: true,
+    description: 'Extended reasoning for complex architecture and code.',
+  },
+  {
+    id: 'openai/o4-mini',
+    label: 'o4 Mini',
+    provider: 'openai',
+    contextWindow: 128000,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.FREE,
+    creditFloor: 3,
+    isFast: true,
+    description: 'Fast reasoning for everyday product work.',
+  },
+  {
+    id: 'google/gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    provider: 'google',
+    contextWindow: 1000000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 13.2,
+    isPremium: true,
+    description: 'Large-context Gemini for documents, codebases and planning.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'google/gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    provider: 'google',
+    contextWindow: 1000000,
+    tier: AIModelTier.ECONOMY,
+    minPlan: UserPlan.FREE,
+    creditFloor: 3.3,
+    isFast: true,
+    description: 'Fast Gemini model for responsive generation and iteration.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'google/gemini-2.0-flash-exp',
+    label: 'Gemini 2.0 Flash Exp',
+    provider: 'google',
+    contextWindow: 1000000,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.FREE,
+    creditFloor: 3.3,
+    isFast: true,
+    description: 'Experimental fast Gemini model for multimodal workflows.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'meta-llama/llama-4-maverick',
+    label: 'Llama 4 Maverick',
+    provider: 'meta',
+    contextWindow: 524288,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 10,
+    isNew: true,
+    description: 'Frontier open model for broad multimodal product work.',
+    capabilities: { supportsVision: true },
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct',
+    label: 'Llama 3.3 70B',
+    provider: 'meta',
+    contextWindow: 131072,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.FREE,
+    creditFloor: 4,
+    description: 'Reliable open-weight model for general app generation.',
+  },
+  {
+    id: 'mistralai/mistral-large-2411',
+    label: 'Mistral Large',
+    provider: 'mistral',
+    contextWindow: 131072,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.BUSINESS,
+    creditFloor: 18,
+    isPremium: true,
+    description: 'Top European frontier model for difficult product tasks.',
+  },
+  {
+    id: 'mistralai/mistral-medium-3',
+    label: 'Mistral Medium 3',
+    provider: 'mistral',
+    contextWindow: 131072,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.PRO,
+    creditFloor: 8,
+    description: 'Balanced performance and cost for production iteration.',
+  },
+  {
+    id: 'mistralai/codestral-2501',
+    label: 'Codestral',
+    provider: 'mistral',
+    contextWindow: 262144,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.PRO,
+    creditFloor: 6,
+    isFast: true,
+    description: 'Code-specialized model for generated app maintenance.',
+  },
+  {
+    id: 'x-ai/grok-3',
+    label: 'Grok 3',
+    provider: 'xai',
+    contextWindow: 131072,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.BUSINESS,
+    creditFloor: 18,
+    isPremium: true,
+    description: 'Strong reasoning model for broad product and code tasks.',
+  },
+  {
+    id: 'x-ai/grok-3-mini',
+    label: 'Grok 3 Mini',
+    provider: 'xai',
+    contextWindow: 131072,
+    tier: AIModelTier.STANDARD,
+    minPlan: UserPlan.PRO,
+    creditFloor: 8,
+    isFast: true,
+    description: 'Fast Grok model for everyday app changes.',
+  },
+  {
+    id: 'deepseek/deepseek-r2',
+    label: 'DeepSeek R2',
+    provider: 'deepseek',
+    contextWindow: 128000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 10,
+    isPremium: true,
+    description: 'Reasoning-specialized DeepSeek model.',
+  },
+  {
+    id: 'deepseek/deepseek-chat-v3-0324',
+    label: 'DeepSeek V3',
+    provider: 'deepseek',
+    contextWindow: 64000,
+    tier: AIModelTier.ECONOMY,
+    minPlan: UserPlan.FREE,
+    creditFloor: 2,
+    description: 'Efficient general-purpose model for low-cost iteration.',
+  },
+] as const satisfies readonly ModelDefinition[];
 
-export const UserPlan = {
-  FREE: 'free',
-  PRODUCER: 'producer',
-  STUDIO: 'studio'
+export type AllowedModelId = (typeof MODEL_REGISTRY)[number]['id'];
+export type ModelSelectionId = AllowedModelId | 'auto';
+
+export const DEFAULT_PROVIDER_MODEL_ID: AllowedModelId = 'google/gemini-2.5-flash';
+
+export const AI_ALLOWED_MODELS = MODEL_REGISTRY.map(model => model.id) as AllowedModelId[];
+
+export const AI_AUTO_MODEL_OPTION = {
+  id: 'auto',
+  display_name: 'Auto',
+  label: 'Auto',
+  provider: 'auto',
+  tier: 'Auto',
+  description: 'Huggy chooses the lowest-cost model capable of completing the task.',
 } as const;
 
-export type UserPlan = (typeof UserPlan)[keyof typeof UserPlan];
-
-export const AI_MODEL_PLAN_ACCESS: Record<AllowedModelId, UserPlan> = {
-  'openai/gpt-5.5': UserPlan.PRODUCER,
-  'openai/gpt-5.5-pro': UserPlan.STUDIO,
-  'anthropic/claude-opus-4.7': UserPlan.STUDIO,
-  'anthropic/claude-sonnet-4.6': UserPlan.PRODUCER,
-  'google/gemini-3-pro': UserPlan.FREE,
-  'google/gemini-3-flash': UserPlan.FREE,
-  'google/gemini-3.5-flash': UserPlan.FREE,
-  'openai/gpt-5-mini': UserPlan.FREE,
-  'openai/gpt-5-nano': UserPlan.FREE,
-  'deepseek/deepseek-coder': UserPlan.FREE,
-  'qwen/qwen-coder': UserPlan.FREE,
-  'mistralai/codestral': UserPlan.FREE,
-  'auto': UserPlan.FREE,
+export const PROVIDER_META: Record<ModelProvider, {
+  label: string;
+  color: string;
+  textColor: string;
+  icon: string;
+}> = {
+  anthropic: { label: 'Anthropic', color: '#CC785C', textColor: '#fff', icon: 'anthropic' },
+  openai: { label: 'OpenAI', color: '#10A37F', textColor: '#fff', icon: 'openai' },
+  google: { label: 'Google', color: '#4285F4', textColor: '#fff', icon: 'google' },
+  meta: { label: 'Meta', color: '#0082FB', textColor: '#fff', icon: 'meta' },
+  mistral: { label: 'Mistral', color: '#FF7000', textColor: '#fff', icon: 'mistral' },
+  xai: { label: 'xAI', color: '#1A1A1A', textColor: '#fff', icon: 'xai' },
+  deepseek: { label: 'DeepSeek', color: '#4D6BFE', textColor: '#fff', icon: 'deepseek' },
 };
+
+export function getModelsByProvider() {
+  return MODEL_REGISTRY.reduce<Record<ModelProvider, ModelDefinition[]>>((acc, model) => {
+    const provider = model.provider;
+    if (!acc[provider]) acc[provider] = [];
+    acc[provider].push(model);
+    return acc;
+  }, {} as Record<ModelProvider, ModelDefinition[]>);
+}
+
+export function isAllowedModelId(value: unknown): value is AllowedModelId {
+  return typeof value === 'string' && (AI_ALLOWED_MODELS as readonly string[]).includes(value);
+}
+
+export function normalizeModelSelectionId(value: unknown): ModelSelectionId {
+  if (value === 'auto' || value === '' || value == null) return 'auto';
+  return isAllowedModelId(value) ? value : 'auto';
+}
+
+const buildRecord = <T>(mapper: (model: ModelDefinition) => T) => (
+  Object.fromEntries(MODEL_REGISTRY.map(model => [model.id, mapper(model)])) as Record<AllowedModelId, T>
+);
+
+export const AI_MODEL_DISPLAY_NAMES = buildRecord(model => model.label);
+
+export const AI_MODEL_TIERS = buildRecord(model => model.tier);
+
+export const AI_MODEL_PLAN_ACCESS = buildRecord(model => model.minPlan);
+
+export const MODEL_ACTION_CREDIT_FLOORS = buildRecord(model => model.creditFloor);
+
+export const AI_MODEL_CAPABILITIES = buildRecord<ModelCapabilities>(model => ({
+  supportsStreaming: model.capabilities?.supportsStreaming ?? true,
+  supportsTools: model.capabilities?.supportsTools ?? true,
+  supportsVision: model.capabilities?.supportsVision ?? false,
+  supportsJsonMode: model.capabilities?.supportsJsonMode ?? true,
+  maxContextTokens: model.contextWindow,
+}));
+
+export const AI_MODEL_FALLBACKS = buildRecord<AllowedModelId[]>(model => {
+  const ordered = MODEL_REGISTRY
+    .filter(candidate => candidate.id !== model.id)
+    .filter(candidate => candidate.minPlan === UserPlan.FREE || candidate.tier !== AIModelTier.PREMIUM)
+    .sort((a, b) => a.creditFloor - b.creditFloor)
+    .slice(0, 3)
+    .map(candidate => candidate.id as AllowedModelId);
+  return ordered.length ? ordered : [DEFAULT_PROVIDER_MODEL_ID];
+});
+
+export type ModelCreditRate = {
+  id: ModelSelectionId;
+  display_name: string;
+  tier: AIModelTier | 'Auto';
+  availability: UserPlan | 'all';
+  credits: {
+    plan: string;
+    build: string;
+    fix: string;
+    deploy: string;
+  };
+};
+
+function formatCredit(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+}
+
+export const MODEL_CREDIT_RATES: ModelCreditRate[] = [
+  {
+    id: 'auto',
+    display_name: 'Auto',
+    tier: 'Auto',
+    availability: 'all',
+    credits: { plan: 'Low', build: 'Adaptive', fix: 'Adaptive', deploy: 'Standard' },
+  },
+  ...MODEL_REGISTRY.map(model => {
+    const base = model.creditFloor;
+    return {
+      id: model.id as AllowedModelId,
+      display_name: model.label,
+      tier: model.tier,
+      availability: model.minPlan,
+      credits: {
+        plan: `~${formatCredit(Math.max(1, base * 0.55))}`,
+        build: `from ${formatCredit(base)}`,
+        fix: `from ${formatCredit(Math.max(1, base * 0.45))}`,
+        deploy: '1-3',
+      },
+    };
+  }),
+];

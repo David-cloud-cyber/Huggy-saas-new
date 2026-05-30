@@ -3,7 +3,35 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Huggy — Workspace</title>
+  <title>Huggy — Workspace Dashboard</title>
+  <!-- HUGGY_SEO_START -->
+  <meta name="description" content="Your private Huggy workspace." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="canonical" href="https://huggy.fun/dashboard.html" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#18130d" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Huggy" />
+  <meta property="og:title" content="Huggy — Workspace Dashboard" />
+  <meta property="og:description" content="Your private Huggy workspace." />
+  <meta property="og:url" content="https://huggy.fun/dashboard.html" />
+  <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Huggy — Workspace Dashboard" />
+  <meta name="twitter:description" content="Your private Huggy workspace." />
+  <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Huggy — Workspace Dashboard",
+  "description": "Your private Huggy workspace.",
+  "url": "https://huggy.fun/dashboard.html"
+}</script>
+  <!-- HUGGY_SEO_END -->
   <script>
     // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
     (function() {
@@ -1150,6 +1178,111 @@
       padding-right: 36px;
     }
     .settings-select:focus { border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-dim); outline: none; }
+
+    .usage-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .usage-card,
+    .usage-row,
+    .model-rate-row {
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      border-radius: 12px;
+    }
+    .usage-card {
+      padding: 12px;
+      min-height: 74px;
+    }
+    .usage-card-label {
+      display: block;
+      color: var(--text-sub);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .usage-card-value {
+      color: var(--text);
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    .usage-list {
+      display: grid;
+      gap: 8px;
+    }
+    .usage-row,
+    .model-rate-row {
+      display: grid;
+      gap: 8px;
+      padding: 11px 12px;
+    }
+    .usage-row-head,
+    .model-rate-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+    .usage-row-title,
+    .model-rate-title {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .usage-row-meta,
+    .model-rate-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .usage-credit-pill,
+    .model-tier-pill {
+      border: 1px solid var(--border-mid);
+      background: var(--bg-panel);
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 750;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    .model-credit-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .model-credit-cell {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px;
+    }
+    .model-credit-cell span {
+      display: block;
+      color: var(--text-sub);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .model-credit-cell strong {
+      color: var(--text);
+      font-size: 11px;
+    }
+    .usage-empty {
+      border: 1px dashed var(--border-mid);
+      border-radius: 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 14px;
+      background: var(--bg-input);
+    }
     
     .avatar-editor { display: flex; align-items: center; gap: 16px; }
     .avatar-large {
@@ -1668,110 +1801,8 @@
                         </svg>
                         
                         <div class="dropdown" id="model-dropdown">
-                            <div class="dropdown-header">Choose AI Engine</div>
-                            <div class="dropdown-search-wrapper">
-                                <svg class="dropdown-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="11" cy="11" r="8"></circle>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <input type="text" class="dropdown-search-input" placeholder="Search models...">
+                                <div class="dropdown-header">Choose AI Engine</div>
                             </div>
-                            <div class="model-option active" data-name="Auto" data-id="auto">
-                                <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Auto</span>
-                                    <span class="opt-desc">Best for the task</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title">Anthropic</div>
-                            <div class="model-option" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
-                                <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Sonnet 4.6</span>
-                                    <span class="opt-desc">Intelligence + Speed</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7">
-                                <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Opus 4.7</span>
-                                    <span class="opt-desc">Deep Reasoning</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title">OpenAI</div>
-                            <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro">
-                                <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">GPT-5.5 Pro</span>
-                                    <span class="opt-desc">State of the Art</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5">
-                                <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">GPT-5.5</span>
-                                    <span class="opt-desc">Power & Performance</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title">Google</div>
-                            <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro">
-                                <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Gemini 3 Pro</span>
-                                    <span class="opt-desc">Multimodal Power</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash">
-                                <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Gemini 3 Flash</span>
-                                    <span class="opt-desc">Instant & Efficient</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash">
-                                <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Gemini 3.5 Flash</span>
-                                    <span class="opt-desc">Advanced Instant & Efficient</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini">
-                                <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">GPT-5 Mini</span>
-                                    <span class="opt-desc">Fast & Smart</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano">
-                                <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">GPT-5 Nano</span>
-                                    <span class="opt-desc">Ultra-lightweight</span>
-                                </div>
-                            </div>
-                            <div class="dropdown-group-title">Specialized / Coders</div>
-                            <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder">
-                                <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">DeepSeek Coder</span>
-                                    <span class="opt-desc">Code Expert</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder">
-                                <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Qwen Coder</span>
-                                    <span class="opt-desc">Alibaba Labs</span>
-                                </div>
-                            </div>
-                            <div class="model-option" data-name="Codestral" data-id="mistralai/codestral">
-                                <div class="model-dot" style="background: #EC4899; box-shadow: 0 0 8px #EC4899;"></div>
-                                <div class="opt-meta">
-                                    <span class="opt-name">Codestral</span>
-                                    <span class="opt-desc">Mistral AI Logic</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                     <div class="prompt-mode" data-prompt-mode="build">
                         <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Build or Plan">
@@ -2137,9 +2168,10 @@
     }
 
     function getModelLabel(model) {
-      if (model.includes('sonnet')) return 'Sonnet 4.6';
-      if (model.includes('gpt-5.5')) return 'GPT-5.5 Pro';
-      if (model.includes('gemini-3.5')) return 'Gemini 3.5';
+      if (model.includes('opus-4.8')) return 'Claude Opus 4.8';
+      if (model.includes('sonnet-4-5')) return 'Claude Sonnet 4.5';
+      if (model.includes('gpt-4o')) return 'GPT-4o';
+      if (model.includes('gemini-2.5')) return 'Gemini 2.5';
       if (model.includes('deepseek')) return 'DeepSeek';
       return 'AI Auto';
     }
@@ -2377,7 +2409,7 @@
 
         const templateVal = newProjTemplateSelect ? newProjTemplateSelect.value : 'dashboard';
         const themeVal = newProjThemeSelect ? newProjThemeSelect.value : 'light';
-        const modelVal = newProjModelSelect ? newProjModelSelect.value : 'anthropic/claude-sonnet-4.6';
+        const modelVal = newProjModelSelect ? newProjModelSelect.value : 'auto';
 
         const hasDb = document.getElementById('features-db')?.checked || false;
         const hasAuth = document.getElementById('features-auth')?.checked || false;
@@ -2570,7 +2602,7 @@
       <button class="settings-tab active" data-tab="profil">Profile</button>
       <button class="settings-tab" data-tab="compte">Account</button>
       <button class="settings-tab" data-tab="apparence">Appearance</button>
-      <button class="settings-tab" data-tab="ia">AI</button>
+      <button class="settings-tab" data-tab="ia">AI Usage</button>
       <button class="settings-tab" data-tab="api">API</button>
       <button class="settings-tab danger" data-tab="danger">Danger Zone</button>
     </div>
@@ -2653,30 +2685,37 @@
       <!-- IA -->
       <div class="tab-panel hidden" id="tab-ia">
         <div class="settings-block">
-          <span class="block-title">Models</span>
-          <div class="form-row">
-            <span class="form-label">Default Model</span>
-            <select class="settings-select">
-              <option>Auto</option>
-              <option>Sonnet 4.6</option>
-              <option>Opus 4.7</option>
-              <option>GPT-5.5 Pro</option>
-              <option>GPT-5.5</option>
-              <option>Gemini 3 Pro</option>
-              <option>Gemini 3 Flash</option>
-              <option>GPT-5 Mini</option>
-              <option>GPT-5 Nano</option>
-              <option>DeepSeek Coder</option>
-              <option>Qwen Coder</option>
-              <option>Codestral</option>
-            </select>
+          <span class="block-title">AI Usage</span>
+          <div class="usage-summary-grid">
+            <div class="usage-card">
+              <span class="usage-card-label">Balance</span>
+              <strong class="usage-card-value" id="ai-usage-balance">--</strong>
+            </div>
+            <div class="usage-card">
+              <span class="usage-card-label">Monthly</span>
+              <strong class="usage-card-value" id="ai-usage-monthly">--</strong>
+            </div>
+            <div class="usage-card">
+              <span class="usage-card-label">Daily promo</span>
+              <strong class="usage-card-value" id="ai-usage-daily">--</strong>
+            </div>
+            <div class="usage-card">
+              <span class="usage-card-label">Top-ups</span>
+              <strong class="usage-card-value" id="ai-usage-topups">--</strong>
+            </div>
+          </div>
+          <span class="form-sublabel">Credit usage lives here, away from the generation flow.</span>
+        </div>
+        <div class="settings-block">
+          <span class="block-title">Recent AI Actions</span>
+          <div class="usage-list" id="ai-usage-history">
+            <div class="usage-empty">AI usage history will appear here after your first Plan, Build, Fix or Deploy action.</div>
           </div>
         </div>
         <div class="settings-block">
-          <span class="block-title">Generation</span>
-          <div class="form-row">
-            <span class="form-label">Temperature</span>
-            <input type="range" class="settings-input" style="padding:0">
+          <span class="block-title">Model credit rates</span>
+          <div class="usage-list" id="model-credit-rates">
+            <div class="usage-empty">Model credit rates are loading.</div>
           </div>
         </div>
       </div>
@@ -2736,16 +2775,16 @@
   <div class="modal-overlay" id="upgrade-modal">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="upgrade-modal-title">
       <button id="btn-upgrade-close" aria-label="Close upgrade modal" style="position:absolute; top:14px; right:14px; width:28px; height:28px; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-sub);">x</button>
-      <h3 class="modal-title" id="upgrade-modal-title">Upgrade to Pro</h3>
-      <p class="modal-desc">Unlock more credits, private projects, custom domains, and stronger AI models when your workspace is ready to scale.</p>
+      <h3 class="modal-title" id="upgrade-modal-title">Upgrade your Huggy plan</h3>
+      <p class="modal-desc">Credits power AI actions. Huggy also includes backend services, auth, database, preview, hosting and deploy workflows.</p>
       <div style="display:grid; gap:10px; margin:16px 0 20px;">
         <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
-          <span>Starter</span>
-          <strong>$20/mo · 100 credits</strong>
+          <span>Pro</span>
+          <strong>$25/mo · 100 credits</strong>
         </div>
         <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
-          <span>Pro</span>
-          <strong>$49/mo · 300 credits</strong>
+          <span>Business</span>
+          <strong>$50/mo · 100 credits + team controls</strong>
         </div>
       </div>
       <div class="modal-actions">

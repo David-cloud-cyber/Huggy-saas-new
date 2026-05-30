@@ -16,15 +16,13 @@ export interface DNSRecordInstruction {
 export class domainPlanLimits {
   static getCustomDomainLimit(plan: string | any): number {
     switch (String(plan).toLowerCase()) {
+      case 'business':
       case 'studio':
-        return 15;
+        return 10;
       case 'pro':
       case 'producer':
-        return 5;
       case 'starter':
-        return 1;
-      case 'business':
-        return 50;
+        return 3;
       case 'free':
       default:
         return 0;
@@ -86,7 +84,7 @@ export class DomainService {
     projectId: string,
     domain: string,
     type: 'subdomain' | 'custom',
-    userPlan: UserPlan | 'starter' | 'business'
+    userPlan: UserPlan | 'pro' | 'business'
   ) {
     if (!this.supabase) throw new Error('Supabase integration missing');
 

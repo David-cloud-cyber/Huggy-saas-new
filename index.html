@@ -3,7 +3,80 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Huggy — AI App Builder</title>
+    <title>Huggy — AI App Builder for Production-Ready Web Apps</title>
+  <!-- HUGGY_SEO_START -->
+  <meta name="description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://huggy.fun/" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#18130d" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Huggy" />
+  <meta property="og:title" content="Huggy — AI App Builder for Production-Ready Web Apps" />
+  <meta property="og:description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta property="og:url" content="https://huggy.fun/" />
+  <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Huggy — AI App Builder for Production-Ready Web Apps" />
+  <meta name="twitter:description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Huggy",
+  "url": "https://huggy.fun",
+  "logo": "https://huggy.fun/favicon.svg"
+}</script>
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Huggy",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Web",
+  "description": "Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}</script>
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "Huggy AI App Builder",
+  "description": "Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output.",
+  "brand": {
+    "@type": "Brand",
+    "name": "Huggy"
+  }
+}</script>
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is Huggy?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Huggy is an AI app builder for generating production-ready web apps with database, preview, deployment and SEO-ready structure."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can Huggy generate SEO-ready apps?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Huggy guides generated apps toward semantic HTML, metadata, Open Graph, analytics and SEO audit workflows."
+      }
+    }
+  ]
+}</script>
+  <!-- HUGGY_SEO_END -->
     <script>
         // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
         (function() {
@@ -121,166 +194,6 @@
                             </svg>
                             <div class="dropdown" id="model-dropdown">
                                 <div class="dropdown-header">Choose AI Engine</div>
-                                <div class="model-option active" data-name="Auto" data-id="auto">
-                                    <div class="model-dot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Auto</span>
-                                        <span class="opt-desc">Best for the task</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="dropdown-group-title">Anthropic</div>
-                                <div class="model-option" data-name="Sonnet 4.6" data-id="anthropic/claude-sonnet-4.6">
-                                    <div class="model-dot" style="background: #60A5FA; box-shadow: 0 0 8px #60A5FA;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Sonnet 4.6</span>
-                                        <span class="opt-desc">Intelligence + Speed</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="Opus 4.7" data-id="anthropic/claude-opus-4.7">
-                                    <div class="model-dot" style="background: #A78BFA; box-shadow: 0 0 8px #A78BFA;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Opus 4.7</span>
-                                        <span class="opt-desc">Deep Reasoning</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="dropdown-group-title">OpenAI</div>
-                                <div class="model-option" data-name="GPT-5.5 Pro" data-id="openai/gpt-5.5-pro">
-                                    <div class="model-dot" style="background: #EF4444; box-shadow: 0 0 8px #EF4444;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">GPT-5.5 Pro</span>
-                                        <span class="opt-desc">State of the Art</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="GPT-5.5" data-id="openai/gpt-5.5">
-                                    <div class="model-dot" style="background: #F87171; box-shadow: 0 0 8px #F87171;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">GPT-5.5</span>
-                                        <span class="opt-desc">Power & Performance</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="dropdown-group-title">Google</div>
-                                <div class="model-option" data-name="Gemini 3 Pro" data-id="google/gemini-3-pro">
-                                    <div class="model-dot" style="background: #3B82F6; box-shadow: 0 0 8px #3B82F6;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Gemini 3 Pro</span>
-                                        <span class="opt-desc">Multimodal Power</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="Gemini 3 Flash" data-id="google/gemini-3-flash">
-                                    <div class="model-dot" style="background: #93C5FD; box-shadow: 0 0 8px #93C5FD;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Gemini 3 Flash</span>
-                                        <span class="opt-desc">Instant & Efficient</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="Gemini 3.5 Flash" data-id="google/gemini-3.5-flash">
-                                    <div class="model-dot" style="background: #a5f3fc; box-shadow: 0 0 8px #a5f3fc;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Gemini 3.5 Flash</span>
-                                        <span class="opt-desc">Advanced Instant & Efficient</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="GPT-5 Mini" data-id="openai/gpt-5-mini">
-                                    <div class="model-dot" style="background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">GPT-5 Mini</span>
-                                        <span class="opt-desc">Fast & Smart</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="GPT-5 Nano" data-id="openai/gpt-5-nano">
-                                    <div class="model-dot" style="background: #34D399; box-shadow: 0 0 8px #34D399;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">GPT-5 Nano</span>
-                                        <span class="opt-desc">Ultra-lightweight</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="dropdown-group-title">Specialized / Coders</div>
-                                <div class="model-option" data-name="DeepSeek Coder" data-id="deepseek/deepseek-coder">
-                                    <div class="model-dot" style="background: #8B5CF6; box-shadow: 0 0 8px #8B5CF6;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">DeepSeek Coder</span>
-                                        <span class="opt-desc">Code Expert</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="Qwen Coder" data-id="qwen/qwen-coder">
-                                    <div class="model-dot" style="background: #F59E0B; box-shadow: 0 0 8px #F59E0B;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Qwen Coder</span>
-                                        <span class="opt-desc">Alibaba Labs</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
-                                <div class="model-option" data-name="Codestral" data-id="mistralai/codestral">
-                                    <div class="model-dot" style="background: #EC4899; box-shadow: 0 0 8px #EC4899;"></div>
-                                    <div class="opt-meta">
-                                        <span class="opt-name">Codestral</span>
-                                        <span class="opt-desc">Mistral AI Logic</span>
-                                    </div>
-                                    <div class="active-check">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         <div class="prompt-mode" data-prompt-mode="build">
