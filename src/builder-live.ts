@@ -124,6 +124,7 @@ let currentPreviewHtml = '';
 let isGenerating = false;
 let lastPlan = '';
 let lastBuildSessionId = '';
+let lastAgentRunId = '';
 let activeAbort: AbortController | null = null;
 let stopRequested = false;
 let workingTimer: number | null = null;
@@ -785,10 +786,16 @@ function addInlineAction(card: HTMLElement | null, label: string, action: () => 
 function formatAgentErrorMessage(event: any) {
   const payload = event?.payload || {};
   const base = String(event?.message || payload.message || 'Generation failed.').trim();
+  const diagnostic = typeof payload.diagnostic_code === 'string' && payload.diagnostic_code.trim()
+    ? ` Code: ${payload.diagnostic_code.trim()}.`
+    : '';
+  const action = typeof payload.suggested_action === 'string' && payload.suggested_action.trim()
+    ? ` Suggested action: ${payload.suggested_action.trim().replace(/_/g, ' ')}.`
+    : '';
   const requestId = typeof payload.request_id === 'string' && payload.request_id.trim()
     ? ` Request ID: ${payload.request_id.trim()}.`
     : '';
-  return `${base}${requestId}`;
+  return `${base}${diagnostic}${action}${requestId}`;
 }
 
 function positionProjectMenu() {
@@ -2094,6 +2101,7 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
     }, (eventType, event) => {
       const payload = event.payload || {};
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
+      if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
       if (eventType === 'token') {
         clearMessageShimmer(status);
         streamedText += event.message || '';
@@ -2113,10 +2121,21 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
         }
         return;
       }
-      if (eventType === 'planning' || (eventType === 'answering' && !payload.text)) {
-        const label = eventType === 'planning' ? 'Planning' : 'Thinking';
+      if (eventType === 'planning' || eventType === 'research_started' || eventType === 'tool_loop_started' || (eventType === 'answering' && !payload.text)) {
+        const label = eventType === 'planning'
+          ? 'Planning'
+          : eventType === 'research_started'
+            ? 'Researching'
+            : eventType === 'tool_loop_started'
+              ? 'Thinking'
+              : 'Thinking';
         setMessageShimmer(status, label);
         if (requestedMode === 'build') setEmptyPreviewState('working', label);
+        return;
+      }
+      if (eventType === 'research_result' || eventType === 'research_skipped') {
+        setMessageShimmer(status, eventType === 'research_result' ? 'Researching' : 'Thinking');
+        if (requestedMode === 'build') setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
         return;
       }
       if (eventType === 'plan_ready' || eventType === 'answering') {
@@ -2153,12 +2172,16 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
         showFixBugBox(payload.errors || [{ message: event.message }]);
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building' || eventType === 'auto_fix_started' || eventType === 'patch_applied') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
           ? 'Building'
-          : eventType === 'auto_fix_started'
-            ? 'Checking'
-            : 'Thinking';
+          : eventType === 'runner_started' || eventType === 'verification_started'
+            ? 'Running checks'
+            : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed'
+              ? 'Retesting'
+              : eventType === 'auto_fix_started' || eventType === 'patch_applied'
+                ? 'Fixing'
+                : 'Thinking';
         setMessageShimmer(status, label);
         if (requestedMode === 'build') setEmptyPreviewState('working', label);
         return;
@@ -2214,8 +2237,14 @@ async function cancelBuild() {
   if (currentProjectId) {
     await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {
       method: 'POST',
-      body: JSON.stringify({ buildSessionId: lastBuildSessionId }),
+      body: JSON.stringify({ buildSessionId: lastBuildSessionId, agentRunId: lastAgentRunId }),
     }).catch(() => null);
+    if (lastAgentRunId) {
+      await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs/${encodeURIComponent(lastAgentRunId)}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ buildSessionId: lastBuildSessionId }),
+      }).catch(() => null);
+    }
   }
   setEmptyPreviewState('idle', 'Generation stopped');
   setBusy(false);

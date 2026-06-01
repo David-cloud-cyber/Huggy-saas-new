@@ -23,10 +23,13 @@ function extractApiMessage(payload: unknown, fallback: string): string {
         ? record.error.trim()
         : '';
     if (base) {
+      const diagnostic = typeof record.diagnostic_code === 'string' && record.diagnostic_code.trim()
+        ? ` Code: ${record.diagnostic_code.trim()}.`
+        : '';
       const requestId = typeof record.request_id === 'string' && record.request_id.trim()
         ? ` Request ID: ${record.request_id.trim()}.`
         : '';
-      return `${base}${requestId}`;
+      return `${base}${diagnostic}${requestId}`;
     }
   }
   if (/failed with 5\d\d/i.test(fallback)) {
