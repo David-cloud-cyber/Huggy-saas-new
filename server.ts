@@ -576,6 +576,81 @@ function getUserOrgId(req: any): string {
   return req.user?.id || DEFAULT_ORG_ID;
 }
 
+function getOrganizationFallbackValue(column: string, req: any, organizationId: string, now: string) {
+  const userId = req.user?.id || organizationId;
+  const email = String(req.user?.email || '').trim();
+  const name = email ? `${email.split('@')[0]}'s workspace` : 'Personal workspace';
+  const slug = `personal-${organizationId.slice(0, 8)}`;
+  const normalized = column.toLowerCase();
+  if (['id', 'organization_id'].includes(normalized)) return organizationId;
+  if (['owner_id', 'created_by', 'user_id', 'created_by_user_id'].includes(normalized)) return userId;
+  if (['name', 'display_name', 'title'].includes(normalized)) return name;
+  if (['slug', 'handle'].includes(normalized)) return slug;
+  if (['type', 'kind'].includes(normalized)) return 'personal';
+  if (['plan', 'plan_key', 'tier', 'subscription_plan'].includes(normalized)) return 'free';
+  if (['status', 'state'].includes(normalized)) return 'active';
+  if (['created_at', 'updated_at'].includes(normalized)) return now;
+  return '';
+}
+
+function getSchemaColumnFromMessage(message: string) {
+  return (
+    message.match(/Could not find the '([^']+)' column/i)?.[1] ||
+    message.match(/column "([^"]+)"/i)?.[1] ||
+    message.match(/column ([a-zA-Z0-9_]+) does not exist/i)?.[1] ||
+    ''
+  );
+}
+
+async function ensurePersonalOrganization(req: any, organizationId: string) {
+  if (!isUuid(organizationId)) return organizationId;
+  const client = getSupabase();
+  if (!client) return organizationId;
+
+  const now = new Date().toISOString();
+  const userId = req.user?.id || organizationId;
+  const email = String(req.user?.email || '').trim();
+  const row: Record<string, any> = {
+    id: organizationId,
+    owner_id: userId,
+    created_by: userId,
+    user_id: userId,
+    name: email ? `${email.split('@')[0]}'s workspace` : 'Personal workspace',
+    slug: `personal-${organizationId.slice(0, 8)}`,
+    type: 'personal',
+    status: 'active',
+    plan: 'free',
+    created_at: now,
+    updated_at: now,
+  };
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { error } = await client.from('organizations').upsert([row], { onConflict: 'id' });
+    if (!error) return organizationId;
+
+    const message = String(error.message || '');
+    if (/relation .*organizations.* does not exist|table .*organizations.* does not exist/i.test(message)) {
+      console.warn('[huggy:organization_bootstrap_skipped]', { message });
+      return organizationId;
+    }
+    if (/duplicate key|already exists/i.test(message)) return organizationId;
+
+    const column = getSchemaColumnFromMessage(message);
+    if (/could not find|does not exist/i.test(message) && column && column in row) {
+      delete row[column];
+      continue;
+    }
+    if (/null value in column/i.test(message) && column) {
+      row[column] = getOrganizationFallbackValue(column, req, organizationId, now);
+      continue;
+    }
+
+    throw new Error(`Supabase organization bootstrap failed: ${message}`);
+  }
+
+  return organizationId;
+}
+
 function getUserProjectRole(_req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
   return 'owner';
 }
@@ -3514,6 +3589,7 @@ app.get('/api/projects', async (req: any, res: any) => {
 app.post('/api/projects', async (req: any, res: any) => {
   try {
     const userId = getUserOrgId(req);
+    const organizationId = await ensurePersonalOrganization(req, userId);
     const name = sanitizeProjectName(req.body?.name);
     const prompt = String(req.body?.prompt || req.body?.description || '').trim();
 
@@ -3525,7 +3601,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     const project: GeneratedProject = {
       id: randomUUID(),
       owner_id: userId,
-      organization_id: userId,
+      organization_id: organizationId,
       created_by: userId,
       name,
       slug: await uniqueSlug(name, userId),
