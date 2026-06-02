@@ -4244,7 +4244,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     if (streamClosed || res.destroyed || res.writableEnded) return;
     sequence += 1;
     const publicPayload = redactAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload });
-    const event = await saveAgentEvent({
+    let event: any = {
+      id: `${requestId}_${sequence}`,
       organization_id: project.organization_id,
       project_id: project.id,
       user_id: userId,
@@ -4252,16 +4253,35 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       event_type,
       message,
       payload: publicPayload,
-    });
-    if (agentRunId) {
-      await saveAgentRunStep({
-        agent_run_id: agentRunId,
-        project,
+      created_at: new Date().toISOString(),
+    };
+    try {
+      event = await saveAgentEvent({
+        organization_id: project.organization_id,
+        project_id: project.id,
         user_id: userId,
         sequence_number: sequence,
         event_type,
         message,
         payload: publicPayload,
+      });
+      if (agentRunId) {
+        await saveAgentRunStep({
+          agent_run_id: agentRunId,
+          project,
+          user_id: userId,
+          sequence_number: sequence,
+          event_type,
+          message,
+          payload: publicPayload,
+        });
+      }
+    } catch (error: any) {
+      console.warn('[huggy:event_persistence_skipped]', {
+        request_id: requestId,
+        project_id: project.id,
+        event_type,
+        message: error?.message || String(error),
       });
     }
 
