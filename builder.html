@@ -446,18 +446,21 @@
     }
 
     .btn-publish {
-      background: #a855f7;
+      background: #09090b;
       color: #ffffff;
-      border: none;
+      border: 1px solid #09090b;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       padding: 6px 16px;
       border-radius: 6px;
-      transition: all 150ms;
+      cursor: pointer;
+      transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), background 150ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     .btn-publish:hover {
-      background: #c084fc;
+      background: #18181b;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(9, 9, 11, 0.18);
     }
 
     .avatar-circle {
@@ -2100,7 +2103,7 @@
           Add integration
         </button>
         <button class="btn-upgrade">Upgrade plan</button>
-        <button class="btn-publish">Publish</button>
+        <button class="btn-publish" type="button">Publish</button>
         <div class="avatar-circle"></div>
       </div>
     </header>

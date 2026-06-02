@@ -83,6 +83,38 @@ type AiModel = {
   capabilities?: Record<string, unknown>;
 };
 
+type PublishCheck = {
+  key: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+};
+
+type PublishStatusPayload = {
+  state: 'not_ready' | 'ready_to_publish' | 'published' | 'changes_unpublished';
+  public_url: string;
+  custom_domain: string | null;
+  latest_published_at: string | null;
+  project_updated_at: string | null;
+  badge_required: boolean;
+  checks: PublishCheck[];
+  can_publish: boolean;
+  has_unpublished_changes: boolean;
+};
+
+type PublishApiPayload = {
+  success: boolean;
+  publish: PublishStatusPayload;
+  deployment?: {
+    id?: string;
+    status?: string;
+    public_url?: string;
+    deployment_url?: string;
+    custom_domain?: string | null;
+    created_at?: string;
+  } | null;
+};
+
 type AiModelProviderGroup = {
   provider: string;
   meta: {
@@ -1056,6 +1088,161 @@ function ensureToolbar() {
 
   document.getElementById('btn-live-cancel')?.addEventListener('click', cancelBuild);
   document.getElementById('action-download-zip')?.addEventListener('click', exportCode);
+  document.querySelectorAll<HTMLButtonElement>('.btn-publish').forEach(button => {
+    if (button.dataset.publishBound === 'true') return;
+    button.dataset.publishBound = 'true';
+    button.type = 'button';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      void openPublishPanel();
+    });
+  });
+}
+
+function publishStateLabel(state: PublishStatusPayload['state']) {
+  if (state === 'not_ready') return 'Build required';
+  if (state === 'ready_to_publish') return 'Ready to publish';
+  if (state === 'changes_unpublished') return 'Unpublished changes';
+  return 'Live';
+}
+
+function publishPrimaryLabel(status: PublishStatusPayload | null) {
+  if (!status?.can_publish) return 'Build first';
+  if (status.state === 'published' && !status.has_unpublished_changes) return 'Republish';
+  if (status.state === 'changes_unpublished') return 'Publish updates';
+  return 'Publish app';
+}
+
+function formatPublishDate(value: string | null | undefined) {
+  if (!value) return 'Never';
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function ensurePublishPanel() {
+  let root = document.getElementById('huggy-publish-panel');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'huggy-publish-panel';
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(9,9,11,.42);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(8px);';
+  document.body.appendChild(root);
+  root.addEventListener('click', event => {
+    if (event.target === root) closePublishPanel();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.getElementById('huggy-publish-panel')) closePublishPanel();
+  });
+  return root;
+}
+
+function closePublishPanel() {
+  document.getElementById('huggy-publish-panel')?.remove();
+}
+
+function publishCheckIcon(status: PublishCheck['status']) {
+  if (status === 'pass') return '✓';
+  if (status === 'warn') return '!';
+  return '×';
+}
+
+function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = false, error = '') {
+  const root = ensurePublishPanel();
+  const status = payload?.publish || null;
+  const publicUrl = status?.public_url || '';
+  const canOpen = Boolean(publicUrl && payload?.deployment);
+  const checks = status?.checks || [];
+  root.innerHTML = `
+    <section style="width:min(460px,100%);border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:16px;box-shadow:0 28px 90px rgba(9,9,11,.24);overflow:hidden;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 16px 12px;border-bottom:1px solid var(--border-light);">
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Publish</div>
+          <h3 style="margin:4px 0 0;font-size:16px;line-height:1.2;">${status ? escapeHtml(publishStateLabel(status.state)) : 'Preparing publish'}</h3>
+        </div>
+        <button type="button" data-publish-action="close" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);width:28px;height:28px;border-radius:8px;cursor:pointer;">×</button>
+      </div>
+      <div style="padding:16px;display:grid;gap:14px;">
+        ${error ? `<div style="border:1px solid rgba(185,28,28,.28);background:rgba(254,242,242,.88);color:#991b1b;border-radius:10px;padding:10px;font-size:12px;line-height:1.45;">${escapeHtml(error)}</div>` : ''}
+        ${status ? `
+          <div style="border:1px solid var(--border);background:var(--bg-elevated);border-radius:12px;padding:12px;display:grid;gap:8px;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:800;text-transform:uppercase;letter-spacing:.10em;">Live URL</div>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;">${escapeHtml(publicUrl)}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-sub);line-height:1.5;">
+              Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}
+              ${status.badge_required ? '<br>Free plan badge will be visible on the published app.' : ''}
+            </div>
+          </div>
+          <div style="display:grid;gap:8px;">
+            ${checks.map(check => `
+              <div style="display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;font-size:12px;">
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:${check.status === 'pass' ? 'rgba(22,163,74,.10)' : check.status === 'warn' ? 'rgba(217,119,6,.10)' : 'rgba(220,38,38,.10)'};color:${check.status === 'pass' ? '#166534' : check.status === 'warn' ? '#92400e' : '#991b1b'};font-weight:900;">${publishCheckIcon(check.status)}</span>
+                <span>
+                  <strong style="display:block;font-size:12px;color:var(--text);">${escapeHtml(check.label)}</strong>
+                  <small style="display:block;margin-top:2px;color:var(--text-sub);line-height:1.45;">${escapeHtml(check.detail)}</small>
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div style="display:grid;gap:10px;">
+            <div class="skeleton" style="height:48px;border-radius:12px;"></div>
+            <div class="skeleton" style="height:82px;border-radius:12px;"></div>
+          </div>
+        `}
+        <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+          <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${publicUrl ? '1' : '.45'};">Copy link</button>
+          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${canOpen ? '1' : '.45'};">Open app</button>
+          <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:32px;border:1px solid #09090b;background:#09090b;color:#fff;border-radius:9px;padding:0 13px;font-size:12px;font-weight:900;cursor:pointer;opacity:${status?.can_publish && !isPublishing ? '1' : '.48'};">${isPublishing ? 'Publishing…' : escapeHtml(publishPrimaryLabel(status))}</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  root.querySelectorAll<HTMLButtonElement>('[data-publish-action]').forEach(button => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.publishAction || 'close';
+      if (action === 'close') closePublishPanel();
+      if (action === 'copy' && publicUrl) {
+        void navigator.clipboard?.writeText(publicUrl);
+        appendMessage('system', 'Published app link copied.');
+      }
+      if (action === 'open' && publicUrl && canOpen) window.open(publicUrl, '_blank', 'noopener,noreferrer');
+      if (action === 'publish') void publishCurrentProject(payload);
+    });
+  });
+}
+
+async function openPublishPanel() {
+  if (!currentProjectId) {
+    appendMessage('system', 'Create or open a project before publishing.');
+    return;
+  }
+  renderPublishPanel(null);
+  try {
+    const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
+    renderPublishPanel(payload);
+  } catch (error) {
+    renderPublishPanel(null, false, error instanceof Error ? error.message : 'Unable to load publish status.');
+  }
+}
+
+async function publishCurrentProject(previousPayload: PublishApiPayload | null) {
+  if (!currentProjectId) return;
+  renderPublishPanel(previousPayload, true);
+  try {
+    const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ branch: 'main' }),
+    });
+    renderPublishPanel(payload);
+    if (payload.publish?.public_url) appendMessage('assistant', `Published. Your live app is available here:\n${payload.publish.public_url}`);
+  } catch (error) {
+    renderPublishPanel(previousPayload, false, error instanceof Error ? error.message : 'Publish failed.');
+  }
 }
 
 const sendIconSvg = `

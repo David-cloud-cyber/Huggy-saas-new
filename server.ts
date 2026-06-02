@@ -510,6 +510,26 @@ type GeneratedProject = {
   updated_at: string;
 };
 
+type PublishStatus = {
+  state: 'not_ready' | 'ready_to_publish' | 'published' | 'changes_unpublished';
+  public_url: string;
+  custom_domain: string | null;
+  latest_published_at: string | null;
+  project_updated_at: string | null;
+  badge_required: boolean;
+  checks: Array<{ key: string; label: string; status: 'pass' | 'warn' | 'fail'; detail: string }>;
+  can_publish: boolean;
+  has_unpublished_changes: boolean;
+};
+
+type PublishContext = {
+  project: GeneratedProject;
+  files: GeneratedFile[];
+  latestDeployment: any | null;
+  plan: string;
+  customDomain: string | null;
+};
+
 type AgentEvent = {
   id?: string;
   organization_id: string;
@@ -1203,6 +1223,193 @@ function injectAnalyticsSnippet(html: string, projectId?: string, environment: '
 </script>`;
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${snippet}\n</body>`);
   return `${html}\n${snippet}`;
+}
+
+function getHuggyPublicOrigin(): string {
+  return String(
+    process.env.HUGGY_PUBLIC_APP_URL ||
+    process.env.HUGGY_PUBLIC_SITE_URL ||
+    process.env.PUBLIC_SITE_URL ||
+    process.env.APP_URL ||
+    'https://www.huggy.fun',
+  ).replace(/\/+$/, '');
+}
+
+function normalizeDomainHost(domain: string): string {
+  return String(domain || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.+$/, '')
+    .toLowerCase();
+}
+
+function normalizeDomainUrl(domain: string): string {
+  const host = normalizeDomainHost(domain);
+  return host ? `https://${host}` : '';
+}
+
+function getPublishedProjectPath(project: Pick<GeneratedProject, 'id' | 'slug'>): string {
+  return `/p/${encodeURIComponent(project.slug || project.id)}`;
+}
+
+function getDefaultPublishedUrl(project: Pick<GeneratedProject, 'id' | 'slug'>): string {
+  return `${getHuggyPublicOrigin()}${getPublishedProjectPath(project)}`;
+}
+
+function isFreePlanKey(plan: string | null | undefined): boolean {
+  const normalized = String(plan || 'free').trim().toLowerCase();
+  return !normalized || /^(free|starter|trial|sandbox)$/.test(normalized);
+}
+
+function getProjectUpdatedAt(project: GeneratedProject, files: GeneratedFile[]): string | null {
+  const dates = [project.updated_at, project.created_at, ...files.map(file => (file as any).updated_at)]
+    .filter(Boolean)
+    .map(value => Date.parse(String(value)))
+    .filter(value => Number.isFinite(value));
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates)).toISOString();
+}
+
+function sanitizeDeploymentForUser(deployment: any, publicUrl: string, customDomain: string | null) {
+  if (!deployment) return null;
+  return {
+    id: deployment.id,
+    provider: 'huggy',
+    status: deployment.status || 'ready',
+    deployment_url: publicUrl,
+    public_url: publicUrl,
+    custom_domain: customDomain,
+    badge_required: Boolean(deployment.badge_required),
+    commit_hash: deployment.commit_hash || null,
+    branch: deployment.branch || 'main',
+    created_at: deployment.created_at || null,
+  };
+}
+
+function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
+  if (!html || html.includes('data-huggy-published-badge="true"')) return html;
+  const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
+  const badge = `
+<a data-huggy-published-badge="true" href="${escapeHtml(href)}" aria-label="Built with Huggy" style="position:fixed;right:14px;bottom:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:999px;background:rgba(9,9,11,.92);color:#fff;text-decoration:none;font:700 12px/1.1 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 12px 40px rgba(9,9,11,.22),0 0 0 1px rgba(255,255,255,.16) inset;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
+  <span style="display:grid;place-items:center;width:18px;height:18px;border-radius:6px;background:#fff;color:#09090b;font-weight:900;">H</span>
+  <span>Built with Huggy</span>
+</a>`;
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${badge}\n</body>`);
+  return `${html}\n${badge}`;
+}
+
+async function getOrganizationPlan(organizationId: string): Promise<string> {
+  const client = requireSupabase('Organization plan lookup');
+  try {
+    const { data, error } = await client
+      .from('organizations')
+      .select('*')
+      .eq('id', organizationId)
+      .maybeSingle();
+    if (error) throw error;
+    const row = (data || {}) as any;
+    return String(row.plan || row.plan_key || row.subscription_plan || row.tier || 'free');
+  } catch (error: any) {
+    console.warn('[huggy:publish_plan_lookup_skipped]', { message: error?.message });
+    return 'free';
+  }
+}
+
+async function getPrimaryCustomDomain(projectId: string): Promise<string | null> {
+  const client = requireSupabase('Primary domain lookup');
+  try {
+    const { data, error } = await client
+      .from('domains')
+      .select('domain,status,is_primary')
+      .eq('project_id', projectId)
+      .neq('status', 'removed');
+    if (error) throw error;
+    const domains = ((data || []) as any[])
+      .filter((item: any) => ['active', 'verified'].includes(String(item.status || '').toLowerCase()) && normalizeDomainHost(item.domain));
+    const primary = domains.find((item: any) => item.is_primary) || domains[0];
+    return primary ? normalizeDomainHost(primary.domain) : null;
+  } catch (error: any) {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:publish_domain_lookup_skipped]', { message: error?.message });
+    return null;
+  }
+}
+
+async function getLatestDeployment(projectId: string): Promise<any | null> {
+  const client = requireSupabase('Latest deployment lookup');
+  try {
+    const { data, error } = await client
+      .from('deployments')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return (data || [])[0] || null;
+  } catch (error: any) {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:publish_deployment_lookup_skipped]', { message: error?.message });
+    return null;
+  }
+}
+
+function buildPublishStatus(context: PublishContext): PublishStatus {
+  const { project, files, latestDeployment, plan, customDomain } = context;
+  const latestPublishedAt = latestDeployment?.created_at || null;
+  const projectUpdatedAt = getProjectUpdatedAt(project, files);
+  const hasUnpublishedChanges = Boolean(
+    latestPublishedAt &&
+    projectUpdatedAt &&
+    Date.parse(projectUpdatedAt) > Date.parse(latestPublishedAt),
+  );
+  const previewReady = project.preview_status === 'ready' && Boolean(project.preview_html);
+  const hasFiles = files.length > 0;
+  const publicUrl = customDomain ? normalizeDomainUrl(customDomain) : getDefaultPublishedUrl(project);
+  const state: PublishStatus['state'] = !previewReady || !hasFiles
+    ? 'not_ready'
+    : !latestDeployment
+      ? 'ready_to_publish'
+      : hasUnpublishedChanges
+        ? 'changes_unpublished'
+        : 'published';
+
+  return {
+    state,
+    public_url: publicUrl,
+    custom_domain: customDomain,
+    latest_published_at: latestPublishedAt,
+    project_updated_at: projectUpdatedAt,
+    badge_required: isFreePlanKey(plan),
+    can_publish: previewReady && hasFiles,
+    has_unpublished_changes: hasUnpublishedChanges,
+    checks: [
+      {
+        key: 'files',
+        label: 'Project files',
+        status: hasFiles ? 'pass' : 'fail',
+        detail: hasFiles ? `${files.length} files ready` : 'Generate the app before publishing.',
+      },
+      {
+        key: 'preview',
+        label: 'Preview',
+        status: previewReady ? 'pass' : 'fail',
+        detail: previewReady ? 'Preview is ready to snapshot.' : 'Run Build until the preview is ready.',
+      },
+      {
+        key: 'domain',
+        label: 'Live URL',
+        status: customDomain ? 'pass' : 'warn',
+        detail: customDomain ? `Custom domain: ${customDomain}` : `Default Huggy URL: ${publicUrl}`,
+      },
+      {
+        key: 'badge',
+        label: 'Huggy badge',
+        status: isFreePlanKey(plan) ? 'warn' : 'pass',
+        detail: isFreePlanKey(plan)
+          ? 'Free plan publishes include a small Built with Huggy badge.'
+          : 'Paid plan: no Huggy badge required.',
+      },
+    ],
+  };
 }
 
 function renderPreviewHtml(
@@ -2370,7 +2577,23 @@ async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
 
 async function saveDeploymentRecord(record: any) {
   const client = requireSupabase('Deployment persistence');
-  const { error } = await client.from('deployments').insert([record]);
+  let { error } = await client.from('deployments').insert([record]);
+  if (error && isSchemaShapeError(error)) {
+    const compactRecord = {
+      id: record.id,
+      organization_id: record.organization_id,
+      project_id: record.project_id,
+      provider: record.provider,
+      provider_deployment_id: record.provider_deployment_id,
+      deployment_url: record.deployment_url,
+      status: record.status,
+      commit_hash: record.commit_hash || null,
+      branch: record.branch || 'main',
+      created_at: record.created_at,
+    };
+    const retry = await client.from('deployments').insert([compactRecord]);
+    error = retry.error;
+  }
   if (error) throw new Error(`Supabase deployment persistence failed: ${error.message}`);
 }
 
@@ -3119,21 +3342,38 @@ function createVercelDomainProxy() {
   return new VercelDomainService(token);
 }
 
-async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFile[]) {
+async function deployFilesToVercel(
+  project: GeneratedProject,
+  files: GeneratedFile[],
+  options: { includeHuggyBadge?: boolean; publicOrigin?: string } = {},
+) {
   const token = getVercelToken();
   if (!token) {
     throw new Error('Vercel deployment is not configured. Add VERCEL_TOKEN on Railway to publish generated apps.');
   }
 
+  const prepareHtml = (html: string) => {
+    const enhanced = injectAnalyticsSnippet(
+      enhanceHtmlSeo(html, project.name, project.prompt || project.name, project.slug || project.id, 'production'),
+      project.id,
+      'production',
+    );
+    return options.includeHuggyBadge
+      ? injectHuggyPublishedBadge(enhanced, project, options.publicOrigin || getHuggyPublicOrigin())
+      : enhanced;
+  };
+
   const deploymentFiles = normalizeGeneratedFiles(files).map(file => ({
     file: file.path,
     data: file.path.endsWith('.html')
-      ? injectAnalyticsSnippet(enhanceHtmlSeo(file.content, project.name, project.prompt || project.name, project.slug || project.id, 'production'), project.id, 'production')
+      ? prepareHtml(file.content)
       : file.content,
   }));
 
   if (!deploymentFiles.some(file => file.file === 'index.html')) {
-    deploymentFiles.unshift({ file: 'index.html', data: renderPreviewHtml(files, project.name, project.id, 'production', project.prompt || project.name, project.slug || project.id) });
+    let html = renderPreviewHtml(files, project.name, project.id, 'production', project.prompt || project.name, project.slug || project.id);
+    if (options.includeHuggyBadge) html = injectHuggyPublishedBadge(html, project, options.publicOrigin || getHuggyPublicOrigin());
+    deploymentFiles.unshift({ file: 'index.html', data: html });
   }
 
   const params = new URLSearchParams();
@@ -3210,7 +3450,7 @@ function getCreditBalanceFromRow(row: Record<string, any> | null | undefined) {
 }
 
 function isSchemaShapeError(error: any) {
-  return /schema cache|column .*does not exist|could not find .* in the schema cache|Could not find the '([^']+)' column/i.test(error?.message || '');
+  return /schema cache|column .*does not exist|column .* does not exist|could not find .* in the schema cache|Could not find the '([^']+)' column|relation .* does not exist|table .* does not exist/i.test(error?.message || '');
 }
 
 async function readCreditWalletRow(client: any, orgId: string) {
@@ -5328,35 +5568,54 @@ app.patch('/api/projects/:id/domains/:domainId/primary', async (req, res) => {
 // 4. DEPLOYMENTS ENDPOINTS
 // ──────────────────────────────────────────────────────────────────────
 
-// POST /projects/:id/deploy
-app.post('/api/projects/:id/deploy', async (req: any, res: any) => {
+async function createPublishContext(project: GeneratedProject): Promise<PublishContext> {
+  const [files, latestDeployment, plan, customDomain] = await Promise.all([
+    loadProjectFiles(project.id),
+    getLatestDeployment(project.id),
+    getOrganizationPlan(project.organization_id),
+    getPrimaryCustomDomain(project.id),
+  ]);
+  return { project, files, latestDeployment, plan, customDomain };
+}
+
+function getPublishPublicUrl(project: GeneratedProject, customDomain: string | null): string {
+  return customDomain ? normalizeDomainUrl(customDomain) : getDefaultPublishedUrl(project);
+}
+
+async function publishProjectSnapshot(req: any, res: any) {
   const projectId = req.params.id;
   const userId = getUserOrgId(req);
-  const { commitHash, branch = 'main', userCredits = 100 } = req.body;
+  const { commitHash, branch = 'main', userCredits = 100 } = req.body || {};
   if (!requireProjectCapability(req, res, 'deploy')) return;
-  if (!enforceRateLimit(`deploy:${userId}`, 6, 60_000)) {
-    return res.status(429).json({ success: false, error: 'Too many deploy requests. Please wait a moment.' });
+  if (!enforceRateLimit(`publish:${userId}`, 6, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many publish requests. Please wait a moment.' });
   }
 
   if (userCredits < 2) {
-    return res.status(200).json({
-      ...publicCreditGateResponse(),
-    });
+    return res.status(200).json(publicCreditGateResponse());
   }
 
   const project = await loadProject(projectId, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (project.preview_status !== 'ready') {
-    return res.status(409).json({ success: false, error: 'Preview must be ready before deployment.' });
-  }
 
-  const files = await loadProjectFiles(projectId);
-  if (files.length === 0) {
-    return res.status(400).json({ success: false, error: 'Generate files before deploying this project.' });
+  const context = await createPublishContext(project);
+  const publishStatus = buildPublishStatus(context);
+  if (!publishStatus.can_publish) {
+    return res.status(409).json({
+      success: false,
+      error: 'Build a ready preview before publishing.',
+      publish: publishStatus,
+    });
   }
 
   try {
-    const result = await deployFilesToVercel(project, files);
+    const publicOrigin = getHuggyPublicOrigin();
+    const badgeRequired = publishStatus.badge_required;
+    const result = await deployFilesToVercel(project, context.files, {
+      includeHuggyBadge: badgeRequired,
+      publicOrigin,
+    });
+    const createdAt = new Date().toISOString();
     const deploy = {
       id: randomUUID(),
       organization_id: project.organization_id,
@@ -5364,29 +5623,208 @@ app.post('/api/projects/:id/deploy', async (req: any, res: any) => {
       provider: 'vercel',
       provider_deployment_id: result.provider_deployment_id,
       deployment_url: result.deployment_url,
+      public_url: publishStatus.public_url,
+      custom_domain: publishStatus.custom_domain,
+      badge_required: badgeRequired,
       status: result.status === 'ready' ? 'ready' : result.status,
       commit_hash: commitHash || null,
       branch,
-      created_at: new Date().toISOString(),
+      created_at: createdAt,
     };
 
     await saveDeploymentRecord(deploy);
-    res.json({ success: true, deployment: deploy });
+    const latestContext = { ...context, latestDeployment: deploy };
+    const nextStatus = buildPublishStatus(latestContext);
+    res.json({
+      success: true,
+      deployment: sanitizeDeploymentForUser(deploy, nextStatus.public_url, nextStatus.custom_domain),
+      publish: nextStatus,
+    });
   } catch (error: any) {
     res.status(error.message?.includes('not configured') ? 503 : 502).json({
       success: false,
       error: error.message,
     });
   }
+}
+
+// GET /projects/:id/publish/status
+app.get('/api/projects/:id/publish/status', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const context = await createPublishContext(project);
+  res.json({
+    success: true,
+    publish: buildPublishStatus(context),
+    deployment: sanitizeDeploymentForUser(
+      context.latestDeployment,
+      getPublishPublicUrl(project, context.customDomain),
+      context.customDomain,
+    ),
+  });
 });
+
+// POST /projects/:id/publish
+app.post('/api/projects/:id/publish', publishProjectSnapshot);
+
+// POST /projects/:id/deploy
+app.post('/api/projects/:id/deploy', publishProjectSnapshot);
 
 // GET /projects/:id/deployments
 app.get('/api/projects/:id/deployments', async (req: any, res) => {
   const projectId = req.params.id;
+  const userId = getUserOrgId(req);
+  const project = await loadProject(projectId, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const customDomain = await getPrimaryCustomDomain(projectId);
+  const publicUrl = getPublishPublicUrl(project, customDomain);
   const client = requireSupabase('Deployment listing');
   const { data, error } = await client.from('deployments').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
   if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, deployments: data || [] });
+  res.json({ success: true, deployments: (data || []).map((item: any) => sanitizeDeploymentForUser(item, publicUrl, customDomain)) });
+});
+
+async function loadPublicProjectBySlug(slugOrId: string): Promise<GeneratedProject | null> {
+  const client = requireSupabase('Public project loading');
+  const slug = String(slugOrId || '').trim();
+  if (!slug) return null;
+  const bySlug = await client.from('projects').select('*').eq('slug', slug).maybeSingle();
+  if (bySlug.error) throw new Error(`Supabase public project load failed: ${bySlug.error.message}`);
+  if (bySlug.data) return bySlug.data as GeneratedProject;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug)) {
+    const byId = await client.from('projects').select('*').eq('id', slug).maybeSingle();
+    if (byId.error) throw new Error(`Supabase public project load failed: ${byId.error.message}`);
+    return (byId.data as GeneratedProject) || null;
+  }
+  return null;
+}
+
+async function loadPublicProjectByCustomDomain(host: string): Promise<GeneratedProject | null> {
+  const domain = normalizeDomainHost(host);
+  if (!domain) return null;
+  const client = requireSupabase('Public custom domain loading');
+  const { data, error } = await client
+    .from('domains')
+    .select('project_id,status,domain')
+    .eq('domain', domain)
+    .neq('status', 'removed')
+    .limit(1);
+  if (error) {
+    if (isSchemaShapeError(error)) return null;
+    throw new Error(`Supabase custom domain load failed: ${error.message}`);
+  }
+  const record = ((data || []) as any[]).find((item: any) => ['active', 'verified'].includes(String(item.status || '').toLowerCase()));
+  if (!record?.project_id) return null;
+  return loadProjectForAnalytics(record.project_id);
+}
+
+function isKnownHuggyHost(host: string): boolean {
+  const normalized = normalizeDomainHost(host);
+  if (!normalized) return true;
+  const publicHost = normalizeDomainHost(getHuggyPublicOrigin());
+  const rootHost = publicHost.replace(/^www\./, '');
+  return [
+    publicHost,
+    rootHost,
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+  ].some((known: string) => normalized === known || normalized.startsWith(`${known}:`));
+}
+
+function renderPublishedWrapper(project: GeneratedProject, deploymentUrl: string) {
+  const title = escapeHtml(project.name || 'Huggy app');
+  const src = escapeHtml(deploymentUrl);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title}</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;background:#fff;color:#09090b;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    iframe{display:block;width:100%;height:100dvh;border:0;background:#fff}
+    .fallback{display:grid;place-items:center;min-height:100dvh;padding:24px;text-align:center}
+    .fallback a{color:#09090b;font-weight:800}
+  </style>
+</head>
+<body>
+  <iframe title="${title}" src="${src}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  <noscript><main class="fallback"><p>This app is live. <a href="${src}">Open it here</a>.</p></main></noscript>
+</body>
+</html>`;
+}
+
+// Public published app route. This reads the latest publish snapshot only.
+app.get('/p/:slug', async (req, res) => {
+  try {
+    const project = await loadPublicProjectBySlug(req.params.slug);
+    if (!project) return res.status(404).send('Published app not found.');
+    const deployment = await getLatestDeployment(project.id);
+    const deploymentUrl = String(deployment?.deployment_url || '');
+    if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.send(renderPublishedWrapper(project, deploymentUrl));
+  } catch (error: any) {
+    res.status(500).send(escapeHtml(error?.message || 'Unable to load published app.'));
+  }
+});
+
+// Badge router: owner returns to builder when signed in; visitors land on Huggy.
+app.get('/built-with-huggy/:projectId', async (req, res) => {
+  try {
+    const project = await loadProjectForAnalytics(req.params.projectId);
+    if (!project) return res.redirect('/');
+    const ownerId = JSON.stringify(project.owner_id);
+    const projectId = JSON.stringify(project.id);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Built with Huggy</title></head>
+<body>
+<script>
+(() => {
+  const ownerId = ${ownerId};
+  const projectId = ${projectId};
+  const landing = '/';
+  const builder = '/builder.html?project=' + encodeURIComponent(projectId);
+  const findUserId = () => {
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i) || '';
+        if (!/^sb-|supabase/i.test(key)) continue;
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+        const user = parsed?.user || parsed?.currentSession?.user || parsed?.session?.user;
+        if (user?.id) return String(user.id);
+      }
+    } catch {}
+    return '';
+  };
+  window.location.replace(findUserId() === ownerId ? builder : landing);
+})();
+</script>
+<noscript><a href="/">Open Huggy</a></noscript>
+</body></html>`);
+  } catch {
+    res.redirect('/');
+  }
+});
+
+app.use(async (req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.startsWith('/assets')) return next();
+  const host = normalizeDomainHost(req.hostname || req.headers.host || '');
+  if (isKnownHuggyHost(host)) return next();
+  try {
+    const project = await loadPublicProjectByCustomDomain(host);
+    if (!project) return next();
+    const deployment = await getLatestDeployment(project.id);
+    const deploymentUrl = String(deployment?.deployment_url || '');
+    if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return res.send(renderPublishedWrapper(project, deploymentUrl));
+  } catch (error: any) {
+    return res.status(500).send(escapeHtml(error?.message || 'Unable to load custom domain app.'));
+  }
 });
 
 // Static files (frontend)
