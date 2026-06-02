@@ -2241,13 +2241,19 @@ async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
   if (files) {
     await client.from('project_files').delete().eq('project_id', project.id);
     const rows = files.map(file => ({
+      organization_id: project.organization_id,
       project_id: project.id,
       path: file.path,
       content: file.content,
       language: file.language || null,
       updated_at: new Date().toISOString(),
     }));
-    const { error: fileError } = await client.from('project_files').insert(rows);
+    let { error: fileError } = await client.from('project_files').insert(rows);
+    if (fileError && /organization_id|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(fileError.message || '')) {
+      const legacyRows = rows.map(({ organization_id, ...row }) => row);
+      const retry = await client.from('project_files').insert(legacyRows);
+      fileError = retry.error;
+    }
     if (fileError) throw new Error(`Supabase project file persistence failed: ${fileError.message}`);
   }
 
