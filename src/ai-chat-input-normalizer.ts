@@ -20,10 +20,10 @@ function installAiInputStyle() {
 
     .huggy-ai-input.input-wrapper,
     .huggy-ai-input {
-      border: 1px solid var(--border, rgba(9,9,11,.16)) !important;
-      background: var(--bg-input, #fff) !important;
-      color: var(--text, #09090b) !important;
-      box-shadow: 0 1px 0 rgba(9,9,11,.04) inset, 0 12px 32px rgba(9,9,11,.08) !important;
+      border: 1px solid var(--border, #eceae4) !important;
+      background: var(--bg-input, #fffefa) !important;
+      color: var(--text, #1c1c1c) !important;
+      box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, 0 12px 32px rgba(28,28,28,.07) !important;
       overflow: visible !important;
       text-align: left !important;
     }
@@ -34,19 +34,19 @@ function installAiInputStyle() {
     }
 
     .huggy-ai-input:focus-within {
-      border-color: var(--border-focus, rgba(9,9,11,.42)) !important;
-      box-shadow: 0 0 0 3px rgba(9,9,11,.06), 0 12px 32px rgba(9,9,11,.09) !important;
+      border-color: var(--border-focus, rgba(28,28,28,.34)) !important;
+      box-shadow: 0 0 0 3px rgba(191,219,254,.38), 0 12px 32px rgba(28,28,28,.09) !important;
     }
 
     .huggy-ai-input textarea,
     .huggy-ai-input #ai-textarea,
     .huggy-ai-input #chat-textarea-box {
-      color: var(--text, #09090b) !important;
+      color: var(--text, #1c1c1c) !important;
       text-align: left !important;
     }
 
     .huggy-ai-input textarea::placeholder {
-      color: var(--text-sub, #52525b) !important;
+      color: var(--text-sub, #77736b) !important;
       opacity: .82 !important;
     }
 
@@ -75,9 +75,9 @@ function installAiInputStyle() {
       min-height: var(--chat-action-height) !important;
       height: var(--chat-action-height) !important;
       border-radius: var(--chat-action-radius) !important;
-      border: 1px solid var(--border, rgba(9,9,11,.16)) !important;
+      border: 1px solid var(--border, #eceae4) !important;
       background: transparent !important;
-      color: var(--text-sub, #52525b) !important;
+      color: var(--text-sub, #77736b) !important;
       box-shadow: none !important;
       font-size: var(--chat-action-font) !important;
       font-weight: 750 !important;
@@ -132,9 +132,9 @@ function installAiInputStyle() {
 
     .huggy-ai-input .submit-btn.active,
     .huggy-ai-input .submit-btn:not(:disabled).active {
-      background: var(--text, #09090b) !important;
-      color: var(--bg, #fff) !important;
-      border-color: var(--text, #09090b) !important;
+      background: var(--text, #1c1c1c) !important;
+      color: var(--bg, #fcfbf8) !important;
+      border-color: var(--text, #1c1c1c) !important;
       cursor: pointer !important;
       pointer-events: auto !important;
     }
@@ -147,9 +147,9 @@ function installAiInputStyle() {
     .huggy-ai-input .model-select:hover,
     .huggy-ai-input .prompt-mode-btn:hover,
     .huggy-ai-input #btn-chat-mode:hover {
-      border-color: var(--border-focus, rgba(9,9,11,.42)) !important;
-      color: var(--text, #09090b) !important;
-      background: var(--bg-elevated, #f6f7f9) !important;
+      border-color: var(--border-focus, rgba(28,28,28,.34)) !important;
+      color: var(--text, #1c1c1c) !important;
+      background: var(--bg-elevated, #f7f4ed) !important;
     }
 
     [data-theme="dark"] .huggy-ai-input.input-wrapper,

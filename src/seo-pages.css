@@ -1,13 +1,13 @@
 :root {
-  --seo-bg: #ffffff;
-  --seo-surface: #ffffff;
-  --seo-panel: #f6f7f9;
-  --seo-text: #09090b;
+  --seo-bg: #fcfbf8;
+  --seo-surface: #fffdf8;
+  --seo-panel: #f7f4ed;
+  --seo-text: #1c1c1c;
   --seo-muted: #52525b;
   --seo-soft: #52525b;
   --seo-border: rgba(9, 9, 11, 0.16);
   --seo-border-soft: rgba(9, 9, 11, 0.10);
-  --seo-accent: #09090b;
+  --seo-accent: #1c1c1c;
   --seo-accent-strong: #27272a;
   --seo-blue: #3b7a8c;
   --seo-radius: 18px;
@@ -161,7 +161,7 @@ a {
   resize: vertical;
   border: 1px solid var(--seo-border);
   border-radius: 16px;
-  background: #ffffff;
+  background: #fcfbf8;
   color: var(--seo-text);
   padding: 16px;
   font: inherit;

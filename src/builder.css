@@ -37,11 +37,11 @@ svg { display: block; flex-shrink: 0; }
 }
 
 [data-theme="light"] {
-  --bg:           #FFFFFF;
-  --bg-surface:   #FFFFFF;
-  --bg-elevated:  #F6F7F9;
-  --bg-input:     #FFFFFF;
-  --bg-panel:     #F8FAFC;
+  --bg:           #fcfbf8;
+  --bg-surface:   #fffdf8;
+  --bg-elevated:  #f7f4ed;
+  --bg-input:     #fffefa;
+  --bg-panel:     #f7f4ed;
 
   --accent:       #09090B;
   --accent-dim:   rgba(9,9,11,0.08);

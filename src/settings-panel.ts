@@ -88,10 +88,10 @@ function installSettingsStyle() {
       display: flex;
       flex-direction: column;
       width: min(620px, 100vw);
-      background: var(--bg, #fff);
-      color: var(--text, #09090b);
-      border-left: 1px solid var(--border, rgba(9,9,11,.16));
-      box-shadow: -24px 0 80px rgba(9,9,11,.16);
+      background: var(--bg, #fcfbf8);
+      color: var(--text, #1c1c1c);
+      border-left: 1px solid var(--border, #eceae4);
+      box-shadow: -24px 0 80px rgba(28,28,28,.12);
       transform: translateX(100%);
     }
 
@@ -105,7 +105,7 @@ function installSettingsStyle() {
       justify-content: space-between;
       gap: 16px;
       padding: 18px 20px;
-      border-bottom: 1px solid var(--border-light, rgba(9,9,11,.10));
+      border-bottom: 1px solid var(--border-light, rgba(236,234,228,.78));
     }
 
     .settings-header h2 {
@@ -120,10 +120,10 @@ function installSettingsStyle() {
       justify-content: center;
       width: 28px;
       height: 28px;
-      border: 1px solid var(--border, rgba(9,9,11,.16));
+      border: 1px solid var(--border, #eceae4);
       border-radius: 7px;
       background: transparent;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       cursor: pointer;
     }
 
@@ -131,7 +131,7 @@ function installSettingsStyle() {
       display: flex;
       gap: 6px;
       padding: 10px 14px;
-      border-bottom: 1px solid var(--border-light, rgba(9,9,11,.10));
+      border-bottom: 1px solid var(--border-light, rgba(236,234,228,.78));
       overflow-x: auto;
     }
 
@@ -141,7 +141,7 @@ function installSettingsStyle() {
       border-radius: 7px;
       padding: 0 10px;
       background: transparent;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       cursor: pointer;
       flex: 0 0 auto;
       font-size: 12px;
@@ -149,9 +149,9 @@ function installSettingsStyle() {
     }
 
     .settings-tab.active {
-      border-color: var(--border, rgba(9,9,11,.16));
-      background: var(--bg-elevated, #f6f7f9);
-      color: var(--text, #09090b);
+      border-color: var(--border, #eceae4);
+      background: var(--bg-elevated, #f7f4ed);
+      color: var(--text, #1c1c1c);
     }
 
     .settings-content {
@@ -165,9 +165,9 @@ function installSettingsStyle() {
     }
 
     .settings-card {
-      border: 1px solid var(--border, rgba(9,9,11,.16));
+      border: 1px solid var(--border, #eceae4);
       border-radius: 14px;
-      background: var(--bg-surface, #fff);
+      background: var(--bg-surface, #fffdf8);
       padding: 14px;
       margin-bottom: 12px;
     }
@@ -180,7 +180,7 @@ function installSettingsStyle() {
 
     .settings-card p {
       margin: 0;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       font-size: 12px;
       line-height: 1.55;
     }
@@ -193,16 +193,16 @@ function installSettingsStyle() {
     }
 
     .usage-summary-card {
-      border: 1px solid var(--border-light, rgba(9,9,11,.10));
+      border: 1px solid var(--border-light, rgba(236,234,228,.78));
       border-radius: 10px;
       padding: 10px;
-      background: var(--bg-elevated, #f6f7f9);
+      background: var(--bg-elevated, #f7f4ed);
     }
 
     .usage-summary-label {
       display: block;
       margin-bottom: 6px;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       font-size: 10px;
       font-weight: 800;
       letter-spacing: .08em;
@@ -218,10 +218,10 @@ function installSettingsStyle() {
 
     .usage-row,
     .model-rate-row {
-      border: 1px solid var(--border-light, rgba(9,9,11,.10));
+      border: 1px solid var(--border-light, rgba(236,234,228,.78));
       border-radius: 10px;
       padding: 10px;
-      background: var(--bg, #fff);
+      background: var(--bg, #fcfbf8);
     }
 
     .usage-row + .usage-row,
@@ -239,7 +239,7 @@ function installSettingsStyle() {
 
     .usage-row-title,
     .model-rate-title {
-      color: var(--text, #09090b);
+      color: var(--text, #1c1c1c);
       font-size: 12px;
       font-weight: 800;
     }
@@ -247,18 +247,18 @@ function installSettingsStyle() {
     .usage-row-meta,
     .model-rate-meta {
       margin-top: 4px;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       font-size: 11px;
       line-height: 1.45;
     }
 
     .usage-credit-pill,
     .model-tier-pill {
-      border: 1px solid var(--border, rgba(9,9,11,.16));
+      border: 1px solid var(--border, #eceae4);
       border-radius: 999px;
       padding: 3px 7px;
-      background: var(--bg-elevated, #f6f7f9);
-      color: var(--text, #09090b);
+      background: var(--bg-elevated, #f7f4ed);
+      color: var(--text, #1c1c1c);
       font-size: 10px;
       font-weight: 850;
       white-space: nowrap;
@@ -272,16 +272,16 @@ function installSettingsStyle() {
     }
 
     .model-credit-cell {
-      border: 1px solid var(--border-light, rgba(9,9,11,.10));
+      border: 1px solid var(--border-light, rgba(236,234,228,.78));
       border-radius: 8px;
       padding: 7px;
-      background: var(--bg-elevated, #f6f7f9);
+      background: var(--bg-elevated, #f7f4ed);
     }
 
     .model-credit-cell span {
       display: block;
       margin-bottom: 4px;
-      color: var(--text-sub, #52525b);
+      color: var(--text-sub, #77736b);
       font-size: 9px;
       font-weight: 850;
       letter-spacing: .08em;
@@ -289,16 +289,16 @@ function installSettingsStyle() {
     }
 
     .model-credit-cell strong {
-      color: var(--text, #09090b);
+      color: var(--text, #1c1c1c);
       font-size: 11px;
     }
 
     .usage-empty {
-      border: 1px dashed var(--border, rgba(9,9,11,.16));
+      border: 1px dashed var(--border, #eceae4);
       border-radius: 10px;
       padding: 12px;
-      color: var(--text-sub, #52525b);
-      background: var(--bg-elevated, #f6f7f9);
+      color: var(--text-sub, #77736b);
+      background: var(--bg-elevated, #f7f4ed);
       font-size: 12px;
       line-height: 1.5;
     }
@@ -308,26 +308,26 @@ function installSettingsStyle() {
       justify-content: flex-end;
       gap: 8px;
       padding: 14px 16px;
-      border-top: 1px solid var(--border-light, rgba(9,9,11,.10));
-      background: var(--bg, #fff);
+      border-top: 1px solid var(--border-light, rgba(236,234,228,.78));
+      background: var(--bg, #fcfbf8);
     }
 
     .settings-footer button {
       height: 30px;
-      border: 1px solid var(--border, rgba(9,9,11,.16));
+      border: 1px solid var(--border, #eceae4);
       border-radius: 8px;
       padding: 0 12px;
       background: transparent;
-      color: var(--text, #09090b);
+      color: var(--text, #1c1c1c);
       font-size: 12px;
       font-weight: 800;
       cursor: pointer;
     }
 
     .settings-footer .primary {
-      background: var(--text, #09090b);
-      color: var(--bg, #fff);
-      border-color: var(--text, #09090b);
+      background: var(--text, #1c1c1c);
+      color: var(--bg, #fcfbf8);
+      border-color: var(--text, #1c1c1c);
     }
 
     [data-theme="dark"] .settings-panel {

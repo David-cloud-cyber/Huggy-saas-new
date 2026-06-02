@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#fcfbf8" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Workspace Dashboard" />
@@ -62,24 +62,24 @@
   <script type="module" src="/src/auth-guard.ts"></script>
   <style>
     :root[data-theme="dark"] {
-      --bg           : #060606;
-      --bg-surface   : #0F0F0F;
-      --bg-elevated  : #161616;
-      --bg-input     : #111111;
-      --bg-panel     : #0A0A0A;
+      --bg           : #171613;
+      --bg-surface   : #201f1b;
+      --bg-elevated  : #2a2822;
+      --bg-input     : #201f1b;
+      --bg-panel     : #191814;
 
-      --accent       : #F4F4F5;
-      --accent-dim   : rgba(244,244,245,0.07);
-      --accent-hover : rgba(244,244,245,0.11);
-      --accent-active: rgba(244,244,245,0.16);
+      --accent       : #f8f4eb;
+      --accent-dim   : rgba(248,244,235,0.08);
+      --accent-hover : rgba(248,244,235,0.12);
+      --accent-active: rgba(248,244,235,0.16);
 
-      --text         : #F2F2F2;
-      --text-muted   : #B8B8C0;
-      --text-sub     : #80808A;
+      --text         : #f8f4eb;
+      --text-muted   : #d8d1c3;
+      --text-sub     : #a79f90;
 
-      --border       : rgba(255,255,255,0.12);
-      --border-mid   : rgba(255,255,255,0.18);
-      --border-focus : rgba(244,244,245,0.34);
+      --border       : rgba(252,251,248,0.14);
+      --border-mid   : rgba(252,251,248,0.18);
+      --border-focus : rgba(191,219,254,0.42);
 
       --success      : #4ADE80;
       --success-dim  : rgba(74,222,128,0.10);
@@ -87,30 +87,30 @@
       --warning-dim  : rgba(251,191,36,0.10);
       --error        : #F87171;
       --error-dim    : rgba(248,113,113,0.10);
-      --blue         : #60A5FA;
-      --blue-dim     : rgba(96,165,250,0.10);
+      --blue         : #93C5FD;
+      --blue-dim     : rgba(147,197,253,0.12);
       --grain-opacity: 0.022;
     }
 
     :root[data-theme="light"] {
-      --bg           : #FFFFFF;
-      --bg-surface   : #FFFFFF;
-      --bg-elevated  : #F6F7F9;
-      --bg-input     : #FFFFFF;
-      --bg-panel     : #F8FAFC;
+      --bg           : #fcfbf8;
+      --bg-surface   : #fffdf8;
+      --bg-elevated  : #f7f4ed;
+      --bg-input     : #fffefa;
+      --bg-panel     : #f7f4ed;
 
-      --accent       : #09090B;
-      --accent-dim   : rgba(9,9,11,0.08);
-      --accent-hover : rgba(9,9,11,0.12);
-      --accent-active: rgba(9,9,11,0.15);
+      --accent       : #1c1c1c;
+      --accent-dim   : rgba(28,28,28,0.06);
+      --accent-hover : rgba(28,28,28,0.10);
+      --accent-active: rgba(28,28,28,0.14);
 
-      --text         : #09090B;
-      --text-muted   : #3F3F46;
-      --text-sub     : #52525B;
+      --text         : #1c1c1c;
+      --text-muted   : #5f5f5d;
+      --text-sub     : #77736b;
 
-      --border       : rgba(9,9,11,0.16);
-      --border-mid   : rgba(9,9,11,0.20);
-      --border-focus : rgba(9,9,11,0.42);
+      --border       : #eceae4;
+      --border-mid   : #dedbd2;
+      --border-focus : rgba(28,28,28,0.34);
 
       --success      : #22C55E;
       --success-dim  : rgba(34,197,94,0.08);
@@ -118,8 +118,8 @@
       --warning-dim  : rgba(217,119,6,0.08);
       --error        : #DC2626;
       --error-dim    : rgba(220,38,38,0.08);
-      --blue         : #2563EB;
-      --blue-dim     : rgba(37,99,235,0.08);
+      --blue         : #3b82f6;
+      --blue-dim     : rgba(191,219,254,0.38);
       --grain-opacity: 0.018;
     }
 
@@ -1593,8 +1593,8 @@
     .btn-promo-upgrade,
     .btn-create-top {
       border-radius: 8px;
-      background: #f4f4f5;
-      color: #09090b;
+      background: var(--accent);
+      color: var(--bg);
     }
 
     .btn-new-project-sidebar {
@@ -1903,7 +1903,7 @@
       const current = html.getAttribute('data-theme');
       const nextTheme = current === 'dark' ? 'light' : 'dark';
       
-      curtain.style.background = nextTheme === 'light' ? '#FFFFFF' : '#060606';
+      curtain.style.background = nextTheme === 'light' ? '#fcfbf8' : '#171613';
       curtain.style.transformOrigin = 'top';
       curtain.classList.add('falling');
 
@@ -2146,7 +2146,7 @@
 
     function getThemeColor(theme) {
       switch (theme) {
-        case 'light': return '#60A5FA';
+        case 'light': return '#3B82F6';
         case 'synthwave': return '#EC4899';
         case 'emerald': return '#10B981';
         default: return '#A78BFA'; // dark / default
@@ -2573,7 +2573,7 @@
           <span style="font-weight: 500; color: var(--text);">Project Saved</span>
           <span style="font-size: 11px; color: var(--text-muted);">Ctrl+S simulation saved successfully</span>
         </div>
-        <button style="background: none; border: none; padding: 4px; color: #52525b; cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
+        <button style="background: none; border: none; padding: 4px; color: var(--text-sub); cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
       `;
 
       document.body.appendChild(toast);

@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#fcfbf8" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Builder Workspace" />
@@ -46,39 +46,42 @@
   <style>
     /* Absolute pixel-perfect UI style matches the Huggy AI Workspace layout precisely */
     :root {
-      --bg: #09090b;
-      --bg-surface: #0c0c0e;
-      --bg-panel: #121214;
-      --bg-input: #1c1c1f;
-      --border: rgba(255, 255, 255, 0.14);
-      --border-light: rgba(255, 255, 255, 0.12);
-      --border-mid: rgba(255, 255, 255, 0.18);
-      --accent: #d946ef;
-      --accent-spark: #c084fc;
-      --text: #f4f4f5;
-      --text-muted: #b8b8c0;
-      --text-sub: #80808a;
-      --text-dark: #3f3f46;
+      --bg: #171613;
+      --bg-surface: #201f1b;
+      --bg-panel: #191814;
+      --bg-input: #201f1b;
+      --border: rgba(252, 251, 248, 0.14);
+      --border-light: rgba(252, 251, 248, 0.10);
+      --border-mid: rgba(252, 251, 248, 0.18);
+      --border-focus: rgba(191, 219, 254, 0.42);
+      --accent: #f8f4eb;
+      --accent-spark: #93c5fd;
+      --accent-dim: rgba(248, 244, 235, 0.08);
+      --accent-hover: rgba(248, 244, 235, 0.12);
+      --text: #f8f4eb;
+      --text-muted: #d8d1c3;
+      --text-sub: #a79f90;
+      --text-dark: #7e7669;
     }
 
     :root[data-theme="light"] {
-      --bg: #ffffff;
-      --bg-surface: #ffffff;
-      --bg-panel: #f8fafc;
-      --bg-input: #ffffff;
-      --border: rgba(9, 9, 11, 0.16);
-      --border-light: rgba(9, 9, 11, 0.10);
-      --border-mid: rgba(9, 9, 11, 0.20);
-      --border-focus: rgba(9, 9, 11, 0.42);
-      --accent: #09090b;
-      --accent-spark: #52525b;
-      --accent-dim: rgba(9, 9, 11, 0.08);
-      --accent-hover: rgba(9, 9, 11, 0.12);
-      --text: #09090b;
-      --text-muted: #3f3f46;
-      --text-sub: #52525b;
-      --text-dark: #3f3f46;
-      --blue: #3b7a8c;
+      --bg: #fcfbf8;
+      --bg-surface: #fffdf8;
+      --bg-panel: #f7f4ed;
+      --bg-input: #fffefa;
+      --border: #eceae4;
+      --border-light: rgba(236, 234, 228, 0.78);
+      --border-mid: #dedbd2;
+      --border-focus: rgba(28, 28, 28, 0.34);
+      --accent: #1c1c1c;
+      --accent-spark: #3b82f6;
+      --accent-dim: rgba(28, 28, 28, 0.06);
+      --accent-hover: rgba(28, 28, 28, 0.10);
+      --text: #1c1c1c;
+      --text-muted: #5f5f5d;
+      --text-sub: #77736b;
+      --text-dark: #77736b;
+      --blue: #3b82f6;
     }
 
     * {
@@ -155,7 +158,7 @@
     }
 
     .brand-logo-spark {
-      background: linear-gradient(135deg, #f472b6, #db2777);
+      background: linear-gradient(135deg, #3b82f6, #bfdbfe);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       font-size: 16px;
@@ -183,7 +186,7 @@
     }
 
     .project-selector:hover {
-      color: #ffffff;
+      color: var(--text);
     }
 
     .project-selector[aria-expanded="true"] {
@@ -446,9 +449,9 @@
     }
 
     .btn-publish {
-      background: #09090b;
-      color: #ffffff;
-      border: 1px solid #09090b;
+      background: var(--accent);
+      color: var(--bg);
+      border: 1px solid var(--accent);
       font-size: 12px;
       font-weight: 700;
       padding: 6px 16px;
@@ -458,7 +461,7 @@
     }
 
     .btn-publish:hover {
-      background: #18181b;
+      background: color-mix(in srgb, var(--accent) 92%, var(--bg) 8%);
       transform: translateY(-1px);
       box-shadow: 0 8px 24px rgba(9, 9, 11, 0.18);
     }
@@ -585,8 +588,8 @@
     }
 
     .p-toggle-btn.active {
-      background: #a855f7;
-      color: #ffffff;
+      background: var(--accent);
+      color: var(--bg);
     }
 
     /* Cards */
@@ -609,9 +612,9 @@
     }
     
     .p-plan-card.recommended {
-      border-color: #a855f7;
-      background: rgba(168, 85, 247, 0.03);
-      box-shadow: 0 0 20px rgba(168, 85, 247, 0.08);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--bg-input) 92%, #dbeafe 8%);
+      box-shadow: 0 16px 40px rgba(28, 28, 28, 0.08);
     }
     
     .p-plan-card.recommended::before {
@@ -619,8 +622,8 @@
       position: absolute;
       top: -10px;
       left: 16px;
-      background: #a855f7;
-      color: #ffffff;
+      background: var(--accent);
+      color: var(--bg);
       font-size: 8px;
       font-weight: 700;
       letter-spacing: 0.05em;
@@ -639,7 +642,7 @@
     .p-plan-price {
       font-size: 28px;
       font-weight: 700;
-      color: #ffffff;
+      color: var(--text);
       margin-bottom: 6px;
     }
 
@@ -676,7 +679,7 @@
     }
 
     .p-feature-item svg {
-      color: #a855f7;
+      color: var(--accent-spark);
       flex-shrink: 0;
     }
 
@@ -698,7 +701,7 @@
     }
 
     .p-plan-card.recommended .p-plan-cta {
-      background: #a855f7;
+      background: var(--accent-spark);
       border: none;
     }
 
@@ -1099,7 +1102,6 @@
 
     /* Custom Chat input Area precisely customized */
     .chat-input-row {
-      border-top: 1px solid var(--border-light);
       padding: 18px;
       background: var(--bg-panel);
     }
@@ -1112,23 +1114,16 @@
         content: "";
         position: absolute;
         inset: -1.5px;
-        background: conic-gradient(
-            from 0deg,
-            #4285F4,
-            #34A853,
-            #FBBC05,
-            #EA4335,
-            #4285F4
-        );
+        background: conic-gradient(from 0deg, #dbeafe, #93c5fd, #f7f4ed, #bfdbfe, #dbeafe);
         animation: rotate 4s linear infinite;
         z-index: -1;
-        opacity: 0.12;
+        opacity: 0.18;
         transition: opacity 300ms;
         filter: blur(1.5px);
         clip-path: inset(0 round 12px);
     }
     .chat-input-row .input-wrapper:focus-within::before {
-        opacity: 0.8;
+        opacity: 0.68;
     }
     .chat-input-row .input-wrapper::after {
         content: "";
@@ -1140,7 +1135,7 @@
     }
     .chat-input-row .input-wrapper:focus-within {
         border-color: transparent !important;
-        box-shadow: 0 0 16px rgba(66, 133, 244, 0.12), 0 10px 30px rgba(0,0,0,0.3) !important;
+        box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.40), 0 14px 34px rgba(28,28,28,0.10) !important;
     }
     .chat-input-row .icon-btn:hover {
         border-color: var(--border-focus);
@@ -1611,9 +1606,9 @@
       align-items: stretch;
       overflow: auto;
       background:
-        linear-gradient(90deg, rgba(9,9,11,.04) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(9,9,11,.04) 1px, transparent 1px),
-        var(--bg-elevated, #f6f7f9);
+        linear-gradient(90deg, rgba(28,28,28,.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(28,28,28,.035) 1px, transparent 1px),
+        var(--bg-elevated, #f7f4ed);
       background-size: 24px 24px;
       padding: 0;
     }
@@ -1918,7 +1913,7 @@
       font-variant-numeric: tabular-nums;
       background:
         linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
-        conic-gradient(from 160deg, #16a34a, #2563eb, #a855f7, #16a34a) border-box;
+        conic-gradient(from 160deg, #bfdbfe, #3b82f6, #f7f4ed, #bfdbfe) border-box;
       border: 1px solid transparent;
     }
 
@@ -2080,9 +2075,9 @@
           <!-- SVG logo of Huggy -->
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none" class="brand-logo">
             <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
-            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#09090b"/>
-            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#09090b"/>
-            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#09090b"/>
+            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#1c1c1c"/>
+            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#1c1c1c"/>
+            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#1c1c1c"/>
           </svg>
           <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
           <span class="brand-sep">/</span>
@@ -2731,7 +2726,7 @@
             <span style="font-weight: 500; color: var(--text);">Project Saved</span>
             <span style="font-size: 11px; color: var(--text-muted);">Ctrl+S simulation saved successfully</span>
           </div>
-          <button style="background: none; border: none; padding: 4px; color: #52525b; cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
+          <button style="background: none; border: none; padding: 4px; color: var(--text-sub); cursor: pointer; font-size: 14px; line-height: 1; margin-left: 8px; display: flex;" onclick="this.parentElement.remove()">✕</button>
         `;
 
         document.body.appendChild(toast);
@@ -2817,7 +2812,7 @@
             transform: translateX(-50%) translateY(20px);
             background: #18181b;
             border: 1px solid rgba(168, 85, 247, 0.3);
-            border-left: 3px solid #a855f7;
+            border-left: 3px solid var(--accent-spark);
             border-radius: 8px;
             padding: 12px 16px;
             box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
@@ -2833,7 +2828,7 @@
           `;
           
           toast.innerHTML = `
-            <div style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7; box-shadow: 0 0 8px #a855f7; flex-shrink: 0;"></div>
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-spark); box-shadow: 0 0 8px rgba(59,130,246,.38); flex-shrink: 0;"></div>
             <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
               <span style="font-weight: 500; color: var(--text);">Activating ${planName} Plan</span>
               <span style="font-size: 11px; color: var(--text-muted);">Redirecting to billing checkout...</span>

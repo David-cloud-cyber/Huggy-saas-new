@@ -174,7 +174,6 @@ function ensureConversationStyles() {
 
     .huggy-message-content {
       max-width: min(92%, 520px);
-      white-space: pre-wrap;
       overflow-wrap: anywhere;
       border: 1px solid var(--border-light, var(--border));
       border-radius: 13px;
@@ -184,6 +183,64 @@ function ensureConversationStyles() {
       color: var(--text);
       background: var(--bg-surface);
       box-shadow: 0 1px 0 rgba(9,9,11,.03) inset;
+    }
+
+    .huggy-message-plain {
+      display: block;
+      white-space: pre-wrap;
+    }
+
+    .huggy-message-markdown {
+      display: grid;
+      gap: 8px;
+    }
+
+    .huggy-message-markdown p,
+    .huggy-message-markdown h4,
+    .huggy-message-markdown ul,
+    .huggy-message-markdown ol {
+      margin: 0;
+    }
+
+    .huggy-message-markdown h4 {
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 780;
+      line-height: 1.35;
+    }
+
+    .huggy-message-markdown ul,
+    .huggy-message-markdown ol {
+      display: grid;
+      gap: 5px;
+      padding-left: 18px;
+    }
+
+    .huggy-message-markdown li {
+      padding-left: 2px;
+    }
+
+    .huggy-message-markdown strong {
+      color: var(--text);
+      font-weight: 760;
+    }
+
+    .huggy-message-markdown code {
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 5px;
+      background: var(--bg-input);
+      color: var(--text);
+      padding: 1px 5px;
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+      font-size: .92em;
+    }
+
+    .huggy-message-markdown a {
+      color: var(--text);
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
     }
 
     .huggy-message-user .huggy-message-content {
@@ -513,6 +570,133 @@ function planSummary(content: string) {
   return firstLine.length > 170 ? `${firstLine.slice(0, 167)}...` : firstLine;
 }
 
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const tokenPattern = /(`[^`]+`|\*\*[^*]+?\*\*|__[^_]+?__|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  const pushText = (value: string) => {
+    if (value) nodes.push(value);
+  };
+
+  while ((match = tokenPattern.exec(text)) !== null) {
+    pushText(text.slice(lastIndex, match.index));
+    const token = match[0];
+    const key = `inline_${match.index}_${token.length}`;
+
+    if (token.startsWith("`") && token.endsWith("`")) {
+      nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
+    } else if ((token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__"))) {
+      nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("[") && token.includes("](") && token.endsWith(")")) {
+      const labelEnd = token.indexOf("](");
+      const label = token.slice(1, labelEnd);
+      const url = token.slice(labelEnd + 2, -1);
+      nodes.push(
+        <a key={key} href={url} target="_blank" rel="noreferrer">
+          {label}
+        </a>,
+      );
+    } else {
+      const trailing = token.match(/[).,;:!?]+$/)?.[0] || "";
+      const href = trailing ? token.slice(0, -trailing.length) : token;
+      nodes.push(
+        <a key={key} href={href} target="_blank" rel="noreferrer">
+          {href}
+        </a>,
+      );
+      pushText(trailing);
+    }
+    lastIndex = tokenPattern.lastIndex;
+  }
+
+  pushText(text.slice(lastIndex));
+  return nodes.length ? nodes : [text];
+}
+
+function renderAssistantMarkdown(content: string) {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const blocks: React.ReactNode[] = [];
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+
+  const flushParagraph = () => {
+    const text = paragraph.join(" ").trim();
+    if (text) {
+      blocks.push(<p key={`p_${blocks.length}`}>{renderInlineMarkdown(text)}</p>);
+    }
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listType || !listItems.length) return;
+    const Tag = listType;
+    blocks.push(
+      <Tag key={`list_${blocks.length}`}>
+        {listItems.map((item, index) => (
+          <li key={`${index}_${item.slice(0, 18)}`}>{renderInlineMarkdown(item)}</li>
+        ))}
+      </Tag>,
+    );
+    listItems = [];
+    listType = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = line.match(/^#{1,4}\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      blocks.push(<h4 key={`h_${blocks.length}`}>{renderInlineMarkdown(heading[1])}</h4>);
+      continue;
+    }
+
+    const unordered = line.match(/^[-*]\s+(.+)$/);
+    if (unordered) {
+      flushParagraph();
+      if (listType && listType !== "ul") flushList();
+      listType = "ul";
+      listItems.push(unordered[1]);
+      continue;
+    }
+
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      if (listType && listType !== "ol") flushList();
+      listType = "ol";
+      listItems.push(ordered[1]);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return <div className="huggy-message-markdown">{blocks.length ? blocks : <p>{content}</p>}</div>;
+}
+
+function renderPlainMessage(content: string) {
+  return <span className="huggy-message-plain">{content}</span>;
+}
+
+function renderStandardMessageContent(message: HuggyConversationMessage) {
+  if (message.role === "assistant") return renderAssistantMarkdown(message.content);
+  return renderPlainMessage(message.content);
+}
+
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
@@ -665,7 +849,7 @@ function BuilderConversation({
           messages.map(message => (
             <Message from={message.role} key={message.id}>
               <MessageContent>
-                {message.working ? renderWorkingBlock(message) : renderMessageBlock(message) || message.content}
+                {message.working ? renderWorkingBlock(message) : renderMessageBlock(message) || renderStandardMessageContent(message)}
                 {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
                   <div className="huggy-message-actions">
                     {message.actions.map(action => (

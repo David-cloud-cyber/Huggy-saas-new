@@ -216,27 +216,33 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
 <style>
 :root {
   color-scheme: light dark;
-  --loader-text: #ffffff;
-  --loader-bg-a: #1a3379;
-  --loader-bg-b: #0f172a;
-  --loader-bg-c: #000000;
-  --ring-a: #38bdf8;
-  --ring-b: #005dff;
-  --ring-c: #1e40af;
-  --ring-glow-a: rgba(56,189,248,.30);
-  --ring-glow-b: rgba(0,93,255,.20);
+  --loader-text: #1c1c1c;
+  --loader-bg-a: #fcfbf8;
+  --loader-bg-b: #f7f4ed;
+  --loader-bg-c: #fffdf8;
+  --ring-a: #dbeafe;
+  --ring-b: #93c5fd;
+  --ring-c: #3b82f6;
+  --ring-mid-a: #bfdbfe;
+  --ring-mid-b: #60a5fa;
+  --ring-mid-c: #2563eb;
+  --ring-glow-a: rgba(96,165,250,.22);
+  --ring-glow-b: rgba(59,130,246,.14);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --loader-text: #1f2937;
-    --loader-bg-a: #f3f4f6;
-    --loader-bg-b: #e5e7eb;
-    --loader-bg-c: #d1d5db;
-    --ring-a: #4b5563;
-    --ring-b: #6b7280;
-    --ring-c: #9ca3af;
-    --ring-glow-a: rgba(107,114,128,.30);
-    --ring-glow-b: rgba(156,163,175,.20);
+    --loader-text: #f8f4eb;
+    --loader-bg-a: #171613;
+    --loader-bg-b: #201f1b;
+    --loader-bg-c: #2a2822;
+    --ring-a: #d8d1c3;
+    --ring-b: #93c5fd;
+    --ring-c: #3b82f6;
+    --ring-mid-a: #f8f4eb;
+    --ring-mid-b: #bfdbfe;
+    --ring-mid-c: #60a5fa;
+    --ring-glow-a: rgba(147,197,253,.22);
+    --ring-glow-b: rgba(191,219,254,.12);
   }
 }
 * { box-sizing: border-box; }
@@ -300,22 +306,22 @@ body {
   }
   50% {
     transform: rotate(270deg);
-    box-shadow: 0 6px 12px 0 #60a5fa inset, 0 12px 6px 0 #0284c7 inset, 0 24px 36px 0 var(--ring-b) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
+    box-shadow: 0 6px 12px 0 var(--ring-mid-a) inset, 0 12px 6px 0 var(--ring-mid-b) inset, 0 24px 36px 0 var(--ring-mid-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
   }
   100% {
     transform: rotate(450deg);
-    box-shadow: 0 6px 12px 0 #4dc8fd inset, 0 12px 18px 0 var(--ring-b) inset, 0 36px 36px 0 var(--ring-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
+    box-shadow: 0 6px 12px 0 var(--ring-a) inset, 0 12px 18px 0 var(--ring-b) inset, 0 36px 36px 0 var(--ring-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
   }
 }
 @media (prefers-color-scheme: dark) {
   @keyframes loaderCircle {
     0%, 100% {
       transform: rotate(90deg);
-      box-shadow: 0 6px 12px 0 #4b5563 inset, 0 12px 18px 0 #6b7280 inset, 0 36px 36px 0 #9ca3af inset, 0 0 3px 1.2px rgba(107,114,128,.30), 0 0 6px 1.8px rgba(156,163,175,.20);
+      box-shadow: 0 6px 12px 0 var(--ring-a) inset, 0 12px 18px 0 var(--ring-b) inset, 0 36px 36px 0 var(--ring-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
     }
     50% {
       transform: rotate(270deg);
-      box-shadow: 0 6px 12px 0 #6b7280 inset, 0 12px 6px 0 #9ca3af inset, 0 24px 36px 0 #4b5563 inset, 0 0 3px 1.2px rgba(107,114,128,.30), 0 0 6px 1.8px rgba(156,163,175,.20);
+      box-shadow: 0 6px 12px 0 var(--ring-mid-a) inset, 0 12px 6px 0 var(--ring-mid-b) inset, 0 24px 36px 0 var(--ring-mid-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
     }
   }
 }
@@ -787,6 +793,51 @@ function isLikelyFrenchText(value: string) {
   return /\b(je|tu|vous|nous|veux|j'aimerais|crée|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application|couleur|bouton)\b/i.test(value);
 }
 
+function normalizePromptIntentText(value: string) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[!?.,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isQuickConversationPrompt(value: string, mode: ChatMode) {
+  if (mode !== 'auto') return false;
+  const normalized = normalizePromptIntentText(value);
+  if (!normalized || normalized.length > 180) return false;
+  const changeHints = /\b(create|build|generate|add|edit|change|modify|fix|debug|deploy|publish|crée|creer|génère|genere|ajoute|modifie|corrige|déploie|deploie|publie|supprime|remplace|couleur|color|button|bouton|texte|text)\b/i;
+  if (changeHints.test(normalized)) return false;
+  const direct = new Set([
+    'bonjour',
+    'bonsoir',
+    'salut',
+    'coucou',
+    'hello',
+    'hi',
+    'hey',
+    'merci',
+    'thanks',
+    'thank you',
+    'ok',
+    'okay',
+    'd accord',
+    'daccord',
+    'comment ca va',
+    'comment ça va',
+    'how are you',
+    'que peux tu faire',
+    'que peux-tu faire',
+    'tu peux faire quoi',
+    'what can you do',
+    'aide moi',
+    'help me',
+  ]);
+  if (direct.has(normalized)) return true;
+  return /^(qui es tu|qui es-tu|tu es qui|what are you|what is huggy|c est quoi huggy|c'est quoi huggy|comment tu peux m aider|comment tu peux m'aider)/i.test(normalized);
+}
+
 function addInlineAction(card: HTMLElement | null, label: string, action: () => void) {
   if (!card) return;
   const id = messageHandleId(card);
@@ -1125,7 +1176,7 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
         <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
           <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${publicUrl ? '1' : '.45'};">Copy link</button>
           <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${canOpen ? '1' : '.45'};">Open app</button>
-          <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:32px;border:1px solid #09090b;background:#09090b;color:#fff;border-radius:9px;padding:0 13px;font-size:12px;font-weight:900;cursor:pointer;opacity:${status?.can_publish && !isPublishing ? '1' : '.48'};">${isPublishing ? 'Publishing…' : escapeHtml(publishPrimaryLabel(status))}</button>
+            <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:32px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);border-radius:9px;padding:0 13px;font-size:12px;font-weight:900;cursor:pointer;opacity:${status?.can_publish && !isPublishing ? '1' : '.48'};">${isPublishing ? 'Publishing…' : escapeHtml(publishPrimaryLabel(status))}</button>
         </div>
       </div>
     </section>
@@ -2271,10 +2322,16 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   clearInlineBlocks();
 
   appendMessage('user', displayText);
+  const speaksFrench = isLikelyFrenchText(prompt);
+  const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const status = appendMessage('assistant', initialLabel);
-  setMessageShimmer(status, initialLabel);
-  startWorkingTimer(status, initialLabel);
+  const status = appendMessage('assistant', quickConversation
+    ? (speaksFrench ? 'Je te réponds...' : 'Answering...')
+    : initialLabel);
+  if (!quickConversation) {
+    setMessageShimmer(status, initialLabel);
+    startWorkingTimer(status, initialLabel);
+  }
   let generationTouchesPreview = requestedMode === 'build';
   if (generationTouchesPreview) {
     activateBuilderView('preview');
@@ -2282,14 +2339,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   }
   let streamedText = '';
   let assistantHasFinalContent = false;
-  const speaksFrench = isLikelyFrenchText(prompt);
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   const agentSteps = new Map<string, { label: string; state: 'done' | 'now' }>();
   const syncAgentSteps = (headline = activeWorkingLabel) => {
+    if (quickConversation && !generationTouchesPreview) return;
     activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
     renderWorkingLabel(headline);
   };
   const markAgentStep = (key: string, label: string, headline = label) => {
+    if (quickConversation && !generationTouchesPreview) return;
     for (const [stepKey, step] of agentSteps) {
       if (stepKey !== key && step.state === 'now') agentSteps.set(stepKey, { ...step, state: 'done' });
     }
@@ -2297,6 +2355,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     syncAgentSteps(headline);
   };
   const finishAgentStep = (key: string, label?: string) => {
+    if (quickConversation && !generationTouchesPreview) return;
     const current = agentSteps.get(key);
     if (!current && !label) return;
     agentSteps.set(key, { label: label || current?.label || key, state: 'done' });
@@ -2304,6 +2363,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const setAssistantWorking = (label: string) => {
     if (assistantHasFinalContent) return;
+    if (quickConversation && !generationTouchesPreview) return;
     setMessageShimmer(status, label);
     if (activeWorkingDetails.length) syncAgentSteps(label);
   };
@@ -2404,8 +2464,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'clarification_required') {
-        commitAssistantText(payload.text || event.message, 'I need one more detail before building.');
-        showClarificationBlock(payload, prompt, requestedMode);
+        commitAssistantText(payload.text || event.message, say('J’ai besoin d’un détail avant d’agir.', 'I need one detail before acting.'));
+        if (!showClarificationActions(status, payload, prompt, requestedMode)) {
+          showClarificationBlock(payload, prompt, requestedMode);
+        }
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for details');
         return;
       }
@@ -2843,7 +2905,7 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
     <div id="clarification-block" style="border:1px solid var(--border-focus, var(--border));background:var(--bg-surface);border-radius:13px;padding:12px;color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.16);">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;">
         <div>
-          <div style="font-size:11px;color:#93c5fd;font-weight:800;margin-bottom:4px;">Clarification needed</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:800;margin-bottom:4px;">One detail needed</div>
           <div style="font-size:13px;line-height:1.45;font-weight:650;">${escapeHtml(question)}</div>
         </div>
         <button type="button" data-action="dismiss" aria-label="Dismiss" style="border:0;background:transparent;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;">&times;</button>
@@ -2851,30 +2913,47 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
         ${choices.map(choice => `<button type="button" data-choice="${escapeHtml(choice)}" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;">${escapeHtml(choice)}</button>`).join('')}
       </div>
-      <textarea data-free-answer placeholder="Answer briefly or choose an option..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
+      <textarea data-free-answer placeholder="Add one precise detail..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:9px;">
-        <button type="button" data-action="recommend" style="height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use recommendation</button>
-        <button type="button" data-action="continue" style="height:30px;border:0;background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Continue</button>
+        ${recommendation ? `<button type="button" data-action="recommend" style="height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use suggestion</button>` : ''}
+        <button type="button" data-action="continue" style="height:30px;border:0;background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Send detail</button>
       </div>
     </div>
   `;
 
-  let selectedAnswer = '';
   host.querySelectorAll('[data-choice]').forEach(button => {
-    button.addEventListener('click', () => {
-      selectedAnswer = (button as HTMLElement).dataset.choice || '';
-      host.querySelectorAll('[data-choice]').forEach(item => ((item as HTMLElement).style.background = 'var(--bg-input)'));
-      (button as HTMLElement).style.background = 'rgba(96,165,250,.28)';
+    button.addEventListener('click', async () => {
+      const selectedAnswer = (button as HTMLElement).dataset.choice || '';
+      await resumeFromClarification(selectedAnswer, originalPrompt, requestedMode);
     });
   });
   host.querySelector('[data-action="dismiss"]')?.addEventListener('click', clearInlineBlocks);
   host.querySelector('[data-action="recommend"]')?.addEventListener('click', async () => {
-    await resumeFromClarification(recommendation || selectedAnswer || choices[0] || 'Use the recommended product structure.', originalPrompt, requestedMode);
+    await resumeFromClarification(recommendation || choices[0] || 'Use the recommended product structure.', originalPrompt, requestedMode);
   });
   host.querySelector('[data-action="continue"]')?.addEventListener('click', async () => {
     const freeAnswer = (host.querySelector('[data-free-answer]') as HTMLTextAreaElement | null)?.value.trim() || '';
-    await resumeFromClarification(freeAnswer || selectedAnswer || recommendation, originalPrompt, requestedMode);
+    await resumeFromClarification(freeAnswer || recommendation, originalPrompt, requestedMode);
   });
+}
+
+function showClarificationActions(card: HTMLElement | null, payload: any, originalPrompt: string, requestedMode: ChatMode) {
+  if (!card) return false;
+  clearInlineBlocks();
+  const choices: string[] = Array.isArray(payload.choices)
+    ? payload.choices.filter((choice: unknown): choice is string => typeof choice === 'string' && choice.trim().length > 0).slice(0, 4)
+    : [];
+  const recommendation = typeof payload.recommendation === 'string' ? payload.recommendation.trim() : '';
+  const actions = choices.length ? choices : (recommendation ? [recommendation] : []);
+  if (!actions.length) return false;
+
+  actions.forEach(choice => {
+    addInlineAction(card, choice, () => {
+      void resumeFromClarification(choice, originalPrompt, requestedMode);
+    });
+  });
+
+  return true;
 }
 
 async function resumeFromClarification(answer: string, originalPrompt: string, requestedMode: ChatMode) {
