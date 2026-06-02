@@ -1,4 +1,5 @@
 import { getVerifiedSession } from './supabase-browser';
+import { createJsonSseParser } from './sse-parser';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -93,25 +94,17 @@ export async function apiStream(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  const parser = createJsonSseParser(onEvent);
 
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop() || '';
-
-    for (const chunk of chunks) {
-      const eventType = chunk.split('\n').find(line => line.startsWith('event:'))?.replace(/^event:\s*/, '').trim() || 'message';
-      const dataLine = chunk.split('\n').find(line => line.startsWith('data:'));
-      if (!dataLine) continue;
-      try {
-        onEvent(eventType, JSON.parse(dataLine.replace(/^data:\s*/, '')));
-      } catch {
-        onEvent('error', { message: 'The AI stream returned a malformed event.' });
-      }
+    if (done) {
+      const tail = decoder.decode();
+      if (tail) parser.push(tail);
+      parser.flush();
+      break;
     }
+
+    parser.push(decoder.decode(value, { stream: true }));
   }
 }

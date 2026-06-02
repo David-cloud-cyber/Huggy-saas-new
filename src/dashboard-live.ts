@@ -39,10 +39,12 @@ type ProjectListResponse = {
 type UserWorkspaceState = {
   last_project_id?: string;
   dashboard_draft_prompt?: string;
-  dashboard_selected_mode?: 'plan' | 'build';
+  dashboard_selected_mode?: DashboardMode;
   theme?: string;
   last_route?: string;
 };
+
+type DashboardMode = 'auto' | 'plan' | 'build';
 
 type AiUsageResponse = {
   success: boolean;
@@ -122,17 +124,17 @@ function showProjectError(message: string) {
   status.textContent = message;
 }
 
-function selectedDashboardMode(): 'plan' | 'build' {
+function selectedDashboardMode(): DashboardMode {
   const root = document.querySelector('.prompt-mode') as HTMLElement | null;
-  return root?.dataset.promptMode === 'plan' ? 'plan' : 'build';
+  return root?.dataset.promptMode === 'plan' ? 'plan' : root?.dataset.promptMode === 'build' ? 'build' : 'auto';
 }
 
-function setDashboardMode(mode: 'plan' | 'build') {
-  const selected = mode === 'plan' ? 'plan' : 'build';
+function setDashboardMode(mode: DashboardMode) {
+  const selected = mode === 'plan' ? 'plan' : mode === 'build' ? 'build' : 'auto';
   const root = document.querySelector('.prompt-mode') as HTMLElement | null;
   const label = document.querySelector('.prompt-mode-label');
   root?.setAttribute('data-prompt-mode', selected);
-  if (label) label.textContent = selected === 'plan' ? 'Plan' : 'Build';
+  if (label) label.textContent = selected === 'plan' ? 'Plan' : selected === 'build' ? 'Build' : 'Auto';
   document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
     option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === selected);
   });

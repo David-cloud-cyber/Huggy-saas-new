@@ -66,6 +66,11 @@ import {
   summarizeResearchForMemory,
   summarizeRunnerForMemory,
 } from './src/services/agent-v3.ts';
+import {
+  GeneratedOutputParseError,
+  extractGeneratedJson,
+  looksLikeStandaloneHtml,
+} from './src/services/generated-output-parser.ts';
 
 dotenv.config();
 
@@ -278,6 +283,7 @@ function diagnoseProviderError(error: any) {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
       OPENROUTER_KEY_INVALID: 'update_openrouter_key',
+      MODEL_OUTPUT_PARSE_FAILED: 'retry_or_use_auto',
       PROVIDER_BAD_REQUEST: 'retry_or_use_auto',
       PROVIDER_QUOTA_OR_BILLING: 'check_openrouter_billing',
       PROVIDER_RATE_LIMITED: 'retry_later',
@@ -288,7 +294,9 @@ function diagnoseProviderError(error: any) {
       PROVIDER_CIRCUIT_OPEN: 'retry_or_use_auto',
     };
     return {
-      message,
+      message: String(error.diagnosticCode) === 'MODEL_OUTPUT_PARSE_FAILED'
+        ? 'Huggy could not safely read the AI output, so the existing app was kept unchanged. Please retry with Auto or ask for a smaller targeted change.'
+        : message,
       diagnostic_code: String(error.diagnosticCode),
       suggested_action: suggestedByCode[String(error.diagnosticCode)] || 'retry_or_use_auto',
       status: Number(error.statusCode || 502),
@@ -516,11 +524,12 @@ type AgentEvent = {
 
 type AgentIntent = 'conversation' | 'clarification_required' | 'plan' | 'build' | 'edit' | 'debug_fix' | 'verify' | 'deploy_assist' | 'external_keys_required' | 'credits_required';
 type AgentNextAction = 'answer' | 'ask_clarification' | 'plan_only' | 'plan_then_build' | 'build' | 'edit' | 'debug_fix' | 'verify' | 'deploy_assist' | 'collect_external_keys' | 'show_upgrade';
+type AgentRequestedMode = 'auto' | 'plan' | 'build';
 
 type IntentDecision = {
   intent: AgentIntent;
   confidence: number;
-  requestedMode: 'plan' | 'build';
+  requestedMode: AgentRequestedMode;
   requiresFileChanges: boolean;
   requiresPreviewRebuild: boolean;
   requiresCredits: boolean;
@@ -536,6 +545,10 @@ type IntentDecision = {
     recommendation: string;
   };
 };
+
+function normalizeRequestedMode(value: any): AgentRequestedMode {
+  return value === 'plan' ? 'plan' : value === 'build' ? 'build' : 'auto';
+}
 
 type PreviewBuildResult = {
   status: 'ready' | 'failed';
@@ -777,10 +790,13 @@ function isSafeProjectFilePath(filePath: string): boolean {
   return !blocked.some(prefix => filePath === prefix || filePath.startsWith(prefix));
 }
 
-function normalizeGeneratedFiles(rawFiles: any): GeneratedFile[] {
+function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean } = {}): GeneratedFile[] {
+  const ensureIndex = options.ensureIndex !== false;
   const entries = Array.isArray(rawFiles)
     ? rawFiles
-    : Object.entries(rawFiles || {}).map(([filePath, content]) => ({ path: filePath, content }));
+    : rawFiles && typeof rawFiles === 'object'
+      ? Object.entries(rawFiles).map(([filePath, content]) => ({ path: filePath, content }))
+      : [];
 
   const files = entries
     .map((entry: any) => ({
@@ -791,7 +807,7 @@ function normalizeGeneratedFiles(rawFiles: any): GeneratedFile[] {
     }))
     .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0);
 
-  if (!files.some(file => file.path === 'index.html')) {
+  if (ensureIndex && !files.some(file => file.path === 'index.html')) {
     files.unshift({
       path: 'index.html',
       content: buildFallbackAppHtml('Generated Huggy app', 'Your app was generated, but no index.html was returned.'),
@@ -1029,11 +1045,16 @@ function buildProjectSeoAudit(project: GeneratedProject, files: GeneratedFile[])
   return auditHtmlSeo(html, files);
 }
 
-function withProjectSeoSupport(files: GeneratedFile[], projectName: string, promptOrDescription = ''): GeneratedFile[] {
+function withProjectSeoSupport(
+  files: GeneratedFile[],
+  projectName: string,
+  promptOrDescription = '',
+  options: { ensureIndex?: boolean } = {},
+): GeneratedFile[] {
   const slug = slugify(projectName || 'huggy-app') || 'huggy-app';
   const baseUrl = `https://huggy.fun/generated/${slug}`;
   const now = new Date().toISOString();
-  const output = normalizeGeneratedFiles(files).map(file => {
+  const output = normalizeGeneratedFiles(files, options).map(file => {
     if (file.path.endsWith('.html')) {
       return {
         ...file,
@@ -1230,7 +1251,8 @@ class AgentOrchestrator {
   decide(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }): IntentDecision {
     const text = input.prompt.trim();
     const lower = text.toLowerCase();
-    const requestedMode = input.requestedMode === 'plan' ? 'plan' : 'build';
+    const requestedMode = normalizeRequestedMode(input.requestedMode);
+    const forceBuild = requestedMode === 'build';
     const words = text.split(/\s+/).filter(Boolean);
     const hasAny = (hints: string[]) => hints.some(hint => lower.includes(hint));
     const decision = (patch: Partial<IntentDecision> & Pick<IntentDecision, 'intent' | 'confidence' | 'userVisibleReason'>): IntentDecision => ({
@@ -1252,7 +1274,7 @@ class AgentOrchestrator {
         requiresCredits: true,
         nextAction: 'plan_only',
         selectedModelPolicy: 'economy',
-        userVisibleReason: 'Plan mode was selected, so Huggy will prepare a plan without touching files.',
+        userVisibleReason: 'Huggy will prepare a plan without touching files.',
       });
     }
 
@@ -1272,9 +1294,13 @@ class AgentOrchestrator {
         nextAction: 'ask_clarification',
         userVisibleReason: 'The request is too short to safely change the app.',
         clarification: {
-          question: 'What should Huggy build first?',
-          choices: ['Landing page', 'SaaS dashboard', 'Auth + database', 'Admin panel'],
-          recommendation: 'Start with the core screen and database needs.',
+          question: isLikelyFrenchPrompt(text) ? 'Quel résultat veux-tu obtenir ?' : 'What outcome do you want?',
+          choices: input.hasFiles
+            ? ['Improve the current app', 'Fix a bug', 'Explain the project', 'Create a new feature']
+            : ['Create a first version', 'Plan the app first', 'Explain what Huggy can do', 'Use a template'],
+          recommendation: input.hasFiles
+            ? 'Tell Huggy what should change or what feels broken.'
+            : 'Describe the app in one sentence, for example: "a restaurant booking app".',
         },
       });
     }
@@ -1341,7 +1367,7 @@ class AgentOrchestrator {
       });
     }
 
-    const wantsBuild = hasAny(buildHints);
+    const wantsBuild = forceBuild || hasAny(buildHints);
     const wantsConversation = hasAny(conversationHints);
     const wantsDebugFix = hasAny(debugHints);
     const wantsVerify = hasAny(verifyHints);
@@ -1350,7 +1376,7 @@ class AgentOrchestrator {
     const wantsComplexWork = hasAny(complexHints) || words.length > 28;
     const wantsEdit = input.hasFiles && hasAny(editHints);
 
-    if (wantsConversation && !wantsBuild) {
+    if (!forceBuild && wantsConversation && !hasAny(buildHints)) {
       return decision({
         intent: 'conversation',
         confidence: 0.86,
@@ -1416,7 +1442,7 @@ class AgentOrchestrator {
     }
 
     const vagueBuildHints = ['app', 'application', 'site', 'dashboard', 'saas', 'projet', 'platforme', 'plateforme'];
-    const isVagueBuild = requestedMode === 'build'
+    const isVagueBuild = (forceBuild || requestedMode === 'auto')
       && !input.hasFiles
       && words.length < 8
       && vagueBuildHints.some(hint => lower.includes(hint))
@@ -1429,14 +1455,16 @@ class AgentOrchestrator {
         nextAction: 'ask_clarification',
         userVisibleReason: 'The request is too broad, so Huggy needs one product decision before writing files.',
         clarification: {
-          question: 'What kind of first version should Huggy create?',
+          question: isLikelyFrenchPrompt(text) ? 'Quel type de première version veux-tu ?' : 'What kind of first version should Huggy create?',
           choices: ['Landing page', 'SaaS dashboard', 'Marketplace', 'Admin panel'],
-          recommendation: 'Choose the closest product type, then Huggy can build a focused first version.',
+          recommendation: isLikelyFrenchPrompt(text)
+            ? 'Choisis le type le plus proche, Huggy construira une première version ciblée.'
+            : 'Choose the closest product type, then Huggy can build a focused first version.',
         },
       });
     }
 
-    if (/(je veux|j'aimerais|i want|i need|build me|make me|cree moi|crée moi)/i.test(text) || wantsBuild) {
+    if (forceBuild || /(je veux|j'aimerais|i want|i need|build me|make me|cree moi|crée moi)/i.test(text) || wantsBuild) {
       return decision({
         intent: input.hasFiles && wantsBuild ? 'edit' : 'build',
         confidence: wantsBuild ? 0.9 : 0.8,
@@ -1457,11 +1485,15 @@ class AgentOrchestrator {
       confidence: 0.58,
       nextAction: 'ask_clarification',
       routingSource: 'fallback',
-      userVisibleReason: 'Huggy needs one more detail before choosing whether to answer, plan or build.',
+      userVisibleReason: 'Huggy needs one more product detail before choosing the safest next step.',
       clarification: {
-        question: 'Do you want Huggy to answer, make a plan, or change the app?',
-        choices: ['Answer only', 'Plan first', 'Build or edit the app'],
-        recommendation: input.hasFiles ? 'Choose Build or edit the app if this should change the current project.' : 'Choose Plan first for a safer app structure.',
+        question: isLikelyFrenchPrompt(text) ? 'Qu’est-ce que tu veux obtenir exactement ?' : 'What should Huggy help you achieve?',
+        choices: input.hasFiles
+          ? ['Improve the current app', 'Fix a bug', 'Explain the project', 'Add a feature']
+          : ['Create a first version', 'Plan the app first', 'Explain the idea', 'Choose a template'],
+        recommendation: input.hasFiles
+          ? 'Point to the screen, behavior, or bug you want Huggy to handle.'
+          : 'Give Huggy the product type and one or two must-have features.',
       },
     });
   }
@@ -1553,6 +1585,7 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
         'Use deploy_assist for domain, DNS, publish, Railway, Vercel or production guidance that does not need file changes.',
         'Set auto_plan_required true for complex or risky work: auth, database, billing, deploy, analytics, SEO, migrations, security, multiple screens, APIs, or refactors.',
         'If the request is too vague, use clarification_required with 2-4 useful choices.',
+        'When requestedMode is auto, choose the natural next action instead of assuming build.',
         'Schema: {"intent":string,"confidence":number,"auto_plan_required":boolean,"selected_model_policy":"economy|balanced|premium","reason":string,"user_visible_reason":string,"clarification":{"question":string,"choices":string[],"recommendation":string},"normalized_prompt":string}.',
       ].join(' '),
     },
@@ -1560,7 +1593,7 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
       role: 'user',
       content: JSON.stringify({
         prompt: input.prompt,
-        requestedMode: input.requestedMode || 'build',
+        requestedMode: normalizeRequestedMode(input.requestedMode),
         hasFiles: input.hasFiles,
         hasLastPlan: Boolean(input.lastPlan),
         fallbackIntent: fallback.intent,
@@ -1600,13 +1633,15 @@ function createPlanResponse(project: GeneratedProject, prompt: string, files: Ge
 
 function createConversationResponse(project: GeneratedProject, prompt: string) {
   if (isGreetingPrompt(prompt)) {
-    return `Bonjour. Je suis prêt à t'aider sur ${project.name}. Dis-moi ce que tu veux créer, modifier, corriger ou analyser, et je m'adapterai au mode Build ou Plan.`;
+    return isLikelyFrenchPrompt(prompt)
+      ? `Bonjour, je suis là. Dis-moi simplement ce que tu veux créer, améliorer ou comprendre dans ${project.name}, et je choisirai la bonne façon d’avancer.`
+      : `Hi, I’m here. Tell me what you want to create, improve, or understand in ${project.name}, and I’ll choose the right next step.`;
   }
   if (isLikelyFrenchPrompt(prompt)) {
     return [
-      `Je peux t'aider sur ${project.name}.`,
+      `Je peux t’aider sur ${project.name}.`,
       '',
-      'Je n’ai rien modifié pour ce message. Si tu veux, je peux répondre simplement, préparer un plan, corriger un bug ou lancer un build selon ton intention.',
+      'Je n’ai rien modifié. Donne-moi le résultat que tu veux obtenir et je m’occupe de choisir entre expliquer, planifier, corriger ou construire.',
       '',
       `Demande reçue : ${prompt}`,
     ].join('\n');
@@ -1614,7 +1649,7 @@ function createConversationResponse(project: GeneratedProject, prompt: string) {
   return [
     `I can help with ${project.name}.`,
     '',
-    'I did not change files for this message. I can answer, plan, fix a bug, or build when your request needs implementation.',
+    'I did not change files. Tell me the outcome you want and I’ll decide whether to explain, plan, fix, or build.',
     '',
     `Request received: ${prompt}`,
   ].join('\n');
@@ -1661,6 +1696,25 @@ function summarizeProjectFilesForAgent(files: GeneratedFile[]) {
     .slice(0, 18)
     .map(file => `${file.path} (${file.language || 'text'}, ${file.content.length} chars)`)
     .join('\n') || 'No generated files yet.';
+}
+
+function buildExistingFilesContextForGeneration(files: GeneratedFile[]) {
+  if (!files.length) return 'No existing files yet.';
+  const important = [...files].sort((a, b) => {
+    const score = (file: GeneratedFile) => file.path === 'index.html' ? 0 : file.path.endsWith('.css') ? 1 : file.path.endsWith('.js') ? 2 : 3;
+    return score(a) - score(b) || a.path.localeCompare(b.path);
+  });
+  let budget = 85_000;
+  const chunks: string[] = [];
+  for (const file of important.slice(0, 18)) {
+    if (budget <= 0) break;
+    const header = `--- ${file.path} (${file.language || 'text'}) ---`;
+    const content = String(file.content || '');
+    const slice = content.length > budget ? content.slice(0, budget) : content;
+    chunks.push(`${header}\n${slice}${content.length > slice.length ? '\n...[truncated]' : ''}`);
+    budget -= slice.length + header.length;
+  }
+  return chunks.join('\n\n') || summarizeProjectFilesForAgent(files);
 }
 
 function agentTextModel(modelId: unknown) {
@@ -2106,6 +2160,7 @@ async function generateFilesWithAi(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
+  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
 
   const result = await providerGateway.chat(selectedModel, [
@@ -2115,7 +2170,11 @@ async function generateFilesWithAi(input: {
         'You are Huggy, a senior fullstack app generator.',
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
+        'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        input.existingFiles.length
+          ? 'This is an iteration on an existing app. Preserve the existing app and return only complete contents for files that must be created or updated. If you modify UI text, colors, sizing, layout or behavior in index.html, return the full updated index.html. Never return a placeholder or fallback index.html.'
+          : 'This is a new app. Return a complete index.html.',
         'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
         'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
@@ -2129,23 +2188,16 @@ async function generateFilesWithAi(input: {
         projectName: input.projectName,
         prompt: input.prompt,
         existingFiles: fileManifest || 'No existing files yet.',
+        existingFilesContent,
         uiGenerationPolicy: uiPolicy.userContext,
       }),
     },
   ], { maxAttempts: 1, timeoutMs: 90_000 });
 
-  const cleaned = result.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-  let parsed: any;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    parsed = {
-      summary: 'The model returned non-JSON output, so Huggy wrapped it in a safe preview page.',
-      files: [{ path: 'index.html', content: buildFallbackAppHtml(input.projectName, result.text), language: 'html' }],
-    };
-  }
-
-  const files = withProjectSeoSupport(normalizeGeneratedFiles(parsed.files), input.projectName, input.prompt);
+  const parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
+    hasExistingFiles: input.existingFiles.length > 0,
+  });
+  const files = parsed.files;
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
@@ -2168,6 +2220,7 @@ function buildGenerationMessages(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
+  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
 
   return [
@@ -2177,7 +2230,11 @@ function buildGenerationMessages(input: {
         'You are Huggy, a senior fullstack app generator.',
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
+        'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
         'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        input.existingFiles.length
+          ? 'This is an iteration on an existing app. Use existingFilesContent as the source of truth, preserve the app, and return only complete contents for files that must be created or updated. If the requested change touches visible UI in index.html, return the full updated index.html. Never return a placeholder or fallback index.html.'
+          : 'This is a new app. Return a complete index.html.',
         'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
         'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
@@ -2192,6 +2249,7 @@ function buildGenerationMessages(input: {
         projectName: input.projectName,
         prompt: input.prompt,
         existingFiles: fileManifest || 'No existing files yet.',
+        existingFilesContent,
         uiGenerationPolicy: uiPolicy.userContext,
         researchContext: input.researchContext || undefined,
       }),
@@ -2199,19 +2257,40 @@ function buildGenerationMessages(input: {
   ];
 }
 
-function parseGeneratedOutput(projectName: string, rawText: string, promptOrDescription = '') {
-  const cleaned = rawText.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-  let parsed: any;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    parsed = {
-      summary: 'The model returned non-JSON output, so Huggy wrapped it in a safe preview page.',
-      files: [{ path: 'index.html', content: buildFallbackAppHtml(projectName, rawText), language: 'html' }],
-    };
+function parseGeneratedOutput(
+  projectName: string,
+  rawText: string,
+  promptOrDescription = '',
+  options: { hasExistingFiles?: boolean } = {},
+) {
+  const parsed = extractGeneratedJson(rawText) || (
+    looksLikeStandaloneHtml(rawText)
+      ? {
+          summary: 'Generated a complete HTML preview.',
+          files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
+        }
+      : null
+  );
+  if (!parsed) {
+    throw new GeneratedOutputParseError();
   }
 
-  const files = withProjectSeoSupport(normalizeGeneratedFiles(parsed.files), projectName, promptOrDescription || projectName);
+  const rawFiles = parsed.files || (parsed.html
+    ? [{ path: 'index.html', content: String(parsed.html), language: 'html' }]
+    : null);
+  if (!rawFiles) {
+    throw new GeneratedOutputParseError('Huggy could not find generated files in the AI output, so the existing app was kept unchanged.');
+  }
+
+  const files = withProjectSeoSupport(
+    normalizeGeneratedFiles(rawFiles, { ensureIndex: !options.hasExistingFiles }),
+    projectName,
+    promptOrDescription || projectName,
+    { ensureIndex: !options.hasExistingFiles },
+  );
+  if (!files.length) {
+    throw new GeneratedOutputParseError('Huggy could not find any safe generated files, so the existing app was kept unchanged.');
+  }
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
@@ -2219,6 +2298,7 @@ function parseGeneratedOutput(projectName: string, rawText: string, promptOrDesc
   return {
     files,
     summary: String(parsed.summary || 'Application files generated.'),
+    backendSchema: parsed.backendSchema ? String(parsed.backendSchema) : '',
   };
 }
 
@@ -2794,8 +2874,8 @@ async function listAgentEventsPage(projectId: string, limitValue: any, beforeVal
   return (data || []).reverse();
 }
 
-function normalizeWorkspaceMode(value: any): 'plan' | 'build' {
-  return value === 'plan' ? 'plan' : 'build';
+function normalizeWorkspaceMode(value: any): AgentRequestedMode {
+  return normalizeRequestedMode(value);
 }
 
 function normalizeWorkspaceTab(value: any): 'preview' | 'code' | 'database' | 'analysis' {
@@ -3793,7 +3873,7 @@ app.post('/api/projects', async (req: any, res: any) => {
       last_project_id: project.id,
       dashboard_draft_prompt: '',
       builder_draft_prompt: '',
-      builder_selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+      builder_selected_mode: normalizeRequestedMode(req.body?.requestedMode || req.body?.mode),
       builder_selected_model: project.model_id,
       builder_active_tab: 'preview',
       builder_preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
@@ -3801,7 +3881,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     });
     await upsertProjectWorkspaceState(userId, project.id, {
       draft_prompt: '',
-      selected_mode: req.body?.requestedMode || req.body?.mode || 'build',
+      selected_mode: normalizeRequestedMode(req.body?.requestedMode || req.body?.mode),
       selected_model: project.model_id,
       active_tab: 'preview',
       preview_device: req.body?.preview_device || req.body?.previewDevice || 'desktop',
@@ -3941,7 +4021,7 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
     prompt: String(req.body?.prompt || ''),
-    requestedMode: req.body?.requestedMode || 'build',
+    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: files.length > 0,
     lastPlan,
   });
@@ -3980,13 +4060,13 @@ app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
     role: 'user',
     content: `Clarification: ${finalAnswer}`,
     intent: 'clarification_required',
-    requested_mode: req.body?.requestedMode === 'plan' ? 'plan' : 'build',
+    requested_mode: normalizeRequestedMode(req.body?.requestedMode),
   });
 
   res.json({
     success: true,
     prompt: resumedPrompt,
-    requestedMode: req.body?.requestedMode === 'plan' ? 'plan' : 'build',
+    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
   });
 });
 
@@ -4011,7 +4091,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
     prompt,
-    requestedMode: req.body?.requestedMode || 'build',
+    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
@@ -4131,7 +4211,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
     generation.files.forEach(file => mergedByPath.set(file.path, file));
-    const files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+    const files = withProjectSeoSupport(
+      Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path)),
+      project.name,
+      prompt,
+      { ensureIndex: true },
+    );
 
     let pipeline = runPreviewPipeline(project, files);
     let finalFiles = files;
@@ -4347,7 +4432,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
     prompt,
-    requestedMode: req.body?.requestedMode || 'build',
+    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
@@ -4588,12 +4673,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
 
     await send('build_started', 'Normalizing generated files and building preview.', {});
-    const parsed = parseGeneratedOutput(project.name, generatedText, prompt);
+    const parsed = parseGeneratedOutput(project.name, generatedText, prompt, { hasExistingFiles: existingFiles.length > 0 });
 
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
     parsed.files.forEach(file => mergedByPath.set(file.path, file));
-    let files = Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+    let files = withProjectSeoSupport(
+      Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path)),
+      project.name,
+      prompt,
+      { ensureIndex: true },
+    );
     await send('files_changed', 'Generated files were merged into the project.', { diff: diffFiles(existingFiles, files) });
     await send('preview_building', 'Building preview sandbox.', {});
     let pipeline = runPreviewPipeline(project, files);

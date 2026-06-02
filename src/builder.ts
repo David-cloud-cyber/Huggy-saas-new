@@ -312,7 +312,7 @@ function initBuilder() {
   const currentModeLabelUI = document.getElementById('current-mode-label-ui');
   const modeDotIndicator = document.getElementById('mode-dot-indicator');
   const modeOptions = document.querySelectorAll('.mode-opt');
-  let currentMode = 'build';
+  let currentMode = 'auto';
 
   modeSelectWrap?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -326,7 +326,8 @@ function initBuilder() {
   modeOptions.forEach(opt => {
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
-      const mode = (opt as HTMLElement).dataset.mode || 'build';
+      const rawMode = (opt as HTMLElement).dataset.mode;
+      const mode = rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto';
       currentMode = mode;
       
       modeOptions.forEach(o => o.classList.remove('active'));

@@ -2164,7 +2164,7 @@
         <div class="sidebar-scroll-area" id="sidebar-scroll-area">
           <div class="sidebar-empty-state" id="chat-empty-state">
             <h3>Chat ready</h3>
-            <p>Your real project conversation and agent events will appear here after synchronization. Use Plan to think or Build to generate files.</p>
+            <p>Your real project conversation and agent events will appear here after synchronization. Auto lets Huggy decide whether to answer, plan, fix or build.</p>
           </div>
         </div>
 
@@ -2201,11 +2201,12 @@
                         </svg>
                     </div>
                     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-                            <span id="chat-mode-label">Build</span><span style="font-size:9px;opacity:.62;">v</span>
+                        <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+                            <span id="chat-mode-label">Auto</span><span style="font-size:9px;opacity:.62;">v</span>
                         </button>
-                        <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
-                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+                        <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:218px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
+                            <button type="button" data-chat-mode="auto" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Auto <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Let Huggy choose the right action</span></button>
+                            <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
                             <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
                         </div>
                     </div>
@@ -2301,7 +2302,7 @@
               <div class="explorer-tree-scroll">
                 <div class="code-empty-state" style="margin:8px;">
                   <h3>No files yet</h3>
-                  <p>Use Build to generate project files. Real files from your backend will appear here.</p>
+                  <p>Ask Huggy for an app, feature, or fix. Generated files from your backend will appear here.</p>
                 </div>
               </div>
             </div>

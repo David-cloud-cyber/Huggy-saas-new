@@ -78,7 +78,8 @@ function init() {
         const promptModeBtn = wrapper.querySelector('.prompt-mode-btn') as HTMLButtonElement | null;
         const promptModeLabel = wrapper.querySelector('.prompt-mode-label') as HTMLSpanElement | null;
         const promptModeOptions = wrapper.querySelectorAll('[data-prompt-mode-option]');
-        let selectedPromptMode: 'build' | 'plan' = 'build';
+        type PromptMode = 'auto' | 'build' | 'plan';
+        let selectedPromptMode: PromptMode = 'auto';
         
         const btnSearch = wrapper.querySelector('#btn-search, .btn-search, button[data-tooltip="Search snippets"]') as HTMLButtonElement | null;
 
@@ -99,18 +100,18 @@ function init() {
             }
         }
 
-        function setPromptMode(mode: 'build' | 'plan') {
-            selectedPromptMode = mode;
+        function setPromptMode(mode: PromptMode) {
+            selectedPromptMode = mode === 'plan' ? 'plan' : mode === 'build' ? 'build' : 'auto';
             promptModeRoot?.classList.remove('open');
-            if (promptModeRoot) promptModeRoot.dataset.promptMode = mode;
+            if (promptModeRoot) promptModeRoot.dataset.promptMode = selectedPromptMode;
             if (promptModeBtn) promptModeBtn.setAttribute('aria-expanded', 'false');
-            if (promptModeLabel) promptModeLabel.textContent = mode === 'plan' ? 'Plan' : 'Build';
+            if (promptModeLabel) promptModeLabel.textContent = selectedPromptMode === 'plan' ? 'Plan' : selectedPromptMode === 'build' ? 'Build' : 'Auto';
             promptModeOptions.forEach(option => {
-                option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === mode);
+                option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === selectedPromptMode);
             });
         }
 
-        setPromptMode('build');
+        setPromptMode('auto');
 
         promptModeBtn?.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -122,7 +123,8 @@ function init() {
         promptModeOptions.forEach(option => {
             option.addEventListener('click', (event) => {
                 event.stopPropagation();
-                const mode = (option as HTMLElement).dataset.promptModeOption === 'plan' ? 'plan' : 'build';
+                const rawMode = (option as HTMLElement).dataset.promptModeOption;
+                const mode: PromptMode = rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto';
                 setPromptMode(mode);
             });
         });

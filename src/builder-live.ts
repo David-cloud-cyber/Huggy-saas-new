@@ -10,6 +10,10 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
+import { mountBuilderConversation, type HuggyConversationApi } from './builder-conversation-island';
+
+type ChatMode = 'auto' | 'plan' | 'build';
+type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 
 type GeneratedFile = {
   path: string;
@@ -44,7 +48,7 @@ type ProjectPayload = {
 
 type WorkspaceState = {
   draft_prompt?: string;
-  selected_mode?: 'plan' | 'build';
+  selected_mode?: ChatMode;
   selected_model?: string;
   active_tab?: 'preview' | 'code' | 'database' | 'analysis';
   sidebar_width?: number;
@@ -54,7 +58,7 @@ type WorkspaceState = {
 type UserWorkspaceState = {
   last_project_id?: string;
   builder_draft_prompt?: string;
-  builder_selected_mode?: 'plan' | 'build';
+  builder_selected_mode?: ChatMode;
   builder_selected_model?: string;
   builder_active_tab?: 'preview' | 'code' | 'database' | 'analysis';
   builder_preview_device?: PreviewDevice;
@@ -130,11 +134,11 @@ let stopRequested = false;
 let workingTimer: number | null = null;
 let activeWorkingCard: HTMLElement | null = null;
 let activeWorkingLabel = 'Thinking';
-let selectedChatMode: 'plan' | 'build' = 'build';
+let selectedChatMode: ChatMode = 'auto';
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
 let currentProjectName = 'Untitled app';
-let initialBuilderHandoff: { prompt: string; mode: 'plan' | 'build' } | null = null;
+let initialBuilderHandoff: { prompt: string; mode: ChatMode } | null = null;
 let analysisPollTimer: number | null = null;
 let analysisRange = '30d';
 let projectWorkspaceState: WorkspaceState | null = null;
@@ -143,6 +147,7 @@ let workspaceSaveTimer: number | null = null;
 let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
+let conversationApi: HuggyConversationApi | null = null;
 
 function escapeHtml(value: string): string {
   return value
@@ -315,6 +320,14 @@ body {
   color: var(--text);
   font-weight: 760;
 }
+.working .shining-text {
+  color: transparent;
+  background-image: linear-gradient(110deg,#404040 0%,#404040 35%,#fff 50%,#404040 75%,#404040 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: preview-shine 2s linear infinite;
+}
 .working .pulse { animation: pulse 1.4s cubic-bezier(.22,1,.36,1) infinite; }
 .working .connector::after,
 .working .connector.vertical::after {
@@ -355,6 +368,10 @@ body {
   .working .block::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.13), transparent); }
 }
 @keyframes shimmer { to { transform: translateX(100%); } }
+@keyframes preview-shine {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
 @keyframes flow { to { transform: translateX(100%); } }
 @keyframes flowY { to { transform: translateY(100%); } }
 @keyframes pulse {
@@ -406,7 +423,7 @@ body {
       <div class="tile-label"><span class="dot"></span>Preview</div>
       <div class="blocks"><span class="block"></span><span class="block"></span><span class="block"></span></div>
     </section>
-    <div class="status" role="status" aria-live="polite"><span class="dot"></span><strong>${status}</strong></div>
+    <div class="status" role="status" aria-live="polite"><span class="dot"></span><strong class="shining-text">${status}</strong></div>
   </main>
 </body>
 </html>`;
@@ -441,7 +458,7 @@ function getInitialBuilderHandoff() {
   const rawMode = sessionStorage.getItem('huggy-requested-mode');
   initialBuilderHandoff = {
     prompt: sessionPrompt || legacyPrompt,
-    mode: rawMode === 'plan' ? 'plan' : 'build',
+    mode: rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto',
   };
   sessionStorage.removeItem('huggy-initial-prompt');
   sessionStorage.removeItem('huggy-requested-mode');
@@ -606,6 +623,25 @@ function chatScroll() {
   return document.getElementById('sidebar-scroll-area');
 }
 
+function ensureConversationApi() {
+  if (conversationApi) return conversationApi;
+  const scroll = chatScroll();
+  if (!scroll) return null;
+  conversationApi = mountBuilderConversation(scroll);
+  return conversationApi;
+}
+
+function createMessageHandle(messageId: string): MessageHandle {
+  const handle = document.createElement('div') as MessageHandle;
+  handle.__huggyMessageId = messageId;
+  handle.dataset.messageId = messageId;
+  return handle;
+}
+
+function messageHandleId(card: HTMLElement | null | undefined) {
+  return (card as MessageHandle | null)?.__huggyMessageId || card?.dataset.messageId || '';
+}
+
 function formatWorkingDuration(ms: number) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -729,6 +765,12 @@ function clearInlineBlocks() {
 
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
   ensureChatShimmerStyle();
+  const api = ensureConversationApi();
+  if (api) {
+    const id = api.addMessage({ role: kind, content: body });
+    return createMessageHandle(id);
+  }
+
   const scroll = chatScroll();
   if (!scroll) return null;
 
@@ -747,6 +789,10 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
 function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
   if (!card) return;
   ensureChatShimmerStyle();
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    conversationApi.setWorking(id, label);
+  }
   card.classList.add('message-card-shimmer');
   card.setAttribute('aria-busy', 'true');
   if (isGenerating) {
@@ -764,17 +810,29 @@ function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
 function clearMessageShimmer(card: HTMLElement | null) {
   if (!card) return;
   stopWorkingTimer(card);
+  const id = messageHandleId(card);
+  if (id && conversationApi) conversationApi.clearWorking(id);
   card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
 }
 
 function updateMessage(card: HTMLElement | null, body: string) {
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    conversationApi.updateMessage(id, body);
+    return;
+  }
   const paragraph = card?.querySelector('.msg-body-paragraph');
   if (paragraph) paragraph.textContent = body;
 }
 
 function addInlineAction(card: HTMLElement | null, label: string, action: () => void) {
   if (!card) return;
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    conversationApi.addAction(id, label, action);
+    return;
+  }
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
@@ -947,7 +1005,7 @@ function renderFiles(files: GeneratedFile[]) {
       tree.innerHTML = `
         <div class="code-empty-state" style="margin:8px;">
           <h3>No files yet</h3>
-          <p>Use Build to generate project files. Real files from your backend will appear here.</p>
+          <p>Ask Huggy for an app, feature, or fix. Generated files from your backend will appear here.</p>
         </div>
       `;
     }
@@ -1763,30 +1821,36 @@ function ensurePlanBuildControls() {
   if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
   submitWrapper.insertAdjacentHTML('beforebegin', `
     <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Plan or Build" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-        <span id="chat-mode-label">Build</span><span style="font-size:10px;opacity:.62;">v</span>
+      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
+        <span id="chat-mode-label">Auto</span><span style="font-size:10px;opacity:.62;">v</span>
       </button>
-      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:206px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
-        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
+      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:218px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
+        <button type="button" data-chat-mode="auto" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Auto <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Let Huggy choose the right action</span></button>
+        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
         <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
       </div>
     </div>
   `);
 }
 
-function setChatMode(mode: 'plan' | 'build') {
-  selectedChatMode = mode;
+function setChatMode(mode: ChatMode) {
+  selectedChatMode = mode === 'plan' ? 'plan' : mode === 'build' ? 'build' : 'auto';
   const label = document.getElementById('chat-mode-label');
   const button = document.getElementById('btn-chat-mode') as HTMLButtonElement | null;
   const menu = document.getElementById('chat-mode-menu');
-  if (label) label.textContent = mode === 'plan' ? 'Plan' : 'Build';
+  if (label) label.textContent = selectedChatMode === 'plan' ? 'Plan' : selectedChatMode === 'build' ? 'Build' : 'Auto';
   if (button) {
-    button.style.background = mode === 'plan' ? 'var(--accent-hover)' : 'transparent';
-    button.style.color = mode === 'plan' ? 'var(--blue, var(--accent))' : 'var(--text)';
+    button.style.background = selectedChatMode === 'auto' ? 'transparent' : 'var(--accent-hover)';
+    button.style.color = selectedChatMode === 'plan' ? 'var(--blue, var(--accent))' : 'var(--text)';
     button.setAttribute('aria-expanded', 'false');
   }
+  document.querySelectorAll<HTMLElement>('[data-chat-mode]').forEach(option => {
+    const active = option.dataset.chatMode === selectedChatMode;
+    option.style.background = active ? 'var(--accent-hover, rgba(9,9,11,.08))' : 'transparent';
+    option.style.color = active ? 'var(--text)' : 'var(--text-muted)';
+  });
   if (menu) menu.style.display = 'none';
-  scheduleWorkspaceSave({ selected_mode: mode });
+  scheduleWorkspaceSave({ selected_mode: selectedChatMode });
 }
 
 function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis') {
@@ -2034,7 +2098,7 @@ async function loadProject() {
       if (userWorkspaceState) {
         applyWorkspaceState({
           draft_prompt: userWorkspaceState.builder_draft_prompt || '',
-          selected_mode: userWorkspaceState.builder_selected_mode || 'build',
+          selected_mode: userWorkspaceState.builder_selected_mode || 'auto',
           selected_model: userWorkspaceState.builder_selected_model || 'auto',
           active_tab: userWorkspaceState.builder_active_tab || 'preview',
           preview_device: userWorkspaceState.builder_preview_device || 'desktop',
@@ -2054,7 +2118,7 @@ async function loadProject() {
     const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
     if (activeTab) activateBuilderView(activeTab);
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
-    updateMessage(loading, 'Project synchronized. Use Plan to think, or Build to update the app.');
+    updateMessage(loading, 'Project synchronized. Auto is ready to answer, plan, fix or build from your next message.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
   }
@@ -2074,7 +2138,7 @@ function restoreMessages(payload: ProjectPayload) {
   });
 }
 
-async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build', useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
+async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   if (isGenerating || !prompt.trim()) return;
   stopRequested = false;
   setBusy(true);
@@ -2082,14 +2146,28 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
   clearInlineBlocks();
 
   appendMessage('user', displayText);
-  const status = appendMessage('assistant', requestedMode === 'plan' ? 'Planning' : 'Thinking');
-  setMessageShimmer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
-  startWorkingTimer(status, requestedMode === 'plan' ? 'Planning' : 'Thinking');
-  if (requestedMode === 'build') {
+  const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
+  const status = appendMessage('assistant', initialLabel);
+  setMessageShimmer(status, initialLabel);
+  startWorkingTimer(status, initialLabel);
+  let generationTouchesPreview = requestedMode === 'build';
+  if (generationTouchesPreview) {
     activateBuilderView('preview');
     setEmptyPreviewState('working', 'Thinking');
   }
   let streamedText = '';
+  let assistantHasFinalContent = false;
+  const setAssistantWorking = (label: string) => {
+    if (assistantHasFinalContent) return;
+    setMessageShimmer(status, label);
+  };
+  const commitAssistantText = (content: unknown, fallback = 'Done.') => {
+    const text = String(content || '').trim() || fallback;
+    clearMessageShimmer(status);
+    assistantHasFinalContent = true;
+    streamedText = text;
+    updateMessage(status, text);
+  };
   try {
     await ensureProjectForPrompt(prompt);
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
@@ -2105,19 +2183,24 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
       if (eventType === 'token') {
         clearMessageShimmer(status);
         streamedText += event.message || '';
+        assistantHasFinalContent = true;
         updateMessage(status, streamedText || 'Streaming code generation...');
         return;
       }
       if (eventType === 'agent_thinking' || eventType === 'intent_detected') {
-        setMessageShimmer(status, eventType === 'intent_detected' ? 'Thinking' : 'Thinking');
-        if (requestedMode === 'build') setEmptyPreviewState('working', 'Thinking');
+        setAssistantWorking('Thinking');
+        if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
+          generationTouchesPreview = true;
+          activateBuilderView('preview');
+          setEmptyPreviewState('working', 'Thinking');
+        }
         return;
       }
       if (eventType === 'working_tick') {
         const elapsed = Number(payload.elapsed_seconds || 0);
         if (elapsed >= 30) {
-          setMessageShimmer(status, 'Still working');
-          if (requestedMode === 'build') setEmptyPreviewState('working', 'Still working');
+          setAssistantWorking('Still working');
+          if (generationTouchesPreview) setEmptyPreviewState('working', 'Still working');
         }
         return;
       }
@@ -2129,44 +2212,46 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
             : eventType === 'tool_loop_started'
               ? 'Thinking'
               : 'Thinking';
-        setMessageShimmer(status, label);
-        if (requestedMode === 'build') setEmptyPreviewState('working', label);
+        setAssistantWorking(label);
+        if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'research_result' || eventType === 'research_skipped') {
-        setMessageShimmer(status, eventType === 'research_result' ? 'Researching' : 'Thinking');
-        if (requestedMode === 'build') setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
+        setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Thinking');
+        if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
         return;
       }
       if (eventType === 'plan_ready' || eventType === 'answering') {
-        clearMessageShimmer(status);
-        updateMessage(status, payload.text || event.message || '');
+        const text = payload.text || event.message || '';
+        if (eventType === 'plan_ready' && payload.auto_plan_required) {
+          clearMessageShimmer(status);
+          updateMessage(status, String(text || 'Plan ready. Starting the build...'));
+        } else {
+          commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
+        }
         if (eventType === 'plan_ready' && !payload.auto_plan_required) {
           lastPlan = payload.text || event.message || '';
           addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
         }
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready for build');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready for build');
         return;
       }
       if (eventType === 'clarification_required') {
-        clearMessageShimmer(status);
-        updateMessage(status, payload.text || event.message || 'I need one more detail before building.');
+        commitAssistantText(payload.text || event.message, 'I need one more detail before building.');
         showClarificationBlock(payload, prompt, requestedMode);
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Waiting for details');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for details');
         return;
       }
       if (eventType === 'credits_insufficient') {
-        clearMessageShimmer(status);
-        updateMessage(status, 'Upgrade required.');
+        commitAssistantText('Upgrade required.');
         showCreditsModal();
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
       if (eventType === 'external_api_keys_required') {
-        clearMessageShimmer(status);
-        updateMessage(status, 'External API keys are needed or can be skipped.');
+        commitAssistantText('External API keys are needed or can be skipped.');
         showApiKeyModal(payload.requirements || []);
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Waiting for keys');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for keys');
         return;
       }
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
@@ -2182,46 +2267,48 @@ async function generateFromPrompt(prompt: string, requestedMode: 'plan' | 'build
               : eventType === 'auto_fix_started' || eventType === 'patch_applied'
                 ? 'Fixing'
                 : 'Thinking';
-        setMessageShimmer(status, label);
-        if (requestedMode === 'build') setEmptyPreviewState('working', label);
+        setAssistantWorking(label);
+        generationTouchesPreview = true;
+        setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'preview_ready') {
-        clearMessageShimmer(status);
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
         const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
-        updateMessage(status, `${event.message || 'Application generated and preview updated.'}${diff}`);
+        commitAssistantText(`${event.message || 'Application generated and preview updated.'}${diff}`, 'Preview ready.');
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }
       if (eventType === 'cancelled') {
-        clearMessageShimmer(status);
-        updateMessage(status, event.message || 'Generation stopped.');
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Generation stopped');
+        commitAssistantText(event.message || 'Generation stopped.');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Generation stopped');
         setBusy(false);
         return;
       }
       if (eventType === 'done') {
-        clearMessageShimmer(status);
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
+        if (!assistantHasFinalContent) {
+          commitAssistantText(event.message || (generationTouchesPreview ? 'Done. Preview is ready.' : 'Done.'));
+        } else {
+          clearMessageShimmer(status);
+        }
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         setBusy(false);
       }
       if (eventType === 'error') {
-        clearMessageShimmer(status);
-        updateMessage(status, formatAgentErrorMessage(event));
-        if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
+        commitAssistantText(formatAgentErrorMessage(event), 'Generation failed.');
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
       }
     }, activeAbort.signal);
   } catch (error) {
     clearMessageShimmer(status);
     if ((error as Error).name === 'AbortError') {
       updateMessage(status, stopRequested ? 'Generation stopped.' : 'Build cancelled.');
-      if (requestedMode === 'build') setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
+      if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       updateMessage(status, error instanceof Error ? error.message : 'Generation failed.');
-      if (requestedMode === 'build') setEmptyPreviewState('idle', 'Ready when you are');
+      if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
     setBusy(false);
@@ -2547,7 +2634,7 @@ async function loadAnalysis(silent = false) {
   }
 }
 
-function showClarificationBlock(payload: any, originalPrompt: string, requestedMode: 'plan' | 'build') {
+function showClarificationBlock(payload: any, originalPrompt: string, requestedMode: ChatMode) {
   const host = ensureInlineBlockHost();
   const question = payload.question || 'What should Huggy focus on first?';
   const choices: string[] = Array.isArray(payload.choices)
@@ -2592,10 +2679,10 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
   });
 }
 
-async function resumeFromClarification(answer: string, originalPrompt: string, requestedMode: 'plan' | 'build') {
+async function resumeFromClarification(answer: string, originalPrompt: string, requestedMode: ChatMode) {
   if (!answer.trim()) return;
   clearInlineBlocks();
-  const response = await apiFetch<{ prompt: string; requestedMode?: 'plan' | 'build' }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/answer`, {
+  const response = await apiFetch<{ prompt: string; requestedMode?: ChatMode }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/answer`, {
     method: 'POST',
     body: JSON.stringify({ answer, originalPrompt, requestedMode, recommendation: answer }),
   });
@@ -2713,7 +2800,7 @@ function bindChat() {
   submit.style.cursor = 'pointer';
   syncSubmitButtonState();
 
-  const send = (mode: 'plan' | 'build') => {
+  const send = (mode: ChatMode) => {
     if (isGenerating) return;
     const value = input.value.trim();
     if (!value) return;
@@ -2761,7 +2848,8 @@ function bindChat() {
   document.querySelectorAll('[data-chat-mode]').forEach(option => {
     option.addEventListener('click', (event) => {
       event.preventDefault();
-      const mode = (option as HTMLElement).dataset.chatMode === 'plan' ? 'plan' : 'build';
+      const rawMode = (option as HTMLElement).dataset.chatMode;
+      const mode: ChatMode = rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto';
       setChatMode(mode);
     });
   });
@@ -2847,6 +2935,7 @@ function ensureResizableSidebar() {
 function init() {
   initHuggyMotion();
   ensureSettingsPanel();
+  ensureConversationApi();
   normalizeAiChatInputs();
   ensureToolbar();
   void ensureModelSelector();
