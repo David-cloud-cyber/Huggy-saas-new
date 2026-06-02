@@ -3123,20 +3123,46 @@ async function writeCreditWalletBalance(client: any, orgId: string, next: number
   const columns = preferredColumn
     ? [preferredColumn, ...CREDIT_BALANCE_COLUMNS, ...CREDIT_BUCKET_COLUMNS].filter((column, index, all) => all.indexOf(column) === index)
     : [...CREDIT_BALANCE_COLUMNS, ...CREDIT_BUCKET_COLUMNS];
+  const existingWallet = await readCreditWalletRow(client, orgId);
   for (const column of columns) {
-    const row: Record<string, any> = {
-      organization_id: orgId,
+    const patch: Record<string, any> = {
       [column]: next,
       updated_at: new Date().toISOString(),
     };
-    let { error } = await client.from('credit_wallets').upsert([row], { onConflict: 'organization_id' });
+    let error: any = null;
+    if (existingWallet) {
+      let result = await client.from('credit_wallets').update(patch).eq('organization_id', orgId);
+      error = result.error;
+      if (error && /updated_at/i.test(error.message || '') && isSchemaShapeError(error)) {
+        delete patch.updated_at;
+        result = await client.from('credit_wallets').update(patch).eq('organization_id', orgId);
+        error = result.error;
+      }
+    } else {
+      const row: Record<string, any> = { organization_id: orgId, ...patch };
+      let result = await client.from('credit_wallets').insert([row]);
+      error = result.error;
+      if (error && /updated_at/i.test(error.message || '') && isSchemaShapeError(error)) {
+        delete row.updated_at;
+        result = await client.from('credit_wallets').insert([row]);
+        error = result.error;
+      }
+      if (error && /duplicate key|unique constraint/i.test(error.message || '')) {
+        const retryPatch = { ...patch };
+        let retry = await client.from('credit_wallets').update(retryPatch).eq('organization_id', orgId);
+        error = retry.error;
+        if (error && /updated_at/i.test(error.message || '') && isSchemaShapeError(error)) {
+          delete retryPatch.updated_at;
+          retry = await client.from('credit_wallets').update(retryPatch).eq('organization_id', orgId);
+          error = retry.error;
+        }
+      }
+    }
     if (error && /updated_at/i.test(error.message || '') && isSchemaShapeError(error)) {
-      delete row.updated_at;
-      const retry = await client.from('credit_wallets').upsert([row], { onConflict: 'organization_id' });
-      error = retry.error;
+      continue;
     }
     if (!error) return column;
-    if (isSchemaShapeError(error) || /no unique|conflict/i.test(error.message || '')) continue;
+    if (isSchemaShapeError(error)) continue;
     throw new Error(`Credit wallet update failed: ${error.message}`);
   }
   throw new Error('Credit wallet update failed: no compatible balance column found.');
