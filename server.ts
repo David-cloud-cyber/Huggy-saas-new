@@ -488,6 +488,7 @@ type GeneratedProject = {
   id: string;
   owner_id: string;
   organization_id: string;
+  created_by?: string;
   name: string;
   slug: string;
   prompt?: string;
@@ -2148,7 +2149,16 @@ function parseGeneratedOutput(projectName: string, rawText: string, promptOrDesc
 
 async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
   const client = requireSupabase('Project persistence');
-  const { error } = await client.from('projects').upsert([project]);
+  const projectRow = {
+    ...project,
+    created_by: project.created_by || project.owner_id || project.organization_id || DEFAULT_ORG_ID,
+  };
+  let { error } = await client.from('projects').upsert([projectRow]);
+  if (error && /created_by|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    const { created_by, ...legacyProjectRow } = projectRow;
+    const retry = await client.from('projects').upsert([legacyProjectRow]);
+    error = retry.error;
+  }
   if (error) {
     throw new Error(`Supabase project persistence failed: ${error.message}`);
   }
@@ -3516,6 +3526,7 @@ app.post('/api/projects', async (req: any, res: any) => {
       id: randomUUID(),
       owner_id: userId,
       organization_id: userId,
+      created_by: userId,
       name,
       slug: await uniqueSlug(name, userId),
       prompt,
