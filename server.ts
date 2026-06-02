@@ -818,8 +818,14 @@ function isSimpleLocalConversationPrompt(value: string) {
     'comment ça va',
     'how are you',
     'what can you do',
+    'what are you able to do',
     'que peux tu faire',
     'que peux-tu faire',
+    'que sais tu faire',
+    'que sais-tu faire',
+    'qu est ce que tu sais faire',
+    "qu'est ce que tu sais faire",
+    "qu'est-ce que tu sais faire",
     'tu peux faire quoi',
     'aide moi',
     'help me',
@@ -1855,7 +1861,10 @@ class AgentOrchestrator {
       'explique', 'explain', 'c est quoi', "c'est quoi", 'what is', 'comment marche',
       'est-ce que', 'peux tu me dire', 'dis moi', 'pourquoi', 'how does', 'what do you think',
       'aide moi a comprendre', 'aide-moi a comprendre', 'analyse sans modifier', 'review only',
-      'comment ca va', 'comment ça va', 'que peux tu faire', 'que peux-tu faire', 'what can you do'
+      'comment ca va', 'comment ça va', 'que peux tu faire', 'que peux-tu faire',
+      'que sais tu faire', 'que sais-tu faire', 'qu est ce que tu sais faire',
+      "qu'est ce que tu sais faire", "qu'est-ce que tu sais faire", 'what can you do',
+      'what are you able to do'
     ];
     const buildHints = [
       'crée', 'creer', 'create', 'ajoute', 'add', 'modifie', 'change', 'corrige',
@@ -2210,7 +2219,7 @@ function createConversationResponse(project: GeneratedProject, prompt: string) {
   }
   if (isSimpleLocalConversationPrompt(prompt)) {
     const normalized = normalizePromptIntentText(prompt);
-    if (/que peux|tu peux faire quoi|what can you do|help me|aide moi|comment tu peux/i.test(normalized)) {
+    if (/que peux|que sais|qu est ce que tu sais|tu peux faire quoi|what can you do|what are you able to do|help me|aide moi|comment tu peux/i.test(normalized)) {
       return isLikelyFrenchPrompt(prompt)
         ? `Je peux répondre simplement, expliquer ton projet, proposer un plan, modifier l’interface, corriger un bug ou lancer un build quand c’est nécessaire. Tu n’as pas besoin de choisir le bon mode : décris le résultat voulu, je décide du chemin le plus sûr.`
         : `I can answer questions, explain the project, suggest a plan, edit the UI, fix bugs, or build when needed. You do not need to pick the right mode: describe the outcome and I’ll choose the safest path.`;
@@ -2854,12 +2863,7 @@ function parseGeneratedOutput(
     promptOrDescription || projectName,
     { ensureIndex: !options.hasExistingFiles },
   );
-  const shouldEnsureModernProject = !options.hasExistingFiles || normalizedFiles.some(file =>
-    /^package\.json$/i.test(file.path) || /^src\/App\.(tsx|jsx)$/i.test(file.path) || /^src\/main\.(tsx|jsx)$/i.test(file.path)
-  );
-  const files = shouldEnsureModernProject
-    ? ensureModernFrontendProject(normalizedFiles, projectName, promptOrDescription || projectName)
-    : normalizedFiles;
+  const files = ensureModernFrontendProject(normalizedFiles, projectName, promptOrDescription || projectName);
   if (!files.length) {
     throw new GeneratedOutputParseError('Huggy could not find any safe generated files, so the existing app was kept unchanged.');
   }
@@ -2867,9 +2871,12 @@ function parseGeneratedOutput(
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
 
+  const summary = String(parsed.summary || 'Modern React application files generated.');
   return {
     files,
-    summary: String(parsed.summary || 'Modern React application files generated.'),
+    summary: /html\s+preview|standalone\s+html|complete\s+html/i.test(summary)
+      ? 'Generated a modern React/Vite application with project files and preview.'
+      : summary,
     backendSchema: parsed.backendSchema ? String(parsed.backendSchema) : '',
   };
 }
@@ -5006,6 +5013,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   };
 
   let workingTimer: ReturnType<typeof setInterval> | null = null;
+  let shouldEmitWorkingTicks = false;
   const endStream = () => {
     if (streamClosed) return;
     streamClosed = true;
@@ -5014,6 +5022,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   };
 
   workingTimer = setInterval(() => {
+    if (!shouldEmitWorkingTicks) return;
     void send('working_tick', 'Still working.', {
       elapsed_seconds: Math.max(0, Math.floor((Date.now() - streamStartedAt) / 1000)),
     }).catch(error => {
@@ -5048,6 +5057,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     lastPlan,
   });
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
+  const shouldStreamAgentTrace = decision.requiresFileChanges || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
+  shouldEmitWorkingTicks = decision.requiresFileChanges || decision.intent === 'plan';
   if (AGENT_V2_ENABLED) {
     const [messages, events, versions, memory, runnerHistory, researchHistory] = await Promise.all([
       listProjectMessagesPage(project.id, 12, null).catch(() => []),
@@ -5079,13 +5090,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         runner_status: 'pending',
       });
     }
-    await send('run_started', 'Agent run started.', { agent_run_id: agentRunId, request_id: requestId });
-    await send('context_loaded', 'Project context loaded.', { context: contextPack });
-    if (AGENT_V3_ENABLED) {
+    if (shouldStreamAgentTrace) {
+      await send('run_started', 'Agent run started.', { agent_run_id: agentRunId, request_id: requestId });
+      await send('context_loaded', 'Project context loaded.', { context: contextPack });
+    }
+    if (AGENT_V3_ENABLED && decision.requiresFileChanges) {
       await send('tool_loop_started', 'Autonomous tool loop started.', { budget: toolLoop.snapshot });
     }
   }
-  await send('agent_thinking', 'Thinking through the request.', { request_id: requestId });
+  if (shouldStreamAgentTrace) {
+    await send('agent_thinking', 'Thinking through the request.', { request_id: requestId });
+  }
   const estimate = estimateActionCost(prompt, decision, requestedModelSelection);
   const wallet = estimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
   await saveProjectMessage({
@@ -5103,7 +5118,9 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     selected_model: requestedModelSelection,
     active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
   });
-  await send('intent_detected', decision.userVisibleReason, { intent: decision });
+  if (shouldStreamAgentTrace) {
+    await send('intent_detected', decision.userVisibleReason, { intent: decision });
+  }
 
   if (decision.requiresFileChanges && !hasProjectCapability(req, 'build')) {
     await send('error', 'Action unavailable with your current project role.', {
@@ -5146,8 +5163,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist') {
     if (decision.intent === 'plan') {
       await send('planning', 'Preparing a plan without changing files.', {});
-    } else if (decision.intent === 'conversation') {
-      await send('answering', 'Answering without changing files.', {});
     } else if (decision.intent === 'verify') {
       await send('verification_started', 'Checking the current project without changing files.', {});
     } else if (decision.intent === 'deploy_assist') {

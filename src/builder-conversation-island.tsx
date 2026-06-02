@@ -6,10 +6,7 @@ import { nanoid } from "nanoid";
 import {
   Conversation,
   ConversationContent,
-  ConversationDownload,
   ConversationEmptyState,
-  ConversationScrollButton,
-  type ConversationDownloadMessage,
 } from "./components/ai-elements/conversation";
 import {
   Confirmation,
@@ -556,14 +553,6 @@ function ensureConversationStyles() {
   document.head.appendChild(style);
 }
 
-function blockToText(block: HuggyConversationBlock | undefined, fallback: string) {
-  if (!block) return fallback;
-  if (block.type === "reasoning") return `${block.title || "Agent notes"}\n${block.content}`;
-  if (block.type === "plan") return `${block.title}\n${block.description || ""}\n${block.content}`.trim();
-  if (block.type === "task") return [block.title, ...block.items.map(item => `${item.status || "pending"}: ${item.label}`)].join("\n");
-  return `${block.title}\n${block.body}`;
-}
-
 function planSummary(content: string) {
   const firstLine = content.split("\n").map(line => line.trim()).find(Boolean);
   if (!firstLine) return "Huggy prepared a short implementation plan before changing the app.";
@@ -827,15 +816,6 @@ function BuilderConversation({
 }: {
   messages: HuggyConversationMessage[];
 }) {
-  const downloadableMessages = React.useMemo<ConversationDownloadMessage[]>(
-    () => messages.map(message => ({
-      key: message.id,
-      content: blockToText(message.block, message.content),
-      role: message.role,
-    })),
-    [messages],
-  );
-
   return (
     <Conversation className="relative size-full">
       <ConversationContent>
@@ -864,8 +844,6 @@ function BuilderConversation({
           ))
         )}
       </ConversationContent>
-      <ConversationDownload messages={downloadableMessages} />
-      <ConversationScrollButton />
     </Conversation>
   );
 }
