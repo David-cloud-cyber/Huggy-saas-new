@@ -77,7 +77,7 @@ export class OpenRouterService {
       validateAllowedModel(fb);
     }
 
-    const payload = this.buildChatPayload(modelId, fallbackModels, messages);
+    const payload = this.buildChatPayload(modelId, messages);
 
     let attempt = 0;
     let delay = 1000; // start with 1s backoff
@@ -170,7 +170,7 @@ export class OpenRouterService {
         headers: this.buildHeaders(),
         signal: controller.signal as any,
         body: JSON.stringify({
-          ...this.buildChatPayload(modelId, fallbackModels, messages),
+          ...this.buildChatPayload(modelId, messages),
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -260,15 +260,11 @@ export class OpenRouterService {
     };
   }
 
-  private buildChatPayload(modelId: string, fallbackModels: AllowedModelId[], messages: ChatMessage[]) {
-    const models = [modelId, ...fallbackModels].filter((model, index, list) => list.indexOf(model) === index);
-    if (models.length > 1) {
-      return {
-        models,
-        messages,
-      };
-    }
-
+  private buildChatPayload(modelId: string, messages: ChatMessage[]) {
+    // ProviderGateway already performs strict, allowlisted fallback one model at
+    // a time. Sending OpenRouter's multi-model `models` body here makes
+    // diagnostics opaque and some providers reject the request shape during
+    // streaming. Keep the provider payload OpenAI-compatible and simple.
     return {
       model: modelId,
       messages,
