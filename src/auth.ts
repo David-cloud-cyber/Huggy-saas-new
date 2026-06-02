@@ -6,6 +6,7 @@ const passwordInput = document.getElementById('input-password') as HTMLInputElem
 const nameInput = document.getElementById('input-name') as HTMLInputElement | null;
 const submitButton = document.getElementById('btn-submit') as HTMLButtonElement | null;
 const authCard = document.querySelector('.auth-card');
+const socialButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.btn-social'));
 
 let statusEl = document.getElementById('auth-status');
 if (!statusEl && authCard) {
@@ -36,6 +37,22 @@ function setBusy(isBusy: boolean) {
       : 'Sign In';
 }
 
+function setOAuthBusy(activeButton: HTMLButtonElement | null, isBusy: boolean) {
+  socialButtons.forEach((button) => {
+    button.disabled = isBusy;
+    button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+    const provider = button.dataset.provider || button.textContent?.trim() || 'provider';
+    if (isBusy && button === activeButton) {
+      button.dataset.oauthLabel = button.textContent?.trim() || '';
+      button.lastChild && (button.lastChild.textContent = ` Opening ${provider}...`);
+    }
+    if (!isBusy && button.dataset.oauthLabel) {
+      button.lastChild && (button.lastChild.textContent = ` ${button.dataset.oauthLabel}`);
+      delete button.dataset.oauthLabel;
+    }
+  });
+}
+
 function goToApp() {
   window.location.href = getRedirectTarget();
 }
@@ -43,6 +60,17 @@ function goToApp() {
 function getAuthRedirectUrl() {
   const target = encodeURIComponent(getRedirectTarget());
   return `${window.location.origin}/auth.html?redirect=${target}`;
+}
+
+function getReturnedAuthError(): string | null {
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return (
+    search.get('error_description') ||
+    hash.get('error_description') ||
+    search.get('error') ||
+    hash.get('error')
+  );
 }
 
 async function handleEmailAuth(event: Event) {
@@ -96,27 +124,40 @@ async function handleEmailAuth(event: Event) {
   }
 }
 
-async function handleOAuth(provider: 'google' | 'github') {
-  setStatus(`Redirecting to ${provider}...`, 'info');
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider,
-    options: {
-      redirectTo: getAuthRedirectUrl(),
-    },
-  });
-  if (error) setStatus(error.message, 'error');
+async function handleOAuth(provider: 'google', button: HTMLButtonElement | null) {
+  setOAuthBusy(button, true);
+  setStatus('Opening Google sign-in...', 'info');
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: getAuthRedirectUrl(),
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
+    if (error) throw error;
+  } catch (error) {
+    setOAuthBusy(button, false);
+    setStatus(error instanceof Error ? error.message : 'Google sign-in failed.', 'error');
+  }
 }
 
 form?.addEventListener('submit', handleEmailAuth);
 
-document.querySelectorAll<HTMLButtonElement>('.btn-social').forEach((button) => {
+socialButtons.forEach((button) => {
   button.addEventListener('click', (event) => {
     event.preventDefault();
-    const label = button.textContent?.toLowerCase() || '';
-    if (label.includes('google')) void handleOAuth('google');
-    if (label.includes('github')) void handleOAuth('github');
+    const provider = button.dataset.provider;
+    if (provider === 'google') void handleOAuth('google', button);
   });
 });
+
+const returnedAuthError = getReturnedAuthError();
+if (returnedAuthError) {
+  setStatus(`Google sign-in could not finish: ${returnedAuthError}`, 'error');
+}
 
 getVerifiedSession().then((verified) => {
   if (verified) goToApp();
