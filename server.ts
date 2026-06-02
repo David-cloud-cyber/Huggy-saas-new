@@ -3077,27 +3077,114 @@ async function deployFilesToVercel(project: GeneratedProject, files: GeneratedFi
 }
 
 // Wrapper to safely access live Supabase-backed billing state.
+const CREDIT_BALANCE_COLUMNS = [
+  'balance',
+  'credits_balance',
+  'available_credits',
+  'balance_credits',
+  'current_balance',
+  'remaining_credits',
+  'credits',
+  'total_credits',
+];
+const CREDIT_BUCKET_COLUMNS = ['monthly_credits', 'daily_promo_credits', 'topup_credits', 'promo_credits'];
+
+function getNumericCreditValue(value: any) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function getCreditBalanceColumn(row: Record<string, any> | null | undefined) {
+  if (!row) return '';
+  return CREDIT_BALANCE_COLUMNS.find(column => column in row) || '';
+}
+
+function getCreditBalanceFromRow(row: Record<string, any> | null | undefined) {
+  const column = getCreditBalanceColumn(row);
+  if (column) return getNumericCreditValue(row?.[column]);
+  return CREDIT_BUCKET_COLUMNS.reduce((total, bucket) => total + getNumericCreditValue(row?.[bucket]), 0);
+}
+
+function isSchemaShapeError(error: any) {
+  return /schema cache|column .*does not exist|could not find .* in the schema cache|Could not find the '([^']+)' column/i.test(error?.message || '');
+}
+
+async function readCreditWalletRow(client: any, orgId: string) {
+  const { data, error } = await client.from('credit_wallets').select('*').eq('organization_id', orgId).maybeSingle();
+  if (error && /credit_wallets|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+    console.warn('[huggy:credit_wallet_lookup_skipped]', { message: error.message });
+    return null;
+  }
+  if (error) throw new Error(`Credit wallet lookup failed: ${error.message}`);
+  return data || null;
+}
+
+async function writeCreditWalletBalance(client: any, orgId: string, next: number, preferredColumn = '') {
+  const columns = preferredColumn
+    ? [preferredColumn, ...CREDIT_BALANCE_COLUMNS, ...CREDIT_BUCKET_COLUMNS].filter((column, index, all) => all.indexOf(column) === index)
+    : [...CREDIT_BALANCE_COLUMNS, ...CREDIT_BUCKET_COLUMNS];
+  for (const column of columns) {
+    const row: Record<string, any> = {
+      organization_id: orgId,
+      [column]: next,
+      updated_at: new Date().toISOString(),
+    };
+    let { error } = await client.from('credit_wallets').upsert([row], { onConflict: 'organization_id' });
+    if (error && /updated_at/i.test(error.message || '') && isSchemaShapeError(error)) {
+      delete row.updated_at;
+      const retry = await client.from('credit_wallets').upsert([row], { onConflict: 'organization_id' });
+      error = retry.error;
+    }
+    if (!error) return column;
+    if (isSchemaShapeError(error) || /no unique|conflict/i.test(error.message || '')) continue;
+    throw new Error(`Credit wallet update failed: ${error.message}`);
+  }
+  throw new Error('Credit wallet update failed: no compatible balance column found.');
+}
+
+async function ensureCreditWalletRow(client: any, orgId: string, initialCredits = 30) {
+  const existing = await readCreditWalletRow(client, orgId);
+  if (existing) return existing;
+  const column = await writeCreditWalletBalance(client, orgId, initialCredits);
+  return { organization_id: orgId, [column]: initialCredits };
+}
+
+async function insertCreditLedgerRow(client: any, row: Record<string, any>) {
+  let current = { ...row };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { error } = await client.from('credit_ledger').insert([current]);
+    if (!error) return;
+    if (/credit_ledger|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+      console.warn('[huggy:credit_ledger_insert_skipped]', { message: error.message });
+      return;
+    }
+    const column = getSchemaColumnFromMessage(error.message || '');
+    if (isSchemaShapeError(error) && column && column in current) {
+      delete current[column];
+      continue;
+    }
+    throw new Error(`Credit ledger insert failed: ${error.message}`);
+  }
+}
+
 function getDbHelpers() {
   const client = requireSupabase('Billing and usage persistence');
   return {
     getWallet: async (orgId: string) => {
-      const { data, error } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
-      if (error) throw new Error(`Credit wallet lookup failed: ${error.message}`);
-      return data ? parseFloat(data.balance) : 0;
+      const wallet = await ensureCreditWalletRow(client, orgId);
+      return getCreditBalanceFromRow(wallet);
     },
     updateWallet: async (orgId: string, diff: number) => {
-      const { data: wallet, error: walletError } = await client.from('credit_wallets').select('balance').eq('organization_id', orgId).maybeSingle();
-      if (walletError) throw new Error(`Credit wallet update lookup failed: ${walletError.message}`);
-      const current = wallet ? parseFloat(wallet.balance) : 0;
+      const wallet = await ensureCreditWalletRow(client, orgId);
+      const balanceColumn = getCreditBalanceColumn(wallet);
+      const current = getCreditBalanceFromRow(wallet);
       const next = current + diff;
-      const { error } = await client.from('credit_wallets').upsert([{ organization_id: orgId, balance: next, updated_at: new Date().toISOString() }]);
-      if (error) throw new Error(`Credit wallet update failed: ${error.message}`);
+      await writeCreditWalletBalance(client, orgId, next, balanceColumn);
       return next;
     },
     addLedger: async (orgId: string, type: string, amount: number, balance_after: number, desc: string, refId: string) => {
       const log = { wallet_id: orgId, type, amount, balance_after, description: desc, reference_id: refId, created_at: new Date().toISOString() };
-      const { error } = await client.from('credit_ledger').insert([log]);
-      if (error) throw new Error(`Credit ledger insert failed: ${error.message}`);
+      await insertCreditLedgerRow(client, log);
     },
     addAudit: async (data: any) => {
       const { error } = await client.from('audit_logs').insert([{ ...data, created_at: new Date().toISOString() }]);
