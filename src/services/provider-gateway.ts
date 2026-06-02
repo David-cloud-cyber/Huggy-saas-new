@@ -51,7 +51,11 @@ export class ProviderGateway {
     let lastError: any = null;
 
     for (const candidate of candidates) {
-      this.assertCircuitOpen(candidate);
+      const circuitError = this.getCircuitError(candidate);
+      if (circuitError) {
+        lastError = circuitError;
+        continue;
+      }
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         try {
           const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000);
@@ -77,7 +81,11 @@ export class ProviderGateway {
     let lastError: any = null;
 
     for (const candidate of candidates) {
-      this.assertCircuitOpen(candidate);
+      const circuitError = this.getCircuitError(candidate);
+      if (circuitError) {
+        lastError = circuitError;
+        continue;
+      }
       let yielded = false;
       try {
         for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {
@@ -134,16 +142,17 @@ export class ProviderGateway {
       .filter(isAllowedModelId);
   }
 
-  private assertCircuitOpen(modelId: AllowedModelId) {
+  private getCircuitError(modelId: AllowedModelId): ProviderGatewayError | null {
     const state = this.circuits.get(modelId);
     if (state && state.blockedUntil > Date.now()) {
-      throw new ProviderGatewayError('The selected AI model is temporarily paused after repeated provider failures. Choose Auto or retry shortly.', {
+      return new ProviderGatewayError('The selected AI model is temporarily paused after repeated provider failures. Choose Auto or retry shortly.', {
         diagnosticCode: 'PROVIDER_CIRCUIT_OPEN',
         statusCode: 503,
         retryable: true,
         modelId,
       });
     }
+    return null;
   }
 
   private noteSuccess(modelId: AllowedModelId) {
@@ -168,7 +177,7 @@ export class ProviderGateway {
       return new ProviderGatewayError(message, { diagnosticCode: 'AUTO_MODEL_NOT_RESOLVED', statusCode: 500, retryable: false, modelId });
     }
     if (/not configured|OPENROUTER_API_KEY/i.test(message)) {
-      return new ProviderGatewayError('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy.', {
+      return new ProviderGatewayError('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy. The backend also accepts OPEN_ROUTER_API_KEY, OPENROUTER_KEY, or OPENROUTER_TOKEN.', {
         diagnosticCode: 'OPENROUTER_NOT_CONFIGURED',
         statusCode: 503,
         retryable: false,
@@ -195,7 +204,7 @@ export class ProviderGateway {
       return new ProviderGatewayError('The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.', {
         diagnosticCode: 'MODEL_UNAVAILABLE',
         statusCode: 502,
-        retryable: false,
+        retryable: true,
         modelId,
       });
     }
@@ -203,6 +212,14 @@ export class ProviderGateway {
       return new ProviderGatewayError('OpenRouter rate limit reached. Please wait a moment and try again.', {
         diagnosticCode: 'PROVIDER_RATE_LIMITED',
         statusCode: 429,
+        retryable: true,
+        modelId,
+      });
+    }
+    if (/400|bad request|invalid request|unsupported parameter|provider rejected/i.test(message)) {
+      return new ProviderGatewayError('OpenRouter rejected the AI request format. Retry with Auto; if it keeps happening, check the selected model and Railway logs.', {
+        diagnosticCode: 'PROVIDER_BAD_REQUEST',
+        statusCode: 502,
         retryable: false,
         modelId,
       });

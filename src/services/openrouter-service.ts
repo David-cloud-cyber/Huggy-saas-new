@@ -2,6 +2,31 @@ import fetch from 'node-fetch';
 import { validateAllowedModel } from './ai-validator.ts';
 import { AI_MODEL_FALLBACKS, type AllowedModelId } from '../config/ai-models.ts';
 
+export const OPENROUTER_API_KEY_ENV_NAMES = [
+  'OPENROUTER_API_KEY',
+  'OPEN_ROUTER_API_KEY',
+  'OPENROUTER_KEY',
+  'OPENROUTER_TOKEN',
+] as const;
+
+type OpenRouterEnv = Record<string, string | undefined>;
+
+export function cleanOpenRouterHeaderValue(value: unknown): string {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+}
+
+export function resolveOpenRouterApiKey(env: OpenRouterEnv = process.env, fallback = ''): string {
+  const candidates = [
+    ...OPENROUTER_API_KEY_ENV_NAMES.map(name => env[name]),
+    fallback,
+  ];
+  for (const value of candidates) {
+    const clean = cleanOpenRouterHeaderValue(value);
+    if (clean && !clean.includes('***')) return clean;
+  }
+  return '';
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -73,7 +98,7 @@ export class OpenRouterService {
         clearTimeout(timeout);
 
         if (!response.ok) {
-          const errMsg = await response.text();
+          const errMsg = await this.readProviderError(response);
           throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg || response.statusText}`);
         }
 
@@ -152,7 +177,7 @@ export class OpenRouterService {
       });
 
       if (!response.ok) {
-        const errMsg = await response.text();
+        const errMsg = await this.readProviderError(response);
         throw new Error(`OpenRouter HTTP ${response.status}: ${errMsg || response.statusText}`);
       }
 
@@ -214,14 +239,11 @@ export class OpenRouterService {
   }
 
   private cleanHeaderValue(value: string): string {
-    return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    return cleanOpenRouterHeaderValue(value);
   }
 
   private resolveApiKey(): string {
-    const fromRuntime = this.cleanHeaderValue(process.env.OPENROUTER_API_KEY || '');
-    const candidate = fromRuntime || this.config.apiKey;
-    if (!candidate || candidate.includes('***')) return '';
-    return candidate;
+    return resolveOpenRouterApiKey(process.env, this.config.apiKey);
   }
 
   private buildHeaders() {
@@ -251,6 +273,25 @@ export class OpenRouterService {
       model: modelId,
       messages,
     };
+  }
+
+  private async readProviderError(response: any): Promise<string> {
+    const raw = await response.text().catch(() => '');
+    if (!raw) return response.statusText || 'Provider returned an empty error response';
+
+    try {
+      const parsed = JSON.parse(raw);
+      const error = parsed?.error || parsed;
+      const message = String(error?.message || parsed?.message || '').trim();
+      const code = String(error?.code || parsed?.code || '').trim();
+      const metadata = code ? ` (${code})` : '';
+      if (message) return `${message}${metadata}`;
+    } catch {
+      // Fall through to a bounded raw message. OpenRouter error bodies can be
+      // verbose; never propagate arbitrary provider payloads into public UI.
+    }
+
+    return raw.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 500);
   }
 
   private estimateUsdCost(model: string, prompt: number, completion: number): number {

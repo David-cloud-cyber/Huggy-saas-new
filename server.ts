@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
 
 // Import our custom services
-import { OpenRouterService } from './src/services/openrouter-service.ts';
+import { OpenRouterService, resolveOpenRouterApiKey } from './src/services/openrouter-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
 import { ModelRouter, type RoutingContext } from './src/services/model-router.ts';
 import { ForbiddenModelError, validateAllowedModel } from './src/services/ai-validator.ts';
@@ -227,7 +227,7 @@ const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
 
 // Instantiate Core Services
 function getOpenRouterApiKey() {
-  return String(process.env.OPENROUTER_API_KEY || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return resolveOpenRouterApiKey(process.env);
 }
 
 function getOpenRouterSiteUrl() {
@@ -270,6 +270,7 @@ function diagnoseProviderError(error: any) {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
       OPENROUTER_KEY_INVALID: 'update_openrouter_key',
+      PROVIDER_BAD_REQUEST: 'retry_or_use_auto',
       PROVIDER_QUOTA_OR_BILLING: 'check_openrouter_billing',
       PROVIDER_RATE_LIMITED: 'retry_later',
       PROVIDER_TIMEOUT: 'retry_or_use_auto',
@@ -295,7 +296,7 @@ function diagnoseProviderError(error: any) {
   }
   if (/not configured|OPENROUTER_API_KEY/i.test(message)) {
     return {
-      message: 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy.',
+      message: 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy. The backend also accepts OPEN_ROUTER_API_KEY, OPENROUTER_KEY, or OPENROUTER_TOKEN.',
       diagnostic_code: 'OPENROUTER_NOT_CONFIGURED',
       suggested_action: 'configure_openrouter_key',
       status: 503,
@@ -314,6 +315,14 @@ function diagnoseProviderError(error: any) {
       message: 'The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.',
       diagnostic_code: 'MODEL_UNAVAILABLE',
       suggested_action: 'use_auto',
+      status: 502,
+    };
+  }
+  if (/OpenRouter HTTP 400|bad request|invalid request|unsupported parameter|provider rejected/i.test(message)) {
+    return {
+      message: 'OpenRouter rejected the AI request format. Retry with Auto; if it keeps happening, check the selected model and Railway logs.',
+      diagnostic_code: 'PROVIDER_BAD_REQUEST',
+      suggested_action: 'retry_or_use_auto',
       status: 502,
     };
   }

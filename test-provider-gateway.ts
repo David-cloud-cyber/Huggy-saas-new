@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ProviderGateway, ProviderGatewayError } from './src/services/provider-gateway.ts';
-import type { ChatMessage } from './src/services/openrouter-service.ts';
+import { resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
 
 const messages: ChatMessage[] = [{ role: 'user', content: 'hello' }];
 
@@ -26,6 +26,12 @@ class FakeOpenRouter {
     if (failure) throw failure;
     yield { type: 'token' as const, text: 'ok', model: modelId };
   }
+}
+
+{
+  assert.equal(resolveOpenRouterApiKey({ OPEN_ROUTER_API_KEY: '  sk-or-alias\n' }), 'sk-or-alias');
+  assert.equal(resolveOpenRouterApiKey({ OPENROUTER_API_KEY: '***redacted***', OPENROUTER_TOKEN: ' sk-or-token ' }), 'sk-or-token');
+  assert.equal(resolveOpenRouterApiKey({ OPENROUTER_API_KEY: '***redacted***' }), '');
 }
 
 {
@@ -58,6 +64,16 @@ class FakeOpenRouter {
     return true;
   });
   assert.equal(fake.calls.length, 1);
+}
+
+{
+  const fake = new FakeOpenRouter();
+  fake.failures.push(new Error('OpenRouter HTTP 404: model not available'));
+  const gateway = new ProviderGateway(fake as any);
+  const result = await gateway.chat('google/gemini-3-pro-preview', messages, { maxAttempts: 1 });
+  assert.equal(result.text, 'ok');
+  assert.equal(fake.calls[0], 'google/gemini-3-pro-preview');
+  assert.notEqual(fake.calls[1], 'google/gemini-3-pro-preview');
 }
 
 {
