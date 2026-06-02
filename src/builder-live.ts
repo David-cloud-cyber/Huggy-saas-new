@@ -10,7 +10,7 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
-import { mountBuilderConversation, type HuggyConversationApi } from './builder-conversation-island';
+import { mountBuilderConversation, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
 
 type ChatMode = 'auto' | 'plan' | 'build';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
@@ -166,6 +166,7 @@ let stopRequested = false;
 let workingTimer: number | null = null;
 let activeWorkingCard: HTMLElement | null = null;
 let activeWorkingLabel = 'Thinking';
+let activeWorkingDetails: string[] = [];
 let selectedChatMode: ChatMode = 'auto';
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
@@ -686,7 +687,8 @@ function renderWorkingLabel(label = activeWorkingLabel) {
   activeWorkingLabel = label || 'Thinking';
   const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
-  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}`);
+  const details = activeWorkingDetails.length ? `\n${activeWorkingDetails.join('\n')}` : '';
+  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}${details}`);
 }
 
 function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
@@ -694,6 +696,7 @@ function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
   if (workingTimer !== null) window.clearInterval(workingTimer);
   activeWorkingCard = card;
   activeWorkingLabel = label;
+  activeWorkingDetails = [];
   card.dataset.workingStartedAt = String(Date.now());
   renderWorkingLabel(label);
   workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
@@ -707,6 +710,7 @@ function stopWorkingTimer(card?: HTMLElement | null) {
   const target = card || activeWorkingCard;
   if (target) delete target.dataset.workingStartedAt;
   activeWorkingCard = null;
+  activeWorkingDetails = [];
 }
 
 function ensureChatShimmerStyle() {
@@ -856,6 +860,47 @@ function updateMessage(card: HTMLElement | null, body: string) {
   }
   const paragraph = card?.querySelector('.msg-body-paragraph');
   if (paragraph) paragraph.textContent = body;
+}
+
+function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock | null) {
+  if (!card) return;
+  const id = messageHandleId(card);
+  if (id && conversationApi?.setBlock) {
+    conversationApi.setBlock(id, block);
+  }
+}
+
+function buildPlanBlock(content: string, prompt: string, open = false): HuggyConversationBlock {
+  const summary = content.split('\n').map(line => line.trim()).find(Boolean) || 'Huggy prepared a plan before changing the app.';
+  const title = isLikelyFrenchText(prompt) ? 'Plan de Huggy' : 'Huggy plan';
+  const description = summary.length > 180 ? `${summary.slice(0, 177)}...` : summary;
+  return {
+    type: 'plan',
+    title,
+    description,
+    content,
+    defaultOpen: open,
+  };
+}
+
+function removeMessage(card: HTMLElement | null) {
+  if (!card) return;
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    conversationApi.removeMessage(id);
+    return;
+  }
+  card.remove();
+}
+
+function showTransientNotice(body: string, duration = 2400) {
+  const card = appendMessage('system', body);
+  if (duration > 0) window.setTimeout(() => removeMessage(card), duration);
+  return card;
+}
+
+function isLikelyFrenchText(value: string) {
+  return /\b(je|tu|vous|nous|veux|j'aimerais|crée|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application|couleur|bouton)\b/i.test(value);
 }
 
 function addInlineAction(card: HTMLElement | null, label: string, action: () => void) {
@@ -2275,8 +2320,11 @@ async function loadProject() {
     scroll.innerHTML = '';
     scroll.dataset.liveInitialized = 'true';
   }
+  const api = ensureConversationApi();
+  api?.clear();
+  if (scroll) delete scroll.dataset.restored;
   const projectName = document.getElementById('project-name');
-  const loading = appendMessage('system', 'Loading project files, timeline and preview...');
+  const loading = showTransientNotice('Loading project files, timeline and preview...', 0);
   try {
     const payload = await ensureProject();
     if (!currentProjectId) {
@@ -2305,9 +2353,11 @@ async function loadProject() {
     const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
     if (activeTab) activateBuilderView(activeTab);
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
-    updateMessage(loading, 'Project synchronized. Auto is ready to answer, plan, fix or build from your next message.');
+    removeMessage(loading);
+    showTransientNotice('Project synchronized. Auto is ready to answer, plan, fix or build from your next message.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
+    window.setTimeout(() => removeMessage(loading), 5000);
   }
 }
 
@@ -2316,13 +2366,17 @@ function restoreMessages(payload: ProjectPayload) {
   const scroll = chatScroll();
   if (!scroll || scroll.dataset.restored === 'true') return;
   scroll.dataset.restored = 'true';
-  payload.messages.slice(-100).forEach(message => {
+  payload.messages
+    .filter(message => message.content && !/^Project synchronized\./i.test(message.content))
+    .slice(-100)
+    .forEach(message => {
     const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
     if (message.intent === 'plan') {
       lastPlan = message.content;
+      setMessageBlock(card, buildPlanBlock(message.content, message.content, false));
       addInlineAction(card, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
     }
-  });
+    });
 }
 
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
@@ -2344,9 +2398,30 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   }
   let streamedText = '';
   let assistantHasFinalContent = false;
+  const speaksFrench = isLikelyFrenchText(prompt);
+  const say = (fr: string, en: string) => speaksFrench ? fr : en;
+  const agentSteps = new Map<string, { label: string; state: 'done' | 'now' }>();
+  const syncAgentSteps = (headline = activeWorkingLabel) => {
+    activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
+    renderWorkingLabel(headline);
+  };
+  const markAgentStep = (key: string, label: string, headline = label) => {
+    for (const [stepKey, step] of agentSteps) {
+      if (stepKey !== key && step.state === 'now') agentSteps.set(stepKey, { ...step, state: 'done' });
+    }
+    agentSteps.set(key, { label, state: 'now' });
+    syncAgentSteps(headline);
+  };
+  const finishAgentStep = (key: string, label?: string) => {
+    const current = agentSteps.get(key);
+    if (!current && !label) return;
+    agentSteps.set(key, { label: label || current?.label || key, state: 'done' });
+    syncAgentSteps();
+  };
   const setAssistantWorking = (label: string) => {
     if (assistantHasFinalContent) return;
     setMessageShimmer(status, label);
+    if (activeWorkingDetails.length) syncAgentSteps(label);
   };
   const commitAssistantText = (content: unknown, fallback = 'Done.') => {
     const text = String(content || '').trim() || fallback;
@@ -2374,8 +2449,20 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         updateMessage(status, streamedText || 'Streaming code generation...');
         return;
       }
-      if (eventType === 'agent_thinking' || eventType === 'intent_detected') {
-        setAssistantWorking('Thinking');
+      if (eventType === 'run_started') {
+        markAgentStep('start', say('Je démarre la demande.', 'Starting the request.'), 'Thinking');
+        return;
+      }
+      if (eventType === 'context_loaded') {
+        markAgentStep('context', say('Je relis le projet et les derniers messages.', 'Reading the project and recent messages.'), 'Thinking');
+        return;
+      }
+      if (eventType === 'agent_thinking') {
+        markAgentStep('thinking', say('Je comprends ce que tu veux obtenir.', 'Understanding what you want.'), 'Thinking');
+        return;
+      }
+      if (eventType === 'intent_detected') {
+        markAgentStep('intent', say('Je choisis la bonne action sans te forcer à décider.', 'Choosing the right action without forcing you to decide.'), 'Thinking');
         if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
           generationTouchesPreview = true;
           activateBuilderView('preview');
@@ -2399,11 +2486,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             : eventType === 'tool_loop_started'
               ? 'Thinking'
               : 'Thinking';
+        if (eventType === 'planning') markAgentStep('plan', say('Je prépare un plan court avant de toucher à l’app.', 'Preparing a short plan before touching the app.'), label);
+        if (eventType === 'research_started') markAgentStep('research', say('Je vérifie les informations utiles en arrière-plan.', 'Checking useful context in the background.'), label);
+        if (eventType === 'tool_loop_started') markAgentStep('tools', say('Je prépare les vérifications automatiques.', 'Preparing automatic checks.'), label);
         setAssistantWorking(label);
         if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'research_result' || eventType === 'research_skipped') {
+        finishAgentStep('research', eventType === 'research_result'
+          ? say('Recherche terminée.', 'Research completed.')
+          : say('Recherche non nécessaire pour cette demande.', 'Research was not needed for this request.'));
         setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Thinking');
         if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
         return;
@@ -2411,10 +2504,13 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'plan_ready' || eventType === 'answering') {
         const text = payload.text || event.message || '';
         if (eventType === 'plan_ready' && payload.auto_plan_required) {
-          clearMessageShimmer(status);
-          updateMessage(status, String(text || 'Plan ready. Starting the build...'));
+          finishAgentStep('plan', say('Plan prêt, je passe à la réalisation.', 'Plan ready, moving into the build.'));
+          setAssistantWorking('Building');
         } else {
           commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
+          if (eventType === 'plan_ready') {
+            setMessageBlock(status, buildPlanBlock(String(text || ''), prompt, true));
+          }
         }
         if (eventType === 'plan_ready' && !payload.auto_plan_required) {
           lastPlan = payload.text || event.message || '';
@@ -2437,34 +2533,65 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
       if (eventType === 'external_api_keys_required') {
         commitAssistantText('External API keys are needed or can be skipped.');
+        setMessageBlock(status, {
+          type: 'confirmation',
+          title: 'External API keys',
+          body: speaksFrench
+            ? 'Cette action peut utiliser des clés API externes. Tu peux les ajouter maintenant ou continuer avec des valeurs sûres provisoires.'
+            : 'This action can use external API keys. You can add them now or continue with safe placeholders.',
+          state: 'approval-requested',
+          approveLabel: speaksFrench ? 'Ajouter les clés' : 'Add keys',
+          rejectLabel: speaksFrench ? 'Continuer sans clés' : 'Continue without keys',
+        });
+        addInlineAction(status, speaksFrench ? 'Ajouter les clés' : 'Add keys', () => showApiKeyModal(payload.requirements || []));
+        addInlineAction(status, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => {
+          void generateFromPrompt(prompt, requestedMode, useLastPlan, { ...extra, skipExternalKeys: true }, displayText);
+        });
         showApiKeyModal(payload.requirements || []);
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for keys');
         return;
       }
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
+        markAgentStep('fix', say('Je vois une erreur et je prépare une correction.', 'I found an issue and I am preparing a fix.'), 'Fixing');
         showFixBugBox(payload.errors || [{ message: event.message }]);
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
           ? 'Building'
+          : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'files_changed'
+            ? 'Building'
           : eventType === 'runner_started' || eventType === 'verification_started'
             ? 'Running checks'
             : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed'
               ? 'Retesting'
-              : eventType === 'auto_fix_started' || eventType === 'patch_applied'
+              : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
                 ? 'Fixing'
                 : 'Thinking';
+        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', say('Je prépare l’espace de travail.', 'Preparing the workspace.'), label);
+        if (eventType === 'model_started') markAgentStep('model', say('Je demande au modèle de produire les changements.', 'Asking the model to create the changes.'), label);
+        if (eventType === 'model_streaming') markAgentStep('model', say('Je reçois les fichiers générés.', 'Receiving generated files.'), label);
+        if (eventType === 'build_started' || eventType === 'files_changed' || eventType === 'preview_building') markAgentStep('build', say('Je mets à jour les fichiers et la preview.', 'Updating files and the preview.'), label);
+        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', say('Je vérifie que l’app est affichable.', 'Checking that the app can be shown.'), label);
+        if (eventType === 'runner_passed') finishAgentStep('verify', say('Vérifications terminées.', 'Checks completed.'));
+        if (eventType === 'runner_failed' || eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', say('Je corrige ce qui bloque avant de montrer le résultat.', 'Fixing blocking issues before showing the result.'), label);
+        if (eventType === 'retest_started') markAgentStep('retest', say('Je reteste après correction.', 'Retesting after the fix.'), label);
+        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', say('Correction automatique appliquée.', 'Automatic fix applied.'));
         setAssistantWorking(label);
         generationTouchesPreview = true;
         setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'preview_ready') {
+        finishAgentStep('build', say('Preview prête.', 'Preview ready.'));
+        finishAgentStep('verify', say('Dernière vérification terminée.', 'Final check completed.'));
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
         const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
-        commitAssistantText(`${event.message || 'Application generated and preview updated.'}${diff}`, 'Preview ready.');
+        const finalText = speaksFrench
+          ? `${event.message || 'C’est prêt. J’ai mis à jour la preview.'}${diff}`
+          : `${event.message || 'Done. I updated the preview.'}${diff}`;
+        commitAssistantText(finalText, 'Preview ready.');
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }

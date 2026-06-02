@@ -4894,6 +4894,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
       const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext });
 
+      let lastModelProgressAt = Date.now();
+      let lastModelProgressChars = 0;
       for await (const event of providerGateway.streamChat(selectedModel, messages)) {
         const session = await getBuildSession(buildSessionId);
         if (session?.status === 'cancelled') {
@@ -4905,6 +4907,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         if (event.type === 'token') {
           generatedText += event.text;
           model = event.model;
+          const now = Date.now();
+          if (generatedText.length - lastModelProgressChars >= 1600 || now - lastModelProgressAt >= 2500) {
+            lastModelProgressAt = now;
+            lastModelProgressChars = generatedText.length;
+            await send('model_streaming', 'Receiving generated files from the model.', {
+              model,
+              streamed_chars: generatedText.length,
+            });
+          }
         } else {
           model = event.model;
           costUsd = event.cost_usd;
@@ -5052,7 +5063,26 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
     await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${model}`, refId);
 
-    await send('preview_ready', parsed.summary, {
+    const promptIsFrench = isLikelyFrenchPrompt(prompt);
+    const previewReadyMessage = promptIsFrench
+      ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.'
+      : (parsed.summary || 'Done. I updated the app and refreshed the preview.');
+    const assistantSummary = [
+      previewReadyMessage,
+      diff.summary ? `${promptIsFrench ? 'Changements' : 'Changes'}: ${diff.summary}.` : '',
+      verificationSummary?.message ? `${promptIsFrench ? 'Vérification' : 'Checks'}: ${verificationSummary.message}` : '',
+    ].filter(Boolean).join('\n');
+    await saveProjectMessage({
+      organization_id: updatedProject.organization_id,
+      project_id: updatedProject.id,
+      user_id: userId,
+      role: 'assistant',
+      content: assistantSummary,
+      intent: decision.intent,
+      requested_mode: decision.requestedMode,
+    });
+
+    await send('preview_ready', previewReadyMessage, {
       project: updatedProject,
       files,
       preview: { status: pipeline.status, html: previewHtml },
