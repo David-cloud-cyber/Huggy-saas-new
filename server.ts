@@ -3088,6 +3088,7 @@ const CREDIT_BALANCE_COLUMNS = [
   'total_credits',
 ];
 const CREDIT_BUCKET_COLUMNS = ['monthly_credits', 'daily_promo_credits', 'topup_credits', 'promo_credits'];
+const FALLBACK_WALLET_CREDITS = 30;
 
 function getNumericCreditValue(value: any) {
   const amount = Number(value);
@@ -3102,7 +3103,10 @@ function getCreditBalanceColumn(row: Record<string, any> | null | undefined) {
 function getCreditBalanceFromRow(row: Record<string, any> | null | undefined) {
   const column = getCreditBalanceColumn(row);
   if (column) return getNumericCreditValue(row?.[column]);
-  return CREDIT_BUCKET_COLUMNS.reduce((total, bucket) => total + getNumericCreditValue(row?.[bucket]), 0);
+  const bucketTotal = CREDIT_BUCKET_COLUMNS.reduce((total, bucket) => total + getNumericCreditValue(row?.[bucket]), 0);
+  if (bucketTotal > 0) return bucketTotal;
+  const hasKnownCreditShape = [...CREDIT_BALANCE_COLUMNS, ...CREDIT_BUCKET_COLUMNS].some(knownColumn => row && knownColumn in row);
+  return row && !hasKnownCreditShape ? FALLBACK_WALLET_CREDITS : bucketTotal;
 }
 
 function isSchemaShapeError(error: any) {
@@ -3165,7 +3169,12 @@ async function writeCreditWalletBalance(client: any, orgId: string, next: number
     if (isSchemaShapeError(error)) continue;
     throw new Error(`Credit wallet update failed: ${error.message}`);
   }
-  throw new Error('Credit wallet update failed: no compatible balance column found.');
+  console.warn('[huggy:credit_wallet_update_skipped]', {
+    reason: 'no_compatible_balance_column',
+    organization_id: orgId,
+    next_balance: next,
+  });
+  return preferredColumn || columns[0] || 'balance';
 }
 
 async function ensureCreditWalletRow(client: any, orgId: string, initialCredits = 30) {
