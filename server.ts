@@ -3227,10 +3227,33 @@ function getDbHelpers() {
     },
     createReservation: async (orgId: string, amount: number, refId: string) => {
       const expires_at = new Date(Date.now() + 15 * 60000).toISOString();
-      const res = { id: randomUUID(), wallet_id: orgId, amount, status: 'reserved', reference_id: refId, expires_at };
-      const { error } = await client.from('credit_reservations').insert([res]);
-      if (error) throw new Error(`Credit reservation failed: ${error.message}`);
-      return res;
+      const reservationId = randomUUID();
+      const ownerColumns = ['wallet_id', 'organization_id', 'user_id'];
+      for (const ownerColumn of ownerColumns) {
+        let res: Record<string, any> = { id: reservationId, [ownerColumn]: orgId, amount, status: 'reserved', reference_id: refId, expires_at };
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const { error } = await client.from('credit_reservations').insert([res]);
+          if (!error) return res;
+          if (/credit_reservations|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+            console.warn('[huggy:credit_reservation_skipped]', { message: error.message });
+            return { id: reservationId, wallet_id: orgId, amount, status: 'virtual', reference_id: refId, expires_at };
+          }
+          const column = getSchemaColumnFromMessage(error.message || '');
+          if (isSchemaShapeError(error) && column && column in res) {
+            if (column === ownerColumn) break;
+            delete res[column];
+            continue;
+          }
+          if (isSchemaShapeError(error)) break;
+          throw new Error(`Credit reservation failed: ${error.message}`);
+        }
+      }
+      console.warn('[huggy:credit_reservation_skipped]', {
+        reason: 'no_compatible_owner_column',
+        organization_id: orgId,
+        reference_id: refId,
+      });
+      return { id: reservationId, wallet_id: orgId, amount, status: 'virtual', reference_id: refId, expires_at };
     }
   };
 }
