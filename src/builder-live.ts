@@ -192,8 +192,21 @@ function escapeHtml(value: string): string {
 }
 
 function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
+  return centeredPreviewLoaderHtml(mode, label);
+}
+
+function previewLoaderLetters(label: string) {
+  return Array.from(label).map((letter, index) => {
+    const safeLetter = letter === ' ' ? '&nbsp;' : escapeHtml(letter);
+    return `<span class="loader-letter" style="animation-delay:${(index * 0.1).toFixed(1)}s">${safeLetter}</span>`;
+  }).join('');
+}
+
+function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
   const isWorking = mode === 'working';
-  const status = escapeHtml(label || (isWorking ? 'Assembling preview' : 'Ready when you are'));
+  const rawStatus = label || (isWorking ? 'Generating' : 'Ready when you are');
+  const status = escapeHtml(rawStatus);
+  const letters = previewLoaderLetters(rawStatus);
   const stateClass = isWorking ? 'working' : 'idle';
   return `<!DOCTYPE html>
 <html lang="en" data-preview-state="${stateClass}">
@@ -203,260 +216,131 @@ function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
 <style>
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --panel: #ffffff;
-  --panel-soft: #f6f7f9;
-  --text: #09090b;
-  --muted: #52525b;
-  --line: rgba(9,9,11,.14);
-  --line-strong: rgba(9,9,11,.22);
-  --accent: #09090b;
-  --glow: rgba(9,9,11,.08);
+  --loader-text: #ffffff;
+  --loader-bg-a: #1a3379;
+  --loader-bg-b: #0f172a;
+  --loader-bg-c: #000000;
+  --ring-a: #38bdf8;
+  --ring-b: #005dff;
+  --ring-c: #1e40af;
+  --ring-glow-a: rgba(56,189,248,.30);
+  --ring-glow-b: rgba(0,93,255,.20);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #09090b;
-    --panel: #111113;
-    --panel-soft: #18181b;
-    --text: #f8fafc;
-    --muted: #b8bbc3;
-    --line: rgba(255,255,255,.12);
-    --line-strong: rgba(255,255,255,.22);
-    --accent: #ffffff;
-    --glow: rgba(255,255,255,.10);
+    --loader-text: #1f2937;
+    --loader-bg-a: #f3f4f6;
+    --loader-bg-b: #e5e7eb;
+    --loader-bg-c: #d1d5db;
+    --ring-a: #4b5563;
+    --ring-b: #6b7280;
+    --ring-c: #9ca3af;
+    --ring-glow-a: rgba(107,114,128,.30);
+    --ring-glow-b: rgba(156,163,175,.20);
   }
 }
 * { box-sizing: border-box; }
+html, body { min-height: 100%; }
 body {
-  min-height: 100vh;
   margin: 0;
-  display: grid;
-  place-items: center;
   overflow: hidden;
-  background:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px),
-    radial-gradient(circle at 50% 38%, var(--glow), transparent 34%),
-    var(--bg);
-  background-size: 48px 48px, 48px 48px, 100% 100%, auto;
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+  background: linear-gradient(180deg, var(--loader-bg-a), var(--loader-bg-b) 52%, var(--loader-bg-c));
+  color: var(--loader-text);
 }
-.studio {
-  position: relative;
-  width: min(680px, calc(100vw - 48px));
-  min-height: 360px;
-  display: grid;
-  place-items: center;
-}
-.orbit {
-  position: absolute;
-  inset: 54px 76px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 28px;
-}
-.connector {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 58%;
-  height: 1px;
-  transform: translate(-50%, -50%);
-  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
-}
-.connector.vertical {
-  width: 1px;
-  height: 54%;
-  background: linear-gradient(180deg, transparent, var(--line-strong), transparent);
-}
-.pulse {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
-  background: var(--accent);
-  box-shadow: 0 0 0 6px var(--glow);
-  opacity: .9;
-}
-.tile {
-  position: absolute;
-  width: 156px;
-  min-height: 106px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  box-shadow: 0 18px 54px rgba(9,9,11,.08), 0 4px 12px rgba(9,9,11,.04);
-  padding: 14px;
-}
-.tile.prompt { left: 8px; top: 38px; }
-.tile.interface { right: 8px; top: 38px; }
-.tile.data { left: 8px; bottom: 38px; }
-.tile.preview { right: 8px; bottom: 38px; }
-.tile-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 12px;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--accent);
-}
-.line {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
-  margin-top: 8px;
-}
-.line.short { width: 64%; }
-.line.mid { width: 82%; }
-.blocks {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.block {
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel-soft);
-}
-.status {
-  position: relative;
-  z-index: 2;
-  width: min(282px, 70vw);
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-  box-shadow: 0 20px 80px rgba(9,9,11,.10);
-  padding: 10px 14px;
+.preview-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
 }
-.status strong {
-  color: var(--text);
-  font-weight: 760;
-}
-.working .shining-text {
-  color: transparent;
-  background-image: linear-gradient(110deg,#404040 0%,#404040 35%,#fff 50%,#404040 75%,#404040 100%);
-  background-size: 200% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: preview-shine 2s linear infinite;
-}
-.working .pulse { animation: pulse 1.4s cubic-bezier(.22,1,.36,1) infinite; }
-.working .connector::after,
-.working .connector.vertical::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  transform: translateX(-100%);
-  animation: flow 1.45s cubic-bezier(.22,1,.36,1) infinite;
-}
-.working .connector.vertical::after {
-  background: linear-gradient(180deg, transparent, var(--accent), transparent);
-  transform: translateY(-100%);
-  animation-name: flowY;
-}
-.working .tile {
-  animation: lift 1.8s cubic-bezier(.22,1,.36,1) infinite;
-}
-.working .tile.interface { animation-delay: .12s; }
-.working .tile.data { animation-delay: .24s; }
-.working .tile.preview { animation-delay: .36s; }
-.working .line,
-.working .block {
+.loader-core {
   position: relative;
-  overflow: hidden;
+  width: min(180px, 54vw);
+  height: min(180px, 54vw);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 520;
+  letter-spacing: .01em;
+  user-select: none;
 }
-.working .line::after,
-.working .block::after {
-  content: "";
+.loader-text {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 78%;
+  color: var(--loader-text);
+  font-size: clamp(13px, 3vw, 16px);
+  line-height: 1;
+  text-align: center;
+  filter: drop-shadow(0 1px 10px rgba(0,0,0,.18));
+}
+.loader-letter {
+  display: inline-block;
+  opacity: .4;
+  animation: loaderLetter 3s infinite;
+}
+.loader-circle {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
-  transform: translateX(-100%);
-  animation: shimmer 1.35s cubic-bezier(.22,1,.36,1) infinite;
+  border-radius: 999px;
+  animation: loaderCircle 5s linear infinite;
+}
+.idle .loader-circle { animation-duration: 8s; opacity: .88; }
+.idle .loader-letter { animation-duration: 4.5s; }
+@keyframes loaderCircle {
+  0% {
+    transform: rotate(90deg);
+    box-shadow: 0 6px 12px 0 var(--ring-a) inset, 0 12px 18px 0 var(--ring-b) inset, 0 36px 36px 0 var(--ring-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
+  }
+  50% {
+    transform: rotate(270deg);
+    box-shadow: 0 6px 12px 0 #60a5fa inset, 0 12px 6px 0 #0284c7 inset, 0 24px 36px 0 var(--ring-b) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
+  }
+  100% {
+    transform: rotate(450deg);
+    box-shadow: 0 6px 12px 0 #4dc8fd inset, 0 12px 18px 0 var(--ring-b) inset, 0 36px 36px 0 var(--ring-c) inset, 0 0 3px 1.2px var(--ring-glow-a), 0 0 6px 1.8px var(--ring-glow-b);
+  }
 }
 @media (prefers-color-scheme: dark) {
-  .working .line::after,
-  .working .block::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.13), transparent); }
+  @keyframes loaderCircle {
+    0%, 100% {
+      transform: rotate(90deg);
+      box-shadow: 0 6px 12px 0 #4b5563 inset, 0 12px 18px 0 #6b7280 inset, 0 36px 36px 0 #9ca3af inset, 0 0 3px 1.2px rgba(107,114,128,.30), 0 0 6px 1.8px rgba(156,163,175,.20);
+    }
+    50% {
+      transform: rotate(270deg);
+      box-shadow: 0 6px 12px 0 #6b7280 inset, 0 12px 6px 0 #9ca3af inset, 0 24px 36px 0 #4b5563 inset, 0 0 3px 1.2px rgba(107,114,128,.30), 0 0 6px 1.8px rgba(156,163,175,.20);
+    }
+  }
 }
-@keyframes shimmer { to { transform: translateX(100%); } }
-@keyframes preview-shine {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+@keyframes loaderLetter {
+  0%, 100% { opacity: .4; transform: translateY(0) scale(1); }
+  20% { opacity: 1; transform: scale(1.15); }
+  40% { opacity: .7; transform: translateY(0) scale(1); }
 }
-@keyframes flow { to { transform: translateX(100%); } }
-@keyframes flowY { to { transform: translateY(100%); } }
-@keyframes pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(.9); opacity: .55; }
-  50% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
-}
-@keyframes lift {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-@media (max-width: 620px) {
-  .studio { width: min(390px, calc(100vw - 28px)); min-height: 420px; }
-  .orbit { inset: 48px 42px; }
-  .connector { width: 44%; }
-  .connector.vertical { height: 60%; }
-  .tile { width: 132px; min-height: 96px; padding: 12px; border-radius: 15px; }
-  .tile.prompt, .tile.data { left: 0; }
-  .tile.interface, .tile.preview { right: 0; }
-  .status { width: min(248px, 76vw); }
+@media (max-width: 520px) {
+  .loader-core { width: min(150px, 58vw); height: min(150px, 58vw); }
+  .loader-text { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
+  .loader-circle,
+  .loader-letter { animation: none !important; }
+  .loader-letter { opacity: .86; }
 }
 </style>
 </head>
 <body>
-  <main class="studio ${stateClass}" aria-label="Preview preparation">
-    <div class="orbit"></div>
-    <div class="connector"></div>
-    <div class="connector vertical"></div>
-    <div class="pulse"></div>
-    <section class="tile prompt" aria-label="Prompt">
-      <div class="tile-label"><span class="dot"></span>Prompt</div>
-      <div class="line mid"></div><div class="line"></div><div class="line short"></div>
-    </section>
-    <section class="tile interface" aria-label="Interface">
-      <div class="tile-label"><span class="dot"></span>Interface</div>
-      <div class="blocks"><span class="block"></span><span class="block"></span><span class="block"></span></div>
-    </section>
-    <section class="tile data" aria-label="Data">
-      <div class="tile-label"><span class="dot"></span>Data</div>
-      <div class="line"></div><div class="line mid"></div><div class="line short"></div>
-    </section>
-    <section class="tile preview" aria-label="Preview">
-      <div class="tile-label"><span class="dot"></span>Preview</div>
-      <div class="blocks"><span class="block"></span><span class="block"></span><span class="block"></span></div>
-    </section>
-    <div class="status" role="status" aria-live="polite"><span class="dot"></span><strong class="shining-text">${status}</strong></div>
+  <main class="preview-loader ${stateClass}" aria-label="Preview preparation">
+    <div class="loader-core" role="status" aria-live="polite" aria-label="${status}">
+      <span class="loader-text">${letters}</span>
+      <div class="loader-circle" aria-hidden="true"></div>
+    </div>
   </main>
 </body>
 </html>`;
@@ -472,7 +356,7 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   emptyPreviewLabel = resolvedLabel;
   frame.dataset.emptyPreview = 'true';
   frame.dataset.emptyPreviewMode = mode;
-  frame.srcdoc = emptyPreviewHtml(mode, resolvedLabel);
+  frame.srcdoc = centeredPreviewLoaderHtml(mode, resolvedLabel);
   setPreviewDevice(selectedPreviewDevice, false);
   const address = document.querySelector('.preview-address-glow span:last-child');
   const statusSlug = resolvedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'working';
