@@ -40,6 +40,11 @@ function goToApp() {
   window.location.href = getRedirectTarget();
 }
 
+function getAuthRedirectUrl() {
+  const target = encodeURIComponent(getRedirectTarget());
+  return `${window.location.origin}/auth.html?redirect=${target}`;
+}
+
 async function handleEmailAuth(event: Event) {
   event.preventDefault();
 
@@ -63,7 +68,7 @@ async function handleEmailAuth(event: Event) {
           data: {
             full_name: nameInput?.value.trim() || '',
           },
-          emailRedirectTo: `${window.location.origin}/dashboard.html`,
+          emailRedirectTo: getAuthRedirectUrl(),
         },
       });
 
@@ -96,7 +101,7 @@ async function handleOAuth(provider: 'google' | 'github') {
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${window.location.origin}/dashboard.html`,
+      redirectTo: getAuthRedirectUrl(),
     },
   });
   if (error) setStatus(error.message, 'error');

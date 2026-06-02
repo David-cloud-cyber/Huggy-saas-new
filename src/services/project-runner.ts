@@ -80,7 +80,7 @@ export class HybridProjectRunner implements RunnerAdapter {
           check_type: 'package_scripts',
           status: 'skipped',
           severity: 'info',
-          message: 'No package.json scripts to run.',
+          message: 'Script checks skipped for this legacy static snapshot.',
         });
       }
     } finally {

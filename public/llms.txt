@@ -1,0 +1,18 @@
+# Huggy
+
+Huggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.
+
+## Important pages
+- Home: https://huggy.fun/
+- Pricing: https://huggy.fun/pricing.html
+- Features: https://huggy.fun/features.html
+- Documentation: https://huggy.fun/documentation.html
+- Templates: https://huggy.fun/templates/
+- Use cases: https://huggy.fun/use-cases/
+- Comparisons: https://huggy.fun/comparisons/
+- Guides: https://huggy.fun/guides/
+
+## Product facts
+- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.
+- Huggy is designed for founders, agencies, product teams and non-technical builders.
+- Private app routes such as auth, dashboard and builder are not intended for indexing.

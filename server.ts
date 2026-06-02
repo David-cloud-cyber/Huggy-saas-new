@@ -878,6 +878,209 @@ function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean
   return files.slice(0, 80);
 }
 
+function inferGeneratedLanguage(filePath: string): string {
+  const normalized = String(filePath || '').toLowerCase();
+  if (normalized.endsWith('.tsx')) return 'tsx';
+  if (normalized.endsWith('.ts')) return 'ts';
+  if (normalized.endsWith('.jsx')) return 'jsx';
+  if (normalized.endsWith('.js')) return 'javascript';
+  if (normalized.endsWith('.css')) return 'css';
+  if (normalized.endsWith('.html')) return 'html';
+  if (normalized.endsWith('.json')) return 'json';
+  if (normalized.endsWith('.sql')) return 'sql';
+  if (normalized.endsWith('.md')) return 'markdown';
+  if (normalized.endsWith('.xml')) return 'xml';
+  return 'text';
+}
+
+function fileByPath(files: GeneratedFile[], filePath: string): GeneratedFile | undefined {
+  const target = String(filePath || '').replace(/\\/g, '/').toLowerCase();
+  return files.find(file => file.path.replace(/\\/g, '/').toLowerCase() === target);
+}
+
+function isModernFrontendProject(files: GeneratedFile[]): boolean {
+  return Boolean(
+    fileByPath(files, 'package.json') &&
+    (fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx')) &&
+    (fileByPath(files, 'src/main.tsx') || fileByPath(files, 'src/main.jsx')),
+  );
+}
+
+function stripStandaloneHtmlForReact(html: string): string {
+  const source = String(html || '');
+  const body = getFirstRegexMatch(source, /<body[^>]*>([\s\S]*?)<\/body>/i) || source;
+  return body
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+    .trim();
+}
+
+function cssFromStandaloneHtml(html: string): string {
+  return Array.from(String(html || '').matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi))
+    .map(match => match[1])
+    .join('\n\n')
+    .trim();
+}
+
+function createReactAppFromStandaloneHtml(html: string, projectName: string): string {
+  const markup = stripStandaloneHtmlForReact(html);
+  return [
+    "import './index.css';",
+    '',
+    'export default function App() {',
+    '  return (',
+    '    <main className="huggy-generated-app" aria-label="Generated app preview">',
+    `      <div dangerouslySetInnerHTML={{ __html: ${JSON.stringify(markup || `<section><h1>${escapeHtml(projectName)}</h1><p>Generated with Huggy.</p></section>`)} }} />`,
+    '    </main>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+function ensureModernFrontendProject(files: GeneratedFile[], projectName: string, promptOrDescription = ''): GeneratedFile[] {
+  const now = new Date().toISOString();
+  const byPath = new Map(files.map(file => [file.path.replace(/\\/g, '/'), { ...file }]));
+  const addIfMissing = (filePath: string, content: string, language = inferGeneratedLanguage(filePath)) => {
+    if (!byPath.has(filePath)) {
+      byPath.set(filePath, { path: filePath, content, language, updated_at: now });
+    }
+  };
+
+  const existingHtml = fileByPath(files, 'index.html')?.content || '';
+  const hasApp = Boolean(fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx'));
+  const hasMain = Boolean(fileByPath(files, 'src/main.tsx') || fileByPath(files, 'src/main.jsx'));
+
+  addIfMissing('package.json', JSON.stringify({
+    scripts: {
+      dev: 'vite',
+      build: 'vite build',
+      test: 'node --experimental-strip-types src/app.test.ts',
+      lint: 'eslint .',
+    },
+    dependencies: {
+      '@vitejs/plugin-react': 'latest',
+      vite: 'latest',
+      typescript: 'latest',
+      react: 'latest',
+      'react-dom': 'latest',
+      eslint: 'latest',
+    },
+    devDependencies: {},
+  }, null, 2));
+
+  const viteIndex = [
+    '<!doctype html>',
+    '<html lang="en">',
+    '  <head>',
+    '    <meta charset="UTF-8" />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `    <title>${escapeHtml(projectName || 'Huggy App')}</title>`,
+    `    <meta name="description" content="${escapeHtml(summarizeForMeta(promptOrDescription || projectName, 'A production-ready React app generated with Huggy.'))}" />`,
+    '  </head>',
+    '  <body>',
+    '    <div id="root"></div>',
+    '    <script type="module" src="/src/main.tsx"></script>',
+    '  </body>',
+    '</html>',
+    '',
+  ].join('\n');
+  byPath.set('index.html', {
+    path: 'index.html',
+    content: viteIndex,
+    language: 'html',
+    updated_at: byPath.get('index.html')?.updated_at || now,
+  });
+
+  if (!hasMain) {
+    addIfMissing('src/main.tsx', [
+      "import React from 'react';",
+      "import { createRoot } from 'react-dom/client';",
+      "import App from './App';",
+      "import './index.css';",
+      '',
+      "createRoot(document.getElementById('root')!).render(",
+      '  <React.StrictMode>',
+      '    <App />',
+      '  </React.StrictMode>,',
+      ');',
+      '',
+    ].join('\n'), 'tsx');
+  }
+
+  if (!hasApp) {
+    addIfMissing('src/App.tsx', createReactAppFromStandaloneHtml(existingHtml, projectName), 'tsx');
+  }
+
+  const extractedCss = cssFromStandaloneHtml(existingHtml);
+  addIfMissing('src/index.css', extractedCss || [
+    ':root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1c; background: #fcfbf8; }',
+    '* { box-sizing: border-box; }',
+    'body { margin: 0; min-height: 100vh; background: #fcfbf8; }',
+    'button, input, textarea, select { font: inherit; }',
+    '.huggy-generated-app { min-height: 100vh; }',
+    '',
+  ].join('\n'), 'css');
+
+  addIfMissing('src/app.test.ts', [
+    "import { readFileSync } from 'node:fs';",
+    '',
+    "const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');",
+    "if (!/export\\s+default\\s+function\\s+App|export\\s+default\\s+App|const\\s+App\\s*=/.test(app)) {",
+    "  throw new Error('App component is missing a default export.');",
+    '}',
+    "console.log('Generated app smoke test passed.');",
+    '',
+  ].join('\n'), 'ts');
+
+  addIfMissing('tsconfig.json', JSON.stringify({
+    compilerOptions: {
+      target: 'ES2020',
+      useDefineForClassFields: true,
+      lib: ['DOM', 'DOM.Iterable', 'ES2020'],
+      allowJs: false,
+      skipLibCheck: true,
+      esModuleInterop: true,
+      allowSyntheticDefaultImports: true,
+      strict: true,
+      forceConsistentCasingInFileNames: true,
+      module: 'ESNext',
+      moduleResolution: 'Node',
+      resolveJsonModule: true,
+      isolatedModules: true,
+      noEmit: true,
+      jsx: 'react-jsx',
+    },
+    include: ['src'],
+  }, null, 2), 'json');
+
+  addIfMissing('vite.config.ts', [
+    "import { defineConfig } from 'vite';",
+    "import react from '@vitejs/plugin-react';",
+    '',
+    'export default defineConfig({',
+    '  plugins: [react()],',
+    '});',
+    '',
+  ].join('\n'), 'ts');
+
+  addIfMissing('README.md', [
+    `# ${projectName || 'Huggy App'}`,
+    '',
+    'Generated as a Vite + React + TypeScript project by Huggy.',
+    '',
+    '## Scripts',
+    '',
+    '- `npm run dev` starts the local app.',
+    '- `npm run build` creates a production build.',
+    '- `npm run test` runs the generated smoke test.',
+    '- `npm run lint` runs ESLint when dependencies are installed.',
+    '',
+  ].join('\n'), 'markdown');
+
+  return Array.from(byPath.values()).slice(0, 80);
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -1451,6 +1654,85 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
   };
 }
 
+function stripReactImportsForPreview(source: string): string {
+  let output = String(source || '')
+    .replace(/^\s*import\s+['"][^'"]+\.css['"];?\s*$/gmi, '')
+    .replace(/^\s*import\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gmi, '')
+    .replace(/^\s*import\s+type\s+[\s\S]*?from\s+['"][^'"]+['"];?\s*$/gmi, '');
+
+  output = output
+    .replace(/export\s+default\s+function\s+App\s*\(/g, 'function App(')
+    .replace(/export\s+function\s+App\s*\(/g, 'function App(')
+    .replace(/export\s+const\s+App\s*=/g, 'const App =')
+    .replace(/export\s+default\s+App\s*;?/g, '')
+    .replace(/export\s+default\s+\(\s*\)\s*=>/g, 'const App = () =>')
+    .replace(/export\s+default\s+/g, 'const App = ');
+
+  if (!/\bfunction\s+App\s*\(|\bconst\s+App\s*=|\blet\s+App\s*=|\bvar\s+App\s*=/.test(output)) {
+    output += '\nfunction App() { return <main><h1>Preview ready</h1><p>Huggy generated source files for this app.</p></main>; }\n';
+  }
+
+  return output;
+}
+
+function buildReactVitePreviewHtml(
+  files: GeneratedFile[],
+  projectName = 'Huggy app',
+  projectId?: string,
+  environment: 'preview' | 'production' = 'preview',
+  promptOrDescription = '',
+  slugOrId = '',
+): string | null {
+  const appFile = fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx');
+  if (!appFile) return null;
+
+  const css = [
+    fileByPath(files, 'src/index.css')?.content,
+    fileByPath(files, 'src/App.css')?.content,
+  ].filter(Boolean).join('\n\n');
+  const appCode = stripReactImportsForPreview(appFile.content);
+  const title = projectName || 'Huggy app';
+  const description = summarizeForMeta(promptOrDescription || title, 'Production-ready React app generated with Huggy.');
+  const slug = slugify(slugOrId || projectId || title) || 'huggy-app';
+  const canonical = `https://huggy.fun/generated/${slug}`;
+  const robots = environment === 'production' ? 'index, follow' : 'noindex, nofollow';
+  const html = [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '  <meta charset="UTF-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `  <meta name="robots" content="${robots}" />`,
+    `  <link rel="canonical" href="${escapeHtml(canonical)}" />`,
+    `  <title>${escapeHtml(title)}</title>`,
+    `  <meta name="description" content="${escapeHtml(description)}" />`,
+    `  <meta property="og:title" content="${escapeHtml(title)}" />`,
+    `  <meta property="og:description" content="${escapeHtml(description)}" />`,
+    '  <meta property="og:type" content="website" />',
+    '  <meta name="twitter:card" content="summary_large_image" />',
+    '  <script src="https://cdn.tailwindcss.com"></script>',
+    '  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>',
+    '  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>',
+    '  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
+    '  <style>',
+    css || 'body{margin:0;background:#fcfbf8;color:#1c1c1c;font-family:Inter,ui-sans-serif,system-ui,sans-serif;}',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <div id="root"></div>',
+    '  <script type="text/babel" data-presets="typescript,react">',
+    '    const { useCallback, useEffect, useMemo, useRef, useState } = React;',
+    appCode,
+    "    const root = ReactDOM.createRoot(document.getElementById('root'));",
+    '    root.render(<App />);',
+    '  </script>',
+    '</body>',
+    '</html>',
+    '',
+  ].join('\n');
+  return injectAnalyticsSnippet(html, projectId, environment);
+}
+
 function renderPreviewHtml(
   files: GeneratedFile[],
   projectName = 'Huggy app',
@@ -1459,6 +1741,8 @@ function renderPreviewHtml(
   promptOrDescription = '',
   slugOrId = '',
 ): string {
+  const reactPreview = buildReactVitePreviewHtml(files, projectName, projectId, environment, promptOrDescription, slugOrId);
+  if (reactPreview) return reactPreview;
   const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
   const html = indexFile?.content || buildFallbackAppHtml(projectName, 'Preview ready. Generate or edit this project to replace the placeholder.');
   const seoHtml = enhanceHtmlSeo(html, projectName, promptOrDescription || projectName, slugOrId || projectId || projectName, environment);
@@ -2465,10 +2749,13 @@ async function generateFilesWithAi(input: {
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
-        'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        'Generate a real Vite + React + TypeScript application, not a single HTML-only mockup.',
+        'For new apps, return at minimum package.json, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts. package.json must include scripts for dev, build, test, and lint.',
+        'src/App.tsx must contain the real product UI and stateful behavior. It should be self-contained except for React and local CSS imports; do not depend on remote assets or private component libraries.',
+        'index.html must be a Vite shell with <div id="root"></div> and a module script for /src/main.tsx, not the whole app.',
         input.existingFiles.length
-          ? 'This is an iteration on an existing app. Preserve the existing app and return only complete contents for files that must be created or updated. If you modify UI text, colors, sizing, layout or behavior in index.html, return the full updated index.html. Never return a placeholder or fallback index.html.'
-          : 'This is a new app. Return a complete index.html.',
+          ? 'This is an iteration on an existing app. Use existingFilesContent as the source of truth, preserve the app, and return only complete contents for files that must be created or updated. If the current project is legacy HTML-only and the user requests a meaningful app change, upgrade it to the Vite React structure above while preserving the visible experience.'
+          : 'This is a new app. Return a complete modern React project structure, not only index.html.',
         'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
         'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
@@ -2525,10 +2812,13 @@ function buildGenerationMessages(input: {
         uiPolicy.systemPrompt,
         'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
         'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
-        'Generate a deployable static Vercel v1 app with a self-contained index.html for live preview.',
+        'Generate a real Vite + React + TypeScript application, not a single HTML-only mockup.',
+        'For new apps, return at minimum package.json, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts. package.json must include scripts for dev, build, test, and lint.',
+        'src/App.tsx must contain the real product UI and stateful behavior. It should be self-contained except for React and local CSS imports; do not depend on remote assets or private component libraries.',
+        'index.html must be a Vite shell with <div id="root"></div> and a module script for /src/main.tsx, not the whole app.',
         input.existingFiles.length
-          ? 'This is an iteration on an existing app. Use existingFilesContent as the source of truth, preserve the app, and return only complete contents for files that must be created or updated. If the requested change touches visible UI in index.html, return the full updated index.html. Never return a placeholder or fallback index.html.'
-          : 'This is a new app. Return a complete index.html.',
+          ? 'This is an iteration on an existing app. Use existingFilesContent as the source of truth, preserve the app, and return only complete contents for files that must be created or updated. If the current project is legacy HTML-only and the user requests a meaningful app change, upgrade it to the Vite React structure above while preserving the visible experience.'
+          : 'This is a new app. Return a complete modern React project structure, not only index.html.',
         'Every generated app must be SEO and AI-search ready: semantic HTML, exactly one useful H1, crawlable content, page title, meta description, canonical-ready structure, Open Graph/Twitter metadata, descriptive image alt text, and JSON-LD when it matches the app type.',
         'For multi-page public apps, include sitemap.xml and robots.txt files. Never fake traffic, rankings, testimonials, customers, or analytics.',
         'Include Supabase backend schema in supabase/schema.sql when the app needs data.',
@@ -2560,7 +2850,7 @@ function parseGeneratedOutput(
   const parsed = extractGeneratedJson(rawText) || (
     looksLikeStandaloneHtml(rawText)
       ? {
-          summary: 'Generated a complete HTML preview.',
+          summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
           files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
         }
       : null
@@ -2576,12 +2866,18 @@ function parseGeneratedOutput(
     throw new GeneratedOutputParseError('Huggy could not find generated files in the AI output, so the existing app was kept unchanged.');
   }
 
-  const files = withProjectSeoSupport(
+  const normalizedFiles = withProjectSeoSupport(
     normalizeGeneratedFiles(rawFiles, { ensureIndex: !options.hasExistingFiles }),
     projectName,
     promptOrDescription || projectName,
     { ensureIndex: !options.hasExistingFiles },
   );
+  const shouldEnsureModernProject = !options.hasExistingFiles || normalizedFiles.some(file =>
+    /^package\.json$/i.test(file.path) || /^src\/App\.(tsx|jsx)$/i.test(file.path) || /^src\/main\.(tsx|jsx)$/i.test(file.path)
+  );
+  const files = shouldEnsureModernProject
+    ? ensureModernFrontendProject(normalizedFiles, projectName, promptOrDescription || projectName)
+    : normalizedFiles;
   if (!files.length) {
     throw new GeneratedOutputParseError('Huggy could not find any safe generated files, so the existing app was kept unchanged.');
   }
@@ -2591,7 +2887,7 @@ function parseGeneratedOutput(
 
   return {
     files,
-    summary: String(parsed.summary || 'Application files generated.'),
+    summary: String(parsed.summary || 'Modern React application files generated.'),
     backendSchema: parsed.backendSchema ? String(parsed.backendSchema) : '',
   };
 }
@@ -3450,9 +3746,14 @@ async function deployFilesToVercel(
       : enhanced;
   };
 
+  const productionPreviewHtml = isModernFrontendProject(files)
+    ? renderPreviewHtml(files, project.name, project.id, 'production', project.prompt || project.name, project.slug || project.id)
+    : '';
   const deploymentFiles = normalizeGeneratedFiles(files).map(file => ({
     file: file.path,
-    data: file.path.endsWith('.html')
+    data: file.path === 'index.html' && productionPreviewHtml
+      ? (options.includeHuggyBadge ? injectHuggyPublishedBadge(productionPreviewHtml, project, options.publicOrigin || getHuggyPublicOrigin()) : productionPreviewHtml)
+      : file.path.endsWith('.html')
       ? prepareHtml(file.content)
       : file.content,
   }));
@@ -4538,12 +4839,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
     generation.files.forEach(file => mergedByPath.set(file.path, file));
-    const files = withProjectSeoSupport(
+    let files = withProjectSeoSupport(
       Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path)),
       project.name,
       prompt,
       { ensureIndex: true },
     );
+    files = ensureModernFrontendProject(files, project.name, prompt);
 
     let pipeline = runPreviewPipeline(project, files);
     let finalFiles = files;
@@ -5022,6 +5324,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       prompt,
       { ensureIndex: true },
     );
+    files = ensureModernFrontendProject(files, project.name, prompt);
     await send('files_changed', 'Generated files were merged into the project.', { diff: diffFiles(existingFiles, files) });
     await send('preview_building', 'Building preview sandbox.', {});
     let pipeline = runPreviewPipeline(project, files);

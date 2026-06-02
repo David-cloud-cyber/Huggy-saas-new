@@ -403,6 +403,282 @@
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Premium auth shell, aligned with Huggy's warm product system */
+        body {
+            align-items: stretch;
+            justify-content: center;
+            padding: clamp(16px, 3vw, 32px);
+            background:
+                radial-gradient(circle at 10% 5%, rgba(18, 63, 150, 0.06), transparent 34%),
+                radial-gradient(circle at 90% 8%, rgba(59, 130, 246, 0.08), transparent 30%),
+                linear-gradient(180deg, #fcfbf8 0%, #f7f4ed 100%);
+        }
+
+        [data-theme="dark"] body {
+            background:
+                radial-gradient(circle at 10% 5%, rgba(147, 197, 253, 0.10), transparent 34%),
+                linear-gradient(180deg, #171613 0%, #201f1b 100%);
+        }
+
+        .auth-container {
+            max-width: 1120px;
+            align-self: center;
+            display: grid;
+            grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+            min-height: min(720px, calc(100vh - 64px));
+            padding: 0;
+            border-radius: 30px;
+            overflow: hidden;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            box-shadow: 0 28px 90px rgba(12, 36, 90, 0.12), 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+            animation: slideUp 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .auth-panel {
+            padding: clamp(28px, 5vw, 58px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: rgba(255, 253, 248, 0.90);
+        }
+
+        [data-theme="dark"] .auth-panel {
+            background: rgba(23, 22, 19, 0.94);
+        }
+
+        .auth-panel .logo-area {
+            justify-content: flex-start;
+            margin: 0 0 38px;
+        }
+
+        .auth-brand-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text);
+            font-weight: 850;
+        }
+
+        .auth-brand-row .logo-mark {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+        }
+
+        .auth-card {
+            padding: 0;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            animation: none;
+        }
+
+        .auth-header {
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .auth-title {
+            font-family: "Inter", "Instrument Sans", sans-serif;
+            font-size: clamp(32px, 4vw, 48px);
+            font-style: normal;
+            font-weight: 850;
+            letter-spacing: -0.045em;
+            line-height: 1;
+            margin-bottom: 10px;
+        }
+
+        .auth-subtitle {
+            max-width: 380px;
+            line-height: 1.6;
+        }
+
+        .auth-progress {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 0 0 28px;
+        }
+
+        .auth-progress span {
+            height: 3px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #123f96, #7dacff);
+        }
+
+        .tabs {
+            width: fit-content;
+            min-width: 240px;
+            background: rgba(28, 28, 28, 0.04);
+            border-radius: 999px;
+            padding: 4px;
+        }
+
+        .tab-btn {
+            border-radius: 999px;
+            padding: 9px 16px;
+        }
+
+        .tab-btn.active {
+            background: #fffefa;
+            box-shadow: 0 8px 20px rgba(12, 36, 90, 0.08), inset 0 1px 0 rgba(255,255,255,.92);
+        }
+
+        .input {
+            min-height: 46px;
+            border-radius: 14px;
+            background: #fffefa;
+            box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
+        }
+
+        [data-theme="dark"] .input,
+        [data-theme="dark"] .tab-btn.active {
+            background: var(--bg-input);
+        }
+
+        .btn-submit {
+            min-height: 48px;
+            border-radius: 999px;
+            background:
+                radial-gradient(circle at 24% 12%, rgba(147, 197, 253, 0.26), transparent 34%),
+                linear-gradient(135deg, #123f96 0%, #0a2d70 54%, #171456 100%);
+            color: #fffefa;
+            box-shadow: 0 14px 30px rgba(12, 36, 90, 0.24), inset 0 1px 0 rgba(255,255,255,.16);
+        }
+
+        .social-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .btn-social {
+            border-radius: 14px;
+            background: rgba(255, 254, 250, 0.78);
+        }
+
+        .auth-showcase {
+            position: relative;
+            overflow: hidden;
+            display: grid;
+            place-items: center;
+            min-height: 100%;
+            padding: clamp(28px, 5vw, 58px);
+            color: #fffefa;
+            background:
+                radial-gradient(circle at 50% 42%, rgba(125, 172, 255, 0.24), transparent 32%),
+                radial-gradient(circle at 100% 0%, rgba(255, 254, 250, 0.12), transparent 28%),
+                linear-gradient(135deg, #123f96 0%, #0a2d70 52%, #171456 100%);
+        }
+
+        .auth-showcase::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            opacity: 0.10;
+            mix-blend-mode: soft-light;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+        }
+
+        .profile-preview {
+            position: relative;
+            z-index: 1;
+            width: min(330px, 100%);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 24px;
+            padding: 24px;
+            background: rgba(255, 254, 250, 0.08);
+            box-shadow: 0 28px 80px rgba(4, 18, 52, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+            backdrop-filter: blur(18px);
+        }
+
+        .profile-tip {
+            position: absolute;
+            top: -34px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: max-content;
+            max-width: 230px;
+            padding: 9px 12px;
+            border-radius: 11px;
+            background: rgba(255, 254, 250, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            color: rgba(255, 254, 250, 0.76);
+            font-size: 11px;
+            line-height: 1.35;
+            text-align: center;
+        }
+
+        .profile-icon {
+            width: 58px;
+            height: 58px;
+            margin: 0 auto 18px;
+            display: grid;
+            place-items: center;
+            border-radius: 16px;
+            color: rgba(255, 254, 250, 0.82);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .profile-name {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 850;
+        }
+
+        .profile-lines {
+            display: grid;
+            gap: 7px;
+            margin: 16px auto 0;
+            width: 78%;
+        }
+
+        .profile-lines span {
+            height: 4px;
+            border-radius: 999px;
+            background: rgba(255, 254, 250, 0.24);
+        }
+
+        .profile-lines span:nth-child(2) { width: 76%; margin: 0 auto; }
+        .profile-lines span:nth-child(3) { width: 48%; margin: 0 auto; }
+
+        .auth-showcase-copy {
+            position: absolute;
+            z-index: 1;
+            bottom: clamp(28px, 6vw, 64px);
+            max-width: 360px;
+            color: rgba(255, 254, 250, 0.58);
+            font-size: 13px;
+            line-height: 1.55;
+            text-align: center;
+        }
+
+        @media (max-width: 860px) {
+            body {
+                padding: 0;
+            }
+
+            .auth-container {
+                width: 100%;
+                min-height: 100vh;
+                border-radius: 0;
+                grid-template-columns: 1fr;
+            }
+
+            .auth-showcase {
+                min-height: 320px;
+                order: -1;
+            }
+
+            .auth-showcase-copy {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -426,21 +702,31 @@
     </button>
 
     <div class="auth-container">
-        <div class="logo-area">
-            <div class="logo-mark">
-                <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
-                    <rect width="32" height="32" rx="8" fill="var(--text)"/>
-                    <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
-                    <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
-                    <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
-                </svg>
+        <section class="auth-panel" aria-label="Sign in to Huggy">
+            <div class="logo-area">
+                <div class="auth-brand-row">
+                    <div class="logo-mark">
+                        <svg width="42" height="42" viewBox="0 0 32 32" fill="none">
+                            <rect width="32" height="32" rx="8" fill="var(--text)"/>
+                            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
+                            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
+                            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
+                        </svg>
+                    </div>
+                    <span>Huggy</span>
+                </div>
             </div>
-        </div>
 
         <div class="auth-card">
             <div class="auth-header">
                 <h1 class="auth-title" id="auth-title">Welcome back</h1>
-                <p class="auth-subtitle" id="auth-subtitle">Enter your details to access your workspace</p>
+                <p class="auth-subtitle" id="auth-subtitle">Pick up your projects, keep your session, and publish when you are ready.</p>
+            </div>
+
+            <div class="auth-progress" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
             </div>
 
             <div class="tabs">
@@ -451,15 +737,15 @@
             <form id="auth-form">
                 <div class="form-group" id="name-group" style="display:none;">
                     <label class="label">Full Name</label>
-                    <input type="text" class="input" placeholder="John Doe" id="input-name">
+                    <input type="text" class="input" placeholder="John Doe" id="input-name" autocomplete="name">
                 </div>
                 <div class="form-group">
                     <label class="label">Email Address</label>
-                    <input type="email" class="input" placeholder="name@company.com" required id="input-email">
+                    <input type="email" class="input" placeholder="name@company.com" required id="input-email" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label class="label">Password</label>
-                    <input type="password" class="input" placeholder="••••••••" required id="input-password">
+                    <input type="password" class="input" placeholder="••••••••" required id="input-password" autocomplete="current-password">
                 </div>
                 
                 <button type="submit" class="btn-submit" id="btn-submit">Sign In</button>
@@ -469,7 +755,7 @@
                 <span>or continue with</span>
             </div>
 
-            <div class="social-btns">
+            <div class="social-buttons">
                 <button class="btn-social">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.901 3.38-2.651 4.581-2.091 1.421-4.791 2.231-7.671 2.231-6.13 0-11.23-3.871-11.23-10.05s5.11-10.04 11.23-10.04c3.281 0 6.041 1.2 8.16 3.19l-2.451 2.451C14.891 5.58 13.78 5.11 12.48 5.11c-2.901 0-5.61 1.7-6.53 4.291-.18.52-.28 1.07-.28 1.63s.101 1.11.27 1.63c.921 2.59 3.63 4.29 6.531 4.29 1.811 0 3.3-.42 4.491-1.251 1.171-.831 2.05-2.01 2.371-3.66h-6.861z"/>
@@ -488,6 +774,27 @@
                 Don't have an account? <a href="#" id="link-signup">Sign up for free</a>
             </div>
         </div>
+        </section>
+
+        <aside class="auth-showcase" aria-label="Huggy workspace preview">
+            <div class="profile-preview">
+                <div class="profile-tip">Your projects stay connected to your workspace.</div>
+                <div class="profile-icon">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+                        <path d="M8 14l2.2-2.2 2 2 2.8-3.2L18 14"></path>
+                        <path d="M8 9h.01"></path>
+                    </svg>
+                </div>
+                <div class="profile-name">Build, iterate, publish</div>
+                <div class="profile-lines" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+            <p class="auth-showcase-copy">Log in once, keep your session, and continue building apps with real previews, files and publishing control.</p>
+        </aside>
     </div>
 
     <script>
@@ -527,7 +834,7 @@
                 tabLogin.classList.add('active');
                 tabSignup.classList.remove('active');
                 authTitle.textContent = "Welcome back";
-                authSubtitle.textContent = "Enter your details to access your workspace";
+                authSubtitle.textContent = "Pick up your projects, keep your session, and publish when you are ready.";
                 nameGroup.style.display = 'none';
                 btnSubmit.textContent = "Sign In";
                 authFooter.innerHTML = `Don't have an account? <a href="#" id="link-signup">Sign up for free</a>`;
@@ -536,7 +843,7 @@
                 tabLogin.classList.remove('active');
                 tabSignup.classList.add('active');
                 authTitle.textContent = "Create an account";
-                authSubtitle.textContent = "Join thousands of builders creating amazing SaaS";
+                authSubtitle.textContent = "Start with a prompt, then keep every project in one connected workspace.";
                 nameGroup.style.display = 'block';
                 btnSubmit.textContent = "Create Account";
                 authFooter.innerHTML = `Already have an account? <a href="#" id="link-login">Log in</a>`;
@@ -567,7 +874,7 @@
             const current = html.getAttribute('data-theme');
             const next = current === 'dark' ? 'light' : 'dark';
             
-            curtain.style.background = next === 'dark' ? '#060606' : '#FFFFFF';
+            curtain.style.background = next === 'dark' ? '#171613' : '#fcfbf8';
             curtain.style.transformOrigin = 'top';
             curtain.classList.add('falling');
 

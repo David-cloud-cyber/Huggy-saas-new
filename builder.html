@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#fcfbf8" />
+  <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Builder Workspace" />
@@ -449,21 +449,36 @@
     }
 
     .btn-publish {
-      background: var(--accent);
-      color: var(--bg);
-      border: 1px solid var(--accent);
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 24% 12%, rgba(147, 197, 253, 0.34), transparent 34%),
+        linear-gradient(135deg, #123f96 0%, #0a2d70 54%, #171456 100%);
+      color: #fffefa;
+      border: 1px solid rgba(255, 255, 255, 0.16);
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 820;
       padding: 6px 16px;
       border-radius: 6px;
       cursor: pointer;
-      transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), background 150ms cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 10px 24px rgba(12, 36, 90, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+      transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), filter 150ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .btn-publish::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.10;
+      mix-blend-mode: soft-light;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
     }
 
     .btn-publish:hover {
-      background: color-mix(in srgb, var(--accent) 92%, var(--bg) 8%);
+      filter: brightness(1.04);
       transform: translateY(-1px);
-      box-shadow: 0 8px 24px rgba(9, 9, 11, 0.18);
+      box-shadow: 0 14px 30px rgba(12, 36, 90, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.20);
     }
 
     .avatar-circle {

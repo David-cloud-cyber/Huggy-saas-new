@@ -19,6 +19,7 @@ const existingPages = [
   { file: 'community.html', path: '/community.html', title: 'Huggy Community — AI Builders and Product Teams', description: 'Join builders using Huggy to create apps, landing pages, dashboards and internal tools with AI.' },
   { file: 'careers.html', path: '/careers.html', title: 'Huggy Careers — Build the Future of AI App Creation', description: 'Work on Huggy, an AI-native app builder for production-ready web applications.' },
   { file: 'api-reference.html', path: '/api-reference.html', title: 'Huggy API Reference — Projects, Builds, Analytics and Deployments', description: 'Reference for Huggy project, generation, analytics, database and deployment APIs.' },
+  { file: 'terms.html', path: '/terms.html', title: 'Huggy Terms - Product Terms and Usage Rules', description: 'Terms for using Huggy to generate, preview, iterate and publish web apps.' },
 ];
 
 const noindexPages = [
@@ -218,15 +219,6 @@ const generatedPages = [
     faq: ['Does Huggy create real Supabase projects per app?', 'The MVP uses shared Supabase isolation by project and organization, with premium dedicated options planned.'],
   },
   {
-    slug: 'seo',
-    title: 'SEO-Ready AI App Builder',
-    description: 'Huggy helps generate web apps with crawlable structure, metadata, Open Graph, analytics, sitemap strategy and AI search readiness.',
-    h1: 'Apps people can use and find',
-    prompt: 'Optimize this generated app for Google and AI search with title tags, meta descriptions, headings, FAQ and structured data.',
-    cards: ['Metadata and Open Graph.', 'Sitemap and indexing strategy.', 'SEO audit inside the builder.'],
-    faq: ['Can Huggy fix SEO issues?', 'Huggy can audit generated pages and create prompts to improve metadata, headings, alt text and structure.'],
-  },
-  {
     slug: 'tools/seo-audit',
     title: 'Free SEO Audit Tool for AI-Generated Apps',
     description: 'Use this free Huggy tool page to audit metadata, headings, social preview and search-readiness before sending a prompt to the builder.',
@@ -366,6 +358,59 @@ ${faviconHead()}
 ${schema.map(jsonLd).join('\n')}`;
 }
 
+function sharedPublicFooter(className = 'footer') {
+  const cardClass = className === 'seo-footer' ? 'seo-footer-card' : 'footer-grid';
+  const brandClass = className === 'seo-footer' ? 'seo-footer-brand' : 'footer-brand';
+  const kickerClass = className === 'seo-footer' ? 'seo-footer-kicker' : 'footer-kicker';
+  const contactClass = className === 'seo-footer' ? 'seo-footer-contact' : 'footer-contact';
+  const wordmarkClass = className === 'seo-footer' ? 'seo-footer-wordmark' : 'footer-wordmark';
+  const colClass = className === 'seo-footer' ? 'seo-footer-col' : 'footer-col';
+  const linksClass = className === 'seo-footer' ? 'seo-footer-links' : 'footer-links';
+  const bottomClass = className === 'seo-footer' ? 'seo-footer-bottom' : 'footer-bottom';
+  const legalClass = className === 'seo-footer' ? 'seo-footer-legal' : 'footer-legal';
+
+  return `    <footer class="${className}" aria-labelledby="footer-title">
+        <div class="${cardClass}">
+            <div class="${brandClass}">
+                <div class="${kickerClass}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"></path>
+                        <path d="M19 15l.8 2.7L22 18.5l-2.2.8L19 22l-.8-2.7-2.2-.8 2.2-.8L19 15Z"></path>
+                    </svg>
+                    Contactez-nous
+                </div>
+                <p id="footer-title">Intéressé par une collaboration, <span>essayer Huggy ou simplement en savoir plus ?</span></p>
+                <div class="${contactClass}">
+                    <span>Contactez-nous :</span>
+                    <a href="mailto:contact@huggy.fun">contact@huggy.fun</a>
+                </div>
+                <a class="${wordmarkClass}" href="/" aria-label="Huggy home">huggy</a>
+            </div>
+            <div class="${colClass}">
+                <h5>Navigation</h5>
+                <ul class="${linksClass}">
+                    <li><a href="/about.html">À propos</a></li>
+                    <li><a href="/pricing.html">Tarifs</a></li>
+                    <li><a href="/templates/">Templates</a></li>
+                    <li><a href="/comparisons/">Comparisons</a></li>
+                    <li><a href="/documentation.html">Documentation</a></li>
+                    <li><a href="/security.html">Security</a></li>
+                    <li><a href="mailto:contact@huggy.fun">Contact</a></li>
+                </ul>
+            </div>
+            <div class="${bottomClass}">
+                <span>© 2026 Huggy. Tous droits réservés.</span>
+                <div class="${legalClass}">
+                    <a href="/privacy.html">Confidentialité</a>
+                    <a href="/security.html">Sécurité</a>
+                    <a href="/terms.html">CGU</a>
+                    <a href="https://www.huggy.fun/">huggy.fun</a>
+                </div>
+            </div>
+        </div>
+    </footer>`;
+}
+
 function renderPage(page) {
   const url = `${siteUrl}/${page.slug.replace(/\/?$/, '/')}`;
   const parent = page.slug.includes('/') ? page.slug.split('/')[0] : page.slug;
@@ -387,14 +432,14 @@ ${baseHead(page, url, breadcrumbs)}
         <a href="/templates/">Templates</a>
         <a href="/use-cases/">Use cases</a>
         <a href="/comparisons/">Comparisons</a>
-        <a href="/seo/">SEO</a>
+        <a href="/guides/">Guides</a>
         <a class="seo-pill" href="/pricing.html">Pricing</a>
       </div>
     </nav>
     <main>
       <section class="seo-hero">
         <div>
-          <div class="seo-kicker">SEO-ready AI app builder</div>
+          <div class="seo-kicker">AI app builder</div>
           <h1>${esc(page.h1)}</h1>
           <p class="seo-lead">${esc(page.description)}</p>
         </div>
@@ -430,13 +475,11 @@ ${baseHead(page, url, breadcrumbs)}
         <div class="seo-faq">
           <details open><summary>${esc(page.faq[0])}</summary><p>${esc(page.faq[1])}</p></details>
           <details><summary>Should I use Plan or Build?</summary><p>Use Plan when the idea is fuzzy. Use Build when the first version is clear enough to safely generate project files and preview.</p></details>
-          <details><summary>How does this help SEO?</summary><p>Huggy turns search intent into structured app pages, metadata, prompt recipes and internal links that are easier for Google and AI answer engines to understand.</p></details>
+          <details><summary>How does this help people find the app?</summary><p>Huggy gives each generated app clear structure, metadata, useful content prompts and internal links that search engines and AI answer systems can understand.</p></details>
         </div>
       </section>
     </main>
-    <footer class="seo-footer">
-      <span>Huggy builds production-ready apps people can use and find.</span>
-    </footer>
+${sharedPublicFooter('seo-footer')}
   </div>
   <script type="module" src="/src/seo-pages.ts"></script>
 </body>
@@ -525,8 +568,18 @@ ${faviconHead()}
   fs.writeFileSync(full, html, 'utf8');
 }
 
+function updateExistingFooter(page) {
+  const full = path.join(root, page.file);
+  if (!fs.existsSync(full)) return;
+  let html = fs.readFileSync(full, 'utf8');
+  if (!html.includes('<footer class="footer"')) return;
+  html = html.replace(/    <footer class="footer"[\s\S]*?    <\/footer>/, sharedPublicFooter('footer'));
+  fs.writeFileSync(full, html, 'utf8');
+}
+
 function generatePublicAssets(urls) {
   write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
+  write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Templates: ${siteUrl}/templates/\n- Use cases: ${siteUrl}/use-cases/\n- Comparisons: ${siteUrl}/comparisons/\n- Guides: ${siteUrl}/guides/\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
   write('public/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${url === siteUrl + '/' ? '1.0' : '0.8'}</priority></url>`).join('\n')}\n</urlset>\n`);
   write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#09090b}.icon-fill{fill:#ffffff}@media (prefers-color-scheme:dark){.icon-bg{fill:#ffffff}.icon-fill{fill:#09090b}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);
   write('public/og-huggy.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#ffffff"/><circle cx="1040" cy="100" r="260" fill="#09090b" opacity=".05"/><circle cx="150" cy="540" r="300" fill="#3b7a8c" opacity=".10"/><rect x="84" y="82" width="1032" height="466" rx="42" fill="#ffffff" stroke="#09090b" stroke-opacity=".12"/><text x="138" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#09090b">Huggy</text><text x="138" y="310" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#09090b">Build apps people can use and find.</text><text x="138" y="386" font-family="Arial, sans-serif" font-size="28" fill="#52525b">AI app builder with database, preview, deploy and SEO-ready output.</text></svg>\n`);
@@ -534,6 +587,7 @@ function generatePublicAssets(urls) {
 
 function main() {
   generatedPages.forEach(page => write(path.join(page.slug, 'index.html'), renderPage(page)));
+  existingPages.forEach(updateExistingFooter);
   [...existingPages, ...noindexPages].forEach(injectHeadMeta);
   const urls = [
     ...existingPages.map(page => `${siteUrl}${page.path}`),
