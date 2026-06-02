@@ -2907,7 +2907,23 @@ async function createProjectVersion(project: GeneratedProject, files: GeneratedF
     created_at: new Date().toISOString(),
   };
   const client = requireSupabase('Project version persistence');
-  const { error } = await client.from('project_versions').insert([row]);
+  let insertRow: Record<string, any> = { ...row };
+  let error: any = null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const result = await client.from('project_versions').insert([insertRow]);
+    error = result.error;
+    if (!error) return row;
+    const missingColumn = getSchemaColumnFromMessage(String(error.message || ''));
+    if (missingColumn && missingColumn in insertRow) {
+      delete insertRow[missingColumn];
+      continue;
+    }
+    if (/project_versions|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+      console.warn('[huggy:project_version_persistence_skipped]', { message: error.message });
+      return row;
+    }
+    break;
+  }
   if (error) throw new Error(`Supabase project version persistence failed: ${error.message}`);
   return row;
 }
@@ -2915,6 +2931,10 @@ async function createProjectVersion(project: GeneratedProject, files: GeneratedF
 async function listProjectVersions(projectId: string) {
   const client = requireSupabase('Project version listing');
   const { data, error } = await client.from('project_versions').select('*').eq('project_id', projectId).order('version_number', { ascending: false });
+  if (error && /project_versions|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    console.warn('[huggy:project_version_listing_skipped]', { message: error.message });
+    return [];
+  }
   if (error) throw new Error(`Supabase project version listing failed: ${error.message}`);
   return data || [];
 }
