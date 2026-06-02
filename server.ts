@@ -4560,7 +4560,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         if (event.type === 'token') {
           generatedText += event.text;
           model = event.model;
-          await send('token', event.text, { model: event.model });
         } else {
           model = event.model;
           costUsd = event.cost_usd;
