@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
+import WebSocket from 'ws';
 
 // Import our custom services
 import { OpenRouterService, resolveOpenRouterApiKey } from './src/services/openrouter-service.ts';
@@ -114,13 +115,25 @@ const COUNTRY_NAMES: Record<string, string> = {
 app.use(express.json({ limit: '8mb' }));
 
 // ── LAZY-LOADED RESOURCES / CLIENT GAUARDS ───────────────────────────
+const SUPABASE_SERVER_CLIENT_OPTIONS = {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+  realtime: {
+    // Supabase JS initializes Realtime even when the backend only uses Auth/DB.
+    // Railway currently runs Node 20, which needs an explicit WebSocket transport.
+    transport: WebSocket as any,
+  },
+};
+
 let supabase: any = null;
 function getSupabase() {
   if (!supabase) {
     const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (url && key) {
-      supabase = createClient(url, key);
+      supabase = createClient(url, key, SUPABASE_SERVER_CLIENT_OPTIONS);
     }
   }
   return supabase;
@@ -135,12 +148,7 @@ function getSupabaseAuthClient() {
       process.env.SUPABASE_ANON_KEY ||
       DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
-    supabaseAuth = createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+    supabaseAuth = createClient(url, key, SUPABASE_SERVER_CLIENT_OPTIONS);
   }
   return supabaseAuth;
 }
