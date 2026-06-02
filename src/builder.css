@@ -296,14 +296,18 @@ body {
 .btn-deploy {
   height: 32px;
   padding: 0 16px; border-radius: 6px;
-  background: var(--accent); color: var(--bg);
+  background:
+    radial-gradient(circle at 24% 12%, rgba(191, 219, 254, 0.30), transparent 34%),
+    linear-gradient(135deg, #173f8f 0%, #102f70 54%, #151e55 100%);
+  color: #fffefa;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   font-family: inherit;
   font-size: 11px; font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   transition: all 200ms;
 }
-.btn-deploy:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.btn-deploy:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: 0 10px 24px rgba(12,36,90,0.20); }
 
 /* ── DRAG HANDLE ────────────────────────────────────── */
 .drag-handle {
