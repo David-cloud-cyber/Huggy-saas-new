@@ -2401,6 +2401,23 @@ async function createAgentTextResponse(input: {
   }
 }
 
+function chunkTextForPublicStream(text: string, targetSize = 28) {
+  const value = String(text || '');
+  if (!value) return [];
+  const chunks: string[] = [];
+  let buffer = '';
+  for (const part of value.split(/(\s+)/)) {
+    if (buffer && buffer.length + part.length > targetSize) {
+      chunks.push(buffer);
+      buffer = part;
+    } else {
+      buffer += part;
+    }
+  }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
+
 function createClarificationContent(decision: IntentDecision) {
   const question = decision.clarification?.question || 'I need one more detail before I can safely build this.';
   const choices = decision.clarification?.choices || [];
@@ -5201,6 +5218,18 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         : decision.intent === 'verify'
           ? 'verification_started'
           : 'answering';
+    await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
+      intent: decision.intent,
+      model: agentText.model,
+    });
+    for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
+      if (await stopIfCancelled('answer')) return;
+      await send('answer_token', chunk, {
+        text_delta: chunk,
+        index,
+        model: agentText.model,
+      });
+    }
     await send(eventName, content, {
       text: content,
       model: agentText.model,

@@ -10,7 +10,7 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
-import { mountBuilderConversation, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
+import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
 
 type ChatMode = 'auto' | 'plan' | 'build';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
@@ -167,6 +167,7 @@ let workingTimer: number | null = null;
 let activeWorkingCard: HTMLElement | null = null;
 let activeWorkingLabel = 'Thinking';
 let activeWorkingDetails: string[] = [];
+let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
 let selectedChatMode: ChatMode = 'auto';
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
@@ -572,13 +573,52 @@ function formatWorkingDuration(ms: number) {
   return `${minutes}m ${seconds}s`;
 }
 
+function currentWorkingDetail() {
+  const active = activeWorkingDetails.find(detail => detail.startsWith('now:'));
+  const latest = active || [...activeWorkingDetails].reverse().find(Boolean) || '';
+  return latest.replace(/^(done|now):\s*/, '').trim();
+}
+
+function buildWorkingTrace(card: HTMLElement | null, label: string, status: HuggyAgentTrace['status'] = 'active'): HuggyAgentTrace {
+  const startedAt = Number(card?.dataset.workingStartedAt || 0);
+  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
+  const detail = currentWorkingDetail();
+  const fallbackStatus: NonNullable<NonNullable<HuggyAgentTrace['steps']>[number]['status']> = status === 'done' ? 'done' : status || 'active';
+  const steps = activeWorkingSteps.length
+    ? activeWorkingSteps.map(step => ({
+        ...step,
+        status: status === 'done' && step.status === 'active' ? 'done' : step.status,
+      }))
+    : [{
+        id: 'current',
+        label: detail || label || 'Working',
+        status: fallbackStatus,
+      }];
+  return {
+    title: label || 'Working',
+    elapsed,
+    status,
+    steps,
+  };
+}
+
+function applyWorkingTrace(card: HTMLElement | null, label = activeWorkingLabel, status: HuggyAgentTrace['status'] = 'active') {
+  const id = messageHandleId(card);
+  if (!id || !conversationApi?.setTrace) return;
+  conversationApi.setTrace(id, buildWorkingTrace(card, label, status));
+}
+
 function renderWorkingLabel(label = activeWorkingLabel) {
   if (!activeWorkingCard) return;
   activeWorkingLabel = label || 'Thinking';
   const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
-  const details = activeWorkingDetails.length ? `\n${activeWorkingDetails.join('\n')}` : '';
-  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}${details}`);
+  const detail = currentWorkingDetail();
+  const normalizedLabel = activeWorkingLabel.toLowerCase();
+  const normalizedDetail = detail.toLowerCase();
+  const detailSuffix = detail && !normalizedLabel.includes(normalizedDetail) ? ` · ${detail}` : '';
+  applyWorkingTrace(activeWorkingCard, activeWorkingLabel, 'active');
+  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}${detailSuffix}`);
 }
 
 function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
@@ -587,6 +627,7 @@ function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
   activeWorkingCard = card;
   activeWorkingLabel = label;
   activeWorkingDetails = [];
+  activeWorkingSteps = [];
   card.dataset.workingStartedAt = String(Date.now());
   renderWorkingLabel(label);
   workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
@@ -601,6 +642,7 @@ function stopWorkingTimer(card?: HTMLElement | null) {
   if (target) delete target.dataset.workingStartedAt;
   activeWorkingCard = null;
   activeWorkingDetails = [];
+  activeWorkingSteps = [];
 }
 
 function ensureChatShimmerStyle() {
@@ -634,22 +676,11 @@ function ensureChatShimmerStyle() {
     }
 
     .message-card.message-card-shimmer::after {
-      content: "";
-      display: block;
-      width: min(260px, 82%);
-      height: 8px;
-      margin-top: 12px;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, rgba(9,9,11,.05), rgba(9,9,11,.14), rgba(9,9,11,.05));
-      background-size: 240% 100%;
-      animation: huggy-chat-shimmer 1.15s cubic-bezier(.22, 1, .36, 1) infinite;
+      content: none;
     }
 
     [data-theme="dark"] .message-card.message-card-shimmer::after {
-      background:
-        linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.18), rgba(255,255,255,.06));
-      background-size: 240% 100%;
+      content: none;
     }
 
     @keyframes huggy-chat-shimmer {
@@ -740,6 +771,30 @@ function clearMessageShimmer(card: HTMLElement | null) {
   if (id && conversationApi) conversationApi.clearWorking(id);
   card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
+}
+
+function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
+  if (!card) return;
+  const startedAt = Number(card.dataset.workingStartedAt || 0);
+  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '';
+  const detail = currentWorkingDetail();
+  const finalTrace = buildWorkingTrace(card, label, 'done');
+  stopWorkingTimer(card);
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    conversationApi.setTrace?.(id, finalTrace);
+    conversationApi.clearWorking(id);
+  }
+  card.classList.remove('message-card-shimmer');
+  card.removeAttribute('aria-busy');
+  const normalizedLabel = label.toLowerCase();
+  const normalizedDetail = detail.toLowerCase();
+  const parts = [
+    label,
+    elapsed,
+    detail && !normalizedLabel.includes(normalizedDetail) ? detail : '',
+  ].filter(Boolean);
+  updateMessage(card, parts.join(' · '));
 }
 
 function updateMessage(card: HTMLElement | null, body: string) {
@@ -2347,9 +2402,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let assistantHasFinalContent = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   const agentSteps = new Map<string, { label: string; state: 'done' | 'now' }>();
+  let responseCard: HTMLElement | null = status;
   const syncAgentSteps = (headline = activeWorkingLabel) => {
     if (quickConversation && !generationTouchesPreview) return;
     activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
+    activeWorkingSteps = Array.from(agentSteps.entries()).map(([id, step]) => ({
+      id,
+      label: step.label,
+      status: step.state === 'now' ? 'active' : 'done',
+    }));
     renderWorkingLabel(headline);
   };
   const markAgentStep = (key: string, label: string, headline = label) => {
@@ -2373,12 +2434,25 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setMessageShimmer(status, label);
     if (activeWorkingDetails.length) syncAgentSteps(label);
   };
-  const commitAssistantText = (content: unknown, fallback = 'Done.') => {
-    const text = String(content || '').trim() || fallback;
-    clearMessageShimmer(status);
+  const shouldPreserveWorkingTrace = () => Boolean(generationTouchesPreview && !quickConversation && status);
+  const ensureResponseCard = (traceLabel = say('Terminé', 'Completed')) => {
+    if (assistantHasFinalContent) return responseCard;
+    if (shouldPreserveWorkingTrace()) {
+      completeMessageShimmer(status, traceLabel);
+      responseCard = appendMessage('assistant', '');
+    } else {
+      clearMessageShimmer(status);
+      responseCard = status;
+    }
     assistantHasFinalContent = true;
+    return responseCard;
+  };
+  const commitAssistantText = (content: unknown, fallback = 'Done.', traceLabel = say('Terminé', 'Completed')) => {
+    const text = String(content || '').trim() || fallback;
+    const target = ensureResponseCard(traceLabel);
     streamedText = text;
-    updateMessage(status, text);
+    updateMessage(target, text);
+    return target;
   };
   try {
     await ensureProjectForPrompt(prompt);
@@ -2410,11 +2484,16 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       };
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
-      if (eventType === 'token') {
-        clearMessageShimmer(status);
-        streamedText += event.message || '';
-        assistantHasFinalContent = true;
-        updateMessage(status, streamedText || 'Streaming code generation...');
+      if (eventType === 'answer_stream_started') {
+        if (!quickConversation || generationTouchesPreview) {
+          markAgentStep('answer', realLabel(say('Réponse en cours.', 'Writing the answer.')), 'Answering');
+        }
+        return;
+      }
+      if (eventType === 'token' || eventType === 'answer_token') {
+        const target = ensureResponseCard(say('Réponse prête', 'Answer ready'));
+        streamedText += String(payload.text_delta || payload.delta || event.message || '');
+        updateMessage(target, streamedText || (speaksFrench ? 'Réponse en cours...' : 'Writing...'));
         return;
       }
       if (eventType === 'run_started') {
@@ -2440,10 +2519,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'working_tick') {
-        const elapsed = Number(payload.elapsed_seconds || 0);
-        if (elapsed >= 30) {
-          setAssistantWorking('Still working');
-          if (generationTouchesPreview) setEmptyPreviewState('working', 'Still working');
+        if (!quickConversation || generationTouchesPreview) {
+          renderWorkingLabel(activeWorkingLabel);
+          if (generationTouchesPreview) setEmptyPreviewState('working', activeWorkingLabel);
         }
         return;
       }
@@ -2476,21 +2554,21 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           finishAgentStep('plan', say('Plan prêt, je passe à la réalisation.', 'Plan ready, moving into the build.'));
           setAssistantWorking('Building');
         } else {
-          commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
+          const target = commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
           if (eventType === 'plan_ready') {
-            setMessageBlock(status, buildPlanBlock(String(text || ''), prompt, true));
+            setMessageBlock(target, buildPlanBlock(String(text || ''), prompt, true));
           }
         }
         if (eventType === 'plan_ready' && !payload.auto_plan_required) {
           lastPlan = payload.text || event.message || '';
-          addInlineAction(status, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
+          addInlineAction(responseCard, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
         }
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready for build');
         return;
       }
       if (eventType === 'clarification_required') {
-        commitAssistantText(payload.text || event.message, say('J’ai besoin d’un détail avant d’agir.', 'I need one detail before acting.'));
-        if (!showClarificationActions(status, payload, prompt, requestedMode)) {
+        const target = commitAssistantText(payload.text || event.message, say('J’ai besoin d’un détail avant d’agir.', 'I need one detail before acting.'));
+        if (!showClarificationActions(target, payload, prompt, requestedMode)) {
           showClarificationBlock(payload, prompt, requestedMode);
         }
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for details');
@@ -2503,8 +2581,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'external_api_keys_required') {
-        commitAssistantText('External API keys are needed or can be skipped.');
-        setMessageBlock(status, {
+        const target = commitAssistantText('External API keys are needed or can be skipped.');
+        setMessageBlock(target, {
           type: 'confirmation',
           title: 'External API keys',
           body: speaksFrench
@@ -2514,8 +2592,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           approveLabel: speaksFrench ? 'Ajouter les clés' : 'Add keys',
           rejectLabel: speaksFrench ? 'Continuer sans clés' : 'Continue without keys',
         });
-        addInlineAction(status, speaksFrench ? 'Ajouter les clés' : 'Add keys', () => showApiKeyModal(payload.requirements || []));
-        addInlineAction(status, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => {
+        addInlineAction(target, speaksFrench ? 'Ajouter les clés' : 'Add keys', () => showApiKeyModal(payload.requirements || []));
+        addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => {
           void generateFromPrompt(prompt, requestedMode, useLastPlan, { ...extra, skipExternalKeys: true }, displayText);
         });
         showApiKeyModal(payload.requirements || []);
@@ -2525,6 +2603,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
         markAgentStep('fix', realLabel(say('Erreur détectée, correction en préparation.', 'Issue detected, preparing a fix.')), 'Fixing');
         showFixBugBox(payload.errors || [{ message: event.message }]);
+      }
+      if (eventType === 'verification_started' && payload.text) {
+        commitAssistantText(payload.text || event.message, say('Vérification terminée.', 'Verification complete.'));
+        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
+        return;
       }
       if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
@@ -2564,19 +2647,19 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const finalText = speaksFrench
           ? `${event.message || 'C’est prêt. J’ai mis à jour la preview.'}${diff}`
           : `${event.message || 'Done. I updated the preview.'}${diff}`;
-        commitAssistantText(finalText, 'Preview ready.');
+        commitAssistantText(finalText, 'Preview ready.', say('Preview prête', 'Preview ready'));
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }
       if (eventType === 'cancelled') {
-        commitAssistantText(event.message || 'Generation stopped.');
+        commitAssistantText(event.message || 'Generation stopped.', 'Generation stopped.', say('Arrêté', 'Stopped'));
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Generation stopped');
         setBusy(false);
         return;
       }
       if (eventType === 'done') {
         if (!assistantHasFinalContent) {
-          commitAssistantText(event.message || (generationTouchesPreview ? 'Done. Preview is ready.' : 'Done.'));
+          commitAssistantText(event.message || (generationTouchesPreview ? 'Done. Preview is ready.' : 'Done.'), 'Done.', say('Terminé', 'Completed'));
         } else {
           clearMessageShimmer(status);
         }
@@ -2584,17 +2667,28 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         setBusy(false);
       }
       if (eventType === 'error') {
-        commitAssistantText(formatAgentErrorMessage(event), 'Generation failed.');
+        commitAssistantText(formatAgentErrorMessage(event), 'Generation failed.', say('Erreur', 'Error'));
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
       }
     }, activeAbort.signal);
   } catch (error) {
-    clearMessageShimmer(status);
     if ((error as Error).name === 'AbortError') {
-      updateMessage(status, stopRequested ? 'Generation stopped.' : 'Build cancelled.');
+      const stoppedText = stopRequested ? 'Generation stopped.' : 'Build cancelled.';
+      const id = messageHandleId(status);
+      if (id && conversationApi?.setTrace) {
+        conversationApi.setTrace(id, buildWorkingTrace(status, stoppedText, 'cancelled'));
+      }
+      clearMessageShimmer(status);
+      appendMessage('assistant', stoppedText);
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
-      updateMessage(status, error instanceof Error ? error.message : 'Generation failed.');
+      const errorText = error instanceof Error ? error.message : 'Generation failed.';
+      const id = messageHandleId(status);
+      if (id && conversationApi?.setTrace) {
+        conversationApi.setTrace(id, buildWorkingTrace(status, say('Erreur', 'Error'), 'failed'));
+      }
+      clearMessageShimmer(status);
+      appendMessage('assistant', errorText);
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {

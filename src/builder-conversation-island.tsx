@@ -47,6 +47,19 @@ export type HuggyConversationTaskItem = {
   status?: "pending" | "active" | "done" | "failed" | "cancelled";
 };
 
+export type HuggyAgentTraceStep = {
+  id: string;
+  label: string;
+  status?: "pending" | "active" | "done" | "failed" | "cancelled";
+};
+
+export type HuggyAgentTrace = {
+  title: string;
+  elapsed?: string;
+  status?: "active" | "done" | "failed" | "cancelled";
+  steps?: HuggyAgentTraceStep[];
+};
+
 export type HuggyConversationBlock =
   | {
       type: "reasoning";
@@ -81,15 +94,17 @@ export type HuggyConversationMessage = {
   content: string;
   role: HuggyConversationRole;
   working?: boolean;
+  trace?: HuggyAgentTrace | null;
   block?: HuggyConversationBlock;
   actions?: HuggyConversationAction[];
 };
 
 export type HuggyConversationApi = {
-  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; working?: boolean; block?: HuggyConversationBlock }) => string;
+  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
   updateMessage: (id: string, content: string) => void;
   setWorking: (id: string, label: string) => void;
   clearWorking: (id: string) => void;
+  setTrace: (id: string, trace: HuggyAgentTrace | null) => void;
   setBlock: (id: string, block: HuggyConversationBlock | null) => void;
   removeMessage: (id: string) => void;
   addAction: (id: string, label: string, onClick: () => void) => void;
@@ -240,6 +255,103 @@ function ensureConversationStyles() {
       text-decoration-thickness: 1px;
     }
 
+    .huggy-agent-trace {
+      display: grid;
+      gap: 8px;
+      width: min(100%, 520px);
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-elevated));
+      box-shadow: 0 1px 0 rgba(255,255,255,.48) inset, 0 10px 24px rgba(9,9,11,.04);
+      padding: 9px 10px;
+      color: var(--text);
+    }
+
+    .huggy-agent-trace-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 12.5px;
+      font-weight: 760;
+      letter-spacing: -.01em;
+    }
+
+    .huggy-agent-trace-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .huggy-agent-trace-elapsed {
+      margin-left: auto;
+      color: var(--text-sub, var(--text-muted));
+      font-size: 11px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .huggy-agent-trace-dot,
+    .huggy-agent-step-mark {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      background: var(--text);
+      box-shadow: 0 0 0 3px rgba(9,9,11,.06);
+    }
+
+    .huggy-agent-trace[data-status="active"] .huggy-agent-trace-dot,
+    .huggy-agent-step[data-status="active"] .huggy-agent-step-mark {
+      animation: huggy-dot-pulse 1.1s cubic-bezier(.22,1,.36,1) infinite;
+    }
+
+    .huggy-agent-trace[data-status="done"] .huggy-agent-trace-dot,
+    .huggy-agent-step[data-status="done"] .huggy-agent-step-mark {
+      background: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.10);
+    }
+
+    .huggy-agent-trace[data-status="failed"] .huggy-agent-trace-dot,
+    .huggy-agent-step[data-status="failed"] .huggy-agent-step-mark {
+      background: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220,38,38,.10);
+    }
+
+    .huggy-agent-steps {
+      display: grid;
+      gap: 5px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-light, var(--border));
+    }
+
+    .huggy-agent-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-sub, var(--text-muted));
+      font-size: 11.5px;
+      line-height: 1.35;
+      min-width: 0;
+    }
+
+    .huggy-agent-step[data-status="active"] {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .huggy-agent-step[data-status="done"] {
+      color: var(--text-muted);
+    }
+
+    .huggy-agent-step-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .huggy-message-user .huggy-message-content {
       color: var(--bg);
       background: var(--text);
@@ -255,29 +367,34 @@ function ensureConversationStyles() {
       text-align: center;
     }
 
-    .huggy-working-steps {
-      display: grid;
-      gap: 5px;
-      margin-top: 9px;
-      padding-top: 9px;
-      border-top: 1px solid var(--border-light, var(--border));
-      color: var(--text-sub);
-      font-size: 11.5px;
-      line-height: 1.45;
-    }
-
-    .huggy-working-step {
-      display: flex;
+    .huggy-live-status {
+      display: inline-flex;
+      align-items: center;
       gap: 7px;
-      align-items: flex-start;
+      color: var(--text-sub);
+      font-size: 12px;
+      font-weight: 680;
+      letter-spacing: -.01em;
+      line-height: 1.35;
     }
 
-    .huggy-working-step strong {
+    .huggy-live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent-blue, #2f6df6);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 47, 109, 246), .10);
+      flex: 0 0 auto;
+      animation: huggy-dot-pulse 900ms cubic-bezier(.22,1,.36,1) infinite;
+    }
+
+    .huggy-live-text {
       color: var(--text);
-      font-weight: 800;
-      font-size: 10px;
-      min-width: 14px;
-      text-align: center;
+    }
+
+    .huggy-live-detail {
+      color: var(--text-muted);
+      font-weight: 520;
     }
 
     .huggy-plan,
@@ -544,6 +661,9 @@ function ensureConversationStyles() {
       .huggy-message-actions button,
       .huggy-conversation-download,
       .huggy-conversation-scroll,
+      .huggy-live-dot,
+      .huggy-agent-trace-dot,
+      .huggy-agent-step-mark,
       .huggy-reasoning-streaming .huggy-reasoning-dot {
         transition: none !important;
         animation: none !important;
@@ -774,40 +894,58 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   );
 }
 
-function renderWorkingBlock(message: HuggyConversationMessage) {
-  const [headline = "Thinking", ...steps] = message.content.split("\n").filter(Boolean);
-  const taskItems = steps.map((step, index) => {
-    const done = step.startsWith("done:");
-    const active = step.startsWith("now:");
-    const label = step.replace(/^(done|now):\s*/, "");
-    return {
-      id: `${message.id}_step_${index}`,
-      label,
-      status: done ? "done" as const : active ? "active" as const : "pending" as const,
-    };
-  });
+function renderWorkingStatus(message: HuggyConversationMessage) {
+  const lines = message.content.split("\n").map(line => line.trim()).filter(Boolean);
+  const [headline = "Thinking", ...details] = lines;
+  const activeDetail = details.find(step => step.startsWith("now:"));
+  const latestDetail = activeDetail || details[details.length - 1] || "";
+  const cleanDetail = latestDetail.replace(/^(done|now):\s*/, "").trim();
+  const showDetail = cleanDetail && !headline.toLowerCase().includes(cleanDetail.toLowerCase());
 
   return (
-    <>
-      <Reasoning isStreaming>
-        <ReasoningTrigger>{headline}</ReasoningTrigger>
-        <ReasoningContent>
-          <ShiningText text={headline} />
-        </ReasoningContent>
-      </Reasoning>
-      {taskItems.length ? (
-        <Task defaultOpen>
-          <TaskTrigger title="What Huggy is doing" />
-          <TaskContent>
-            {taskItems.map(item => (
-              <TaskItem key={item.id} status={item.status}>
-                {item.label}
-              </TaskItem>
-            ))}
-          </TaskContent>
-        </Task>
-      ) : null}
-    </>
+    <div className="huggy-live-status" aria-live="polite">
+      <span className="huggy-live-dot" aria-hidden="true" />
+      <span className="huggy-live-text">{headline}</span>
+      {showDetail ? <span className="huggy-live-detail">· {cleanDetail}</span> : null}
+    </div>
+  );
+}
+
+function renderAgentTrace(message: HuggyConversationMessage) {
+  const trace = message.trace;
+  if (!trace) return null;
+  const status = trace.status || (message.working ? "active" : "done");
+  const rawSteps = (trace.steps || []).filter(step => step.label?.trim());
+  const steps = rawSteps.length
+    ? rawSteps
+    : [{ id: "current", label: trace.title || message.content || "Working", status }];
+  const title = trace.title || (status === "done" ? "Completed" : "Working");
+
+  return (
+    <div className="huggy-agent-trace" data-status={status}>
+      <div className="huggy-agent-trace-head">
+        <span className="huggy-agent-trace-dot" aria-hidden="true" />
+        <span className="huggy-agent-trace-title">{title}</span>
+        {trace.elapsed ? <span className="huggy-agent-trace-elapsed" aria-hidden="true">{trace.elapsed}</span> : null}
+      </div>
+      <div className="huggy-agent-steps">
+        {steps.slice(-6).map(step => {
+          const stepStatus = step.status || "pending";
+          return (
+            <div className="huggy-agent-step" data-status={stepStatus} key={step.id || step.label}>
+              {stepStatus === "done" ? (
+                <CheckIcon className="huggy-agent-step-mark" size={12} aria-hidden="true" />
+              ) : stepStatus === "failed" ? (
+                <XIcon className="huggy-agent-step-mark" size={12} aria-hidden="true" />
+              ) : (
+                <span className="huggy-agent-step-mark" aria-hidden="true" />
+              )}
+              <span className="huggy-agent-step-label">{step.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -829,7 +967,7 @@ function BuilderConversation({
           messages.map(message => (
             <Message from={message.role} key={message.id}>
               <MessageContent>
-                {message.working ? renderWorkingBlock(message) : renderMessageBlock(message) || renderStandardMessageContent(message)}
+                {renderAgentTrace(message) || (message.working ? renderWorkingStatus(message) : renderMessageBlock(message) || renderStandardMessageContent(message))}
                 {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
                   <div className="huggy-message-actions">
                     {message.actions.map(action => (
@@ -873,6 +1011,7 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
           role: message.role,
           content: message.content,
           working: Boolean(message.working),
+          trace: message.trace || null,
           block: message.block,
           actions: [],
         },
@@ -890,6 +1029,10 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
     },
     clearWorking(id) {
       messages = messages.map(message => message.id === id ? { ...message, working: false } : message);
+      render();
+    },
+    setTrace(id, trace) {
+      messages = messages.map(message => message.id === id ? { ...message, trace } : message);
       render();
     },
     setBlock(id, block) {

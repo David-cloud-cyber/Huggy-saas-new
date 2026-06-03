@@ -1456,7 +1456,7 @@ h1 {
     padding: 64px 24px 28px;
     border-top: 0;
     background:
-        linear-gradient(180deg, var(--bg) 0%, var(--bg-elevated) 100%);
+        linear-gradient(180deg, #fcfbf8 0%, #f7f4ed 100%);
 }
 
 .footer-grid {
@@ -1469,13 +1469,13 @@ h1 {
     overflow: hidden;
     border-radius: 26px;
     padding: clamp(30px, 4.6vw, 58px);
-    color: #fffefa;
+    color: #1c1c1c;
     background:
-        radial-gradient(circle at 18% 14%, rgba(191, 219, 254, 0.30), transparent 34%),
-        radial-gradient(circle at 82% 18%, rgba(125, 172, 255, 0.20), transparent 35%),
-        linear-gradient(135deg, #173f8f 0%, #102f70 52%, #151e55 100%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 28px 72px rgba(12, 36, 90, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        radial-gradient(circle at 18% 14%, rgba(123, 168, 255, 0.18), transparent 34%),
+        radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.92), transparent 35%),
+        linear-gradient(135deg, #fffefa 0%, #f7f4ed 54%, #eef3ff 100%);
+    border: 1px solid #eceae4;
+    box-shadow: 0 24px 64px rgba(18, 55, 130, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
 .footer-grid::before {
@@ -1483,8 +1483,8 @@ h1 {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.12;
-    mix-blend-mode: soft-light;
+    opacity: 0.045;
+    mix-blend-mode: multiply;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
 }
 
@@ -1495,7 +1495,7 @@ h1 {
     right: 0;
     bottom: 64px;
     height: 1px;
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(28, 28, 28, 0.10);
 }
 
 .footer-brand,
@@ -1517,12 +1517,12 @@ h1 {
     font-weight: 820;
     letter-spacing: -0.045em;
     line-height: 0.98;
-    color: #fffefa;
+    color: #1c1c1c;
     max-width: 840px;
 }
 
 .footer-brand p span {
-    color: rgba(255, 254, 250, 0.58);
+    color: #5f5f5d;
 }
 
 .footer-kicker {
@@ -1530,7 +1530,7 @@ h1 {
     align-items: center;
     gap: 10px;
     width: fit-content;
-    color: rgba(255, 254, 250, 0.72);
+    color: #31579e;
     font-size: 12px;
     font-weight: 850;
     letter-spacing: 0.12em;
@@ -1546,12 +1546,12 @@ h1 {
     margin-top: 40px;
     display: grid;
     gap: 8px;
-    color: rgba(255, 254, 250, 0.62);
+    color: #5f5f5d;
     font-size: 13px;
 }
 
 .footer-contact a {
-    color: #fffefa;
+    color: #123f96;
     text-decoration: none;
     font-size: 17px;
     font-weight: 780;
@@ -1559,7 +1559,7 @@ h1 {
 
 .footer-wordmark {
     margin-top: auto;
-    color: #fffefa;
+    color: #123f96;
     text-decoration: none;
     font-size: clamp(72px, 12vw, 148px);
     font-weight: 900;
@@ -1571,7 +1571,7 @@ h1 {
 .footer-col h5 {
     font-size: 11px;
     font-weight: 850;
-    color: rgba(255, 254, 250, 0.52);
+    color: rgba(28, 28, 28, 0.46);
     margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -1589,7 +1589,7 @@ h1 {
 
 .footer-links a {
     text-decoration: none;
-    color: rgba(255, 254, 250, 0.66);
+    color: #5f5f5d;
     font-size: 14px;
     font-weight: 620;
     transition: color 180ms cubic-bezier(0.22, 1, 0.36, 1), transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1597,7 +1597,7 @@ h1 {
 }
 
 .footer-links a:hover {
-    color: #fffefa;
+    color: #123f96;
     transform: translateX(2px);
 }
 
@@ -1610,7 +1610,7 @@ h1 {
     gap: 16px;
     padding-top: 26px;
     font-size: 13px;
-    color: rgba(255, 254, 250, 0.55);
+    color: rgba(28, 28, 28, 0.58);
 }
 
 .footer-bottom a {
@@ -1619,7 +1619,7 @@ h1 {
 }
 
 .footer-bottom a:hover {
-    color: #fffefa;
+    color: #123f96;
 }
 
 .footer-legal {

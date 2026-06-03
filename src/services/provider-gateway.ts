@@ -86,19 +86,19 @@ export class ProviderGateway {
         lastError = circuitError;
         continue;
       }
-      const bufferedEvents: StreamChatEvent[] = [];
+      let yieldedAnyEvent = false;
       try {
         for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {
-          bufferedEvents.push(event);
+          yieldedAnyEvent = true;
+          yield event;
         }
         this.noteSuccess(candidate);
-        for (const event of bufferedEvents) yield event;
         return;
       } catch (error: any) {
         lastError = error;
         const classified = this.classifyError(error, candidate);
         this.noteFailure(candidate, classified.retryable);
-        if (!classified.retryable) throw classified;
+        if (yieldedAnyEvent || !classified.retryable) throw classified;
       }
     }
 
