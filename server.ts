@@ -80,6 +80,12 @@ import {
   extractGeneratedJson,
   looksLikeStandaloneHtml,
 } from './src/services/generated-output-parser.ts';
+import {
+  understandUserIntent,
+  type IntentUnderstanding,
+  type UserIntentCategory,
+} from './src/services/intent-understanding.ts';
+import { buildAgentImprovementSignal } from './src/services/agent-self-improvement.ts';
 
 dotenv.config();
 
@@ -559,6 +565,8 @@ type IntentDecision = {
   intent: AgentIntent;
   confidence: number;
   requestedMode: AgentRequestedMode;
+  understandingCategory?: UserIntentCategory;
+  intentUnderstanding?: Pick<IntentUnderstanding, 'category' | 'action' | 'confidence' | 'allowsFileAction' | 'needsClarification' | 'reason' | 'signals'>;
   requiresFileChanges: boolean;
   requiresPreviewRebuild: boolean;
   requiresCredits: boolean;
@@ -1797,11 +1805,19 @@ class AgentOrchestrator {
     const text = input.prompt.trim();
     const lower = text.toLowerCase();
     const requestedMode = normalizeRequestedMode(input.requestedMode);
+    const understanding = understandUserIntent({
+      prompt: text,
+      hasFiles: input.hasFiles,
+      requestedMode,
+      hasLastPlan: Boolean(input.lastPlan),
+    });
     const forceBuild = requestedMode === 'build';
     const words = text.split(/\s+/).filter(Boolean);
     const hasAny = (hints: string[]) => hints.some(hint => lower.includes(hint));
     const decision = (patch: Partial<IntentDecision> & Pick<IntentDecision, 'intent' | 'confidence' | 'userVisibleReason'>): IntentDecision => ({
       requestedMode,
+      understandingCategory: understanding.category,
+      intentUnderstanding: understanding,
       requiresFileChanges: false,
       requiresPreviewRebuild: false,
       requiresCredits: false,
@@ -1857,6 +1873,41 @@ class AgentOrchestrator {
           recommendation: input.hasFiles
             ? 'Tell Huggy what should change or what feels broken.'
             : 'Describe the app in one sentence, for example: "a restaurant booking app".',
+        },
+      });
+    }
+
+    const shouldInspectInsteadOfChat = /\b(verifie|vérifie|verify|audit|check|teste|test|review|inspecte|inspect|analyse le projet|validate|validation)\b/i.test(lower);
+    if (!forceBuild && !shouldInspectInsteadOfChat && understanding.action === 'answer' && !understanding.allowsFileAction) {
+      return decision({
+        intent: 'conversation',
+        confidence: Math.max(0.82, understanding.confidence),
+        requiresCredits: !isSimpleLocalConversationPrompt(text),
+        nextAction: 'answer',
+        selectedModelPolicy: understanding.category === 'text' ? 'economy' : 'auto',
+        userVisibleReason: 'Huggy understood this as a response, explanation, strategy, or text task, not a file change.',
+      });
+    }
+
+    if (understanding.needsClarification || (forceBuild && !understanding.allowsFileAction)) {
+      return decision({
+        intent: 'clarification_required',
+        confidence: Math.max(0.78, understanding.confidence),
+        nextAction: 'ask_clarification',
+        routingSource: 'heuristic',
+        userVisibleReason: forceBuild
+          ? 'Build mode was selected, but the message does not name a safe technical target yet.'
+          : 'The request is ambiguous enough that coding now could create the wrong result.',
+        clarification: {
+          question: isLikelyFrenchPrompt(text)
+            ? 'Tu veux que Huggy réponde seulement, ou qu’il modifie vraiment le projet ?'
+            : 'Should Huggy only answer, or actually change the project?',
+          choices: input.hasFiles
+            ? ['Répondre sans modifier', 'Modifier une partie précise', 'Corriger un bug précis', 'Créer une nouvelle fonctionnalité']
+            : ['Répondre sans générer', 'Créer une app précise', 'Faire un plan', 'Améliorer un texte ou prompt'],
+          recommendation: isLikelyFrenchPrompt(text)
+            ? 'Si tu veux coder, indique l’écran, le composant, l’API, la base de données ou le bug exact.'
+            : 'If you want code work, name the screen, component, API, database, or exact bug.',
         },
       });
     }
@@ -1932,14 +1983,14 @@ class AgentOrchestrator {
       });
     }
 
-    const wantsBuild = forceBuild || hasAny(buildHints);
+    const wantsBuild = forceBuild || (hasAny(buildHints) && understanding.allowsFileAction);
     const wantsConversation = hasAny(conversationHints);
-    const wantsDebugFix = hasAny(debugHints);
+    const wantsDebugFix = hasAny(debugHints) && understanding.allowsFileAction;
     const wantsVerify = hasAny(verifyHints);
     const wantsDeployAssist = hasAny(deployHints)
       && !/(crée|creer|create|ajoute|add|modifie|change|corrige|fix|build|implémente|implemente|generate|génère|genere|page|component|dashboard|landing|formulaire|supprime|remove|replace|update|met a jour|mets a jour)/i.test(lower);
     const wantsComplexWork = hasAny(complexHints) || words.length > 28;
-    const wantsEdit = input.hasFiles && hasAny(editHints);
+    const wantsEdit = input.hasFiles && hasAny(editHints) && understanding.allowsFileAction;
 
     if (!forceBuild && wantsConversation && !hasAny(buildHints)) {
       return decision({
@@ -2029,7 +2080,9 @@ class AgentOrchestrator {
       });
     }
 
-    if (forceBuild || /(je veux|j'aimerais|i want|i need|build me|make me|cree moi|crée moi)/i.test(text) || wantsBuild) {
+    if ((forceBuild && understanding.allowsFileAction)
+      || (/(je veux|j'aimerais|i want|i need|build me|make me|cree moi|crée moi)/i.test(text) && understanding.allowsFileAction)
+      || wantsBuild) {
       return decision({
         intent: input.hasFiles && wantsBuild ? 'edit' : 'build',
         confidence: wantsBuild ? 0.9 : 0.8,
@@ -2149,6 +2202,67 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
   };
 }
 
+function guardAiDecisionWithUnderstanding(
+  aiDecision: IntentDecision,
+  input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string },
+  fallback: IntentDecision,
+): IntentDecision {
+  const requestedMode = normalizeRequestedMode(input.requestedMode);
+  const understanding = understandUserIntent({
+    prompt: input.prompt,
+    hasFiles: input.hasFiles,
+    requestedMode,
+    hasLastPlan: Boolean(input.lastPlan),
+  });
+  const withUnderstanding = (decision: IntentDecision): IntentDecision => ({
+    ...decision,
+    understandingCategory: understanding.category,
+    intentUnderstanding: understanding,
+  });
+
+  if (!aiDecision.requiresFileChanges || understanding.allowsFileAction) {
+    return withUnderstanding(aiDecision);
+  }
+
+  if (requestedMode === 'build' || understanding.needsClarification) {
+    return withUnderstanding({
+      ...fallback,
+      intent: 'clarification_required',
+      confidence: Math.max(fallback.confidence, understanding.confidence, 0.8),
+      requiresFileChanges: false,
+      requiresPreviewRebuild: false,
+      requiresCredits: false,
+      nextAction: 'ask_clarification',
+      routingSource: 'heuristic',
+      userVisibleReason: 'Huggy paused because the message does not clearly request a safe file change.',
+      clarification: {
+        question: isLikelyFrenchPrompt(input.prompt)
+          ? 'Tu veux une réponse simple, ou une vraie modification du projet ?'
+          : 'Do you want a simple answer, or an actual project change?',
+        choices: input.hasFiles
+          ? ['Répondre seulement', 'Modifier un composant précis', 'Corriger un bug précis']
+          : ['Répondre seulement', 'Créer une app précise', 'Faire un plan'],
+        recommendation: isLikelyFrenchPrompt(input.prompt)
+          ? 'Pour modifier le projet, cite l’écran, le composant, l’API, la base de données ou le bug exact.'
+          : 'For project changes, name the exact screen, component, API, database, or bug.',
+      },
+    });
+  }
+
+  return withUnderstanding({
+    ...fallback,
+    intent: 'conversation',
+    confidence: Math.max(fallback.confidence, understanding.confidence, 0.84),
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: !isSimpleLocalConversationPrompt(input.prompt),
+    nextAction: 'answer',
+    selectedModelPolicy: 'auto',
+    routingSource: 'heuristic',
+    userVisibleReason: 'Huggy treated this as a response task instead of generating files.',
+  });
+}
+
 async function classifyIntentWithAi(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }, fallback: IntentDecision): Promise<IntentDecision | null> {
   if (!getOpenRouterApiKey() || !agentIntentNeedsAiRouter(fallback)) return null;
   const result = await providerGateway.chat(DEFAULT_PROVIDER_MODEL_ID, [
@@ -2163,11 +2277,13 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
         requestedMode: normalizeRequestedMode(input.requestedMode),
         hasFiles: input.hasFiles,
         hasLastPlan: Boolean(input.lastPlan),
+        localUnderstanding: fallback.intentUnderstanding || null,
         fallbackIntent: fallback.intent,
       }),
     },
   ], { maxAttempts: 1, timeoutMs: 18_000 });
-  return buildDecisionFromAi(parseLooseJsonObject(result.text), fallback);
+  const aiDecision = buildDecisionFromAi(parseLooseJsonObject(result.text), fallback);
+  return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
 
 async function resolveAgentDecision(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }) {
@@ -3156,6 +3272,46 @@ async function upsertAgentMemory(project: GeneratedProject, userId: string, summ
   if (error && isMissingAgentV2TableError(error)) return row;
   if (error) console.warn('[huggy:agent_memory_persistence_skipped]', { message: error.message });
   return row;
+}
+
+async function upsertAgentTypedMemory(project: GeneratedProject, userId: string, memoryType: string, summary: string, payload: Record<string, any> = {}) {
+  const row = {
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    memory_type: memoryType,
+    summary: summary.slice(0, 4000),
+    architecture: redactAgentPayload(payload.architecture || {}),
+    ui_preferences: redactAgentPayload(payload.ui_preferences || {}),
+    known_errors: redactAgentPayload(payload.known_errors || []),
+    recent_decisions: redactAgentPayload(payload.recent_decisions || []),
+    updated_at: new Date().toISOString(),
+  };
+  const client = requireSupabase('Agent typed memory persistence');
+  const { error } = await client.from('agent_memories').upsert([row], { onConflict: 'project_id,memory_type' });
+  if (error && isMissingAgentV2TableError(error)) return row;
+  if (error) console.warn('[huggy:agent_typed_memory_persistence_skipped]', { message: error.message });
+  return row;
+}
+
+async function recordAgentImprovementSignal(project: GeneratedProject, userId: string, input: {
+  prompt: string;
+  decision: IntentDecision;
+  outcome: 'answered' | 'clarified' | 'planned' | 'verified' | 'deployed_guidance' | 'generated' | 'failed' | 'cancelled';
+  previewChanged?: boolean;
+  qualityStatus?: string;
+  issueCount?: number;
+}) {
+  const signal = buildAgentImprovementSignal(input);
+  return upsertAgentTypedMemory(project, userId, signal.memoryType, signal.summary, signal.payload);
+}
+
+function improvementOutcomeForDecision(decision: IntentDecision): 'answered' | 'clarified' | 'planned' | 'verified' | 'deployed_guidance' {
+  if (decision.intent === 'clarification_required') return 'clarified';
+  if (decision.intent === 'plan') return 'planned';
+  if (decision.intent === 'verify') return 'verified';
+  if (decision.intent === 'deploy_assist') return 'deployed_guidance';
+  return 'answered';
 }
 
 async function saveAgentVerifications(project: GeneratedProject, userId: string, runId: string, checks: AgentVerificationCheck[]) {
@@ -4834,14 +4990,23 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
     const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : cost.finalCredits;
     await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${decision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
+    await recordAgentImprovementSignal(project, userId, {
+      prompt,
+      decision,
+      outcome: improvementOutcomeForDecision(decision),
+      previewChanged: false,
+      qualityStatus: 'not_applicable',
+    });
     await updateAgentRunStatus(agentRunId, 'completed');
     return res.json({
       success: true,
       intent: decision,
       text: content,
       model: agentText.model,
-      files: existingFiles,
-      preview: { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') },
+      files: decision.requiresFileChanges ? existingFiles : undefined,
+      preview: decision.requiresPreviewRebuild
+        ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') }
+        : undefined,
     });
   }
 
@@ -4958,6 +5123,14 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       architecture: {
         quality: qualitySummary,
       },
+    });
+    await recordAgentImprovementSignal(updatedProject, userId, {
+      prompt,
+      decision,
+      outcome: 'generated',
+      previewChanged: true,
+      qualityStatus: qualitySummary.status,
+      issueCount: Number(qualitySummary.failed?.length || 0) + Number(qualitySummary.warnings?.length || 0),
     });
 
     const finalCost = costEstimator.calculateRequiredCredits({
@@ -5256,6 +5429,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: requestedModelSelection, researchContext });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
+      await recordAgentImprovementSignal(project, userId, {
+        prompt,
+        decision,
+        outcome: 'failed',
+        previewChanged: false,
+        qualityStatus: diagnostic.diagnostic_code,
+        issueCount: 1,
+      }).catch(() => null);
       await send('error', diagnostic.message, {
         code: 'AgentResponseFailed',
         diagnostic_code: diagnostic.diagnostic_code,
@@ -5277,6 +5458,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
     const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
     await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${decision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
+    await recordAgentImprovementSignal(project, userId, {
+      prompt,
+      decision,
+      outcome: improvementOutcomeForDecision(decision),
+      previewChanged: false,
+      qualityStatus: 'not_applicable',
+    });
     const eventName = decision.intent === 'plan'
       ? 'plan_ready'
       : decision.intent === 'clarification_required'
@@ -5303,8 +5491,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       choices: decision.clarification?.choices || [],
       recommendation: decision.clarification?.recommendation,
       original_prompt: prompt,
-      preview: { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') },
-      files: existingFiles,
+      preview: decision.requiresPreviewRebuild ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') } : undefined,
+      files: decision.requiresFileChanges ? existingFiles : undefined,
     });
     await send('done', 'No file changes were made.', {});
     await updateAgentRunStatus(agentRunId, 'completed', { duration_ms: Date.now() - streamStartedAt });
@@ -5558,6 +5746,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         quality: qualitySummary,
       },
     });
+    await recordAgentImprovementSignal(updatedProject, userId, {
+      prompt,
+      decision,
+      outcome: 'generated',
+      previewChanged: true,
+      qualityStatus: qualitySummary.status,
+      issueCount: Number(qualitySummary.failed?.length || 0) + Number(qualitySummary.warnings?.length || 0),
+    });
 
     const finalCost = costEstimator.calculateRequiredCredits({
       openrouter_cost_usd: costUsd,
@@ -5625,6 +5821,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
 
     const diagnostic = diagnoseProviderError(error);
+    await recordAgentImprovementSignal(project, userId, {
+      prompt,
+      decision,
+      outcome: 'failed',
+      previewChanged: decision.requiresPreviewRebuild,
+      qualityStatus: diagnostic.diagnostic_code,
+      issueCount: 1,
+    }).catch(() => null);
     console.error('[huggy:generate_stream_failed]', {
       request_id: requestId,
       project_id: project.id,

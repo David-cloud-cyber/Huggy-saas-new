@@ -161,6 +161,7 @@ let isGenerating = false;
 let lastPlan = '';
 let lastBuildSessionId = '';
 let lastAgentRunId = '';
+let activeGenerationTouchesPreview = false;
 let activeAbort: AbortController | null = null;
 let stopRequested = false;
 let workingTimer: number | null = null;
@@ -2386,18 +2387,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const speaksFrench = isLikelyFrenchText(prompt);
   const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const status = appendMessage('assistant', quickConversation
-    ? (speaksFrench ? 'Je te réponds...' : 'Answering...')
-    : initialLabel);
-  if (!quickConversation) {
-    setMessageShimmer(status, initialLabel);
-    startWorkingTimer(status, initialLabel);
-  }
-  let generationTouchesPreview = requestedMode === 'build';
-  if (generationTouchesPreview) {
-    activateBuilderView('preview');
-    setEmptyPreviewState('working', 'Thinking');
-  }
+  const status = appendMessage('assistant', '');
+  let generationTouchesPreview = false;
+  activeGenerationTouchesPreview = false;
   let streamedText = '';
   let assistantHasFinalContent = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
@@ -2435,6 +2427,13 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (activeWorkingDetails.length) syncAgentSteps(label);
   };
   const shouldPreserveWorkingTrace = () => Boolean(generationTouchesPreview && !quickConversation && status);
+  const promoteToPreviewWork = (label = activeWorkingLabel || initialLabel) => {
+    if (generationTouchesPreview) return;
+    generationTouchesPreview = true;
+    activeGenerationTouchesPreview = true;
+    activateBuilderView('preview');
+    setEmptyPreviewState('working', label);
+  };
   const ensureResponseCard = (traceLabel = say('Terminé', 'Completed')) => {
     if (assistantHasFinalContent) return responseCard;
     if (shouldPreserveWorkingTrace()) {
@@ -2485,9 +2484,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
       if (eventType === 'answer_stream_started') {
-        if (!quickConversation || generationTouchesPreview) {
-          markAgentStep('answer', realLabel(say('Réponse en cours.', 'Writing the answer.')), 'Answering');
-        }
+        if (generationTouchesPreview) markAgentStep('answer', realLabel(say('Réponse en cours.', 'Writing the answer.')), 'Answering');
         return;
       }
       if (eventType === 'token' || eventType === 'answer_token') {
@@ -2512,9 +2509,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const detected = String(payload.intent?.intent || payload.intent || '').replace(/_/g, ' ');
         markAgentStep('intent', detected ? `Intent: ${detected}` : realLabel(say('Action choisie.', 'Action selected.')), 'Thinking');
         if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
-          generationTouchesPreview = true;
-          activateBuilderView('preview');
-          setEmptyPreviewState('working', 'Thinking');
+          promoteToPreviewWork('Thinking');
         }
         return;
       }
@@ -2634,8 +2629,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (eventType === 'retest_started') markAgentStep('retest', realLabel(say('Retest après correction.', 'Retesting after fix.')), label);
         if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', realLabel(say('Correction automatique terminée.', 'Automatic fix completed.')));
         setAssistantWorking(label);
-        generationTouchesPreview = true;
-        setEmptyPreviewState('working', label);
+        const fileChangingEvent = eventType !== 'verification_started' || generationTouchesPreview;
+        if (fileChangingEvent) promoteToPreviewWork(label);
+        if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
       }
       if (eventType === 'preview_ready') {
@@ -2696,6 +2692,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setBusy(false);
     activeAbort = null;
     stopRequested = false;
+    activeGenerationTouchesPreview = false;
   }
 }
 
@@ -2715,7 +2712,7 @@ async function cancelBuild() {
       }).catch(() => null);
     }
   }
-  setEmptyPreviewState('idle', 'Generation stopped');
+  if (activeGenerationTouchesPreview) setEmptyPreviewState('idle', 'Generation stopped');
   setBusy(false);
 }
 

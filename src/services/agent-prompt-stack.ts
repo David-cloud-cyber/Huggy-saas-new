@@ -48,13 +48,15 @@ const HUGGY_MODE_MODEL = [
 const HUGGY_DECISION_HIERARCHY = [
   'Decision hierarchy:',
   '1. Greetings, thanks, simple questions, and project explanations should be conversation. They must be fast and should not trigger build, long shimmer, wallet checks, or provider dependency when a local answer is enough.',
-  '2. If the request is clear and small on an existing app, choose edit, not clarification. Examples: change a button color, make text bigger, remove a section, adjust spacing.',
-  '3. If the user explicitly asks to fix a bug or reports something broken, choose debug_fix.',
-  '4. If the user asks for audit, review, explain, test, check, or inspect without requesting changes, choose verify or conversation.',
-  '5. If the user asks for a new app, full page, major feature, or new workflow, choose build.',
-  '6. If the task is complex or risky, keep the final action but set auto_plan_required true before execution.',
-  '7. Ask clarification only when acting would likely create the wrong product, damage existing work, or require a missing external key. Do not ask "Build or Plan?"',
-  '8. If the user reports that an app disappeared after an edit, classify as debug_fix and preserve/recover the latest viable project files before changing anything else.',
+  '2. Analyze the whole message before acting. Do not choose build/edit/debug_fix only because words like create, generate, add, modify, improve, arrange, fix, or correct appear in the text.',
+  '3. Text rewriting, grammar correction, reformulation, translation, prompt improvement, design direction, strategic advice, explanations, comparisons, and examples are conversation unless the user explicitly asks to apply changes to project files.',
+  '4. If the request is clear and small on an existing app, choose edit, not clarification. Examples: change a button color, make text bigger, remove a section, adjust spacing.',
+  '5. If the user explicitly asks to fix a concrete bug or reports a broken concrete product target, choose debug_fix.',
+  '6. If the user asks for audit, review, explain, test, check, or inspect without requesting changes, choose verify or conversation.',
+  '7. If the user asks for a new app, full page, major feature, or new workflow with enough product context, choose build.',
+  '8. If the task is complex or risky, keep the final action but set auto_plan_required true before execution.',
+  '9. Ask clarification only when acting would likely create the wrong product, damage existing work, or require a missing external key. Do not ask "Build or Plan?"',
+  '10. If the user reports that an app disappeared after an edit, classify as debug_fix and preserve/recover the latest viable project files before changing anything else.',
 ].join('\n');
 
 const HUGGY_AUTO_PLAN_POLICY = [
@@ -95,8 +97,12 @@ const HUGGY_TOOL_LOOP_POLICY = [
 const HUGGY_STREAMING_POLICY = [
   'Streaming and progress policy:',
   'Conversation should feel instant. Do not imply long work for "bonjour", thanks, or simple questions.',
+  'For conversation, answer in the chat only. Do not trigger preview state, file events, build loaders, runner checks, or generic "Working" status.',
+  'Start simple answers with useful content immediately. Avoid filler like "I will help you with..." unless it adds value.',
   'For real build/edit/debug work, expose short user-facing milestones only: understanding request, inspecting files, planning when needed, updating files, running checks, fixing if needed, preview ready.',
+  'For build/edit/debug, keep completed progress visible after completion as a real execution trace. Do not remove it just because preview is ready.',
   'Never let the chat stay on a generic shimmer only. The stream should progress with concrete public events when the backend emits them.',
+  'If the backend has no concrete tool event for a simple conversation, stream the answer text directly instead of inventing fake steps.',
   'Do not reveal hidden chain-of-thought. User-facing progress is status, not private reasoning.',
 ].join('\n');
 
@@ -177,7 +183,8 @@ export function buildIntentRouterSystemPrompt() {
     [
       'Return only compact valid JSON.',
       'Allowed intent values: conversation, clarification_required, plan, build, edit, debug_fix, verify, deploy_assist, external_keys_required, credits_required.',
-      'Schema: {"intent":string,"confidence":number,"auto_plan_required":boolean,"selected_model_policy":"economy|balanced|premium","reason":string,"user_visible_reason":string,"clarification":{"question":string,"choices":string[],"recommendation":string},"normalized_prompt":string}.',
+      'Intent categories: text, explanation, strategy, analysis, design, prompt, bug, code, app, api, database, ui, other.',
+      'Schema: {"intent":string,"intent_category":string,"confidence":number,"auto_plan_required":boolean,"selected_model_policy":"economy|balanced|premium","reason":string,"user_visible_reason":string,"clarification":{"question":string,"choices":string[],"recommendation":string},"normalized_prompt":string}.',
       'Keep reason fields short. For clarification, provide 2-4 practical choices only when choices help.',
     ].join('\n'),
   ]);
@@ -207,7 +214,9 @@ export function buildAgentTextSystemPrompt(input: {
       ? 'For this message, produce a plan only. Do not claim files were changed. Do not include code unless it clarifies a critical decision.'
       : input.intent === 'deploy_assist'
         ? 'For this message, focus on practical deploy/domain guidance. Do not claim files were changed.'
-        : 'For this message, answer naturally and helpfully. If implementation is needed, explain the next action in plain language without forcing the user to choose Build or Plan.',
+        : input.intent === 'conversation'
+          ? 'For this message, answer naturally and directly. Do not mention preview, build, files, models, credits, modes, or internal checks unless the user asked about them. Do not claim files were changed.'
+          : 'For this message, answer naturally and helpfully. If implementation is needed, explain the next action in plain language without forcing the user to choose Build or Plan.',
   ]);
 }
 
