@@ -2609,7 +2609,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
           ? 'Building'
           : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'files_changed'
@@ -2628,6 +2628,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label);
         if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', realLabel(say('Vérifications lancées.', 'Checks started.')), label);
         if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Vérifications terminées.', 'Checks completed.')));
+        if (eventType === 'quality_checked') finishAgentStep('verify', realLabel(say('Qualité vérifiée.', 'Quality checked.')));
         if (eventType === 'runner_failed') markAgentStep('fix', runnerLabel(say('Des vérifications demandent une correction.', 'Checks need a fix.')), label);
         if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', realLabel(say('Correction appliquée.', 'Fix applied.')), label);
         if (eventType === 'retest_started') markAgentStep('retest', realLabel(say('Retest après correction.', 'Retesting after fix.')), label);

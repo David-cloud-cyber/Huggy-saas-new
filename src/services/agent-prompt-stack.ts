@@ -1,4 +1,4 @@
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v5';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v6';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -107,6 +107,28 @@ const HUGGY_WEB_RESEARCH_POLICY = [
   'When using research context for current claims, cite short source URLs in plain text if the user-facing answer depends on them.',
 ].join('\n');
 
+const HUGGY_PLATFORM_INTELLIGENCE_POLICY = [
+  'Platform intelligence policy:',
+  'Do not apply one generic design style to every request. First infer the platform type and adapt layout, density, components, motion, trust level, and audit priorities.',
+  'A CRM must feel operational, not like a landing page. A landing page must convert, not look like a dashboard. A mobile/PWA app must be touch-first, not a squeezed desktop page.',
+  'A marketplace needs discovery, filters, listings, trust, and no-results states. An ecommerce app needs catalog, variants, cart, totals, and checkout feedback.',
+  'A restaurant/local business app needs menu, reservation, hours, location, reviews, and contact actions. A fintech/billing app needs tabular numbers, confirmations, and sober trust states.',
+  'An AI tool needs prompt input, conversation/output, honest streaming status, settings/model state, and persistent results. A healthcare/education app needs calm readability and accessibility.',
+  'Use the provided uiGenerationPolicy.designBrief and uiGenerationPolicy.platformIntelligence as binding product requirements, not optional inspiration.',
+].join('\n');
+
+const HUGGY_FUNCTIONAL_QUALITY_POLICY = [
+  'Functional quality gate:',
+  'A beautiful app that is broken is a failed generation.',
+  'Never sacrifice functionality for aesthetics. Every primary UI control must have a working interaction, visible feedback, or an honest placeholder state.',
+  'The app must render without a blank preview or obvious JavaScript crash.',
+  'Buttons, forms, filters, tabs, modals, menus, toggles, carts, navigation, and primary CTAs must update visible state when present.',
+  'Forms must validate and show clear feedback. Empty, loading, error, success, disabled, and selected states must exist for the core flow.',
+  'Do not claim real backend, payments, auth, emails, AI calls, or persistence unless the generated project actually implements it or clearly labels it as demo/local preview behavior.',
+  'If package.json exists, generate scripts and dependencies that can pass build/test/lint in a clean runner.',
+  'If the quality audit finds weak functionality, missing responsive behavior, dead controls, generic AI design, or a blank preview, revise before claiming the app is ready.',
+].join('\n');
+
 const HUGGY_GENERATION_PRODUCT_POLICY = [
   'Generated app quality:',
   'Generate real project files, not a static screenshot or fake mockup.',
@@ -199,8 +221,10 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_USER_EMPATHY,
     HUGGY_TOOL_LOOP_POLICY,
     HUGGY_STREAMING_POLICY,
+    HUGGY_PLATFORM_INTELLIGENCE_POLICY,
     input.uiPolicySystemPrompt,
     HUGGY_GENERATION_PRODUCT_POLICY,
+    HUGGY_FUNCTIONAL_QUALITY_POLICY,
     input.hasExistingFiles
       ? HUGGY_GENERATION_ITERATION_POLICY
       : 'This is a new app. Return a complete modern React project structure, not only index.html.',

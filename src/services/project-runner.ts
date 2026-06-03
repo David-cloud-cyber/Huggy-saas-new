@@ -73,6 +73,7 @@ export class HybridProjectRunner implements RunnerAdapter {
       }
 
       const packageFile = input.files.find(file => normalizePath(file.path) === 'package.json');
+      checks.push(...this.projectTopologyChecks(input.files, input.previewHtml || '', Boolean(packageFile)));
       if (packageFile) {
         checks.push(...await this.packageChecks(workdir, packageFile, input.timeoutMs || 120_000));
       } else {
@@ -83,6 +84,7 @@ export class HybridProjectRunner implements RunnerAdapter {
           message: 'Script checks skipped for this legacy static snapshot.',
         });
       }
+      checks.push(this.technicalScoreCheck(checks));
     } finally {
       await rm(workdir, { recursive: true, force: true }).catch(() => null);
     }
@@ -153,6 +155,112 @@ export class HybridProjectRunner implements RunnerAdapter {
     }
 
     return checks;
+  }
+
+  private projectTopologyChecks(files: RunnerFile[], previewHtml: string, hasPackageJson: boolean): RunnerCheck[] {
+    const checks: RunnerCheck[] = [];
+    const byPath = new Map(files.map(file => [normalizePath(file.path).toLowerCase(), file]));
+    const source = files.map(file => `${file.path}\n${file.content || ''}`).join('\n\n');
+    const html = previewHtml || files.find(file => normalizePath(file.path).endsWith('.html'))?.content || '';
+    const hasIndex = byPath.has('index.html');
+    const hasMain = Array.from(byPath.keys()).some(file => /^src\/main\.(tsx|jsx|ts|js)$/.test(file));
+    const hasApp = Array.from(byPath.keys()).some(file => /^src\/app\.(tsx|jsx)$/.test(file));
+    const hasViteRoot = /<div\s+id=["']root["'][^>]*>/i.test(html);
+    const hasMainScript = /<script[^>]+type=["']module["'][^>]+src=["']\/src\/main\.(tsx|jsx|ts|js)["']/i.test(html);
+
+    if (hasPackageJson) {
+      checks.push(hasIndex ? pass('vite_index_present', 'index.html is present.', 'index.html') : fail('vite_index_present', 'high', 'Modern project is missing index.html.', 'index.html'));
+      checks.push(hasMain ? pass('vite_main_present', 'React entrypoint is present.', 'src/main.tsx') : fail('vite_main_present', 'high', 'Modern project is missing src/main.tsx or equivalent.', 'src/main.tsx'));
+      checks.push(hasApp ? pass('vite_app_present', 'React App component is present.', 'src/App.tsx') : fail('vite_app_present', 'high', 'Modern project is missing src/App.tsx or equivalent.', 'src/App.tsx'));
+      checks.push(hasViteRoot ? pass('vite_root_mount', 'Preview contains a root mount.', 'index.html') : fail('vite_root_mount', 'high', 'index.html should expose <div id="root"> for React.', 'index.html'));
+      checks.push(hasMainScript ? pass('vite_main_script', 'Preview references the React entrypoint.', 'index.html') : fail('vite_main_script', 'high', 'index.html should load /src/main.tsx as a module.', 'index.html'));
+    }
+
+    checks.push(...this.localImportChecks(files));
+    checks.push(...this.interactionChecks(source));
+    checks.push(...this.previewRuntimeChecks(html));
+    return checks;
+  }
+
+  private localImportChecks(files: RunnerFile[]): RunnerCheck[] {
+    const checks: RunnerCheck[] = [];
+    const filePaths = new Set(files.map(file => normalizePath(file.path).toLowerCase()));
+    const sourceFiles = files.filter(file => /\.(tsx|jsx|ts|js)$/i.test(normalizePath(file.path)));
+    const missing: Array<{ from: string; target: string }> = [];
+
+    for (const file of sourceFiles) {
+      const fromPath = normalizePath(file.path);
+      const fromDir = path.posix.dirname(fromPath);
+      const content = String(file.content || '');
+      const importRegex = /(?:import\s+(?:[^'"]+\s+from\s+)?|import\s*\(|require\s*\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+      let match: RegExpExecArray | null;
+      while ((match = importRegex.exec(content))) {
+        const specifier = match[1];
+        if (!specifier) continue;
+        const resolved = normalizePath(path.posix.normalize(path.posix.join(fromDir, specifier))).toLowerCase();
+        if (hasLocalModule(filePaths, resolved)) continue;
+        missing.push({ from: fromPath, target: specifier });
+      }
+    }
+
+    if (!missing.length) {
+      checks.push(pass('local_imports_resolve', 'Local imports resolve statically.'));
+    } else {
+      missing.slice(0, 6).forEach(item => {
+        checks.push(fail('local_imports_resolve', 'high', `Missing local import ${item.target}.`, item.from));
+      });
+    }
+    return checks;
+  }
+
+  private interactionChecks(source: string): RunnerCheck[] {
+    const checks: RunnerCheck[] = [];
+    const hasButton = /<button|role=["']button|type=["']button/i.test(source);
+    const hasForm = /<form|<input|<select|<textarea/i.test(source);
+    const hasHandler = /\b(onClick|onSubmit|onChange|addEventListener|useState|useReducer|href=|aria-expanded)\b/i.test(source);
+    const hasValidation = /\b(required|minLength|maxLength|pattern|aria-invalid|invalid|error|validation|validate|setError)\b/i.test(source);
+    const hasFeedback = /\b(loading|saving|saved|success|error|empty|toast|alert|disabled|pending|cancelled)\b/i.test(source);
+
+    if (hasButton) {
+      checks.push(hasHandler ? pass('control_handlers', 'Primary controls have handlers or navigation.') : fail('control_handlers', 'high', 'Controls exist but no handlers or navigation were detected.'));
+    }
+    if (hasForm) {
+      checks.push(hasValidation ? pass('form_validation', 'Forms include validation or error feedback.') : fail('form_validation', 'medium', 'Forms need validation and visible feedback.'));
+    }
+    checks.push(hasFeedback ? pass('ui_feedback_states', 'User feedback states are represented.') : warn('ui_feedback_states', 'medium', 'No loading, empty, error, success, or disabled state was detected.'));
+    return checks;
+  }
+
+  private previewRuntimeChecks(html: string): RunnerCheck[] {
+    const checks: RunnerCheck[] = [];
+    if (!html.trim()) return checks;
+    if (/Cannot\s+read\s+properties|ReferenceError|SyntaxError|TypeError|__HUGGY_FORCE_ERROR__|data-huggy-runtime-error/i.test(html)) {
+      checks.push(fail('preview_runtime_markers', 'high', 'Preview contains a runtime error marker.'));
+    } else {
+      checks.push(pass('preview_runtime_markers', 'No known runtime error markers found in preview.'));
+    }
+    if (/<body[^>]*>\s*<\/body>/i.test(html) || /id=["']root["'][^>]*>\s*<\/div>\s*<\/body>/i.test(html)) {
+      checks.push(warn('preview_body_content', 'medium', 'Preview body appears sparse before runtime rendering; runner will rely on source checks.'));
+    } else {
+      checks.push(pass('preview_body_content', 'Preview body contains rendered content or a mounted shell.'));
+    }
+    return checks;
+  }
+
+  private technicalScoreCheck(checks: RunnerCheck[]): RunnerCheck {
+    const penalty = checks.reduce((total, check) => {
+      if (check.status === 'passed') return total;
+      const base = check.severity === 'high' ? 24 : check.severity === 'medium' ? 13 : check.severity === 'low' ? 6 : 2;
+      return total + (check.status === 'failed' ? base : Math.ceil(base / 2));
+    }, 0);
+    const score = Math.max(0, Math.min(100, 100 - penalty));
+    return {
+      check_type: 'technical_build_score',
+      status: score >= 76 ? 'passed' : score >= 60 ? 'skipped' : 'failed',
+      severity: score >= 60 ? 'low' : 'high',
+      message: `Technical build score: ${score}/100.`,
+      public_payload: { score },
+    };
   }
 
   private async writeSafeFiles(workdir: string, files: RunnerFile[], checks: RunnerCheck[]) {
@@ -254,6 +362,23 @@ function normalizePath(value: string) {
 
 function isSafeProjectPath(value: string) {
   return Boolean(value) && !value.includes('..') && !value.startsWith('/') && !/^[a-z]:/i.test(value);
+}
+
+function hasLocalModule(filePaths: Set<string>, resolved: string) {
+  const candidates = [
+    resolved,
+    `${resolved}.ts`,
+    `${resolved}.tsx`,
+    `${resolved}.js`,
+    `${resolved}.jsx`,
+    `${resolved}.json`,
+    `${resolved}.css`,
+    `${resolved}/index.ts`,
+    `${resolved}/index.tsx`,
+    `${resolved}/index.js`,
+    `${resolved}/index.jsx`,
+  ];
+  return candidates.some(candidate => filePaths.has(candidate));
 }
 
 function sanitizePathPart(value: string) {

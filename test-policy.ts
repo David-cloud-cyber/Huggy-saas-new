@@ -3,8 +3,10 @@ import { validateAllowedModel, ForbiddenModelError } from './src/services/ai-val
 import { AI_ALLOWED_MODELS } from './src/config/ai-models.ts';
 import {
   buildWorldClassUiPolicy,
+  buildGeneratedDesignBrief,
   chooseDesignDirection,
   classifyGeneratedAppType,
+  getPlatformIntelligence,
 } from './src/services/design-generation-policy.ts';
 
 const EXPECTED_ALLOWED_MODELS = [
@@ -81,6 +83,18 @@ async function runTests() {
     classifyGeneratedAppType('Create an ecommerce shop with cart, products and checkout'),
     'ecommerce',
   );
+  assert.equal(
+    classifyGeneratedAppType('Cree une app fintech avec wallet, credits, facturation et historique de paiements'),
+    'fintech_billing',
+  );
+  assert.equal(
+    classifyGeneratedAppType('Cree un outil IA avec prompt, streaming, preview et historique'),
+    'ai_tool',
+  );
+  assert.equal(
+    classifyGeneratedAppType('Cree une app mobile PWA avec bottom nav et swipe'),
+    'mobile_first_app',
+  );
 
   // Test 6: The world-class protocol rejects generic AI design and carries app-specific rules.
   const landingPolicy = buildWorldClassUiPolicy({
@@ -90,6 +104,9 @@ async function runTests() {
   assert.equal(landingPolicy.designDirection, 'cinematic_landing');
   assert.ok(landingPolicy.systemPrompt.includes('Never produce UI that looks AI-generated'));
   assert.ok(landingPolicy.systemPrompt.includes('Break the generic hero pattern'));
+  assert.ok(landingPolicy.systemPrompt.includes('Functional quality gate'));
+  assert.ok(landingPolicy.userContext.designBrief.required_components.includes('hero'));
+  assert.ok(landingPolicy.userContext.platformIntelligence.functionalRules.length > 0);
 
   const dashboardPolicy = buildWorldClassUiPolicy({
     prompt: 'Create a dashboard for monitoring API usage and billing metrics',
@@ -97,6 +114,18 @@ async function runTests() {
   assert.equal(dashboardPolicy.appType, 'analytics_dashboard');
   assert.equal(chooseDesignDirection(dashboardPolicy.appType, 'dashboard'), 'data_operational');
   assert.ok(dashboardPolicy.systemPrompt.includes('Never use a marketing hero'));
+
+  const restaurantBrief = buildGeneratedDesignBrief({
+    prompt: 'restaurant app with menu and reservations',
+    appType: 'restaurant',
+    designDirection: 'hospitality_warm',
+  });
+  assert.ok(restaurantBrief.required_components.includes('menu'));
+  assert.ok(restaurantBrief.required_interactions.includes('reservation validation'));
+
+  const fintechIntel = getPlatformIntelligence('fintech_billing');
+  assert.equal(fintechIntel.trustLevel, 'critical');
+  assert.ok(fintechIntel.requiredComponents.includes('transactions'));
 
   console.log('Success: Adaptive world-class UI generation policy passed validation.');
   console.log('Tests completed.');

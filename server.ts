@@ -39,6 +39,10 @@ import { StripeService, SAAS_PLANS, TOPUP_PRODUCTS } from './src/services/billin
 import { AuditLogService, BillingAlertService, UsageMeteringService, MemberLimitService } from './src/services/platform-support.ts';
 import { buildWorldClassUiPolicy } from './src/services/design-generation-policy.ts';
 import {
+  auditGeneratedDesign,
+  auditGeneratedFunctionality,
+} from './src/services/design-quality-auditor.ts';
+import {
   buildAgentTextSystemPrompt,
   buildGenerationSystemPrompt,
   buildIntentRouterSystemPrompt,
@@ -2855,8 +2859,14 @@ function parseGeneratedOutput(
   promptOrDescription = '',
   options: { hasExistingFiles?: boolean } = {},
 ) {
+  const isStandaloneHtml = looksLikeStandaloneHtml(rawText);
+  if (isStandaloneHtml && !options.hasExistingFiles) {
+    throw new GeneratedOutputParseError(
+      'Huggy received only a standalone HTML preview, but new apps must be complete React/Vite projects with working files. The existing project was kept unchanged.',
+    );
+  }
   const parsed = extractGeneratedJson(rawText) || (
-    looksLikeStandaloneHtml(rawText)
+    isStandaloneHtml
       ? {
           summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
           files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
@@ -3167,6 +3177,41 @@ async function saveAgentVerifications(project: GeneratedProject, userId: string,
   const { error } = await client.from('agent_verifications').insert(rows);
   if (error && isMissingAgentV2TableError(error)) return;
   if (error) console.warn('[huggy:agent_verification_persistence_skipped]', { message: error.message });
+}
+
+function summarizeQualityForMemory(checks: AgentVerificationCheck[]) {
+  const scores: Record<string, number> = {};
+  const failed = checks
+    .filter(check => check.status === 'fail')
+    .slice(0, 8)
+    .map(check => ({
+      key: check.key,
+      severity: check.severity,
+      message: check.message,
+      file: check.file || null,
+    }));
+  const warnings = checks
+    .filter(check => check.status === 'warn')
+    .slice(0, 8)
+    .map(check => ({
+      key: check.key,
+      severity: check.severity,
+      message: check.message,
+      file: check.file || null,
+    }));
+
+  for (const check of checks) {
+    if (!/_score$/.test(check.key)) continue;
+    const match = check.message.match(/(\d+)\/100/);
+    if (match) scores[check.key] = Number(match[1]);
+  }
+
+  return redactAgentPayload({
+    scores,
+    failed,
+    warnings,
+    status: failed.length ? 'failed' : warnings.length ? 'warning' : 'passed',
+  });
 }
 
 async function saveAgentRunnerResults(project: GeneratedProject, userId: string, runId: string, result: RunnerResult | null) {
@@ -4867,8 +4912,26 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }
     }
     const previewHtml = pipeline.html;
-    const verificationChecks = verifyGeneratedProject({ projectName: project.name, files: finalFiles, previewHtml });
+    const uiPolicy = buildWorldClassUiPolicy({ prompt });
+    const verificationChecks = [
+      ...verifyGeneratedProject({ projectName: project.name, files: finalFiles, previewHtml }),
+      ...auditGeneratedDesign({
+        files: finalFiles,
+        previewHtml,
+        platformType: uiPolicy.appType,
+        designDirection: uiPolicy.designDirection,
+        hasExistingFiles: existingFiles.length > 0,
+      }),
+      ...auditGeneratedFunctionality({
+        files: finalFiles,
+        previewHtml,
+        platformType: uiPolicy.appType,
+        designDirection: uiPolicy.designDirection,
+        hasExistingFiles: existingFiles.length > 0,
+      }),
+    ];
     const verificationSummary = summarizeVerificationChecks(verificationChecks);
+    const qualitySummary = summarizeQualityForMemory(verificationChecks);
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     const updatedProject: GeneratedProject = {
       ...project,
@@ -4892,6 +4955,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }), {
       recent_decisions: [{ intent: decision.intent, summary: decision.userVisibleReason, created_at: new Date().toISOString() }],
       known_errors: verificationChecks.filter(check => check.status === 'fail'),
+      architecture: {
+        quality: qualitySummary,
+      },
     });
 
     const finalCost = costEstimator.calculateRequiredCredits({
@@ -4905,7 +4971,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
     await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${generation.model}`, refId);
-    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, model: generation.model } });
+    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, quality: qualitySummary, model: generation.model } });
 
     res.json({
       success: true,
@@ -5428,15 +5494,40 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       }
     }
     await send('verification_started', 'Verifying generated files and preview.', {});
+    const uiPolicy = buildWorldClassUiPolicy({ prompt });
     const verificationChecks = [
       ...verifyGeneratedProject({ projectName: project.name, files, previewHtml }),
+      ...auditGeneratedDesign({
+        files,
+        previewHtml,
+        platformType: uiPolicy.appType,
+        designDirection: uiPolicy.designDirection,
+        hasExistingFiles: existingFiles.length > 0,
+      }),
+      ...auditGeneratedFunctionality({
+        files,
+        previewHtml,
+        platformType: uiPolicy.appType,
+        designDirection: uiPolicy.designDirection,
+        hasExistingFiles: existingFiles.length > 0,
+      }),
       ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
     ];
     const verificationSummary = summarizeVerificationChecks(verificationChecks);
+    const qualitySummary = summarizeQualityForMemory(verificationChecks);
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     if (verificationSummary.status === 'failed') {
       await send('verification_failed', verificationSummary.message, { checks: verificationChecks, summary: verificationSummary });
     }
+    await send(
+      'quality_checked',
+      qualitySummary.status === 'passed'
+        ? 'Quality checks passed.'
+        : qualitySummary.status === 'warning'
+          ? 'Quality checks passed with notes.'
+          : 'Quality checks found issues.',
+      { quality: qualitySummary, summary: verificationSummary },
+    );
 
     const updatedProject: GeneratedProject = {
       ...project,
@@ -5464,6 +5555,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       architecture: {
         runner: summarizeRunnerForMemory(runnerResult),
         research: summarizeResearchForMemory(researchResult),
+        quality: qualitySummary,
       },
     });
 
@@ -5508,6 +5600,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       errors: pipeline.errors,
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       research: researchResult ? summarizeResearchForMemory(researchResult) : null,
+      quality: qualitySummary,
     });
 
     await updateBuildSessionStatus(buildSessionId, 'completed');
@@ -5515,7 +5608,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send('done', 'Generation completed.', {});
     await updateAgentRunStatus(agentRunId, 'completed', {
       duration_ms: Date.now() - streamStartedAt,
-      public_payload: { verification: verificationSummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
+      public_payload: { verification: verificationSummary, quality: qualitySummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
     });
     await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed' });
     endStream();
