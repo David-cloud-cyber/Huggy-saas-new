@@ -3,6 +3,8 @@ export type UserIntentCategory =
   | 'explanation'
   | 'strategy'
   | 'analysis'
+  | 'product_review'
+  | 'ux_review'
   | 'design'
   | 'prompt'
   | 'bug'
@@ -10,6 +12,10 @@ export type UserIntentCategory =
   | 'app'
   | 'api'
   | 'database'
+  | 'auth_billing_security'
+  | 'refactor'
+  | 'architecture'
+  | 'bad_product_decision'
   | 'ui'
   | 'other';
 
@@ -53,6 +59,21 @@ function matchesAny(text: string, patterns: RegExp[]) {
 
 function words(text: string) {
   return text.split(/\s+/).filter(Boolean);
+}
+
+function chooseFileActionCategory(input: {
+  text: string;
+  hasSensitiveTopic: boolean;
+  hasRefactorIntent: boolean;
+}): UserIntentCategory {
+  const { text, hasSensitiveTopic, hasRefactorIntent } = input;
+  if (hasSensitiveTopic) return 'auth_billing_security';
+  if (hasRefactorIntent) return 'refactor';
+  if (text.includes('api') || text.includes('endpoint')) return 'api';
+  if (text.includes('database') || text.includes('base de donnees') || text.includes('supabase') || text.includes('schema')) return 'database';
+  if (text.includes('bug') || text.includes('erreur') || text.includes('error') || text.includes('ne fonctionne pas')) return 'bug';
+  if (text.includes('ui') || text.includes('bouton') || text.includes('button') || text.includes('design') || text.includes('component') || text.includes('composant')) return 'ui';
+  return 'code';
 }
 
 function result(patch: Partial<IntentUnderstanding> & Pick<IntentUnderstanding, 'category' | 'action' | 'reason'>): IntentUnderstanding {
@@ -108,6 +129,36 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'que manque', 'que faut t il', 'que faut-il', 'au meme niveau', 'plan produit',
     'roadmap', 'analyse', 'audit', 'compare',
   ];
+  const productReviewSignals = [
+    'business model', 'modele economique', 'modèle économique', 'monetisation', 'monetization',
+    'conversion', 'retention', 'mvp', 'pricing', 'tarifs', 'plans tarifaires', 'credits',
+    'crédits', 'rentabilite', 'rentabilité', 'positionnement', 'go to market', 'gtm',
+    'product market fit', 'pmf', 'priorite produit', 'priorité produit',
+  ];
+  const uxReviewSignals = [
+    'audit ux', 'audit ui', 'ux review', 'ui review', 'analyse ux', 'analyse ui',
+    'critique ux', 'critique ui', 'interface n est pas', 'design pas beau',
+    'experience utilisateur', 'expérience utilisateur', 'parcours utilisateur',
+    'wireframe', 'ergonomie', 'hiérarchie visuelle', 'hierarchie visuelle',
+  ];
+  const architectureReviewSignals = [
+    'architecture', 'structure du projet', 'codebase', 'scalabilite', 'scalabilité',
+    'dette technique', 'technical debt', 'stack', 'maintenabilite', 'maintenabilité',
+    'refonte technique', 'refactor global', 'runner sandbox',
+  ];
+  const sensitiveSignals = [
+    'auth', 'authentication', 'login', 'signup', 'billing', 'paiement', 'payment',
+    'stripe', 'credits', 'crédits', 'wallet', 'admin', 'rls', 'role', 'permission',
+    'permissions', 'api key', 'cle api', 'clé api', 'secret', 'service role',
+    'openrouter', 'supabase', 'webhook', 'oauth', 'google auth',
+  ];
+  const badProductDecisionSignals = [
+    'expose les couts fournisseur', 'expose les coûts fournisseur', 'affiche les marges',
+    'affiche la marge', 'montre la cle api', 'montre la clé api', 'service role dans le front',
+    'service_role dans le front', 'desactive rls', 'désactive rls', 'ignore rls',
+    'tout le monde admin', 'rends tous les utilisateurs admin', 'supprime les credits',
+    'supprime les crédits', 'bypass payment', 'contourne le paiement',
+  ];
   const promptSignals = [
     'prompt systeme', 'system prompt', 'prompt system', 'ameliore ce prompt',
     'prompt puissant', 'anti design ia', 'direction artistique', 'design brief',
@@ -122,6 +173,11 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasTextRequest = includesAny(text, textSignals);
   const hasExplanation = includesAny(text, explanationSignals);
   const hasStrategy = includesAny(text, strategySignals);
+  const hasProductReview = includesAny(text, productReviewSignals);
+  const hasUxReview = includesAny(text, uxReviewSignals);
+  const hasArchitectureReview = includesAny(text, architectureReviewSignals);
+  const hasSensitiveTopic = includesAny(text, sensitiveSignals);
+  const hasBadProductDecision = includesAny(text, badProductDecisionSignals);
   const hasPromptRequest = includesAny(text, promptSignals);
   const hasNoAction = includesAny(text, noActionSignals);
 
@@ -145,6 +201,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasDirectAction = matchesAny(text, directActionPatterns);
   const hasTechnicalTarget = includesAny(text, concreteTechnicalTargets);
   const hasAppTarget = includesAny(text, appTargets);
+  const hasRefactorIntent = includesAny(text, ['refactor', 'refactorise', 'refactoriser', 'refonte technique', 'restructure', 'restructurer']);
   const hasBugReport = includesAny(text, [
     'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
     'error', 'request failed', 'crash', 'broken', 'cass',
@@ -158,9 +215,31 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     /\b(dans|sur)\b.*\b(huggy|mon saas|mon app|mon application|le builder|dashboard|settings|pricing|auth|footer|api|database)\b/,
   ]);
 
+  if (hasBadProductDecision) {
+    return result({
+      category: 'bad_product_decision',
+      action: 'answer',
+      confidence: 0.95,
+      reason: 'dangerous_or_product_harming_request',
+      signals: ['bad_product_decision'],
+    });
+  }
+
   if (hasNoAction && !explicitApplyToProduct) {
     return result({
-      category: hasPromptRequest ? 'prompt' : hasStrategy ? 'strategy' : 'explanation',
+      category: hasPromptRequest
+        ? 'prompt'
+        : hasUxReview
+          ? 'ux_review'
+          : hasProductReview
+            ? 'product_review'
+            : hasArchitectureReview
+              ? 'architecture'
+              : hasSensitiveTopic
+                ? 'auth_billing_security'
+                : hasStrategy
+                  ? 'strategy'
+                  : 'explanation',
       action: 'answer',
       confidence: 0.96,
       reason: 'user_explicitly_asked_no_file_changes',
@@ -188,6 +267,37 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     });
   }
 
+  if ((hasProductReview || hasUxReview || hasArchitectureReview || hasSensitiveTopic) && !explicitApplyToProduct && !asksForGeneratedArtifact && !hasDirectAction) {
+    return result({
+      category: hasUxReview
+          ? 'ux_review'
+          : hasArchitectureReview
+            ? 'architecture'
+            : hasProductReview
+              ? 'product_review'
+              : hasSensitiveTopic && !hasExplanation
+                ? 'auth_billing_security'
+                : 'explanation',
+      action: 'answer',
+      confidence: 0.9,
+      reason: hasUxReview
+          ? 'ux_review_without_code_request'
+          : hasArchitectureReview
+            ? 'architecture_review_without_code_request'
+            : hasProductReview
+              ? 'product_or_business_review_request'
+              : hasSensitiveTopic && !hasExplanation
+                ? 'sensitive_saas_topic_without_action_request'
+                : 'explanation_request',
+      signals: [
+        ...(hasSensitiveTopic ? ['sensitive_topic'] : []),
+        ...(hasUxReview ? ['ux_review'] : []),
+        ...(hasArchitectureReview ? ['architecture_review'] : []),
+        ...(hasProductReview ? ['product_review'] : []),
+      ],
+    });
+  }
+
   if ((hasExplanation || hasStrategy) && !explicitApplyToProduct && !asksForGeneratedArtifact) {
     return result({
       category: hasStrategy ? 'strategy' : 'explanation',
@@ -209,15 +319,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   }
 
   if (hasDirectAction && (hasTechnicalTarget || explicitApplyToProduct)) {
-    const category: UserIntentCategory = text.includes('api') || text.includes('endpoint')
-      ? 'api'
-      : text.includes('database') || text.includes('base de donnees') || text.includes('supabase') || text.includes('schema')
-        ? 'database'
-        : text.includes('bug') || text.includes('erreur') || text.includes('error') || text.includes('ne fonctionne pas')
-          ? 'bug'
-          : text.includes('ui') || text.includes('bouton') || text.includes('button') || text.includes('design') || text.includes('component') || text.includes('composant')
-            ? 'ui'
-            : 'code';
+    const category = chooseFileActionCategory({ text, hasSensitiveTopic, hasRefactorIntent });
     return result({
       category,
       action: 'file_action',

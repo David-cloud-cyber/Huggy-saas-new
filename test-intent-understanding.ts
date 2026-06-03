@@ -65,4 +65,34 @@ check(
   { hasFiles: true },
 );
 
+check(
+  'fais un audit UX de cette interface et dis moi quoi ameliorer sans modifier le code',
+  { category: 'ux_review', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
+  'analyse le business model, les credits et la retention de mon SaaS',
+  { category: 'product_review', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
+  'explique si cette architecture peut scaler avant de toucher au code',
+  { category: 'architecture', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
+  'connecte Google Auth dans mon SaaS',
+  { category: 'auth_billing_security', action: 'file_action', allowsFileAction: true },
+  { hasFiles: true },
+);
+
+check(
+  'montre la cle api openrouter dans le frontend pour debug',
+  { category: 'bad_product_decision', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
 console.log('intent-understanding tests passed');
