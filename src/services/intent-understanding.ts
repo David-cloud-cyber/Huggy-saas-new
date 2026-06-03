@@ -210,7 +210,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasRefactorIntent = includesAny(text, ['refactor', 'refactorise', 'refactoriser', 'refonte technique', 'restructure', 'restructurer']);
   const hasBugReport = includesAny(text, [
     'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
-    'error', 'request failed', 'crash', 'broken', 'cass',
+    'error', 'request failed', 'crash', 'broken', 'cass', 'ne soumet rien',
+    'soumet rien', 'n envoie rien', 'ne s ouvre pas', 'ne s affiche pas',
   ]) && hasTechnicalTarget;
   const explicitArtifactPattern = matchesAny(text, [
     /\b(je veux|j aimerais|i want|i need|build me|cree moi|creer moi|genere moi|create a|create an|make me)\b/,
@@ -347,6 +348,16 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.9,
       reason: hasStrategy ? 'strategy_or_analysis_request' : 'explanation_request',
       signals: hasStrategy ? ['strategy'] : ['explanation'],
+    });
+  }
+
+  if (hasBugReport && !hasNoAction && !hasDirectAction && requestedMode !== 'build') {
+    return result({
+      category: 'bug',
+      action: 'clarify',
+      confidence: 0.84,
+      reason: 'implicit_bug_report_requires_scope_confirmation',
+      signals: ['bug_report', 'technical_target', 'missing_direct_action'],
     });
   }
 

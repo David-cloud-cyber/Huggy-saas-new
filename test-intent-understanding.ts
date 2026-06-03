@@ -37,6 +37,17 @@ check(
 );
 
 check(
+  'comment tu vas ?',
+  { category: 'other', action: 'answer', allowsFileAction: false },
+);
+
+check(
+  'quelle stack utiliser pour mon SaaS ?',
+  { category: 'architecture', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
   'est-ce que creer une app todo est une bonne idee pour mon MVP ?',
   { category: 'strategy', action: 'answer', allowsFileAction: false },
   { hasFiles: true },
@@ -89,6 +100,12 @@ check(
 check(
   'corrige le bug du bouton login qui ne fonctionne pas',
   { category: 'bug', action: 'file_action', allowsFileAction: true },
+  { hasFiles: true },
+);
+
+check(
+  'mon formulaire ne soumet rien',
+  { category: 'bug', action: 'clarify', allowsFileAction: false, needsClarification: true },
   { hasFiles: true },
 );
 

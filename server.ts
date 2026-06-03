@@ -10,7 +10,7 @@ import fetch from 'node-fetch';
 import WebSocket from 'ws';
 
 // Import our custom services
-import { OpenRouterService, resolveOpenRouterApiKey } from './src/services/openrouter-service.ts';
+import { OpenRouterService, resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
 import { ModelRouter, type RoutingContext } from './src/services/model-router.ts';
 import { ForbiddenModelError, validateAllowedModel } from './src/services/ai-validator.ts';
@@ -610,6 +610,34 @@ function buildReliabilityDecision(decision: IntentDecision): ReliabilityDecision
         : 'conversation',
     reason: decision.userVisibleReason || decision.reason || decision.intentUnderstanding?.reason || 'Huggy selected the safest next action.',
   };
+}
+
+const FAST_ANSWER_CATEGORIES = new Set<UserIntentCategory>([
+  'text',
+  'explanation',
+  'strategy',
+  'analysis',
+  'product_review',
+  'ux_review',
+  'design',
+  'prompt',
+  'architecture',
+  'other',
+]);
+
+function promptLikelyNeedsProjectContext(prompt: string) {
+  const normalized = normalizePromptIntentText(prompt);
+  return /\b(ce projet|cette app|cette application|mon projet|mon app|mon application|l app actuelle|le code actuel|les fichiers|dans le projet|dans l application|dans l app|preview actuelle|fichiers actuels|current project|current app|current files|existing code)\b/i.test(normalized);
+}
+
+function canUseFastAnswerPath(decision: IntentDecision, prompt: string) {
+  if (decision.requiresFileChanges || decision.requiresPreviewRebuild) return false;
+  if (decision.intent === 'clarification_required') return !promptLikelyNeedsProjectContext(prompt);
+  if (decision.intent !== 'conversation') return false;
+  if (isGreetingPrompt(prompt) || isSimpleLocalConversationPrompt(prompt)) return true;
+  if (promptLikelyNeedsProjectContext(prompt)) return false;
+  const category = decision.intentUnderstanding?.category || decision.understandingCategory || 'other';
+  return FAST_ANSWER_CATEGORIES.has(category);
 }
 
 function normalizeRequestedMode(value: any): AgentRequestedMode {
@@ -2461,6 +2489,49 @@ function agentTextModel(modelId: unknown) {
   return modelId && modelId !== 'auto' ? normalizeProviderModelForBackend(modelId) : DEFAULT_PROVIDER_MODEL_ID;
 }
 
+function buildAgentTextMessages(input: {
+  project: GeneratedProject;
+  prompt: string;
+  files: GeneratedFile[];
+  decision: IntentDecision;
+  researchContext?: string;
+}): ChatMessage[] {
+  const { project, prompt, files, decision, researchContext } = input;
+  const languageInstruction = isLikelyFrenchPrompt(prompt)
+    ? 'Answer in natural French.'
+    : 'Answer in the same language as the user.';
+  const fileSummary = summarizeProjectFilesForAgent(files);
+  const modeInstruction = decision.intent === 'plan'
+    ? 'Produce a concise execution plan. Do not claim files were changed. Do not include code unless needed for clarity.'
+    : decision.intent === 'deploy_assist'
+      ? 'Give deployment, domain or production-readiness guidance. Do not claim files were changed.'
+      : 'Answer conversationally and helpfully. Do not claim files were changed. If the user likely wants implementation, explain what Huggy can do next.';
+
+  return [
+    {
+      role: 'system',
+      content: buildAgentTextSystemPrompt({
+        intent: decision.intent,
+        modeInstruction,
+        languageInstruction,
+        hasResearchContext: Boolean(researchContext),
+      }),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        project: { name: project.name, status: project.status, preview_status: project.preview_status },
+        request: prompt,
+        intent: decision.intent,
+        intent_category: decision.intentUnderstanding?.category || decision.understandingCategory,
+        auto_plan_required: decision.autoPlanRequired,
+        files: fileSummary,
+        researchContext: researchContext || undefined,
+      }),
+    },
+  ];
+}
+
 async function createAgentTextResponse(input: {
   project: GeneratedProject;
   prompt: string;
@@ -2496,39 +2567,13 @@ async function createAgentTextResponse(input: {
 
   const selectedModel = agentTextModel(input.modelId);
   validateAllowedModel(selectedModel);
-  const languageInstruction = isLikelyFrenchPrompt(prompt)
-    ? 'Answer in natural French.'
-    : 'Answer in the same language as the user.';
-  const fileSummary = summarizeProjectFilesForAgent(files);
-  const modeInstruction = decision.intent === 'plan'
-    ? 'Produce a concise execution plan. Do not claim files were changed. Do not include code unless needed for clarity.'
-    : decision.intent === 'deploy_assist'
-      ? 'Give deployment, domain or production-readiness guidance. Do not claim files were changed.'
-      : 'Answer conversationally and helpfully. Do not claim files were changed. If the user likely wants implementation, explain what Huggy can do next.';
 
   try {
-    const result = await providerGateway.chat(selectedModel, [
-      {
-        role: 'system',
-        content: buildAgentTextSystemPrompt({
-          intent: decision.intent,
-          modeInstruction,
-          languageInstruction,
-          hasResearchContext: Boolean(researchContext),
-        }),
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          project: { name: project.name, status: project.status, preview_status: project.preview_status },
-          request: prompt,
-          intent: decision.intent,
-          auto_plan_required: decision.autoPlanRequired,
-          files: fileSummary,
-          researchContext: researchContext || undefined,
-        }),
-      },
-    ], { maxAttempts: 1, timeoutMs: 45_000 });
+    const result = await providerGateway.chat(
+      selectedModel,
+      buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
+      { maxAttempts: 1, timeoutMs: 45_000 },
+    );
 
     return {
       text: result.text.trim() || (decision.intent === 'plan' ? createPlanResponse(project, prompt, files) : createConversationResponse(project, prompt)),
@@ -2544,6 +2589,86 @@ async function createAgentTextResponse(input: {
     }
     if (decision.intent === 'deploy_assist') {
       return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0 };
+    }
+    throw error;
+  }
+}
+
+async function streamAgentTextResponse(input: {
+  project: GeneratedProject;
+  prompt: string;
+  files: GeneratedFile[];
+  decision: IntentDecision;
+  modelId?: unknown;
+  researchContext?: string;
+  onToken?: (chunk: string, meta: { index: number; model: string }) => Promise<void> | void;
+}): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
+  const { project, prompt, files, decision, researchContext, onToken } = input;
+  if (decision.intent === 'clarification_required') {
+    return { text: createClarificationContent(decision), model: 'auto', cost_usd: 0, streamed: false };
+  }
+  if (decision.intent === 'conversation' && (isGreetingPrompt(prompt) || isSimpleLocalConversationPrompt(prompt))) {
+    return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
+  }
+  if (decision.intent === 'verify') {
+    const pipeline = runPreviewPipeline(project, files);
+    const checks = verifyGeneratedProject({ projectName: project.name, files, previewHtml: pipeline.html });
+    return { text: createVerificationResponse(project, files, checks), model: 'auto', cost_usd: 0, streamed: false };
+  }
+  if (!getOpenRouterApiKey()) {
+    if (decision.intent === 'plan') {
+      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
+    }
+    if (decision.intent === 'deploy_assist') {
+      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0, streamed: false };
+    }
+    if (decision.intent === 'conversation') {
+      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
+    }
+    throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live AI responses.');
+  }
+
+  const selectedModel = agentTextModel(input.modelId);
+  validateAllowedModel(selectedModel);
+  let text = '';
+  let model: string = selectedModel;
+  let cost_usd = 0;
+  let index = 0;
+  let streamed = false;
+
+  try {
+    for await (const event of providerGateway.streamChat(
+      selectedModel,
+      buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
+      { timeoutMs: decision.intent === 'plan' ? 45_000 : 28_000 },
+    )) {
+      if (event.type === 'token') {
+        const chunk = event.text || '';
+        if (!chunk) continue;
+        text += chunk;
+        model = event.model || model;
+        streamed = true;
+        await onToken?.(chunk, { index, model });
+        index += 1;
+      } else if (event.type === 'usage') {
+        model = event.model || model;
+        cost_usd = Number(event.cost_usd || 0);
+      }
+    }
+
+    const fallback = decision.intent === 'plan'
+      ? createPlanResponse(project, prompt, files)
+      : createConversationResponse(project, prompt);
+    return { text: text.trim() || fallback, model, cost_usd, streamed };
+  } catch (error) {
+    if (decision.intent === 'plan') {
+      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
+    }
+    if (decision.intent === 'conversation') {
+      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
+    }
+    if (decision.intent === 'deploy_assist') {
+      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0, streamed: false };
     }
     throw error;
   }
@@ -5049,16 +5174,17 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   }
 
   const helpers = getDbHelpers();
+  const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
+  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
     prompt,
-    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
+    requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
-  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   let agentRunId = '';
   if (AGENT_V2_ENABLED) {
     const contextPack = buildAgentContextPack({
@@ -5476,16 +5602,124 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   };
 
   const helpers = getDbHelpers();
+  const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
+  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
+  const quickDecision = intentRouter.decide({ prompt, requestedMode, hasFiles: false });
+  if (canUseFastAnswerPath(quickDecision, prompt)) {
+    const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
+    const quickWallet = quickEstimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
+    await saveProjectMessage({
+      organization_id: project.organization_id,
+      project_id: project.id,
+      user_id: userId,
+      role: 'user',
+      content: prompt,
+      intent: quickDecision.intent,
+      requested_mode: quickDecision.requestedMode,
+    });
+    await upsertProjectWorkspaceState(userId, project.id, {
+      draft_prompt: '',
+      selected_mode: quickDecision.requestedMode,
+      selected_model: requestedModelSelection,
+    });
+    if (quickWallet < quickEstimate.finalCredits) {
+      await send('credits_insufficient', 'Upgrade required', {
+        code: 'UpgradeRequired',
+        action: 'upgrade_required',
+        suggested_action: 'use_auto',
+      });
+      endStream();
+      return;
+    }
+
+    let streamedAnyToken = false;
+    let agentText;
+    await send('answer_stream_started', 'Writing the answer.', {
+      intent: quickDecision.intent,
+      model: requestedModelSelection,
+      fast_path: true,
+    });
+    try {
+      agentText = await streamAgentTextResponse({
+        project,
+        prompt,
+        files: [],
+        decision: quickDecision,
+        modelId: requestedModelSelection,
+        onToken: async (chunk, meta) => {
+          streamedAnyToken = true;
+          await send('answer_token', chunk, {
+            text_delta: chunk,
+            index: meta.index,
+            model: meta.model,
+            fast_path: true,
+          });
+        },
+      });
+    } catch (error: any) {
+      const diagnostic = diagnoseProviderError(error);
+      await send('error', diagnostic.message, {
+        code: 'AgentResponseFailed',
+        diagnostic_code: diagnostic.diagnostic_code,
+        suggested_action: diagnostic.suggested_action,
+        fast_path: true,
+      });
+      endStream();
+      return;
+    }
+
+    const content = agentText.text;
+    if (!streamedAnyToken) {
+      for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
+        await send('answer_token', chunk, {
+          text_delta: chunk,
+          index,
+          model: agentText.model,
+          fast_path: true,
+        });
+      }
+    }
+    await saveProjectMessage({
+      organization_id: project.organization_id,
+      project_id: project.id,
+      user_id: userId,
+      role: 'assistant',
+      content,
+      intent: quickDecision.intent,
+      requested_mode: quickDecision.requestedMode,
+    });
+    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : quickEstimate.finalCredits;
+    await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${quickDecision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
+    await recordAgentImprovementSignal(project, userId, {
+      prompt,
+      decision: quickDecision,
+      outcome: improvementOutcomeForDecision(quickDecision),
+      previewChanged: false,
+      qualityStatus: 'fast_path',
+    }).catch(() => null);
+    await send(quickDecision.intent === 'clarification_required' ? 'clarification_required' : 'answering', content, {
+      text: content,
+      model: agentText.model,
+      question: quickDecision.clarification?.question,
+      choices: quickDecision.clarification?.choices || [],
+      recommendation: quickDecision.clarification?.recommendation,
+      original_prompt: prompt,
+      reliability: buildReliabilityDecision(quickDecision),
+      fast_path: true,
+    });
+    await send('done', 'Answer ready.', { fast_path: true });
+    endStream();
+    return;
+  }
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
     prompt,
-    requestedMode: normalizeRequestedMode(req.body?.requestedMode),
+    requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
-  const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   const shouldStreamAgentTrace = reliability.should_mutate_files || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
   shouldEmitWorkingTicks = reliability.should_mutate_files || decision.intent === 'plan';
   if (AGENT_V2_ENABLED) {
@@ -5597,9 +5831,31 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     } else if (decision.intent === 'deploy_assist') {
       await send('answering', 'Preparing deployment guidance without changing files.', {});
     }
+    await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
+      intent: decision.intent,
+      model: requestedModelSelection,
+      fast_path: !shouldStreamAgentTrace,
+    });
     let agentText;
+    let streamedAnyToken = false;
     try {
-      agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: requestedModelSelection, researchContext });
+      agentText = await streamAgentTextResponse({
+        project,
+        prompt,
+        files: existingFiles,
+        decision,
+        modelId: requestedModelSelection,
+        researchContext,
+        onToken: async (chunk, meta) => {
+          if (await stopIfCancelled('answer')) return;
+          streamedAnyToken = true;
+          await send('answer_token', chunk, {
+            text_delta: chunk,
+            index: meta.index,
+            model: meta.model,
+          });
+        },
+      });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
       await recordAgentImprovementSignal(project, userId, {
@@ -5645,17 +5901,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         : decision.intent === 'verify'
           ? 'verification_started'
           : 'answering';
-    await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
-      intent: decision.intent,
-      model: agentText.model,
-    });
-    for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
-      if (await stopIfCancelled('answer')) return;
-      await send('answer_token', chunk, {
-        text_delta: chunk,
-        index,
-        model: agentText.model,
-      });
+    if (!streamedAnyToken) {
+      for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
+        if (await stopIfCancelled('answer')) return;
+        await send('answer_token', chunk, {
+          text_delta: chunk,
+          index,
+          model: agentText.model,
+        });
+      }
     }
     await send(eventName, content, {
       text: content,
