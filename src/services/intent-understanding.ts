@@ -190,6 +190,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'frontend', 'database', 'base de donnees', 'supabase', 'schema', 'migration',
     'auth', 'login', 'bouton', 'button', 'input', 'modal', 'footer', 'header',
     'dashboard', 'builder', 'settings', 'pricing', 'preview', 'publish', 'deploy',
+    'fonctionnalite', 'fonctionnalité', 'feature', 'workflow', 'formulaire', 'form',
+    'navigation', 'filtre', 'filter', 'search', 'recherche', 'tableau', 'table',
     'css', 'html', 'react', 'vite', 'typescript', 'javascript',
   ];
   const appTargets = [
@@ -206,9 +208,12 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
     'error', 'request failed', 'crash', 'broken', 'cass',
   ]) && hasTechnicalTarget;
-  const asksForGeneratedArtifact = matchesAny(text, [
+  const explicitArtifactPattern = matchesAny(text, [
     /\b(je veux|j aimerais|i want|i need|build me|cree moi|creer moi|genere moi|create a|create an|make me)\b/,
-  ]) && hasAppTarget;
+    /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
+    /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
+  ]);
+  const asksForGeneratedArtifact = explicitArtifactPattern && hasAppTarget && !hasNoAction;
 
   const explicitApplyToProduct = matchesAny(text, [
     /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet)\b/,
@@ -318,6 +323,16 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     });
   }
 
+  if (asksForGeneratedArtifact) {
+    return result({
+      category: 'app',
+      action: 'file_action',
+      confidence: 0.9,
+      reason: 'explicit_app_generation_request',
+      signals: ['app', 'direct_request', ...(tokenCount <= 7 ? ['defaults_allowed'] : [])],
+    });
+  }
+
   if (hasDirectAction && (hasTechnicalTarget || explicitApplyToProduct)) {
     const category = chooseFileActionCategory({ text, hasSensitiveTopic, hasRefactorIntent });
     return result({
@@ -326,26 +341,6 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.9,
       reason: 'explicit_action_on_concrete_product_target',
       signals: ['direct_action', 'technical_target'],
-    });
-  }
-
-  if (asksForGeneratedArtifact) {
-    const isTooVague = tokenCount <= 7 && !/(todo|restaurant|crm|marketplace|ecommerce|e commerce|portfolio|admin|landing|dashboard|auth|booking|chat|blog|fintech|education)/i.test(text);
-    if (isTooVague) {
-      return result({
-        category: 'app',
-        action: 'clarify',
-        confidence: 0.86,
-        reason: 'app_request_missing_product_specifics',
-        signals: ['app', 'vague'],
-      });
-    }
-    return result({
-      category: 'app',
-      action: 'file_action',
-      confidence: 0.9,
-      reason: 'explicit_app_generation_request',
-      signals: ['app', 'direct_request'],
     });
   }
 

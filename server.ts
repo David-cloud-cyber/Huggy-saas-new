@@ -2062,7 +2062,7 @@ class AgentOrchestrator {
       && !input.hasFiles
       && words.length < 8
       && vagueBuildHints.some(hint => lower.includes(hint))
-      && !/(restaurant|booking|auth|login|crm|ecommerce|e-commerce|portfolio|marketplace|admin|analytics|chat|blog|landing|payment|stripe|supabase)/i.test(text);
+      && !/(app|application|site web|web app|restaurant|booking|auth|login|crm|ecommerce|e-commerce|portfolio|marketplace|admin|analytics|chat|blog|landing|dashboard|payment|stripe|supabase)/i.test(text);
 
     if (isVagueBuild) {
       return decision({
@@ -5209,7 +5209,9 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
+  res.write(': huggy-stream-open\n\n');
 
   let sequence = 0;
   let streamClosed = false;

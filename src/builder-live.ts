@@ -829,6 +829,70 @@ function buildPlanBlock(content: string, prompt: string, open = false): HuggyCon
   };
 }
 
+function redactStreamingCodeSnippet(value: unknown) {
+  const text = String(value || '')
+    .replace(/(api[_-]?key|secret|token|password|service[_-]?role)(\s*[:=]\s*)(["']?)[^"'\s]+/gi, '$1$2$3[masked]')
+    .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|sbp_[A-Za-z0-9_]+/g, '[masked-secret]');
+  const lines = text.split('\n').slice(0, 22);
+  const clipped = lines.join('\n').slice(0, 1800);
+  return clipped || '// No public snippet available for this step.';
+}
+
+function inferCodeLanguage(path = '') {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.tsx') || lower.endsWith('.jsx')) return 'tsx';
+  if (lower.endsWith('.ts') || lower.endsWith('.js')) return 'ts';
+  if (lower.endsWith('.css')) return 'css';
+  if (lower.endsWith('.html')) return 'html';
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.sql')) return 'sql';
+  return 'text';
+}
+
+function diffPreviewSnippet(diff: any) {
+  const created = Array.isArray(diff?.created) ? diff.created : [];
+  const modified = Array.isArray(diff?.modified) ? diff.modified : [];
+  const deleted = Array.isArray(diff?.deleted) ? diff.deleted : [];
+  const lines = [
+    ...created.map((path: string) => `+ ${path}`),
+    ...modified.map((path: string) => `~ ${path}`),
+    ...deleted.map((path: string) => `- ${path}`),
+  ];
+  return lines.slice(0, 16).join('\n') || String(diff?.summary || 'Project files updated.');
+}
+
+function filePreviewSnippet(files: GeneratedFile[], preferredPaths: string[] = []) {
+  const pathSet = new Set(preferredPaths.filter(Boolean));
+  const file = files.find(item => pathSet.has(item.path)) || files.find(item => item.path === 'src/App.tsx') || files.find(item => item.path === 'index.html') || files[0];
+  if (!file) return null;
+  return {
+    path: file.path,
+    language: inferCodeLanguage(file.path),
+    code: redactStreamingCodeSnippet(file.content),
+  };
+}
+
+function appendCodePreviewBlock(options: {
+  title: string;
+  subtitle?: string;
+  code: string;
+  language?: string;
+  status?: 'writing' | 'done' | 'failed';
+  defaultOpen?: boolean;
+}) {
+  const card = appendMessage('assistant', '');
+  setMessageBlock(card, {
+    type: 'code_preview',
+    title: options.title,
+    subtitle: options.subtitle,
+    language: options.language || 'text',
+    code: redactStreamingCodeSnippet(options.code),
+    status: options.status || 'done',
+    defaultOpen: options.defaultOpen ?? false,
+  });
+  return card;
+}
+
 function removeMessage(card: HTMLElement | null) {
   if (!card) return;
   const id = messageHandleId(card);
@@ -2351,7 +2415,7 @@ async function loadProject() {
     if (activeTab) activateBuilderView(activeTab);
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     removeMessage(loading);
-    showTransientNotice('Project synchronized. Auto is ready to answer, plan, fix or build from your next message.');
+    showTransientNotice('Project ready. Auto can answer, plan, fix, or build.');
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
     window.setTimeout(() => removeMessage(loading), 5000);
@@ -2364,7 +2428,7 @@ function restoreMessages(payload: ProjectPayload) {
   if (!scroll || scroll.dataset.restored === 'true') return;
   scroll.dataset.restored = 'true';
   payload.messages
-    .filter(message => message.content && !/^Project synchronized\./i.test(message.content))
+    .filter(message => message.content && !/^Project (synchronized|ready)\./i.test(message.content))
     .slice(-100)
     .forEach(message => {
     const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
@@ -2388,13 +2452,24 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
   const status = appendMessage('assistant', '');
+  if (!quickConversation) {
+    setMessageShimmer(status, initialLabel);
+    startWorkingTimer(status, initialLabel);
+  }
   let generationTouchesPreview = false;
   activeGenerationTouchesPreview = false;
   let streamedText = '';
   let assistantHasFinalContent = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   const agentSteps = new Map<string, { label: string; state: 'done' | 'now' }>();
+  const shownStreamBlocks = new Set<string>();
   let responseCard: HTMLElement | null = status;
+  const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
+    if (quickConversation && !generationTouchesPreview) return;
+    if (shownStreamBlocks.has(key)) return;
+    shownStreamBlocks.add(key);
+    appendCodePreviewBlock(options);
+  };
   const syncAgentSteps = (headline = activeWorkingLabel) => {
     if (quickConversation && !generationTouchesPreview) return;
     activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
@@ -2467,6 +2542,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const raw = String(payload.step_label || payload.message || event.message || fallback || '').trim();
         return raw.replace(/\s+/g, ' ').slice(0, 140) || fallback;
       };
+      const visibleStepLabel = (fallback: string) => {
+        const raw = String(payload.step_label || '').trim();
+        return raw ? raw.replace(/\s+/g, ' ').slice(0, 140) : fallback;
+      };
       const runnerLabel = (fallback: string) => {
         const checks = Array.isArray(payload.checks) ? payload.checks : [];
         if (!checks.length) return realLabel(fallback);
@@ -2481,33 +2560,51 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const summary = String(payload.diff?.summary || '').trim();
         return summary ? `Files updated: ${summary}` : realLabel('Files updated.');
       };
+      const normalizedIntent = String(payload.intent?.intent || payload.intent || '').replace(/_/g, ' ').trim();
+      const visibleIntentLabel = () => normalizedIntent
+        ? say(`Intention detectee : ${normalizedIntent}`, `Detected intent: ${normalizedIntent}`)
+        : realLabel(say('Mode de reponse choisi.', 'Response mode selected.'));
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
+      if (eventType === 'thinking_step' || eventType === 'planning_step' || eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step' || eventType === 'validation_step') {
+        const stepKey = `${eventType}_${String(payload.id || payload.key || payload.label || event.message || '').slice(0, 28)}`;
+        const label = eventType === 'planning_step'
+          ? 'Planning'
+          : eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step'
+            ? 'Building'
+            : eventType === 'validation_step'
+              ? 'Checking'
+              : 'Thinking';
+        markAgentStep(stepKey, realLabel(say('Etape en cours.', 'Step in progress.')), label);
+        setAssistantWorking(label);
+        if (eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step') promoteToPreviewWork(label);
+        if (generationTouchesPreview) setEmptyPreviewState('working', label);
+        return;
+      }
       if (eventType === 'answer_stream_started') {
         if (generationTouchesPreview) markAgentStep('answer', realLabel(say('Réponse en cours.', 'Writing the answer.')), 'Answering');
         return;
       }
-      if (eventType === 'token' || eventType === 'answer_token') {
+      if (eventType === 'token' || eventType === 'answer_token' || eventType === 'delta') {
         const target = ensureResponseCard(say('Réponse prête', 'Answer ready'));
-        streamedText += String(payload.text_delta || payload.delta || event.message || '');
+        streamedText += String(payload.text_delta || payload.delta || payload.content || event.message || '');
         updateMessage(target, streamedText || (speaksFrench ? 'Réponse en cours...' : 'Writing...'));
         return;
       }
       if (eventType === 'run_started') {
-        markAgentStep('start', realLabel(say('Je démarre la demande.', 'Starting the request.')), 'Thinking');
+        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking');
         return;
       }
       if (eventType === 'context_loaded') {
-        markAgentStep('context', realLabel(say('Contexte projet chargé.', 'Project context loaded.')), 'Thinking');
+        markAgentStep('context', visibleStepLabel(say('Contexte du projet charge.', 'Project context loaded.')), 'Thinking');
         return;
       }
       if (eventType === 'agent_thinking') {
-        markAgentStep('thinking', realLabel(say('Huggy analyse la demande.', 'Huggy is analyzing the request.')), 'Thinking');
+        markAgentStep('thinking', visibleStepLabel(say('Analyse de la demande.', 'Analyzing the request.')), 'Thinking');
         return;
       }
       if (eventType === 'intent_detected') {
-        const detected = String(payload.intent?.intent || payload.intent || '').replace(/_/g, ' ');
-        markAgentStep('intent', detected ? `Intent: ${detected}` : realLabel(say('Action choisie.', 'Action selected.')), 'Thinking');
+        markAgentStep('intent', visibleIntentLabel(), 'Thinking');
         if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
           promoteToPreviewWork('Thinking');
         }
@@ -2528,9 +2625,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             : eventType === 'tool_loop_started'
               ? 'Thinking'
               : 'Thinking';
-        if (eventType === 'planning') markAgentStep('plan', realLabel(say('Planification avant modification.', 'Planning before changes.')), label);
-        if (eventType === 'research_started') markAgentStep('research', realLabel(say('Recherche contextuelle lancée.', 'Context research started.')), label);
-        if (eventType === 'tool_loop_started') markAgentStep('tools', realLabel(say('Boucle outils lancée.', 'Tool loop started.')), label);
+        if (eventType === 'planning') markAgentStep('plan', visibleStepLabel(say('Planification du travail utile.', 'Planning the useful work.')), label);
+        if (eventType === 'research_started') markAgentStep('research', visibleStepLabel(say('Recherche des informations utiles.', 'Looking up useful context.')), label);
+        if (eventType === 'tool_loop_started') markAgentStep('tools', visibleStepLabel(say('Preparation des actions techniques.', 'Preparing technical actions.')), label);
         setAssistantWorking(label);
         if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
@@ -2616,21 +2713,40 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
               : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
                 ? 'Fixing'
                 : 'Thinking';
-        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', realLabel(say('Préparation de l’espace de travail.', 'Preparing workspace.')), label);
-        if (eventType === 'model_started') markAgentStep('model', realLabel(say('Génération des fichiers lancée.', 'File generation started.')), label);
-        if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${realLabel(say('Réception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : realLabel(say('Réception des fichiers.', 'Receiving files.')), label);
-        if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', realLabel(say('Construction de la preview.', 'Building preview.')), label);
+        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Preparation de l espace de travail.', 'Preparing the workspace.')), label);
+        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers lancee.', 'File generation started.')), label);
+        if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${visibleStepLabel(say('Reception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : visibleStepLabel(say('Reception des fichiers.', 'Receiving files.')), label);
+        if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label);
         if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label);
-        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', realLabel(say('Vérifications lancées.', 'Checks started.')), label);
+        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label);
         if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Vérifications terminées.', 'Checks completed.')));
-        if (eventType === 'quality_checked') finishAgentStep('verify', realLabel(say('Qualité vérifiée.', 'Quality checked.')));
+        if (eventType === 'quality_checked') finishAgentStep('verify', visibleStepLabel(say('Qualite verifiee.', 'Quality checked.')));
         if (eventType === 'runner_failed') markAgentStep('fix', runnerLabel(say('Des vérifications demandent une correction.', 'Checks need a fix.')), label);
-        if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', realLabel(say('Correction appliquée.', 'Fix applied.')), label);
-        if (eventType === 'retest_started') markAgentStep('retest', realLabel(say('Retest après correction.', 'Retesting after fix.')), label);
-        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', realLabel(say('Correction automatique terminée.', 'Automatic fix completed.')));
+        if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', visibleStepLabel(say('Correction ciblee appliquee.', 'Targeted fix applied.')), label);
+        if (eventType === 'retest_started') markAgentStep('retest', visibleStepLabel(say('Nouvelle verification apres correction.', 'Retesting after the fix.')), label);
+        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', visibleStepLabel(say('Correction terminee.', 'Fix completed.')));
         setAssistantWorking(label);
         const fileChangingEvent = eventType !== 'verification_started' || generationTouchesPreview;
         if (fileChangingEvent) promoteToPreviewWork(label);
+        if (eventType === 'files_changed') {
+          showStreamCodeBlock('files_changed', {
+            title: say('Fichiers mis a jour', 'Files updated'),
+            subtitle: String(payload.diff?.summary || event.message || '').trim() || undefined,
+            language: 'diff',
+            code: diffPreviewSnippet(payload.diff),
+            status: 'done',
+          });
+        }
+        if (eventType === 'patch_applied') {
+          const targetFile = String(payload.patch?.target_file || payload.patch?.file || '').trim();
+          showStreamCodeBlock(`patch_${targetFile || 'auto_fix'}`, {
+            title: targetFile ? `${say('Correction', 'Patch')} - ${targetFile}` : say('Correction appliquee', 'Patch applied'),
+            subtitle: String(payload.patch?.summary || event.message || '').trim() || undefined,
+            language: 'diff',
+            code: targetFile ? `~ ${targetFile}\n${String(payload.patch?.summary || event.message || 'Targeted patch applied.')}` : String(payload.patch?.summary || event.message || 'Targeted patch applied.'),
+            status: 'done',
+          });
+        }
         if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
       }
@@ -2640,6 +2756,19 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
+        const previewSnippet = filePreviewSnippet(payload.files || [], [
+          ...(Array.isArray(payload.diff?.created) ? payload.diff.created : []),
+          ...(Array.isArray(payload.diff?.modified) ? payload.diff.modified : []),
+        ]);
+        if (previewSnippet) {
+          showStreamCodeBlock(`preview_${previewSnippet.path}`, {
+            title: `${say('Apercu du fichier', 'File preview')} - ${previewSnippet.path}`,
+            subtitle: say('Extrait reel du resultat genere.', 'Real snippet from the generated result.'),
+            language: previewSnippet.language,
+            code: previewSnippet.code,
+            status: 'done',
+          });
+        }
         const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
         const finalText = speaksFrench
           ? `${event.message || 'C’est prêt. J’ai mis à jour la preview.'}${diff}`
@@ -3016,15 +3145,20 @@ async function loadAnalysis(silent = false) {
 function showClarificationBlock(payload: any, originalPrompt: string, requestedMode: ChatMode) {
   const host = ensureInlineBlockHost();
   const question = payload.question || 'What should Huggy focus on first?';
+  const isFrench = isLikelyFrenchText(`${originalPrompt} ${question}`);
   const choices: string[] = Array.isArray(payload.choices)
     ? payload.choices.filter((choice: unknown): choice is string => typeof choice === 'string' && choice.trim().length > 0).slice(0, 4)
     : [];
   const recommendation = payload.recommendation || choices[0] || '';
+  const eyebrow = isFrench ? 'Un detail utile' : 'One useful detail';
+  const placeholder = isFrench ? 'Ajoute la precision qui manque...' : 'Add the missing detail...';
+  const recommendLabel = isFrench ? 'Utiliser la suggestion' : 'Use suggestion';
+  const continueLabel = isFrench ? 'Envoyer la precision' : 'Send detail';
   host.innerHTML = `
     <div id="clarification-block" style="border:1px solid var(--border-focus, var(--border));background:var(--bg-surface);border-radius:13px;padding:12px;color:var(--text);box-shadow:0 18px 50px rgba(0,0,0,.16);">
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px;">
         <div>
-          <div style="font-size:11px;color:var(--text-muted);font-weight:800;margin-bottom:4px;">One detail needed</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:800;margin-bottom:4px;">${escapeHtml(eyebrow)}</div>
           <div style="font-size:13px;line-height:1.45;font-weight:650;">${escapeHtml(question)}</div>
         </div>
         <button type="button" data-action="dismiss" aria-label="Dismiss" style="border:0;background:transparent;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;">&times;</button>
@@ -3032,10 +3166,10 @@ function showClarificationBlock(payload: any, originalPrompt: string, requestedM
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;">
         ${choices.map(choice => `<button type="button" data-choice="${escapeHtml(choice)}" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:6px 9px;font-size:11px;font-weight:700;cursor:pointer;">${escapeHtml(choice)}</button>`).join('')}
       </div>
-      <textarea data-free-answer placeholder="Add one precise detail..." style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
+      <textarea data-free-answer placeholder="${escapeHtml(placeholder)}" style="width:100%;min-height:42px;max-height:90px;resize:vertical;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:9px;font-size:12px;line-height:1.4;outline:none;"></textarea>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:9px;">
-        ${recommendation ? `<button type="button" data-action="recommend" style="height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">Use suggestion</button>` : ''}
-        <button type="button" data-action="continue" style="height:30px;border:0;background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">Send detail</button>
+        ${recommendation ? `<button type="button" data-action="recommend" style="height:30px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;padding:0 10px;font-size:11px;font-weight:750;cursor:pointer;">${escapeHtml(recommendLabel)}</button>` : ''}
+        <button type="button" data-action="continue" style="height:30px;border:0;background:var(--text);color:var(--bg);border-radius:8px;padding:0 12px;font-size:11px;font-weight:850;cursor:pointer;">${escapeHtml(continueLabel)}</button>
       </div>
     </div>
   `;

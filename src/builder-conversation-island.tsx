@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CheckIcon, FileText, MessageSquareIcon, XIcon } from "lucide-react";
+import { CheckIcon, Code2, FileText, MessageSquareIcon, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -87,6 +87,15 @@ export type HuggyConversationBlock =
       state: ConfirmationState;
       approveLabel?: string;
       rejectLabel?: string;
+    }
+  | {
+      type: "code_preview";
+      title: string;
+      subtitle?: string;
+      language?: string;
+      code: string;
+      status?: "writing" | "done" | "failed";
+      defaultOpen?: boolean;
     };
 
 export type HuggyConversationMessage = {
@@ -257,14 +266,30 @@ function ensureConversationStyles() {
 
     .huggy-agent-trace {
       display: grid;
-      gap: 8px;
+      gap: 9px;
       width: min(100%, 520px);
       border: 1px solid var(--border-light, var(--border));
       border-radius: 14px;
-      background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-elevated));
-      box-shadow: 0 1px 0 rgba(255,255,255,.48) inset, 0 10px 24px rgba(9,9,11,.04);
-      padding: 9px 10px;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 14% 0%, rgba(59,130,246,.07), transparent 36%),
+        color-mix(in srgb, var(--bg-surface) 90%, var(--bg-elevated));
+      box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 10px 24px rgba(9,9,11,.045);
+      padding: 10px;
       color: var(--text);
+    }
+
+    .huggy-agent-trace[data-status="active"]::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(37,99,235,.58), transparent);
+      transform: translateX(-62%);
+      animation: huggy-agent-rail 1.6s cubic-bezier(.22,1,.36,1) infinite;
     }
 
     .huggy-agent-trace-head {
@@ -347,9 +372,24 @@ function ensureConversationStyles() {
 
     .huggy-agent-step-label {
       min-width: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+
+    .huggy-agent-step + .huggy-agent-step {
+      position: relative;
+    }
+
+    .huggy-agent-step + .huggy-agent-step::before {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: -8px;
+      width: 1px;
+      height: 8px;
+      background: var(--border-light, var(--border));
     }
 
     .huggy-message-user .huggy-message-content {
@@ -581,6 +621,99 @@ function ensureConversationStyles() {
       margin-right: 5px;
     }
 
+    .huggy-code-preview {
+      display: grid;
+      gap: 0;
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 12px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--bg-input) 86%, var(--bg-elevated));
+      box-shadow: 0 1px 0 rgba(255,255,255,.46) inset;
+    }
+
+    .huggy-code-preview summary {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 8px 10px;
+      cursor: pointer;
+      list-style: none;
+      color: var(--text);
+      font-size: 11.5px;
+      font-weight: 760;
+    }
+
+    .huggy-code-preview summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .huggy-code-preview-title {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .huggy-code-preview-title strong,
+    .huggy-code-preview-title span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .huggy-code-preview-title span {
+      color: var(--text-sub);
+      font-size: 10.5px;
+      font-weight: 620;
+    }
+
+    .huggy-code-preview-badge {
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 999px;
+      padding: 0 7px;
+      color: var(--text-sub);
+      background: var(--bg-surface);
+      font-size: 10px;
+      font-weight: 780;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .huggy-code-preview[data-status="writing"] .huggy-code-preview-badge {
+      color: #1d4ed8;
+      border-color: rgba(37,99,235,.20);
+      background: rgba(37,99,235,.07);
+    }
+
+    .huggy-code-preview[data-status="failed"] .huggy-code-preview-badge {
+      color: #b91c1c;
+      border-color: rgba(185,28,28,.20);
+      background: rgba(185,28,28,.07);
+    }
+
+    .huggy-code-preview pre {
+      margin: 0;
+      max-height: 190px;
+      overflow: auto;
+      border-top: 1px solid var(--border-light, var(--border));
+      background: color-mix(in srgb, var(--bg-surface) 72%, var(--bg-elevated));
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+      font-size: 10.8px;
+      line-height: 1.62;
+      white-space: pre;
+    }
+
+    .huggy-code-preview code {
+      font: inherit;
+    }
+
     .huggy-confirmation-actions {
       justify-content: flex-end;
     }
@@ -653,6 +786,12 @@ function ensureConversationStyles() {
       50% { opacity: 1; transform: scale(1); }
     }
 
+    @keyframes huggy-agent-rail {
+      from { transform: translateX(-64%); opacity: .32; }
+      50% { opacity: .9; }
+      to { transform: translateX(64%); opacity: .32; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .huggy-message {
         animation: none !important;
@@ -664,7 +803,8 @@ function ensureConversationStyles() {
       .huggy-live-dot,
       .huggy-agent-trace-dot,
       .huggy-agent-step-mark,
-      .huggy-reasoning-streaming .huggy-reasoning-dot {
+      .huggy-reasoning-streaming .huggy-reasoning-dot,
+      .huggy-agent-trace[data-status="active"]::after {
         transition: none !important;
         animation: none !important;
       }
@@ -863,6 +1003,27 @@ function renderMessageBlock(message: HuggyConversationMessage) {
     );
   }
 
+  if (block.type === "code_preview") {
+    const status = block.status || "done";
+    return (
+      <div className="huggy-code-preview" data-status={status}>
+        <details open={block.defaultOpen ?? false}>
+          <summary>
+            <Code2 size={14} aria-hidden="true" />
+            <span className="huggy-code-preview-title">
+              <strong>{block.title}</strong>
+              {block.subtitle ? <span>{block.subtitle}</span> : null}
+            </span>
+            <span className="huggy-code-preview-badge">{status === "writing" ? "Writing" : status === "failed" ? "Issue" : "Done"}</span>
+          </summary>
+          <pre aria-label={block.title}>
+            <code>{block.code}</code>
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <Confirmation approval={{ id: message.id }} state={block.state}>
       <ConfirmationTitle>
@@ -967,7 +1128,19 @@ function BuilderConversation({
           messages.map(message => (
             <Message from={message.role} key={message.id}>
               <MessageContent>
-                {renderAgentTrace(message) || (message.working ? renderWorkingStatus(message) : renderMessageBlock(message) || renderStandardMessageContent(message))}
+                {(() => {
+                  const trace = renderAgentTrace(message);
+                  const block = renderMessageBlock(message);
+                  if (trace || block) {
+                    return (
+                      <>
+                        {trace}
+                        {block}
+                      </>
+                    );
+                  }
+                  return message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message);
+                })()}
                 {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
                   <div className="huggy-message-actions">
                     {message.actions.map(action => (

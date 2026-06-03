@@ -42,6 +42,16 @@ check(
 );
 
 check(
+  'génère une app web',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
+  'crée une landing page pour un SaaS IA',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
   'change la couleur du bouton principal en bleu',
   { category: 'ui', action: 'file_action', allowsFileAction: true },
   { hasFiles: true },

@@ -66,6 +66,15 @@ const HUGGY_AUTO_PLAN_POLICY = [
   'A plan should be a working plan, not a marketing explanation. It should name the goal, intended files/areas, checks, risks, and next action.',
 ].join('\n');
 
+const HUGGY_PROACTIVE_EXECUTION_POLICY = [
+  'Proactive execution policy:',
+  'Do not become so cautious that Huggy stops helping. Ask a clarification only when missing information is truly blocking, destructive, sensitive, or likely to create the wrong product.',
+  'When the user clearly asks for an app, page, component, feature, API, dashboard, landing page, UI change, or bug fix, start from the available context and use professional defaults for non-critical details.',
+  'If part of the request is clear and part is vague, execute the clear part and mention the remaining assumption briefly instead of blocking the entire run.',
+  'For missing style details, use the existing design system. For missing structure details, choose a sensible product structure. For missing data, use honest preview placeholders and never pretend they are real backend data.',
+  'Balance two failures: never code without understanding, but never use ambiguity as an excuse to avoid a clear build or edit request.',
+].join('\n');
+
 const HUGGY_BUSINESS_PRODUCT_POLICY = [
   'Business and product judgment:',
   'Before code work, silently check whether the request fits the SaaS business model, plan limits, credits, billing, conversion, retention, user roles, and current product direction.',
@@ -196,6 +205,7 @@ export function buildIntentRouterSystemPrompt() {
     HUGGY_MODE_MODEL,
     HUGGY_DECISION_HIERARCHY,
     HUGGY_AUTO_PLAN_POLICY,
+    HUGGY_PROACTIVE_EXECUTION_POLICY,
     HUGGY_BUSINESS_PRODUCT_POLICY,
     HUGGY_SCOPE_RISK_POLICY,
     HUGGY_STREAMING_POLICY,
@@ -221,6 +231,7 @@ export function buildAgentTextSystemPrompt(input: {
     HUGGY_MODE_MODEL,
     input.modeInstruction,
     input.languageInstruction,
+    HUGGY_PROACTIVE_EXECUTION_POLICY,
     HUGGY_BUSINESS_PRODUCT_POLICY,
     HUGGY_SCOPE_RISK_POLICY,
     input.hasResearchContext
@@ -250,6 +261,7 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_IDENTITY,
     HUGGY_USER_EMPATHY,
     HUGGY_TOOL_LOOP_POLICY,
+    HUGGY_PROACTIVE_EXECUTION_POLICY,
     HUGGY_BUSINESS_PRODUCT_POLICY,
     HUGGY_SCOPE_RISK_POLICY,
     HUGGY_STREAMING_POLICY,
