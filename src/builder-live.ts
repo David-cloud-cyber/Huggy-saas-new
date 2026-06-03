@@ -2415,7 +2415,9 @@ async function loadProject() {
     if (activeTab) activateBuilderView(activeTab);
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     removeMessage(loading);
-    showTransientNotice('Project ready. Auto can answer, plan, fix, or build.');
+    if (!payload.messages?.length) {
+      showTransientNotice('Ready when you are.', 1600);
+    }
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
     window.setTimeout(() => removeMessage(loading), 5000);

@@ -299,6 +299,7 @@ function diagnoseProviderError(error: any) {
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
       OPENROUTER_KEY_INVALID: 'update_openrouter_key',
       MODEL_OUTPUT_PARSE_FAILED: 'retry_or_use_auto',
+      RELIABILITY_GATE_FAILED: 'fix_and_retry',
       PROVIDER_BAD_REQUEST: 'retry_or_use_auto',
       PROVIDER_QUOTA_OR_BILLING: 'check_openrouter_billing',
       PROVIDER_RATE_LIMITED: 'retry_later',
@@ -582,6 +583,34 @@ type IntentDecision = {
     recommendation: string;
   };
 };
+
+type ReliabilityDecision = {
+  intent: AgentIntent;
+  should_mutate_files: boolean;
+  should_touch_preview: boolean;
+  requires_runner: boolean;
+  requires_clarification: boolean;
+  quality_gate_level: 'conversation' | 'advisory' | 'critical';
+  reason: string;
+};
+
+function buildReliabilityDecision(decision: IntentDecision): ReliabilityDecision {
+  const shouldMutate = Boolean(decision.requiresFileChanges);
+  const shouldTouchPreview = Boolean(decision.requiresPreviewRebuild);
+  return {
+    intent: decision.intent,
+    should_mutate_files: shouldMutate,
+    should_touch_preview: shouldTouchPreview,
+    requires_runner: shouldMutate,
+    requires_clarification: decision.intent === 'clarification_required',
+    quality_gate_level: shouldMutate
+      ? 'critical'
+      : decision.intent === 'plan' || decision.intent === 'verify'
+        ? 'advisory'
+        : 'conversation',
+    reason: decision.userVisibleReason || decision.reason || decision.intentUnderstanding?.reason || 'Huggy selected the safest next action.',
+  };
+}
 
 function normalizeRequestedMode(value: any): AgentRequestedMode {
   return value === 'plan' ? 'plan' : value === 'build' ? 'build' : 'auto';
@@ -979,7 +1008,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
       dev: 'vite',
       build: 'vite build',
       test: 'node --experimental-strip-types src/app.test.ts',
-      lint: 'eslint .',
+      lint: 'tsc --noEmit',
     },
     dependencies: {
       '@vitejs/plugin-react': 'latest',
@@ -987,7 +1016,6 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
       typescript: 'latest',
       react: 'latest',
       'react-dom': 'latest',
-      eslint: 'latest',
     },
     devDependencies: {},
   }, null, 2));
@@ -1097,7 +1125,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '- `npm run dev` starts the local app.',
     '- `npm run build` creates a production build.',
     '- `npm run test` runs the generated smoke test.',
-    '- `npm run lint` runs ESLint when dependencies are installed.',
+    '- `npm run lint` runs TypeScript validation.',
     '',
   ].join('\n'), 'markdown');
 
@@ -3335,10 +3363,109 @@ async function saveAgentVerifications(project: GeneratedProject, userId: string,
   if (error) console.warn('[huggy:agent_verification_persistence_skipped]', { message: error.message });
 }
 
+const RELIABILITY_BLOCKING_CHECK_KEYS = new Set([
+  'files_present',
+  'safe_paths',
+  'safe_path',
+  'safe_write',
+  'no_env_files',
+  'no_secrets',
+  'no_forbidden_pages',
+  'preview_non_empty',
+  'preview_runtime_guard',
+  'preview_runtime_markers',
+  'unsafe_runtime_api',
+  'local_imports_resolve',
+  'vite_index_present',
+  'vite_main_present',
+  'vite_app_present',
+  'vite_root_mount',
+  'vite_main_script',
+  'functionality_modern_project',
+  'functionality_vite_shell',
+  'functionality_primary_controls',
+  'control_handlers',
+  'technical_build_score',
+  'script_build_safe',
+  'script_build_exec',
+  'package_parse',
+]);
+
+type ReliabilityGateSummary = {
+  status: 'passed' | 'warning' | 'failed';
+  message: string;
+  blocking: Array<{ key: string; severity: string; message: string; file: string | null }>;
+  notes: Array<{ key: string; severity: string; message: string; file: string | null }>;
+};
+
+function normalizeVerificationKey(key: string) {
+  return String(key || '').replace(/^runner_/, '');
+}
+
+function isBlockingVerificationFailure(check: AgentVerificationCheck) {
+  if (check.status !== 'fail') return false;
+  const key = normalizeVerificationKey(check.key);
+  if (RELIABILITY_BLOCKING_CHECK_KEYS.has(key)) return true;
+  return check.severity === 'high'
+    && /(safe|secret|env|forbidden|preview|runtime|vite|import|control|functionality|technical|script|package)/i.test(key);
+}
+
+function toPublicVerificationIssue(check: AgentVerificationCheck) {
+  return {
+    key: normalizeVerificationKey(check.key),
+    severity: check.severity,
+    message: check.message,
+    file: check.file || null,
+  };
+}
+
+function summarizeReliabilityGate(checks: AgentVerificationCheck[]): ReliabilityGateSummary {
+  const blocking = checks.filter(isBlockingVerificationFailure).map(toPublicVerificationIssue);
+  const notes = checks
+    .filter(check => check.status === 'warn' || (check.status === 'fail' && !isBlockingVerificationFailure(check)))
+    .slice(0, 12)
+    .map(toPublicVerificationIssue);
+  if (blocking.length) {
+    const visible = blocking.slice(0, 3).map(item => item.file ? `${item.file}: ${item.message}` : item.message).join(' ');
+    return {
+      status: 'failed',
+      message: `Huggy stopped before saving because the generated app still has ${blocking.length} blocking issue${blocking.length > 1 ? 's' : ''}. ${visible}`.trim(),
+      blocking,
+      notes,
+    };
+  }
+  if (notes.length) {
+    return {
+      status: 'warning',
+      message: `Checks passed with ${notes.length} non-blocking note${notes.length > 1 ? 's' : ''}. The app is usable, and Huggy kept the notes in the run history.`,
+      blocking,
+      notes,
+    };
+  }
+  return {
+    status: 'passed',
+    message: 'Checks passed. No blocking issue found.',
+    blocking,
+    notes,
+  };
+}
+
+class ReliabilityGateError extends Error {
+  diagnosticCode = 'RELIABILITY_GATE_FAILED';
+  statusCode = 422;
+  publicPayload: ReliabilityGateSummary;
+
+  constructor(summary: ReliabilityGateSummary) {
+    super(summary.message);
+    this.name = 'ReliabilityGateError';
+    this.publicPayload = summary;
+  }
+}
+
 function summarizeQualityForMemory(checks: AgentVerificationCheck[]) {
   const scores: Record<string, number> = {};
   const failed = checks
-    .filter(check => check.status === 'fail')
+    .filter(isBlockingVerificationFailure)
     .slice(0, 8)
     .map(check => ({
       key: check.key,
@@ -3347,7 +3474,7 @@ function summarizeQualityForMemory(checks: AgentVerificationCheck[]) {
       file: check.file || null,
     }));
   const warnings = checks
-    .filter(check => check.status === 'warn')
+    .filter(check => check.status === 'warn' || (check.status === 'fail' && !isBlockingVerificationFailure(check)))
     .slice(0, 8)
     .map(check => ({
       key: check.key,
@@ -4930,6 +5057,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
+  const reliability = buildReliabilityDecision(decision);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   let agentRunId = '';
   if (AGENT_V2_ENABLED) {
@@ -4959,7 +5087,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     draft_prompt: '',
     selected_mode: decision.requestedMode,
     selected_model: requestedModelSelection,
-    active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
+    active_tab: reliability.should_touch_preview ? 'preview' : undefined,
   });
 
   if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist') {
@@ -5003,8 +5131,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       intent: decision,
       text: content,
       model: agentText.model,
-      files: decision.requiresFileChanges ? existingFiles : undefined,
-      preview: decision.requiresPreviewRebuild
+      reliability,
+      files: reliability.should_mutate_files ? existingFiles : undefined,
+      preview: reliability.should_touch_preview
         ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') }
         : undefined,
     });
@@ -5076,7 +5205,40 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         pipeline = runPreviewPipeline(project, finalFiles);
       }
     }
-    const previewHtml = pipeline.html;
+    let previewHtml = pipeline.html;
+    let runnerResult: RunnerResult | null = null;
+    if (AGENT_V3_ENABLED && reliability.requires_runner) {
+      runnerResult = await projectRunner.run({
+        runId: agentRunId || requestId,
+        projectId: project.id,
+        files: finalFiles,
+        previewHtml,
+        timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+      });
+      await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
+      let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
+      for (let attempt = 1; runnerBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
+        const fix = applyAutoFix(project, finalFiles, runnerBlocking.map(check => ({
+          file: check.file || 'index.html',
+          message: check.message,
+          severity: check.severity,
+        })));
+        autoFix = fix.patch;
+        if (!fix.fixed) break;
+        finalFiles = fix.files;
+        pipeline = runPreviewPipeline(project, finalFiles);
+        previewHtml = pipeline.html;
+        runnerResult = await projectRunner.run({
+          runId: agentRunId || requestId,
+          projectId: project.id,
+          files: finalFiles,
+          previewHtml,
+          timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+        });
+        await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
+        runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
+      }
+    }
     const uiPolicy = buildWorldClassUiPolicy({ prompt });
     const verificationChecks = [
       ...verifyGeneratedProject({ projectName: project.name, files: finalFiles, previewHtml }),
@@ -5094,10 +5256,15 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         designDirection: uiPolicy.designDirection,
         hasExistingFiles: existingFiles.length > 0,
       }),
+      ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
     ];
     const verificationSummary = summarizeVerificationChecks(verificationChecks);
+    const reliabilitySummary = summarizeReliabilityGate(verificationChecks);
     const qualitySummary = summarizeQualityForMemory(verificationChecks);
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
+    if (reliabilitySummary.status === 'failed') {
+      throw new ReliabilityGateError(reliabilitySummary);
+    }
     const updatedProject: GeneratedProject = {
       ...project,
       prompt,
@@ -5110,7 +5277,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
     await saveProject(updatedProject, finalFiles);
     const diff = diffFiles(existingFiles, finalFiles);
-    await createProjectVersion(updatedProject, finalFiles, prompt, { ...diff, verification: verificationSummary, agent_run_id: agentRunId || null });
+    await createProjectVersion(updatedProject, finalFiles, prompt, { ...diff, verification: verificationSummary, reliability: reliabilitySummary, agent_run_id: agentRunId || null });
     if (autoFix) await saveProjectPatch(updatedProject, autoFix);
     await upsertAgentMemory(updatedProject, userId, summarizeAgentMemory({
       projectName: updatedProject.name,
@@ -5144,7 +5311,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
     await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${generation.model}`, refId);
-    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, quality: qualitySummary, model: generation.model } });
+    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, model: generation.model } });
 
     res.json({
       success: true,
@@ -5157,6 +5324,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       auto_fix: autoFix,
       errors: pipeline.errors,
       verification: verificationSummary,
+      reliability,
+      reliability_summary: reliabilitySummary,
+      runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       preview: {
         status: pipeline.status,
         html: previewHtml,
@@ -5314,9 +5484,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     hasFiles: existingFiles.length > 0,
     lastPlan,
   });
+  const reliability = buildReliabilityDecision(decision);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
-  const shouldStreamAgentTrace = decision.requiresFileChanges || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
-  shouldEmitWorkingTicks = decision.requiresFileChanges || decision.intent === 'plan';
+  const shouldStreamAgentTrace = reliability.should_mutate_files || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
+  shouldEmitWorkingTicks = reliability.should_mutate_files || decision.intent === 'plan';
   if (AGENT_V2_ENABLED) {
     const [messages, events, versions, memory, runnerHistory, researchHistory] = await Promise.all([
       listProjectMessagesPage(project.id, 12, null).catch(() => []),
@@ -5342,7 +5513,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       : baseContextPack;
     const agentRun = await createAgentRun(project, userId, requestId, decision, requestedModelSelection, contextPack);
     agentRunId = agentRun.id;
-    if (AGENT_V3_ENABLED) {
+    if (AGENT_V3_ENABLED && reliability.requires_runner) {
       await updateAgentRunV3Meta(agentRunId, {
         tool_budget: toolLoop.snapshot,
         runner_status: 'pending',
@@ -5352,7 +5523,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       await send('run_started', 'Agent run started.', { agent_run_id: agentRunId, request_id: requestId });
       await send('context_loaded', 'Project context loaded.', { context: contextPack });
     }
-    if (AGENT_V3_ENABLED && decision.requiresFileChanges) {
+    if (AGENT_V3_ENABLED && reliability.should_mutate_files) {
       await send('tool_loop_started', 'Autonomous tool loop started.', { budget: toolLoop.snapshot });
     }
   }
@@ -5374,10 +5545,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     draft_prompt: '',
     selected_mode: decision.requestedMode,
     selected_model: requestedModelSelection,
-    active_tab: decision.requiresPreviewRebuild ? 'preview' : undefined,
+    active_tab: reliability.should_touch_preview ? 'preview' : undefined,
   });
   if (shouldStreamAgentTrace) {
-    await send('intent_detected', decision.userVisibleReason, { intent: decision });
+    await send('intent_detected', decision.userVisibleReason, { intent: decision, reliability });
   }
 
   if (decision.requiresFileChanges && !hasProjectCapability(req, 'build')) {
@@ -5402,7 +5573,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
 
-  if (AGENT_V3_ENABLED && shouldUseWebResearch({ prompt, intent: decision.intent, requiresFileChanges: decision.requiresFileChanges })) {
+  if (AGENT_V3_ENABLED && shouldUseWebResearch({ prompt, intent: decision.intent, requiresFileChanges: reliability.should_mutate_files })) {
     toolLoop.claim('web_research');
     await send('research_started', 'Researching current context.', { query: prompt.slice(0, 180), budget: toolLoop.snapshot });
     researchResult = await webResearchGateway.search(prompt, { maxResults: 4, timeoutMs: 12_000 });
@@ -5493,8 +5664,9 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       choices: decision.clarification?.choices || [],
       recommendation: decision.clarification?.recommendation,
       original_prompt: prompt,
-      preview: decision.requiresPreviewRebuild ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') } : undefined,
-      files: decision.requiresFileChanges ? existingFiles : undefined,
+      reliability,
+      preview: reliability.should_touch_preview ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') } : undefined,
+      files: reliability.should_mutate_files ? existingFiles : undefined,
     });
     await send('done', 'No file changes were made.', {});
     await updateAgentRunStatus(agentRunId, 'completed', { duration_ms: Date.now() - streamStartedAt });
@@ -5634,7 +5806,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       }
     }
     let previewHtml = pipeline.html;
-    if (AGENT_V3_ENABLED) {
+    if (AGENT_V3_ENABLED && reliability.requires_runner) {
       toolLoop.claim('project_runner');
       await send('runner_started', 'Running project checks.', { budget: toolLoop.snapshot });
       runnerResult = await projectRunner.run({
@@ -5652,12 +5824,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       if (await stopIfCancelled('runner')) return;
 
-      while (runnerResult.status === 'failed' && autoFixAttempts < maxAutoFixAttempts) {
+      let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
+      while (runnerBlocking.length && autoFixAttempts < maxAutoFixAttempts) {
         toolLoop.claim('runner_auto_fix');
         autoFixAttempts += 1;
-        const runnerErrors = runnerResult.checks
-          .filter(check => check.status === 'failed')
-          .map(check => ({ file: check.file_path || 'index.html', message: check.message, severity: check.severity }));
+        const runnerErrors = runnerBlocking.map(check => ({ file: check.file || 'index.html', message: check.message, severity: check.severity }));
         await send('auto_fix_started', `Auto-fix attempt ${autoFixAttempts} started.`, { attempt: autoFixAttempts, source: 'runner' });
         const fix = applyAutoFix(project, files, runnerErrors);
         autoFix = fix.patch;
@@ -5676,6 +5847,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         });
         await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
         await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult.status, tool_budget: toolLoop.snapshot });
+        runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
         await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? 'Runner retest passed.' : 'Runner retest still found issues.', {
           status: runnerResult.status,
           checks: runnerResult.checks,
@@ -5704,10 +5876,16 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
     ];
     const verificationSummary = summarizeVerificationChecks(verificationChecks);
+    const reliabilitySummary = summarizeReliabilityGate(verificationChecks);
     const qualitySummary = summarizeQualityForMemory(verificationChecks);
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
-    if (verificationSummary.status === 'failed') {
-      await send('verification_failed', verificationSummary.message, { checks: verificationChecks, summary: verificationSummary });
+    if (reliabilitySummary.status === 'failed') {
+      await send('verification_failed', reliabilitySummary.message, {
+        checks: verificationChecks,
+        summary: verificationSummary,
+        reliability: reliabilitySummary,
+        blocking: true,
+      });
     }
     await send(
       'quality_checked',
@@ -5716,8 +5894,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         : qualitySummary.status === 'warning'
           ? 'Quality checks passed with notes.'
           : 'Quality checks found issues.',
-      { quality: qualitySummary, summary: verificationSummary },
+      { quality: qualitySummary, summary: verificationSummary, reliability: reliabilitySummary },
     );
+
+    if (reliabilitySummary.status === 'failed') {
+      throw new ReliabilityGateError(reliabilitySummary);
+    }
 
     const updatedProject: GeneratedProject = {
       ...project,
@@ -5731,7 +5913,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
     await saveProject(updatedProject, files);
     const diff = diffFiles(existingFiles, files);
-    await createProjectVersion(updatedProject, files, prompt, { ...diff, verification: verificationSummary, agent_run_id: agentRunId || null });
+    await createProjectVersion(updatedProject, files, prompt, { ...diff, verification: verificationSummary, reliability: reliabilitySummary, agent_run_id: agentRunId || null });
     if (autoFix) await saveProjectPatch(updatedProject, autoFix);
     const memorySummary = summarizeAgentMemory({
       projectName: updatedProject.name,
@@ -5776,7 +5958,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     const assistantSummary = [
       previewReadyMessage,
       diff.summary ? `${promptIsFrench ? 'Changements' : 'Changes'}: ${diff.summary}.` : '',
-      verificationSummary?.message ? `${promptIsFrench ? 'Vérification' : 'Checks'}: ${verificationSummary.message}` : '',
+      reliabilitySummary?.message ? `${promptIsFrench ? 'Vérification' : 'Checks'}: ${reliabilitySummary.message}` : '',
     ].filter(Boolean).join('\n');
     await saveProjectMessage({
       organization_id: updatedProject.organization_id,
@@ -5799,6 +5981,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       research: researchResult ? summarizeResearchForMemory(researchResult) : null,
       quality: qualitySummary,
+      reliability,
+      reliability_summary: reliabilitySummary,
     });
 
     await updateBuildSessionStatus(buildSessionId, 'completed');
@@ -5806,7 +5990,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send('done', 'Generation completed.', {});
     await updateAgentRunStatus(agentRunId, 'completed', {
       duration_ms: Date.now() - streamStartedAt,
-      public_payload: { verification: verificationSummary, quality: qualitySummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
+      public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
     });
     await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed' });
     endStream();
@@ -5827,7 +6011,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       prompt,
       decision,
       outcome: 'failed',
-      previewChanged: decision.requiresPreviewRebuild,
+      previewChanged: reliability.should_touch_preview,
       qualityStatus: diagnostic.diagnostic_code,
       issueCount: 1,
     }).catch(() => null);
@@ -5842,7 +6026,9 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send('error', diagnostic.message, {
       code: 'GenerationFailed',
       diagnostic_code: diagnostic.diagnostic_code,
+      request_id: requestId,
       suggested_action: diagnostic.suggested_action,
+      reliability: error?.publicPayload || undefined,
     });
     await updateAgentRunStatus(agentRunId, 'failed', {
       diagnostic_code: diagnostic.diagnostic_code,

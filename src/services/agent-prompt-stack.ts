@@ -197,6 +197,9 @@ const HUGGY_JSON_OUTPUT_POLICY = [
   'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
   'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
   'The summary must mention the detected app type and chosen design direction in one concise sentence.',
+  'For a new app, files must include package.json, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts.',
+  'Never return standalone HTML as the only deliverable for a normal app request. Use HTML-only only when the user explicitly asks for a static one-page HTML file.',
+  'Every generated app must include working primary controls or honest disabled/empty states. A visually polished but non-functional app is not complete.',
 ].join('\n');
 
 export function buildIntentRouterSystemPrompt() {

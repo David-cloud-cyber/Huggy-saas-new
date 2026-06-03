@@ -180,6 +180,10 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasBadProductDecision = includesAny(text, badProductDecisionSignals);
   const hasPromptRequest = includesAny(text, promptSignals);
   const hasNoAction = includesAny(text, noActionSignals);
+  const hasAnalysisRequest = includesAny(text, [
+    'analyse pourquoi', 'analyse comment', 'analyse si', 'analyse le', 'analyse la',
+    'analyse les', 'fais une analyse', 'donne une analyse',
+  ]);
 
   const directActionPatterns = [
     /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte|cree|creer|genere|build|update|fais|fait|mets|met|ameliore|ameliorer)\b/,
@@ -214,6 +218,13 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
   ]);
   const asksForGeneratedArtifact = explicitArtifactPattern && hasAppTarget && !hasNoAction;
+  const advisoryQuestionSignals = [
+    'bonne idee', 'bon choix', 'mauvaise idee', 'dois je', 'devrais je',
+    'est ce que je dois', 'est ce une bonne idee', 'est ce que c est une bonne idee',
+    'should i', 'is it a good idea', 'avant de coder', 'avant de toucher',
+    'conseil avant', 'pour mon mvp',
+  ];
+  const hasAdvisoryQuestion = hasExplanation && includesAny(text, advisoryQuestionSignals);
 
   const explicitApplyToProduct = matchesAny(text, [
     /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet)\b/,
@@ -269,6 +280,32 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.92,
       reason: hasMetaAgent ? 'meta_agent_or_product_strategy' : 'example_or_hypothetical_request',
       signals: [...(hasMetaAgent ? ['meta_agent'] : []), ...(hasExample ? ['example'] : [])],
+    });
+  }
+
+  if (hasAdvisoryQuestion && !explicitApplyToProduct && requestedMode !== 'build') {
+    return result({
+      category: hasAnalysisRequest ? 'analysis' : hasArchitectureReview ? 'architecture' : hasUxReview ? 'ux_review' : 'strategy',
+      action: 'answer',
+      confidence: 0.93,
+      reason: 'advisory_question_not_generation_request',
+      signals: ['advisory_question', ...(hasAnalysisRequest ? ['analysis'] : [])],
+    });
+  }
+
+  if (hasAnalysisRequest && !explicitApplyToProduct && requestedMode !== 'build') {
+    return result({
+      category: hasUxReview
+        ? 'ux_review'
+        : hasProductReview
+          ? 'product_review'
+          : hasArchitectureReview
+            ? 'architecture'
+            : 'analysis',
+      action: 'answer',
+      confidence: 0.92,
+      reason: 'analysis_request_not_file_action',
+      signals: ['analysis'],
     });
   }
 

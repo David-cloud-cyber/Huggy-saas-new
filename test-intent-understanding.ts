@@ -37,6 +37,29 @@ check(
 );
 
 check(
+  'est-ce que creer une app todo est une bonne idee pour mon MVP ?',
+  { category: 'strategy', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
+  'reformule ce texte : cree une app restaurant complete avec reservation',
+  { category: 'text', action: 'answer', allowsFileAction: false },
+);
+
+check(
+  'analyse pourquoi une app e-commerce doit avoir un panier avant de coder',
+  { category: 'analysis', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
+  'j ai besoin d un conseil avant de modifier mon dashboard',
+  { category: 'strategy', action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
   'je veux une app todo list avec ajout suppression et filtre des taches',
   { category: 'app', action: 'file_action', allowsFileAction: true },
 );
