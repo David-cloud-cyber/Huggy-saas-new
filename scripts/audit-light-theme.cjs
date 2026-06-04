@@ -60,6 +60,14 @@ for (const file of listFiles(root)) {
   const lines = text.split(/\r?\n/);
 
   lines.forEach((line, index) => {
+    const hasBannedExact = bannedExact.some(color => line.includes(color));
+    const hasRelevantToken =
+      hasBannedExact ||
+      bannedWords.test(line) ||
+      weakWhiteBorder.test(line) ||
+      /data-theme=["']dark["']/.test(line);
+    if (!hasRelevantToken) return;
+
     const darkScoped = lineInDarkBlock(lines, index);
     const trimmed = line.trim();
 
@@ -68,7 +76,7 @@ for (const file of listFiles(root)) {
     }
 
     for (const color of bannedExact) {
-      if (line.includes(color) && !darkScoped) {
+      if (hasBannedExact && line.includes(color) && !darkScoped) {
         failures.push(`${rel}:${index + 1} banned weak/warm color ${color}`);
       }
     }

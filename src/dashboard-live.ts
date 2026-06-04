@@ -53,6 +53,14 @@ type AiUsageResponse = {
     monthly_credits?: number | null;
     daily_promo_credits?: number | null;
     topup_credits?: number | null;
+    cloud?: {
+      balance_usd?: number | null;
+      ai_app_balance_usd?: number | null;
+      database_storage_gb?: number | null;
+      file_storage_gb?: number | null;
+      bandwidth_gb?: number | null;
+      topup_min_usd?: number | null;
+    };
   };
   history?: Array<{
     id: string;
@@ -364,6 +372,20 @@ function formatCredits(value: unknown) {
   return Number.isInteger(number) ? String(number) : number.toFixed(1);
 }
 
+function formatUsd(value: unknown) {
+  if (value === null || value === undefined || value === '') return '--';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  return `$${number.toFixed(number % 1 === 0 ? 0 : 2)}`;
+}
+
+function formatGb(value: unknown) {
+  if (value === null || value === undefined || value === '') return '--';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  return `${number % 1 === 0 ? number.toFixed(0) : number.toFixed(2)} GB`;
+}
+
 function formatDate(iso?: string) {
   if (!iso) return 'Recently';
   try {
@@ -387,6 +409,20 @@ function renderAiUsage(data: AiUsageResponse, rates: ModelRateResponse) {
   if (monthly) monthly.textContent = formatCredits(data.wallet?.monthly_credits);
   if (daily) daily.textContent = formatCredits(data.wallet?.daily_promo_credits);
   if (topups) topups.textContent = formatCredits(data.wallet?.topup_credits);
+
+  const cloud = data.wallet?.cloud;
+  const cloudBalance = document.getElementById('cloud-balance');
+  const cloudAiApp = document.getElementById('cloud-ai-app');
+  const cloudTopupMin = document.getElementById('cloud-topup-min');
+  const cloudDbStorage = document.getElementById('cloud-db-storage');
+  const cloudFileStorage = document.getElementById('cloud-file-storage');
+  const cloudBandwidth = document.getElementById('cloud-bandwidth');
+  if (cloudBalance) cloudBalance.textContent = formatUsd(cloud?.balance_usd);
+  if (cloudAiApp) cloudAiApp.textContent = formatUsd(cloud?.ai_app_balance_usd);
+  if (cloudTopupMin) cloudTopupMin.textContent = cloud?.topup_min_usd ? formatUsd(cloud.topup_min_usd) : 'Included only';
+  if (cloudDbStorage) cloudDbStorage.textContent = formatGb(cloud?.database_storage_gb);
+  if (cloudFileStorage) cloudFileStorage.textContent = formatGb(cloud?.file_storage_gb);
+  if (cloudBandwidth) cloudBandwidth.textContent = formatGb(cloud?.bandwidth_gb);
 
   const history = document.getElementById('ai-usage-history');
   if (history) {

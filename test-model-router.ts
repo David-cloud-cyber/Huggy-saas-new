@@ -38,7 +38,7 @@ assert.equal(
 
 assert.equal(
   await router.selectModel({
-    plan: 'business',
+    plan: 'scale',
     mode: 'Auto',
     userCredits: 100,
     taskComplexity: 'extreme',

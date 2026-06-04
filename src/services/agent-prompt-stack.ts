@@ -172,6 +172,17 @@ const HUGGY_FUNCTIONAL_QUALITY_POLICY = [
   'If the quality audit finds weak functionality, missing responsive behavior, dead controls, generic AI design, or a blank preview, revise before claiming the app is ready.',
 ].join('\n');
 
+const HUGGY_CLOUD_POLICY = [
+  'Huggy Cloud backend policy:',
+  'When an app needs persistent data, authentication, file storage, edge functions, webhooks, emails, jobs, or private API secrets, do not ask the user to connect Supabase manually.',
+  'Use Huggy Cloud by default. Huggy Cloud is the managed backend layer that creates or tracks backend namespace/project, SQL schema, RLS, auth settings, storage buckets, functions, secrets, public runtime config, logs, and usage.',
+  'For Free projects, prefer a shared managed backend isolated by project_id/schema and strict RLS. For Pro, use the standard managed backend. For Scale, Enterprise, or high-isolation needs, recommend a dedicated backend without exposing internal supplier details.',
+  'Include supabase/schema.sql when persistent data is needed, but generated previews must be honest: if Huggy Cloud is only planned and not active yet, show local/demo state clearly and never claim real persistence is live.',
+  'Users should only need to confirm sensitive actions: real payments, real email sending, external private APIs, deleting data, custom domains, or capacity upgrades.',
+  'Never expose service_role_key, provider secrets, internal Supabase project refs when sensitive, OpenRouter keys, Stripe secrets, raw supplier payloads, provider costs, or margins.',
+  'Backend-related UI should be user-level: Database, Auth, Storage, Functions, Secrets, Logs, Usage, status, schema, and safe masked configuration only.',
+].join('\n');
+
 const HUGGY_PREMIUM_UI_ESCALATION_POLICY = [
   'Premium UI escalation gate:',
   'Before coding, answer internally: real problem, end user, primary action, critical journey, visual direction, required screens/components, and required states.',
@@ -246,6 +257,7 @@ export function buildIntentRouterSystemPrompt() {
     HUGGY_SCOPE_RISK_POLICY,
     HUGGY_FAST_PATH_POLICY,
     HUGGY_STREAMING_POLICY,
+    HUGGY_CLOUD_POLICY,
     [
       'Return only compact valid JSON.',
       'Allowed intent values: conversation, clarification_required, plan, build, edit, debug_fix, verify, deploy_assist, external_keys_required, credits_required.',
@@ -277,6 +289,7 @@ export function buildAgentTextSystemPrompt(input: {
       : 'Do not pretend to have current web facts if no research context is provided.',
     HUGGY_FORMATTING_POLICY,
     HUGGY_STREAMING_POLICY,
+    HUGGY_CLOUD_POLICY,
     HUGGY_FINAL_DELIVERY_POLICY,
     HUGGY_WEB_RESEARCH_POLICY,
     HUGGY_SAFETY_POLICY,
@@ -309,6 +322,7 @@ export function buildGenerationSystemPrompt(input: {
     input.uiPolicySystemPrompt,
     HUGGY_GENERATION_PRODUCT_POLICY,
     HUGGY_FUNCTIONAL_QUALITY_POLICY,
+    HUGGY_CLOUD_POLICY,
     HUGGY_PREMIUM_UI_ESCALATION_POLICY,
     input.hasExistingFiles
       ? HUGGY_GENERATION_ITERATION_POLICY

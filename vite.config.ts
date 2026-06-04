@@ -48,6 +48,22 @@ export default defineConfig(({mode}) => {
     build: {
       rollupOptions: {
         input: discoverHtmlInputs(__dirname),
+        onwarn(warning, defaultHandler) {
+          const message = String(warning.message || '');
+          if (
+            warning.code === 'MODULE_LEVEL_DIRECTIVE' &&
+            message.includes('use client')
+          ) {
+            return;
+          }
+          if (
+            message.includes("Module level directives cause errors when bundled") &&
+            message.includes('use client')
+          ) {
+            return;
+          }
+          defaultHandler(warning);
+        },
       },
     },
   };

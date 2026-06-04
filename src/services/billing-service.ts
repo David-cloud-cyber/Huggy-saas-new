@@ -1,9 +1,35 @@
 import Stripe from 'stripe';
 
+export type BillingInterval = 'monthly' | 'annual';
+export type PublicPlanKey = 'free' | 'pro' | 'scale';
+export type PlanKey = PublicPlanKey | 'enterprise';
+export type CloudUsageCategory =
+  | 'database_server'
+  | 'database_storage'
+  | 'compute'
+  | 'file_storage'
+  | 'live_updates'
+  | 'network'
+  | 'ai_app_usage';
+
+export interface CloudPlanLimits {
+  balanceUsd: number;
+  aiAppBalanceUsd: number;
+  databaseStorageGb: number;
+  fileStorageGb: number;
+  bandwidthGb: number;
+  topupMinUsd: number | null;
+  autoTopupAvailable: boolean;
+  usageCategories: CloudUsageCategory[];
+}
+
 export interface PlanConfig {
   id: string;
+  key: PlanKey;
   name: string;
   amount: number;
+  annualAmount?: number;
+  annualMonthlyEquivalent?: number;
   credits: number;
   dailyCredits?: number;
   monthlyCreditCap?: number;
@@ -11,84 +37,279 @@ export interface PlanConfig {
   customDomains: number;
   topupPricePer50?: number;
   rollover: 'none' | 'monthly' | 'annual_period';
+  public: boolean;
+  cloud: CloudPlanLimits;
   features: string[];
 }
 
-export const SAAS_PLANS: Record<string, PlanConfig> = {
+export interface TopupProduct {
+  id: string;
+  plan: 'pro' | 'scale';
+  credits: number;
+  price: number;
+  expiresMonths: number;
+}
+
+export interface CloudTopupProduct {
+  id: string;
+  amountUsd: number;
+  label: string;
+}
+
+export const PUBLIC_PRICING_PLAN_KEYS = ['free', 'pro', 'scale'] as const satisfies readonly PublicPlanKey[];
+export const PAID_PLAN_KEYS = ['pro', 'scale', 'enterprise'] as const satisfies readonly PlanKey[];
+export const CLOUD_USAGE_CATEGORIES: CloudUsageCategory[] = [
+  'database_server',
+  'database_storage',
+  'compute',
+  'file_storage',
+  'live_updates',
+  'network',
+  'ai_app_usage',
+];
+
+export const SAAS_PLANS: Record<PlanKey, PlanConfig> = {
   free: {
     id: 'plan_free',
+    key: 'free',
     name: 'Free',
     amount: 0,
-    credits: 30,
-    dailyCredits: 5,
-    monthlyCreditCap: 30,
+    annualAmount: 0,
+    annualMonthlyEquivalent: 0,
+    credits: 10,
+    monthlyCreditCap: 10,
     maxProjects: 1,
     customDomains: 0,
     rollover: 'none',
-    features: ['5 daily promo credits', '30 monthly credit cap', 'Public previews', 'Huggy backend basics'],
+    public: true,
+    cloud: {
+      balanceUsd: 1,
+      aiAppBalanceUsd: 0.25,
+      databaseStorageGb: 0.1,
+      fileStorageGb: 0.25,
+      bandwidthGb: 1,
+      topupMinUsd: null,
+      autoTopupAvailable: false,
+      usageCategories: CLOUD_USAGE_CATEGORIES,
+    },
+    features: [
+      '10 credits / month',
+      '1 active project',
+      'Live preview',
+      'Limited Huggy Cloud',
+      '$1 Cloud balance included',
+      '0.1 GB database storage',
+      '0.25 GB file storage',
+      '1 GB bandwidth',
+      'Simple automatic database',
+      'Simple auth',
+      'Huggy subdomain',
+      'Built with Huggy badge',
+      'Standard AI streaming',
+      'Limited history',
+    ],
   },
   pro: {
-    id: 'plan_pro_100',
+    id: 'plan_pro',
+    key: 'pro',
     name: 'Pro',
     amount: 25,
-    credits: 100,
-    dailyCredits: 5,
+    annualAmount: 240,
+    annualMonthlyEquivalent: 20,
+    credits: 150,
     monthlyCreditCap: 150,
     maxProjects: 10,
-    customDomains: 3,
-    topupPricePer50: 15,
+    customDomains: 1,
+    topupPricePer50: 10,
     rollover: 'monthly',
-    features: ['100 monthly credits', '5 daily promo credits', 'Private projects', 'Supabase backend, auth and database', 'Vercel publishing', 'Code export'],
+    public: true,
+    cloud: {
+      balanceUsd: 10,
+      aiAppBalanceUsd: 1,
+      databaseStorageGb: 1,
+      fileStorageGb: 5,
+      bandwidthGb: 50,
+      topupMinUsd: 10,
+      autoTopupAvailable: false,
+      usageCategories: CLOUD_USAGE_CATEGORIES,
+    },
+    features: [
+      '150 credits / month',
+      '$10 Cloud balance included',
+      '1 GB database storage',
+      '5 GB file storage',
+      '50 GB bandwidth',
+      '10 active projects',
+      'Automatic Huggy Cloud',
+      'Automatic database, auth and storage',
+      'Premium visual streaming',
+      'Premium preview',
+      'Custom domain',
+      'Remove Huggy badge',
+      '1-click deploy',
+      'Code export',
+      'Version history and rollback',
+      'GitHub integration',
+      'Credit top-ups',
+      'Standard support',
+    ],
   },
-  pro_200: { id: 'plan_pro_200', name: 'Pro 200', amount: 50, credits: 200, dailyCredits: 5, monthlyCreditCap: 250, maxProjects: 15, customDomains: 4, topupPricePer50: 15, rollover: 'monthly', features: ['200 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_400: { id: 'plan_pro_400', name: 'Pro 400', amount: 100, credits: 400, dailyCredits: 5, monthlyCreditCap: 450, maxProjects: 25, customDomains: 6, topupPricePer50: 15, rollover: 'monthly', features: ['400 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_800: { id: 'plan_pro_800', name: 'Pro 800', amount: 200, credits: 800, dailyCredits: 5, monthlyCreditCap: 850, maxProjects: 40, customDomains: 10, topupPricePer50: 15, rollover: 'monthly', features: ['800 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_1200: { id: 'plan_pro_1200', name: 'Pro 1200', amount: 294, credits: 1200, dailyCredits: 5, monthlyCreditCap: 1250, maxProjects: 60, customDomains: 15, topupPricePer50: 15, rollover: 'monthly', features: ['1,200 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_2000: { id: 'plan_pro_2000', name: 'Pro 2000', amount: 480, credits: 2000, dailyCredits: 5, monthlyCreditCap: 2050, maxProjects: 100, customDomains: 25, topupPricePer50: 15, rollover: 'monthly', features: ['2,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_5000: { id: 'plan_pro_5000', name: 'Pro 5000', amount: 1125, credits: 5000, dailyCredits: 5, monthlyCreditCap: 5050, maxProjects: 200, customDomains: 50, topupPricePer50: 15, rollover: 'monthly', features: ['5,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  pro_10000: { id: 'plan_pro_10000', name: 'Pro 10000', amount: 2250, credits: 10000, dailyCredits: 5, monthlyCreditCap: 10050, maxProjects: 500, customDomains: 100, topupPricePer50: 15, rollover: 'monthly', features: ['10,000 monthly credits', 'Private projects', 'Backend services', 'Deployments'] },
-  business: {
-    id: 'plan_business_100',
-    name: 'Business',
-    amount: 50,
-    credits: 100,
-    maxProjects: 50,
+  scale: {
+    id: 'plan_scale',
+    key: 'scale',
+    name: 'Scale',
+    amount: 200,
+    annualAmount: 1920,
+    annualMonthlyEquivalent: 160,
+    credits: 1500,
+    monthlyCreditCap: 1500,
+    maxProjects: 9999,
     customDomains: 10,
-    topupPricePer50: 30,
+    topupPricePer50: 12.5,
     rollover: 'monthly',
-    features: ['100 monthly credits', 'Team controls', 'Roles and permissions', 'Shared templates', 'Supabase backend, auth and database', 'Full-stack hosting', 'Priority support'],
+    public: true,
+    cloud: {
+      balanceUsd: 75,
+      aiAppBalanceUsd: 10,
+      databaseStorageGb: 20,
+      fileStorageGb: 100,
+      bandwidthGb: 500,
+      topupMinUsd: 25,
+      autoTopupAvailable: true,
+      usageCategories: CLOUD_USAGE_CATEGORIES,
+    },
+    features: [
+      '1,500 credits / month',
+      '$75 Cloud balance included',
+      '20 GB database storage',
+      '100 GB file storage',
+      '500 GB bandwidth',
+      'Auto top-up available',
+      'Unlimited active projects',
+      'Advanced Huggy Cloud',
+      'Advanced automatic backends',
+      'Automatic auth, database and storage',
+      'Multiple custom domains',
+      'Advanced GitHub sync',
+      'Team workspace',
+      'Roles and permissions',
+      'Advanced analytics',
+      'Generation logs and detailed AI runs',
+      'Generation priority',
+      'Premium models',
+      'Basic security audit',
+      'Priority support',
+      'Full export and advanced rollback',
+    ],
   },
-  business_200: { id: 'plan_business_200', name: 'Business 200', amount: 100, credits: 200, maxProjects: 75, customDomains: 15, topupPricePer50: 30, rollover: 'monthly', features: ['200 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_400: { id: 'plan_business_400', name: 'Business 400', amount: 200, credits: 400, maxProjects: 100, customDomains: 25, topupPricePer50: 30, rollover: 'monthly', features: ['400 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_800: { id: 'plan_business_800', name: 'Business 800', amount: 400, credits: 800, maxProjects: 200, customDomains: 50, topupPricePer50: 30, rollover: 'monthly', features: ['800 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_1200: { id: 'plan_business_1200', name: 'Business 1200', amount: 588, credits: 1200, maxProjects: 300, customDomains: 75, topupPricePer50: 30, rollover: 'monthly', features: ['1,200 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_2000: { id: 'plan_business_2000', name: 'Business 2000', amount: 960, credits: 2000, maxProjects: 500, customDomains: 100, topupPricePer50: 30, rollover: 'monthly', features: ['2,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_5000: { id: 'plan_business_5000', name: 'Business 5000', amount: 2250, credits: 5000, maxProjects: 1000, customDomains: 250, topupPricePer50: 30, rollover: 'monthly', features: ['5,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
-  business_10000: { id: 'plan_business_10000', name: 'Business 10000', amount: 4300, credits: 10000, maxProjects: 2000, customDomains: 500, topupPricePer50: 30, rollover: 'monthly', features: ['10,000 monthly credits', 'Team controls', 'Backend services', 'Priority support'] },
   enterprise: {
     id: 'plan_enterprise',
+    key: 'enterprise',
     name: 'Enterprise',
     amount: 0,
     credits: 0,
     maxProjects: 9999,
     customDomains: 9999,
     rollover: 'annual_period',
-    features: ['Volume pricing', 'SSO', 'Advanced security', 'Custom model and usage policy', 'Dedicated support'],
+    public: false,
+    cloud: {
+      balanceUsd: 0,
+      aiAppBalanceUsd: 0,
+      databaseStorageGb: 0,
+      fileStorageGb: 0,
+      bandwidthGb: 0,
+      topupMinUsd: null,
+      autoTopupAvailable: true,
+      usageCategories: CLOUD_USAGE_CATEGORIES,
+    },
+    features: [
+      'Custom credits',
+      'Custom Huggy Cloud balance',
+      'Custom storage and bandwidth',
+      'Multiple workspaces',
+      'Dedicated backend',
+      'Stronger isolation',
+      'SSO / SAML',
+      'Advanced audit logs',
+      'Advanced roles',
+      'Custom contracts',
+      'Private priority support',
+      'Custom onboarding',
+      'SLA',
+      'Invoice billing',
+      'Advanced security',
+      'Multi-team management',
+      'Custom limits',
+    ],
   },
 };
 
-export const TOPUP_PRODUCTS = [
-  { id: 'topup_pro_50', plan: 'pro', credits: 50, price: 15.00, expiresMonths: 12 },
-  { id: 'topup_pro_100', plan: 'pro', credits: 100, price: 30.00, expiresMonths: 12 },
-  { id: 'topup_pro_250', plan: 'pro', credits: 250, price: 75.00, expiresMonths: 12 },
-  { id: 'topup_pro_500', plan: 'pro', credits: 500, price: 150.00, expiresMonths: 12 },
-  { id: 'topup_pro_1000', plan: 'pro', credits: 1000, price: 300.00, expiresMonths: 12 },
-  { id: 'topup_business_50', plan: 'business', credits: 50, price: 30.00, expiresMonths: 12 },
-  { id: 'topup_business_100', plan: 'business', credits: 100, price: 60.00, expiresMonths: 12 },
-  { id: 'topup_business_250', plan: 'business', credits: 250, price: 150.00, expiresMonths: 12 },
-  { id: 'topup_business_500', plan: 'business', credits: 500, price: 300.00, expiresMonths: 12 },
-  { id: 'topup_business_1000', plan: 'business', credits: 1000, price: 600.00, expiresMonths: 12 },
+export const TOPUP_PRODUCTS: TopupProduct[] = [
+  { id: 'topup_pro_50', plan: 'pro', credits: 50, price: 10.00, expiresMonths: 12 },
+  { id: 'topup_pro_100', plan: 'pro', credits: 100, price: 20.00, expiresMonths: 12 },
+  { id: 'topup_pro_250', plan: 'pro', credits: 250, price: 50.00, expiresMonths: 12 },
+  { id: 'topup_pro_500', plan: 'pro', credits: 500, price: 100.00, expiresMonths: 12 },
+  { id: 'topup_scale_100', plan: 'scale', credits: 100, price: 25.00, expiresMonths: 12 },
+  { id: 'topup_scale_250', plan: 'scale', credits: 250, price: 62.50, expiresMonths: 12 },
+  { id: 'topup_scale_500', plan: 'scale', credits: 500, price: 125.00, expiresMonths: 12 },
+  { id: 'topup_scale_1000', plan: 'scale', credits: 1000, price: 250.00, expiresMonths: 12 },
 ];
+
+export const CLOUD_TOPUP_PRODUCTS: CloudTopupProduct[] = [
+  { id: 'cloud_topup_10', amountUsd: 10, label: '$10 Cloud balance' },
+  { id: 'cloud_topup_25', amountUsd: 25, label: '$25 Cloud balance' },
+  { id: 'cloud_topup_50', amountUsd: 50, label: '$50 Cloud balance' },
+  { id: 'cloud_topup_100', amountUsd: 100, label: '$100 Cloud balance' },
+  { id: 'cloud_topup_250', amountUsd: 250, label: '$250 Cloud balance' },
+];
+
+export function normalizePlanKey(value: unknown): PlanKey | null {
+  const key = String(value || '').trim().toLowerCase();
+  if (key === 'free' || key === 'pro' || key === 'scale' || key === 'enterprise') return key;
+  return null;
+}
+
+export function getPlanConfig(value: unknown): PlanConfig | null {
+  const key = normalizePlanKey(value);
+  if (key) return SAAS_PLANS[key];
+  const text = String(value || '').trim().toLowerCase();
+  return Object.values(SAAS_PLANS).find(plan => plan.id.toLowerCase() === text) || null;
+}
+
+export function getPublicPlans() {
+  return Object.fromEntries(PUBLIC_PRICING_PLAN_KEYS.map(key => [key, SAAS_PLANS[key]])) as Record<PublicPlanKey, PlanConfig>;
+}
+
+export function getCloudUsageCategories() {
+  return CLOUD_USAGE_CATEGORIES.map(category => ({
+    id: category,
+    label: category
+      .split('_')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' '),
+  }));
+}
+
+export function isPaidPlanKey(value: unknown): boolean {
+  const key = normalizePlanKey(value);
+  return key === 'pro' || key === 'scale' || key === 'enterprise';
+}
+
+export function resolveCheckoutAmount(plan: PlanConfig, billingInterval: BillingInterval) {
+  if (billingInterval === 'annual' && plan.annualAmount != null) {
+    return {
+      amount: plan.annualAmount,
+      recurringInterval: 'year' as const,
+      label: `$${plan.annualMonthlyEquivalent || Math.round(plan.annualAmount / 12)} / month, billed annually`,
+    };
+  }
+
+  return {
+    amount: plan.amount,
+    recurringInterval: 'month' as const,
+    label: `$${plan.amount} / month`,
+  };
+}
 
 export class StripeService {
   private stripe: Stripe | null = null;
@@ -111,14 +332,24 @@ export class StripeService {
     return this.stripe;
   }
 
-  async createSubscriptionCheckout(organizationId: string, email: string, planKey: string, successUrl: string, cancelUrl: string): Promise<string> {
-    const plan = SAAS_PLANS[planKey.toLowerCase()];
-    if (!plan) throw new Error(`Unknown plan key specified: ${planKey}`);
+  async createSubscriptionCheckout(
+    organizationId: string,
+    email: string,
+    planKey: string,
+    successUrl: string,
+    cancelUrl: string,
+    billingInterval: BillingInterval = 'monthly'
+  ): Promise<string> {
+    const plan = getPlanConfig(planKey);
+    if (!plan || !plan.public || plan.key === 'free') {
+      throw new Error(`Unknown public paid plan key specified: ${planKey}`);
+    }
+
+    const resolvedBilling = resolveCheckoutAmount(plan, billingInterval);
 
     if (this.stripe) {
       const client = this.getStripeClient();
-      
-      // Get or create customer
+
       let customerId = '';
       const { data: custRecord } = await this.supabase
         .from('stripe_customers')
@@ -131,13 +362,19 @@ export class StripeService {
       } else {
         const customer = await client.customers.create({
           email,
-          metadata: { organization_id: organizationId }
+          metadata: { organization_id: organizationId },
         });
         customerId = customer.id;
         await this.supabase
           .from('stripe_customers')
           .insert([{ id: organizationId, stripe_customer_id: customerId, email }]);
       }
+
+      const metadata = {
+        organization_id: organizationId,
+        plan_key: plan.key,
+        billing_interval: billingInterval,
+      };
 
       const session = await client.checkout.sessions.create({
         customer: customerId,
@@ -147,11 +384,11 @@ export class StripeService {
             price_data: {
               currency: 'usd',
               product_data: {
-                name: `Huggy SaaS - ${plan.name} Plan`,
-                description: `Monthly billing for ${plan.name}. Includes ${plan.credits || 'custom volume'} AI credits plus Huggy backend, auth, database, preview, hosting and deploy workflows.`,
+                name: `Huggy - ${plan.name}`,
+                description: `${plan.name} includes ${plan.credits.toLocaleString('en-US')} Huggy credits plus app generation, Huggy Cloud, preview and publishing workflows. Provider costs and margins are never exposed.`,
               },
-              unit_amount: Math.round(plan.amount * 100),
-              recurring: { interval: 'month' }
+              unit_amount: Math.round(resolvedBilling.amount * 100),
+              recurring: { interval: resolvedBilling.recurringInterval },
             },
             quantity: 1,
           },
@@ -159,15 +396,15 @@ export class StripeService {
         mode: 'subscription',
         success_url: successUrl,
         cancel_url: cancelUrl,
-        metadata: { organization_id: organizationId, plan_key: planKey }
+        metadata,
+        subscription_data: { metadata },
       });
 
       return session.url || successUrl;
-    } else {
-      // Return dev simulated portal redirection url
-      console.log(`[STRIPE SIMULATION] Subscription checkout created for ${planKey}`);
-      return `/settings?plan=${planKey}&simulated_success=true`;
     }
+
+    console.log(`[STRIPE SIMULATION] Subscription checkout created for ${plan.key} (${billingInterval})`);
+    return `/settings?plan=${plan.key}&billing=${billingInterval}&simulated_success=true`;
   }
 
   async createTopupCheckout(organizationId: string, email: string, productId: string, successUrl: string, cancelUrl: string): Promise<string> {
@@ -183,8 +420,8 @@ export class StripeService {
             price_data: {
               currency: 'usd',
               product_data: {
-                name: `Credits Topup - ${item.credits} Credits`,
-                description: `12-month non-negative margin protected credits.`,
+                name: `Huggy credits - ${item.credits} credits`,
+                description: `User-facing Huggy credits for AI actions and publishing workflows. Internal provider costs are not exposed.`,
               },
               unit_amount: Math.round(item.price * 100),
             },
@@ -194,13 +431,46 @@ export class StripeService {
         mode: 'payment',
         success_url: successUrl,
         cancel_url: cancelUrl,
-        metadata: { organization_id: organizationId, topup_credits: String(item.credits), topup_product_id: productId }
+        metadata: { organization_id: organizationId, topup_credits: String(item.credits), topup_product_id: productId },
       });
 
       return session.url || successUrl;
-    } else {
-      return `/settings?topup=${productId}&simulated_success=true`;
     }
+
+    return `/settings?topup=${productId}&simulated_success=true`;
+  }
+
+  async createCloudTopupCheckout(organizationId: string, email: string, productId: string, successUrl: string, cancelUrl: string): Promise<string> {
+    const item = CLOUD_TOPUP_PRODUCTS.find(p => p.id === productId);
+    if (!item) throw new Error(`Invalid Cloud top-up product: ${productId}`);
+
+    if (this.stripe) {
+      const client = this.getStripeClient();
+      const session = await client.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `Huggy Cloud balance - $${item.amountUsd}`,
+                description: 'User-facing Huggy Cloud balance for published app hosting, database, storage, realtime, bandwidth and deployed AI usage.',
+              },
+              unit_amount: Math.round(item.amountUsd * 100),
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { organization_id: organizationId, cloud_topup_usd: String(item.amountUsd), cloud_topup_product_id: productId },
+      });
+
+      return session.url || successUrl;
+    }
+
+    return `/settings?cloud_topup=${productId}&simulated_success=true`;
   }
 
   /**
@@ -220,7 +490,6 @@ export class StripeService {
       throw new Error(`Stripe signature validation failed: ${err.message}`);
     }
 
-    // 1. Idempotency safeguard checking supabase ledger
     const { data: alreadyProcessed } = await this.supabase
       .from('stripe_events')
       .select('processed')
@@ -231,7 +500,6 @@ export class StripeService {
       return { processed: true, reason: 'Webhook already evaluated. Safe exit.' };
     }
 
-    // Insert as initial stage
     await this.supabase
       .from('stripe_events')
       .upsert([{ event_id: event.id, event_type: event.type, processed: false }]);
@@ -240,15 +508,24 @@ export class StripeService {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const orgId = session.metadata?.organization_id;
-        
+
         if (!orgId) break;
 
-        // One-time Topups
         if (session.mode === 'payment') {
+          const cloudTopupUsd = Number(session.metadata?.cloud_topup_usd || 0);
+          if (Number.isFinite(cloudTopupUsd) && cloudTopupUsd > 0) {
+            await this.grantCloudBalance(
+              orgId,
+              cloudTopupUsd,
+              session.id,
+              `Cloud balance top-up purchased - ID: ${session.metadata?.cloud_topup_product_id}`
+            );
+            break;
+          }
+
           const creditsStr = session.metadata?.topup_credits;
           const creditsVal = creditsStr ? parseInt(creditsStr, 10) : 0;
           if (creditsVal > 0) {
-            // Allocate balance safely
             const { data: wallet } = await this.supabase
               .from('credit_wallets')
               .select('balance')
@@ -270,25 +547,21 @@ export class StripeService {
                 amount: creditsVal,
                 balance_after: updated,
                 description: `Credit top-up purchased - ID: ${session.metadata?.topup_product_id}`,
-                reference_id: session.id
+                reference_id: session.id,
               }]);
           }
         }
 
-        // Subscription Initial Setup
         if (session.mode === 'subscription' && session.subscription) {
-          const planKey = session.metadata?.plan_key || 'free';
-          const plan = SAAS_PLANS[planKey.toLowerCase()];
+          const plan = getPlanConfig(session.metadata?.plan_key) || SAAS_PLANS.pro;
           const subObj = await client.subscriptions.retrieve(session.subscription as string);
-
-          await this.syncSubscription(orgId, subObj, plan.id, plan.credits);
+          await this.syncSubscription(orgId, subObj, plan.key, plan.id, plan.credits, plan);
         }
         break;
       }
 
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription;
-        // Lookup organization mapping
         const { data: customer } = await this.supabase
           .from('stripe_customers')
           .select('id')
@@ -296,9 +569,8 @@ export class StripeService {
           .maybeSingle();
 
         if (customer) {
-          const planId = sub.metadata?.plan_id || 'pro';
-          const plan = SAAS_PLANS[planId] || SAAS_PLANS.pro;
-          await this.syncSubscription(customer.id, sub, plan.id, plan.credits);
+          const plan = getPlanConfig(sub.metadata?.plan_key || sub.metadata?.plan_id) || SAAS_PLANS.pro;
+          await this.syncSubscription(customer.id, sub, plan.key, plan.id, plan.credits, plan);
         }
         break;
       }
@@ -312,14 +584,12 @@ export class StripeService {
           .maybeSingle();
 
         if (customer) {
-          // Demote to free plan limits
           await this.demoteToFreePlan(customer.id);
         }
         break;
       }
     }
 
-    // Mark as processed
     await this.supabase
       .from('stripe_events')
       .update({ processed: true })
@@ -328,10 +598,9 @@ export class StripeService {
     return { processed: true };
   }
 
-  private async syncSubscription(organizationId: string, stripeSubscription: any, planId: string, creditsToGrant: number) {
+  private async syncSubscription(organizationId: string, stripeSubscription: any, planKey: PlanKey, planId: string, creditsToGrant: number, planConfig: PlanConfig) {
     if (!this.supabase) return;
 
-    // Save/update subscription record
     await this.supabase
       .from('subscriptions')
       .upsert({
@@ -342,10 +611,14 @@ export class StripeService {
         current_period_start: new Date(stripeSubscription.current_period_start * 1000).toISOString(),
         current_period_end: new Date(stripeSubscription.current_period_end * 1000).toISOString(),
         cancel_at_period_end: stripeSubscription.cancel_at_period_end,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'stripe_subscription_id' });
 
-    // Grant recurring subscription credits
+    await this.supabase
+      .from('organizations')
+      .update({ plan: planKey, updated_at: new Date().toISOString() })
+      .eq('id', organizationId);
+
     const { data: wallet } = await this.supabase
       .from('credit_wallets')
       .select('balance')
@@ -366,9 +639,83 @@ export class StripeService {
         type: 'subscription_grant',
         amount: creditsToGrant,
         balance_after: updated,
-        description: `Plan subscription monthly credits granted automatically.`,
-        reference_id: stripeSubscription.id
+        description: `Plan subscription credits granted automatically.`,
+        reference_id: stripeSubscription.id,
       }]);
+
+    await this.grantIncludedCloudBalance(organizationId, planConfig, stripeSubscription.id);
+  }
+
+  private async grantIncludedCloudBalance(organizationId: string, plan: PlanConfig, referenceId: string) {
+    const amount = Number(plan.cloud?.balanceUsd || 0);
+    const aiAppBalance = Number(plan.cloud?.aiAppBalanceUsd || 0);
+    if (!this.supabase || amount <= 0) return;
+
+    try {
+      const { data: wallet } = await this.supabase
+        .from('cloud_wallets')
+        .select('balance_usd,included_balance_usd,ai_app_balance_usd')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      const current = wallet ? Number(wallet.balance_usd || 0) : 0;
+      const currentIncluded = wallet ? Number(wallet.included_balance_usd || 0) : 0;
+      const currentAiApp = wallet ? Number(wallet.ai_app_balance_usd || 0) : 0;
+
+      await this.supabase
+        .from('cloud_wallets')
+        .upsert([{
+          organization_id: organizationId,
+          balance_usd: current + amount,
+          included_balance_usd: currentIncluded + amount,
+          ai_app_balance_usd: currentAiApp + aiAppBalance,
+          auto_topup_enabled: false,
+          updated_at: new Date().toISOString(),
+        }]);
+
+      await this.supabase
+        .from('cloud_usage_ledger')
+        .insert([{
+          organization_id: organizationId,
+          usage_type: 'included_grant',
+          amount_usd: amount,
+          description: `${plan.name} included Huggy Cloud balance granted.`,
+          reference_id: referenceId,
+        }]);
+    } catch (error: any) {
+      console.warn(`[huggy:cloud_wallet_grant_skipped] ${error?.message || error}`);
+    }
+  }
+
+  private async grantCloudBalance(organizationId: string, amountUsd: number, referenceId: string, description: string) {
+    if (!this.supabase || amountUsd <= 0) return;
+
+    try {
+      const { data: wallet } = await this.supabase
+        .from('cloud_wallets')
+        .select('balance_usd')
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+
+      const current = wallet ? Number(wallet.balance_usd || 0) : 0;
+      const updated = current + amountUsd;
+
+      await this.supabase
+        .from('cloud_wallets')
+        .upsert([{ organization_id: organizationId, balance_usd: updated, updated_at: new Date().toISOString() }]);
+
+      await this.supabase
+        .from('cloud_usage_ledger')
+        .insert([{
+          organization_id: organizationId,
+          usage_type: 'topup',
+          amount_usd: amountUsd,
+          description,
+          reference_id: referenceId,
+        }]);
+    } catch (error: any) {
+      console.warn(`[huggy:cloud_wallet_topup_skipped] ${error?.message || error}`);
+    }
   }
 
   private async demoteToFreePlan(organizationId: string) {
@@ -376,18 +723,21 @@ export class StripeService {
 
     const freePlan = SAAS_PLANS.free;
 
-    // Reset subscription records
     await this.supabase
       .from('subscriptions')
       .update({
         plan_id: freePlan.id,
         status: 'canceled',
         stripe_subscription_id: null,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
       .eq('organization_id', organizationId);
 
-    // Limit or reset credits
+    await this.supabase
+      .from('organizations')
+      .update({ plan: freePlan.key, updated_at: new Date().toISOString() })
+      .eq('id', organizationId);
+
     const { data: wallet } = await this.supabase
       .from('credit_wallets')
       .select('balance')
@@ -395,8 +745,6 @@ export class StripeService {
       .maybeSingle();
 
     const current = wallet ? parseFloat(wallet.balance) : 0;
-    
-    // Safety caps: allow residual topups, but cap standard balance to Free grants
     const targetBalance = Math.min(current, parseFloat(String(freePlan.credits)));
 
     await this.supabase

@@ -125,6 +125,13 @@
         .pricing-card:nth-child(2) { animation-delay: 0.1s; }
         .pricing-card:nth-child(3) { animation-delay: 0.2s; }
 
+        .billing-note {
+            color: var(--text-sub);
+            font-size: 13px;
+            line-height: 1.45;
+            margin: 16px 0 0;
+        }
+
         /* FAQ SECTION */
         .faq-section {
             max-width: 800px;
@@ -235,8 +242,8 @@
     </nav>
 
     <header class="pricing-hero">
-        <h1>A plan for every<br>wave of creativity.</h1>
-        <p>Lovable-style credits, adapted for Huggy: AI generation plus built-in backend, auth, database, preview, hosting and deploy workflows.</p>
+        <h1>Simple plans for<br>serious builders.</h1>
+        <p>Start for free, publish with Pro, and scale with build credits, Huggy Cloud balance, storage and custom domains.</p>
 
         <div class="billing-toggle">
             <button class="toggle-btn active" onclick="setBilling('monthly')">Monthly</button>
@@ -245,179 +252,58 @@
     </header>
 
     <section class="pricing-grid">
-        <!-- PLAN 1: FREE -->
         <div class="pricing-card">
             <span class="card-name">Free</span>
             <div class="card-price">$0 <span>/mo</span></div>
-            <p class="card-desc">Discover the platform and construct public applications.</p>
+            <p class="card-desc">For discovering Huggy and building a first simple app.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    5 credits / day, max 30 / month
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    1 active project (Public-only)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    1 SaaS subdomain
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Economy models access
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Standard community support
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 credits / month</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 active project</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Live preview</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$1 Cloud balance included</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>0.1 GB database, 0.25 GB files, 1 GB bandwidth</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Simple database and auth</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Huggy subdomain + badge</li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Get started free</button>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=free')">Start free</button>
         </div>
 
-        <!-- PLAN 2: PRO -->
-        <div class="pricing-card">
-            <span class="card-name">Pro</span>
-            <div class="card-price" id="price-starter">$25 <span>/mo</span></div>
-            <p class="card-desc">For founders building production-ready apps with real backend services.</p>
-            <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    100 credits / month
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    10 active projects (Private)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    3 Custom domains included
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Economy + Standard models (Auto Mode)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Full code source export
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Supabase backend, auth and database
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Top-ups: $15 for 50 credits
-                </li>
-            </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Select Pro</button>
-        </div>
-
-        <!-- PLAN 3: PRO SCALE -->
         <div class="pricing-card featured">
-            <span class="featured-label">Best Seller</span>
-            <span class="card-name">Pro 400</span>
-            <div class="card-price" id="price-pro">$100 <span>/mo</span></div>
-            <p class="card-desc">For teams shipping multiple full-stack builds every month.</p>
+            <span class="featured-label">Most popular</span>
+            <span class="card-name">Pro</span>
+            <div class="card-price" id="price-pro">$25 <span>/mo</span></div>
+            <p class="card-desc">For creators, freelancers and founders who want to create, publish and sell apps.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    400 credits / month
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    25 active projects (Private)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    6 Custom domains included
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Economy + Standard + Pro models
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Advanced code & diagnostics agents
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Backend, database, storage and deployment workflows
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Monthly credit rollover while subscribed
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>150 credits / month</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 active projects</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$10 Cloud balance included</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 GB database, 5 GB files, 50 GB bandwidth</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Premium streaming and preview</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Custom domain and badge removal</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Deploy, export, versions, rollback</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Credit and Cloud top-ups</li>
             </ul>
-            <button class="card-cta btn-solid" onclick="navigate('/auth.html')">Go Pro Now</button>
+            <p class="billing-note" id="note-pro">Monthly billing. Annual saves $60/year.</p>
+            <button class="card-cta btn-solid" onclick="navigate('/auth.html?plan=pro')">Upgrade to Pro</button>
         </div>
 
-        <!-- PLAN 4: BUSINESS -->
         <div class="pricing-card">
-            <span class="card-name">Business</span>
-            <div class="card-price" id="price-studio">$50 <span>/mo</span></div>
-            <p class="card-desc">For organizations that need controls, roles and shared production workflows.</p>
+            <span class="card-name">Scale</span>
+            <div class="card-price" id="price-scale">$200 <span>/mo</span></div>
+            <p class="card-desc">For agencies, teams and startups building multiple apps at serious scale.</p>
             <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    100 credits / month
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    50 active projects (Private)
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    10 Custom domains included
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Premium models with cost guarantees
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Roles, security controls and shared templates
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Top-ups: $30 for 50 credits
-                </li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1,500 credits / month</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Unlimited active projects</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$75 Cloud balance included</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>20 GB database, 100 GB files, 500 GB bandwidth</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Multiple custom domains</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Team workspace and roles</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Advanced analytics and AI runs</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Priority generation and premium models</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Auto top-up and priority support</li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Select Business</button>
-        </div>
-
-        <!-- PLAN 5: ENTERPRISE -->
-        <div class="pricing-card">
-            <span class="card-name">Enterprise</span>
-            <div class="card-price" id="price-business">Custom</div>
-            <p class="card-desc">For volume pricing, advanced governance and dedicated support.</p>
-            <ul class="feature-list">
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Custom credit volume
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Enterprise SSO and controls
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Dedicated onboarding
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Audit logging & Multi-tenant roles
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    Priority VIP build queues
-                </li>
-                <li class="feature-item">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    180-day version history
-                </li>
-            </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html')">Select Business</button>
+            <p class="billing-note" id="note-scale">Monthly billing. Annual saves $480/year.</p>
+            <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=scale')">Upgrade to Scale</button>
         </div>
     </section>
 
@@ -430,7 +316,7 @@
                     <span>Can I cancel at any time?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
-                <div class="faq-a">Yes, Huggy is commitment-free. You can cancel your Pro or Business plan with a single click from your settings. You'll maintain access until the end of the current billing cycle.</div>
+                <div class="faq-a">Yes, Huggy is commitment-free. You can cancel your Pro or Scale plan from your settings and keep access until the end of the current billing cycle.</div>
             </div>
             <div class="faq-item">
                 <div class="faq-q">
@@ -577,24 +463,24 @@
         // Toggle Billing for Pricing Plans Comparison
         function setBilling(mode) {
             const buttons = document.querySelectorAll('.toggle-btn');
-            const priceStarter = document.getElementById('price-starter');
             const pricePro = document.getElementById('price-pro');
-            const priceStudio = document.getElementById('price-studio');
-            const priceBusiness = document.getElementById('price-business');
+            const priceScale = document.getElementById('price-scale');
+            const notePro = document.getElementById('note-pro');
+            const noteScale = document.getElementById('note-scale');
 
             buttons.forEach(b => b.classList.remove('active'));
             if (mode === 'monthly') {
                 buttons[0].classList.add('active');
-                if (priceStarter) priceStarter.innerHTML = '$25 <span>/mo</span>';
-                if (pricePro) pricePro.innerHTML = '$100 <span>/mo</span>';
-                if (priceStudio) priceStudio.innerHTML = '$50 <span>/mo</span>';
-                if (priceBusiness) priceBusiness.innerHTML = 'Custom';
+                if (pricePro) pricePro.innerHTML = '$25 <span>/mo</span>';
+                if (priceScale) priceScale.innerHTML = '$200 <span>/mo</span>';
+                if (notePro) notePro.textContent = 'Monthly billing. Annual saves $60/year.';
+                if (noteScale) noteScale.textContent = 'Monthly billing. Annual saves $480/year.';
             } else {
                 buttons[1].classList.add('active');
-                if (priceStarter) priceStarter.innerHTML = '$20 <span>/mo</span>';
-                if (pricePro) pricePro.innerHTML = '$80 <span>/mo</span>';
-                if (priceStudio) priceStudio.innerHTML = '$40 <span>/mo</span>';
-                if (priceBusiness) priceBusiness.innerHTML = 'Custom';
+                if (pricePro) pricePro.innerHTML = '$20 <span>/mo</span>';
+                if (priceScale) priceScale.innerHTML = '$160 <span>/mo</span>';
+                if (notePro) notePro.textContent = 'Billed $240/year. You save $60/year.';
+                if (noteScale) noteScale.textContent = 'Billed $1,920/year. You save $480/year.';
             }
         }
 

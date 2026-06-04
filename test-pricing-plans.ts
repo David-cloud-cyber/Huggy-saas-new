@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import {
+  PUBLIC_PRICING_PLAN_KEYS,
+  CLOUD_TOPUP_PRODUCTS,
+  SAAS_PLANS,
+  TOPUP_PRODUCTS,
+  getCloudUsageCategories,
+  getPlanConfig,
+  getPublicPlans,
+  isPaidPlanKey,
+  resolveCheckoutAmount,
+} from './src/services/billing-service.ts';
+import { MODEL_CREDIT_RATES, UserPlan } from './src/config/ai-models.ts';
+import { domainPlanLimits } from './src/services/domain-service.ts';
+
+const publicPlans = getPublicPlans();
+
+assert.deepEqual(Object.keys(publicPlans), ['free', 'pro', 'scale']);
+assert.deepEqual([...PUBLIC_PRICING_PLAN_KEYS], ['free', 'pro', 'scale']);
+
+assert.equal(SAAS_PLANS.free.credits, 10);
+assert.equal(SAAS_PLANS.free.maxProjects, 1);
+assert.equal(SAAS_PLANS.free.customDomains, 0);
+assert.equal(SAAS_PLANS.free.cloud.balanceUsd, 1);
+assert.equal(SAAS_PLANS.free.cloud.databaseStorageGb, 0.1);
+assert.equal(SAAS_PLANS.free.cloud.fileStorageGb, 0.25);
+
+assert.equal(SAAS_PLANS.pro.amount, 25);
+assert.equal(SAAS_PLANS.pro.annualAmount, 240);
+assert.equal(SAAS_PLANS.pro.annualMonthlyEquivalent, 20);
+assert.equal(SAAS_PLANS.pro.credits, 150);
+assert.equal(SAAS_PLANS.pro.maxProjects, 10);
+assert.equal(SAAS_PLANS.pro.customDomains, 1);
+assert.equal(SAAS_PLANS.pro.cloud.balanceUsd, 10);
+assert.equal(SAAS_PLANS.pro.cloud.aiAppBalanceUsd, 1);
+assert.equal(SAAS_PLANS.pro.cloud.databaseStorageGb, 1);
+assert.equal(SAAS_PLANS.pro.cloud.fileStorageGb, 5);
+assert.equal(SAAS_PLANS.pro.cloud.bandwidthGb, 50);
+assert.equal(SAAS_PLANS.pro.cloud.topupMinUsd, 10);
+
+assert.equal(SAAS_PLANS.scale.amount, 200);
+assert.equal(SAAS_PLANS.scale.annualAmount, 1920);
+assert.equal(SAAS_PLANS.scale.annualMonthlyEquivalent, 160);
+assert.equal(SAAS_PLANS.scale.credits, 1500);
+assert.equal(SAAS_PLANS.scale.maxProjects, 9999);
+assert.equal(SAAS_PLANS.scale.customDomains, 10);
+assert.equal(SAAS_PLANS.scale.cloud.balanceUsd, 75);
+assert.equal(SAAS_PLANS.scale.cloud.aiAppBalanceUsd, 10);
+assert.equal(SAAS_PLANS.scale.cloud.databaseStorageGb, 20);
+assert.equal(SAAS_PLANS.scale.cloud.fileStorageGb, 100);
+assert.equal(SAAS_PLANS.scale.cloud.bandwidthGb, 500);
+assert.equal(SAAS_PLANS.scale.cloud.autoTopupAvailable, true);
+
+assert.equal(SAAS_PLANS.enterprise.public, false);
+assert.equal((publicPlans as Record<string, unknown>).enterprise, undefined);
+assert.equal(getPlanConfig('business'), null);
+assert.equal(getPlanConfig('pro_400'), null);
+assert.equal(getPlanConfig('plan_business_100'), null);
+assert.equal(getPlanConfig('plan_scale')?.key, 'scale');
+
+assert.equal(resolveCheckoutAmount(SAAS_PLANS.pro, 'monthly').amount, 25);
+assert.equal(resolveCheckoutAmount(SAAS_PLANS.pro, 'annual').amount, 240);
+assert.equal(resolveCheckoutAmount(SAAS_PLANS.scale, 'monthly').amount, 200);
+assert.equal(resolveCheckoutAmount(SAAS_PLANS.scale, 'annual').amount, 1920);
+
+assert.equal(isPaidPlanKey('free'), false);
+assert.equal(isPaidPlanKey('pro'), true);
+assert.equal(isPaidPlanKey('scale'), true);
+assert.equal(isPaidPlanKey('enterprise'), true);
+
+assert.equal(TOPUP_PRODUCTS.some(item => String(item.plan) === 'business' || item.id.includes('business')), false);
+assert.equal(TOPUP_PRODUCTS.every(item => item.plan === 'pro' || item.plan === 'scale'), true);
+assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_pro_50')?.price, 10);
+assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_scale_100')?.price, 25);
+assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.amountUsd < 10), false);
+assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.id === 'cloud_topup_10'), true);
+assert.ok(getCloudUsageCategories().some(category => category.id === 'database_storage'));
+assert.ok(getCloudUsageCategories().some(category => category.id === 'file_storage'));
+assert.ok(getCloudUsageCategories().some(category => category.id === 'ai_app_usage'));
+
+assert.equal(domainPlanLimits.getCustomDomainLimit('free'), 0);
+assert.equal(domainPlanLimits.getCustomDomainLimit('pro'), 1);
+assert.equal(domainPlanLimits.getCustomDomainLimit('scale'), 10);
+assert.equal(domainPlanLimits.getCustomDomainLimit('enterprise'), 9999);
+
+const premiumRates = MODEL_CREDIT_RATES.filter(rate => rate.tier === 'Premium');
+assert.ok(premiumRates.length >= 1);
+assert.equal(premiumRates.every(rate => rate.availability === UserPlan.SCALE), true);
+
+console.log('pricing plans ok');

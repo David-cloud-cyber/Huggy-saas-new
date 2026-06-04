@@ -14,7 +14,7 @@ import {
 } from './ai-validator.ts';
 
 export interface RoutingContext {
-  plan: UserPlan | 'free' | 'pro' | 'business' | 'producer' | 'studio';
+  plan: UserPlan | 'free' | 'pro' | 'scale' | 'enterprise';
   mode: 'Auto' | 'Fast' | 'Balanced' | 'Pro' | 'Premium' | 'Max Quality' | 'Custom';
   userCredits: number;
   taskComplexity?: 'simple' | 'medium' | 'complex' | 'extreme';
@@ -134,8 +134,8 @@ export class ModelRouter {
     const tierValue = (p: string) => {
       const lower = p.toLowerCase();
       if (lower === 'enterprise') return 3;
-      if (lower === 'business' || lower === 'studio') return 2;
-      if (lower === 'pro' || lower === 'producer' || lower === 'starter') return 1;
+      if (lower === 'scale') return 2;
+      if (lower === 'pro') return 1;
       return 0;
     };
 

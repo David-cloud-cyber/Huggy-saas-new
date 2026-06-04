@@ -35,7 +35,17 @@ import {
 } from './src/config/ai-models.ts';
 import { CostEstimatorService, CreditWalletService, CreditLedgerService, CreditReservationService } from './src/services/credit-system.ts';
 import { DomainService, VercelDomainService } from './src/services/domain-service.ts';
-import { StripeService, SAAS_PLANS, TOPUP_PRODUCTS } from './src/services/billing-service.ts';
+import {
+  StripeService,
+  SAAS_PLANS,
+  TOPUP_PRODUCTS,
+  CLOUD_TOPUP_PRODUCTS,
+  getCloudUsageCategories,
+  getPlanConfig,
+  getPublicPlans,
+  isPaidPlanKey,
+  normalizePlanKey,
+} from './src/services/billing-service.ts';
 import { AuditLogService, BillingAlertService, UsageMeteringService, MemberLimitService } from './src/services/platform-support.ts';
 import { buildWorldClassUiPolicy } from './src/services/design-generation-policy.ts';
 import {
@@ -87,6 +97,13 @@ import {
   type UserIntentCategory,
 } from './src/services/intent-understanding.ts';
 import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
+import {
+  buildHuggyCloudSchemaName,
+  detectHuggyCloudRequirements,
+  hasHuggyCloudRequirement,
+  summarizeHuggyCloudRequirements,
+  type HuggyCloudRequirement,
+} from './src/services/huggy-cloud.ts';
 
 dotenv.config();
 
@@ -840,30 +857,68 @@ async function ensurePersonalOrganization(req: any, organizationId: string) {
   return organizationId;
 }
 
-function getUserProjectRole(req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
-  const metadata = {
-    ...(req.user?.user_metadata || {}),
-    ...(req.user?.app_metadata || {}),
-  };
-  const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
-  const candidates = [
-    metadata.project_role,
-    metadata.projectRole,
-    metadata.organization_role,
-    metadata.organizationRole,
-    metadata.role,
-    ...roles,
-  ]
-    .map(role => String(role || '').toLowerCase().trim())
-    .filter(Boolean);
+type ProjectRole = 'owner' | 'admin' | 'editor' | 'viewer';
 
-  for (const role of candidates) {
-    if (role === 'platform_admin' || role === 'owner' || role === 'admin') return role === 'owner' ? 'owner' : 'admin';
-    if (role === 'editor') return 'editor';
-    if (role === 'viewer') return 'viewer';
+function normalizeProjectRole(value: unknown): ProjectRole | null {
+  const role = String(value || '').toLowerCase().trim();
+  if (role === 'platform_admin' || role === 'admin') return 'admin';
+  if (role === 'owner') return 'owner';
+  if (role === 'editor' || role === 'member') return 'editor';
+  if (role === 'viewer' || role === 'read_only' || role === 'readonly') return 'viewer';
+  return null;
+}
+
+function isMissingMembershipTableError(error: any) {
+  return /project_members|organization_members|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error?.message || '');
+}
+
+async function lookupProjectMembershipRole(projectId: string, userId: string): Promise<ProjectRole | null> {
+  const client = requireSupabase('Project membership role lookup');
+  const { data, error } = await client
+    .from('project_members')
+    .select('role')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error && isMissingMembershipTableError(error)) return null;
+  if (error) throw new Error(`Supabase project membership lookup failed: ${error.message}`);
+  return normalizeProjectRole(data?.role);
+}
+
+async function lookupOrganizationMembershipRole(organizationId: string, userId: string): Promise<ProjectRole | null> {
+  const client = requireSupabase('Organization membership role lookup');
+  const { data, error } = await client
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error && isMissingMembershipTableError(error)) return null;
+  if (error) throw new Error(`Supabase organization membership lookup failed: ${error.message}`);
+  return normalizeProjectRole(data?.role);
+}
+
+async function resolveProjectRole(project: GeneratedProject, userId: string, req?: any): Promise<ProjectRole | null> {
+  if (!project || !userId) return null;
+  if (isPlatformAdmin(req)) return 'admin';
+  if (project.owner_id === userId || project.created_by === userId || (project as any).user_id === userId) return 'owner';
+  const projectRole = await lookupProjectMembershipRole(project.id, userId);
+  if (projectRole) return projectRole;
+  const organizationId = project.organization_id || '';
+  if (organizationId) {
+    const orgRole = await lookupOrganizationMembershipRole(organizationId, userId);
+    if (orgRole) return orgRole === 'owner' ? 'admin' : orgRole;
   }
+  return null;
+}
 
-  return 'owner';
+function getUserProjectRole(req: any, project?: GeneratedProject): ProjectRole {
+  const attachedRole = normalizeProjectRole((project as any)?.__huggy_project_role);
+  if (attachedRole) return attachedRole;
+  if (isPlatformAdmin(req)) return 'admin';
+  const userId = String(req.user?.id || '').trim();
+  if (project && userId && (project.owner_id === userId || project.created_by === userId || (project as any).user_id === userId)) return 'owner';
+  return 'viewer';
 }
 
 function isPlatformAdmin(req: any) {
@@ -878,8 +933,8 @@ function requirePlatformAdmin(req: any, res: any) {
   return false;
 }
 
-function requireProjectCapability(req: any, res: any, capability: 'build' | 'deploy' | 'secrets' | 'view') {
-  const role = getUserProjectRole(req);
+function requireProjectCapability(req: any, res: any, capability: 'build' | 'deploy' | 'secrets' | 'view', project?: GeneratedProject) {
+  const role = getUserProjectRole(req, project);
   const allowed: Record<string, string[]> = {
     view: ['owner', 'admin', 'editor', 'viewer'],
     build: ['owner', 'admin', 'editor'],
@@ -893,8 +948,8 @@ function requireProjectCapability(req: any, res: any, capability: 'build' | 'dep
   return true;
 }
 
-function hasProjectCapability(req: any, capability: 'build' | 'deploy' | 'secrets' | 'view') {
-  const role = getUserProjectRole(req);
+function hasProjectCapability(req: any, capability: 'build' | 'deploy' | 'secrets' | 'view', project?: GeneratedProject) {
+  const role = getUserProjectRole(req, project);
   const allowed: Record<string, string[]> = {
     view: ['owner', 'admin', 'editor', 'viewer'],
     build: ['owner', 'admin', 'editor'],
@@ -1684,7 +1739,7 @@ function getDefaultPublishedUrl(project: Pick<GeneratedProject, 'id' | 'slug'>):
 
 function isFreePlanKey(plan: string | null | undefined): boolean {
   const normalized = String(plan || 'free').trim().toLowerCase();
-  return !normalized || /^(free|starter|trial|sandbox)$/.test(normalized);
+  return !normalized || normalized === 'free';
 }
 
 function getProjectUpdatedAt(project: GeneratedProject, files: GeneratedFile[]): string | null {
@@ -3537,11 +3592,15 @@ async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
   return project;
 }
 
-async function loadProject(projectId: string, userId: string): Promise<GeneratedProject | null> {
+async function loadProject(projectId: string, userId: string, req?: any): Promise<GeneratedProject | null> {
   const client = requireSupabase('Project loading');
-  const { data, error } = await client.from('projects').select('*').eq('id', projectId).eq('owner_id', userId).maybeSingle();
+  const { data, error } = await client.from('projects').select('*').eq('id', projectId).maybeSingle();
   if (error) throw new Error(`Supabase project load failed: ${error.message}`);
-  return (data as GeneratedProject) || null;
+  if (!data) return null;
+  const project = data as GeneratedProject;
+  const role = await resolveProjectRole(project, userId, req);
+  if (!role) return null;
+  return { ...project, __huggy_project_role: role } as GeneratedProject;
 }
 
 async function loadProjectForAnalytics(projectId: string): Promise<GeneratedProject | null> {
@@ -3670,6 +3729,120 @@ async function saveAgentEvent(event: AgentEvent) {
 
 function isMissingAgentV2TableError(error: any) {
   return /agent_runs|agent_run_steps|agent_memories|agent_verifications|agent_runner_results|agent_research_results|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error?.message || '');
+}
+
+function isMissingHuggyCloudTableError(error: any) {
+  return /huggy_cloud_projects|huggy_cloud_migrations|huggy_cloud_resources|project_backend_requirements|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error?.message || '');
+}
+
+function publicHuggyCloudRequirementPayload(requirement: HuggyCloudRequirement) {
+  return {
+    needs_database: requirement.needs_database,
+    needs_auth: requirement.needs_auth,
+    needs_storage: requirement.needs_storage,
+    needs_edge_functions: requirement.needs_edge_functions,
+    needs_secrets: requirement.needs_secrets,
+    detected_from_prompt: requirement.detected_from_prompt,
+    recommended_mode: requirement.recommended_mode,
+    summary: requirement.summary,
+  };
+}
+
+async function upsertProjectBackendRequirements(project: GeneratedProject, prompt: string) {
+  const requirement = detectHuggyCloudRequirements(prompt);
+  if (!hasHuggyCloudRequirement(requirement)) return { requirement, cloudProject: null };
+
+  try {
+    const client = requireSupabase('Huggy Cloud requirement persistence');
+    const now = new Date().toISOString();
+    const requirementPayload = publicHuggyCloudRequirementPayload(requirement);
+    const requirementsRow = {
+      organization_id: project.organization_id,
+      project_id: project.id,
+      needs_database: requirementPayload.needs_database,
+      needs_auth: requirementPayload.needs_auth,
+      needs_storage: requirementPayload.needs_storage,
+      needs_edge_functions: requirementPayload.needs_edge_functions,
+      needs_secrets: requirementPayload.needs_secrets,
+      detected_from_prompt: requirementPayload.detected_from_prompt,
+      recommended_mode: requirementPayload.recommended_mode,
+      status: 'detected',
+      updated_at: now,
+    };
+    const { error: requirementsError } = await client
+      .from('project_backend_requirements')
+      .upsert([requirementsRow], { onConflict: 'project_id' });
+    if (requirementsError) throw requirementsError;
+
+    const cloudProjectRow = {
+      organization_id: project.organization_id,
+      project_id: project.id,
+      provider: 'huggy_cloud',
+      mode: requirement.recommended_mode,
+      status: 'planned',
+      region: 'auto',
+      schema_name: buildHuggyCloudSchemaName(project.id),
+      public_runtime_config: {
+        backend_status: 'planned',
+        backend_mode: requirement.recommended_mode,
+        backend_summary: requirement.summary,
+        managed_by: 'huggy_cloud',
+      },
+      updated_at: now,
+    };
+    const { data: cloudProject, error: cloudProjectError } = await client
+      .from('huggy_cloud_projects')
+      .upsert([cloudProjectRow], { onConflict: 'project_id' })
+      .select('id,project_id,provider,mode,status,region,schema_name,public_runtime_config,created_at,updated_at')
+      .maybeSingle();
+    if (cloudProjectError) throw cloudProjectError;
+
+    return { requirement, cloudProject: cloudProject || null };
+  } catch (error: any) {
+    if (isMissingHuggyCloudTableError(error)) {
+      console.warn('[huggy:cloud_requirement_persistence_skipped]', { message: error.message });
+      return { requirement, cloudProject: null };
+    }
+    throw error;
+  }
+}
+
+async function loadProjectHuggyCloud(projectId: string) {
+  try {
+    const client = requireSupabase('Huggy Cloud project view');
+    const [requirementsResult, cloudProjectResult, resourcesResult] = await Promise.all([
+      client
+        .from('project_backend_requirements')
+        .select('needs_database,needs_auth,needs_storage,needs_edge_functions,needs_secrets,detected_from_prompt,recommended_mode,status,updated_at')
+        .eq('project_id', projectId)
+        .maybeSingle(),
+      client
+        .from('huggy_cloud_projects')
+        .select('id,project_id,provider,mode,status,region,schema_name,public_runtime_config,created_at,updated_at')
+        .eq('project_id', projectId)
+        .maybeSingle(),
+      client
+        .from('huggy_cloud_resources')
+        .select('id,resource_type,resource_name,schema_name,table_name,status,metadata,created_at,updated_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false }),
+    ]);
+
+    for (const result of [requirementsResult, cloudProjectResult, resourcesResult]) {
+      if (result.error) throw result.error;
+    }
+
+    return {
+      requirements: requirementsResult.data || null,
+      project: cloudProjectResult.data || null,
+      resources: resourcesResult.data || [],
+    };
+  } catch (error: any) {
+    if (isMissingHuggyCloudTableError(error)) {
+      return { requirements: null, project: null, resources: [] };
+    }
+    throw error;
+  }
 }
 
 const PUBLIC_MODEL_ROUTING_FIELD_RE = /^(model|model_id|model_name|selected_model|requested_model|routed_model|provider_model|selectedModel|requestedModel|auto_routed|task_complexity|routing_mode|selected_model_policy|provider)$/i;
@@ -4873,16 +5046,79 @@ function getDbHelpers() {
   };
 }
 
+async function loadCloudWalletSnapshot(organizationId: string, plan: ReturnType<typeof getPlanConfig>) {
+  const fallbackCloud = plan?.cloud || SAAS_PLANS.free.cloud;
+  const snapshot = {
+    balance_usd: fallbackCloud.balanceUsd,
+    included_balance_usd: fallbackCloud.balanceUsd,
+    ai_app_balance_usd: fallbackCloud.aiAppBalanceUsd,
+    database_storage_gb: fallbackCloud.databaseStorageGb,
+    file_storage_gb: fallbackCloud.fileStorageGb,
+    bandwidth_gb: fallbackCloud.bandwidthGb,
+    topup_min_usd: fallbackCloud.topupMinUsd,
+    auto_topup_available: fallbackCloud.autoTopupAvailable,
+    auto_topup_enabled: false,
+    usage_categories: getCloudUsageCategories(),
+  };
+
+  try {
+    const client = requireSupabase('Cloud wallet listing');
+    const { data, error } = await client
+      .from('cloud_wallets')
+      .select('balance_usd,included_balance_usd,ai_app_balance_usd,auto_topup_enabled')
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data) {
+      snapshot.balance_usd = Number(data.balance_usd ?? snapshot.balance_usd);
+      snapshot.included_balance_usd = Number(data.included_balance_usd ?? snapshot.included_balance_usd);
+      snapshot.ai_app_balance_usd = Number(data.ai_app_balance_usd ?? snapshot.ai_app_balance_usd);
+      snapshot.auto_topup_enabled = Boolean(data.auto_topup_enabled);
+    }
+  } catch (error: any) {
+    console.warn('[huggy:cloud_wallet_snapshot_fallback]', { message: error?.message || String(error) });
+  }
+
+  return snapshot;
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // 1. BILLING ENDPOINTS
 // ──────────────────────────────────────────────────────────────────────
 
 // GET /billing/plans
-app.get('/api/billing/plans', (req, res) => {
+app.get('/api/billing/plans', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  let enterpriseVisible = false;
+
+  if (token) {
+    try {
+      const authClient = getSupabaseAuthClient();
+      const { data } = await authClient.auth.getUser(token);
+      const userId = data?.user?.id;
+      if (userId) {
+        const plan = normalizePlanKey(await getOrganizationPlan(userId).catch(() => 'free')) || 'free';
+        enterpriseVisible = isPaidPlanKey(plan);
+      }
+    } catch {
+      enterpriseVisible = false;
+    }
+  }
+
   res.json({
     success: true,
-    plans: SAAS_PLANS,
-    topups: TOPUP_PRODUCTS
+    plans: getPublicPlans(),
+    topups: TOPUP_PRODUCTS,
+    cloud_topups: CLOUD_TOPUP_PRODUCTS,
+    cloud_usage_categories: getCloudUsageCategories(),
+    enterprise: enterpriseVisible ? SAAS_PLANS.enterprise : null,
+    billing: {
+      annual_discount_percent: 20,
+      public_plan_keys: ['free', 'pro', 'scale'],
+    },
   });
 });
 
@@ -4891,15 +5127,21 @@ app.get('/api/billing/wallet', async (req, res) => {
   const orgId = getUserOrgId(req);
   const helpers = getDbHelpers();
   const balance = await helpers.getWallet(orgId);
+  const planKey = normalizePlanKey(await getOrganizationPlan(orgId).catch(() => 'free')) || 'free';
+  const plan = getPlanConfig(planKey) || SAAS_PLANS.free;
+  const cloud = await loadCloudWalletSnapshot(orgId, plan);
+
   res.json({
     success: true,
     organization_id: orgId,
+    plan: plan.key,
     balance,
     buckets: {
-      monthly_credits: null,
-      daily_promo_credits: null,
+      monthly_credits: plan.credits,
+      daily_promo_credits: plan.dailyCredits ?? null,
       topup_credits: null,
     },
+    cloud,
   });
 });
 
@@ -4914,7 +5156,7 @@ app.get('/api/billing/ledger', async (req, res) => {
 
 // POST /billing/checkout/subscription
 app.post('/api/billing/checkout/subscription', async (req, res) => {
-  const { planKey, email, successUrl, cancelUrl } = req.body;
+  const { planKey, email, successUrl, cancelUrl, billingInterval } = req.body;
   const orgId = req.body.orgId || DEFAULT_ORG_ID;
 
   try {
@@ -4924,7 +5166,8 @@ app.post('/api/billing/checkout/subscription', async (req, res) => {
       email || 'test@huggy.app',
       planKey || 'pro',
       successUrl || `${req.protocol}://${req.get('host')}/settings?success=true`,
-      cancelUrl || `${req.protocol}://${req.get('host')}/settings?cancel=true`
+      cancelUrl || `${req.protocol}://${req.get('host')}/settings?cancel=true`,
+      billingInterval === 'annual' ? 'annual' : 'monthly'
     );
     res.json({ success: true, url: redirectUrl });
   } catch (error: any) {
@@ -5029,6 +5272,26 @@ app.post('/api/ai/route', async (req, res) => {
     res.json({ success: true, routed_model: targetModel });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// POST /billing/checkout/cloud-topup
+app.post('/api/billing/checkout/cloud-topup', async (req, res) => {
+  const { productId, email, successUrl, cancelUrl } = req.body;
+  const orgId = req.body.orgId || getUserOrgId(req);
+
+  try {
+    const billing = new StripeService(getSupabase());
+    const redirectUrl = await billing.createCloudTopupCheckout(
+      orgId,
+      email || (req as any).user?.email || 'test@huggy.app',
+      productId || 'cloud_topup_10',
+      successUrl || `${req.protocol}://${req.get('host')}/settings?cloud_success=true`,
+      cancelUrl || `${req.protocol}://${req.get('host')}/settings?cloud_cancel=true`
+    );
+    res.json({ success: true, url: redirectUrl });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -5179,6 +5442,9 @@ app.get('/api/users/me/ai-usage', async (req: any, res) => {
   const helpers = getDbHelpers();
   const client = requireSupabase('AI usage');
   const balance = await helpers.getWallet(userId);
+  const planKey = normalizePlanKey(await getOrganizationPlan(userId).catch(() => 'free')) || 'free';
+  const plan = getPlanConfig(planKey) || SAAS_PLANS.free;
+  const cloud = await loadCloudWalletSnapshot(userId, plan);
 
   let history: any[] = [];
   try {
@@ -5219,9 +5485,10 @@ app.get('/api/users/me/ai-usage', async (req: any, res) => {
     success: true,
     wallet: {
       balance,
-      monthly_credits: null,
-      daily_promo_credits: null,
+      monthly_credits: plan.credits,
+      daily_promo_credits: plan.dailyCredits ?? null,
       topup_credits: null,
+      cloud,
     },
     history,
   });
@@ -5463,6 +5730,12 @@ app.post('/api/projects', async (req: any, res: any) => {
     const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
     project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
     await saveProject(project, files);
+    const huggyCloud = prompt
+      ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
+        console.warn('[huggy:cloud_requirement_create_skipped]', { message: error?.message || String(error) });
+        return null;
+      })
+      : null;
     await upsertUserWorkspaceState(userId, {
       last_project_id: project.id,
       dashboard_draft_prompt: '',
@@ -5490,6 +5763,12 @@ app.post('/api/projects', async (req: any, res: any) => {
         status: project.preview_status,
         html: project.preview_html,
       },
+      huggy_cloud: huggyCloud
+        ? {
+          requirements: publicHuggyCloudRequirementPayload(huggyCloud.requirement),
+          project: huggyCloud.cloudProject,
+        }
+        : undefined,
     });
   } catch (error: any) {
     const message = error?.statusCode === 503
@@ -5672,7 +5951,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
-  if (!requireProjectCapability(req, res, 'view')) return;
+  if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
   }
@@ -5692,6 +5971,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
+  const huggyCloudPlan = reliability.should_mutate_files
+    ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
+      console.warn('[huggy:cloud_requirement_generate_skipped]', { message: error?.message || String(error) });
+      return null;
+    })
+    : null;
   const walletForRouting = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
   let modelRouting;
   try {
@@ -5790,7 +6075,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
   }
 
-  if (decision.requiresFileChanges && !hasProjectCapability(req, 'build')) {
+  if (decision.requiresFileChanges && !hasProjectCapability(req, 'build', project)) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
     return res.status(403).json({ success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
   }
@@ -6007,6 +6292,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       verification: verificationSummary,
       reliability,
       reliability_summary: reliabilitySummary,
+      huggy_cloud: huggyCloudPlan
+        ? {
+          requirements: publicHuggyCloudRequirementPayload(huggyCloudPlan.requirement),
+          project: huggyCloudPlan.cloudProject,
+        }
+        : undefined,
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       preview: {
         status: pipeline.status,
@@ -6049,7 +6340,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
-  if (!requireProjectCapability(req, res, 'view')) return;
+  if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`stream:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
   }
@@ -6357,6 +6648,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
+  const huggyCloudPlan = reliability.should_mutate_files
+    ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
+      console.warn('[huggy:cloud_requirement_stream_skipped]', { message: error?.message || String(error) });
+      return null;
+    })
+    : null;
   const shouldStreamAgentTrace = reliability.should_mutate_files || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
   shouldEmitWorkingTicks = reliability.should_mutate_files || decision.intent === 'plan';
   const walletForRouting = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
@@ -6464,8 +6761,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_detail: decision.userVisibleReason,
     });
   }
+  if (shouldStreamAgentTrace && huggyCloudPlan && hasHuggyCloudRequirement(huggyCloudPlan.requirement)) {
+    await send('backend_requirements_detected', streamCopy('Backend Huggy Cloud detecte.', 'Huggy Cloud backend detected.'), {
+      requirements: publicHuggyCloudRequirementPayload(huggyCloudPlan.requirement),
+      cloud_project: huggyCloudPlan.cloudProject,
+      summary: summarizeHuggyCloudRequirements(huggyCloudPlan.requirement),
+      step_label: streamCopy('Huggy Cloud prevu.', 'Huggy Cloud planned.'),
+      step_detail: streamCopy('Je garde le backend gere par Huggy au lieu de demander une configuration Supabase manuelle.', 'I will use Huggy-managed backend instead of asking for manual Supabase setup.'),
+    });
+  }
 
-  if (decision.requiresFileChanges && !hasProjectCapability(req, 'build')) {
+  if (decision.requiresFileChanges && !hasProjectCapability(req, 'build', project)) {
     await send('error', 'Action unavailable with your current project role.', {
       code: 'PermissionDenied',
       diagnostic_code: 'PERMISSION_DENIED',
@@ -7135,6 +7441,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       errors: pipeline.errors,
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       research: researchResult ? summarizeResearchForMemory(researchResult) : null,
+      huggy_cloud: huggyCloudPlan
+        ? {
+          requirements: publicHuggyCloudRequirementPayload(huggyCloudPlan.requirement),
+          project: huggyCloudPlan.cloudProject,
+        }
+        : undefined,
       quality: qualitySummary,
       reliability,
       reliability_summary: reliabilitySummary,
@@ -7418,7 +7730,7 @@ app.post('/api/projects/:id/versions/:versionId/rollback', async (req: any, res:
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (!requireProjectCapability(req, res, 'build')) return;
+  if (!requireProjectCapability(req, res, 'build', project)) return;
   const versions = await listProjectVersions(project.id);
   const version = versions.find((item: any) => item.id === req.params.versionId);
   if (!version) return res.status(404).json({ success: false, error: 'Version not found.' });
@@ -7449,6 +7761,7 @@ app.get('/api/projects/:id/database', async (req: any, res: any) => {
   const { data: integrations = [] } = await client.from('project_integrations').select('*').eq('project_id', project.id).order('updated_at', { ascending: false });
   const { data: assets = [] } = await client.from('project_assets').select('id, name, url, kind, created_at').eq('project_id', project.id).order('created_at', { ascending: false });
   const { data: activity = [] } = await client.from('agent_events').select('event_type, message, created_at').eq('project_id', project.id).order('created_at', { ascending: false }).limit(8);
+  const huggyCloud = await loadProjectHuggyCloud(project.id);
   const tableMatches = [...(schemaFile?.content || '').matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-zA-Z0-9_]+)/gi)];
   const tables = tableMatches.length
     ? tableMatches.map(match => ({ name: match[1], rows: 0, source: 'supabase/schema.sql', columns: [] }))
@@ -7457,8 +7770,18 @@ app.get('/api/projects/:id/database', async (req: any, res: any) => {
     success: true,
     database: {
       project_id: project.id,
-      backend_status: schemaFile ? 'schema_generated' : 'waiting_for_schema',
-      mode: 'shared_supabase_project',
+      backend_status: huggyCloud.project?.status || (schemaFile ? 'schema_generated' : 'waiting_for_schema'),
+      mode: huggyCloud.project?.mode || huggyCloud.requirements?.recommended_mode || 'shared_supabase_project',
+      cloud: {
+        provider: huggyCloud.project?.provider || 'huggy_cloud',
+        status: huggyCloud.project?.status || (huggyCloud.requirements ? 'detected' : 'not_detected'),
+        mode: huggyCloud.project?.mode || huggyCloud.requirements?.recommended_mode || 'shared',
+        region: huggyCloud.project?.region || 'auto',
+        schema_name: huggyCloud.project?.schema_name || (huggyCloud.requirements ? buildHuggyCloudSchemaName(project.id) : null),
+        requirements: huggyCloud.requirements,
+        resources: huggyCloud.resources,
+        runtime_config: huggyCloud.project?.public_runtime_config || {},
+      },
       rls_status: 'enabled_required',
       last_sync_at: project.updated_at,
       tables,
@@ -7495,7 +7818,7 @@ app.post('/api/projects/:id/database/secrets', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (!requireProjectCapability(req, res, 'secrets')) return;
+  if (!requireProjectCapability(req, res, 'secrets', project)) return;
   if (!enforceRateLimit(`secret:${userId}`, 20, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many secret updates.' });
   }
@@ -7507,7 +7830,7 @@ app.post('/api/projects/:id/external-keys', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (!requireProjectCapability(req, res, 'secrets')) return;
+  if (!requireProjectCapability(req, res, 'secrets', project)) return;
   const keys = Array.isArray(req.body?.keys) ? req.body.keys : [];
   const saved = [];
   for (const item of keys) {
@@ -7520,7 +7843,7 @@ app.delete('/api/projects/:id/database/secrets/:secretId', async (req: any, res:
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (!requireProjectCapability(req, res, 'secrets')) return;
+  if (!requireProjectCapability(req, res, 'secrets', project)) return;
   const client = requireSupabase('Project secret deletion');
   const { error } = await client.from('project_secrets').delete().eq('id', req.params.secretId).eq('project_id', project.id);
   if (error) return res.status(500).json({ success: false, error: error.message });
@@ -7554,7 +7877,7 @@ app.post('/api/projects/:id/assets', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  if (!requireProjectCapability(req, res, 'build')) return;
+  if (!requireProjectCapability(req, res, 'build', project)) return;
 
   const client = requireSupabase('Project asset persistence');
   const id = randomUUID();
@@ -7638,8 +7961,12 @@ app.get('/api/projects/:id/export', async (req: any, res: any) => {
 });
 
 // GET /projects/:id/domains
-app.get('/api/projects/:id/domains', async (req, res) => {
+app.get('/api/projects/:id/domains', async (req: any, res) => {
+  const userId = getUserOrgId(req);
   const projectId = req.params.id;
+  const project = await loadProject(projectId, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
   const client = requireSupabase('Domain listing');
   const { data, error } = await client.from('domains').select('*').eq('project_id', projectId).neq('status', 'removed');
   if (error) return res.status(500).json({ success: false, error: error.message });
@@ -7648,13 +7975,17 @@ app.get('/api/projects/:id/domains', async (req, res) => {
 
 // POST /projects/:id/domains
 app.post('/api/projects/:id/domains', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
   const projectId = req.params.id;
-  const { domain, type, orgId = DEFAULT_ORG_ID, plan = 'pro' } = req.body;
+  const { domain, type, plan = 'pro' } = req.body;
 
   try {
+    const project = await loadProject(projectId, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(requireSupabase('Domain creation'), vercelProxy);
-    const records = await domainService.registerDomain(orgId, projectId, domain, type || 'custom', plan as any);
+    const records = await domainService.registerDomain(project.organization_id, projectId, domain, type || 'custom', plan as any);
     return res.json({ success: true, domain: records });
   } catch (err: any) {
     res.status(400).json({ success: false, message: err.message });
@@ -7666,11 +7997,15 @@ function PARTS_RESERVED(sub: string): boolean {
 }
 
 // POST /projects/:id/domains/:domainId/verify
-app.post('/api/projects/:id/domains/:domainId/verify', async (req, res) => {
+app.post('/api/projects/:id/domains/:domainId/verify', async (req: any, res) => {
+  const userId = getUserOrgId(req);
   const projectId = req.params.id;
   const domainId = req.params.domainId;
 
   try {
+    const project = await loadProject(projectId, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(requireSupabase('Domain verification'), vercelProxy);
     const result = await domainService.verifyDnsRecords(projectId, domainId);
@@ -7681,11 +8016,15 @@ app.post('/api/projects/:id/domains/:domainId/verify', async (req, res) => {
 });
 
 // DELETE /projects/:id/domains/:domainId
-app.delete('/api/projects/:id/domains/:domainId', async (req, res) => {
+app.delete('/api/projects/:id/domains/:domainId', async (req: any, res) => {
+  const userId = getUserOrgId(req);
   const projectId = req.params.id;
   const domainId = req.params.domainId;
 
   try {
+    const project = await loadProject(projectId, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(requireSupabase('Domain deletion'), vercelProxy);
     await domainService.removeDomain(projectId, domainId);
@@ -7696,11 +8035,15 @@ app.delete('/api/projects/:id/domains/:domainId', async (req, res) => {
 });
 
 // PATCH /projects/:id/domains/:domainId/primary
-app.patch('/api/projects/:id/domains/:domainId/primary', async (req, res) => {
+app.patch('/api/projects/:id/domains/:domainId/primary', async (req: any, res) => {
+  const userId = getUserOrgId(req);
   const projectId = req.params.id;
   const domainId = req.params.domainId;
 
   try {
+    const project = await loadProject(projectId, userId);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(requireSupabase('Primary domain update'), vercelProxy);
     await domainService.setPrimaryDomain(projectId, domainId);
@@ -7735,7 +8078,6 @@ async function publishProjectSnapshot(req: any, res: any) {
   const userId = getUserOrgId(req);
   const { commitHash, branch = 'main', userCredits = 100 } = req.body || {};
   try {
-    if (!requireProjectCapability(req, res, 'deploy')) return;
     if (!enforceRateLimit(`publish:${userId}`, 6, 60_000)) {
       return res.status(429).json({
         success: false,
@@ -7762,6 +8104,7 @@ async function publishProjectSnapshot(req: any, res: any) {
         suggested_action: 'open_project',
       });
     }
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
 
     const context = await createPublishContext(project);
     const publishStatus = buildPublishStatus(context);
