@@ -808,7 +808,7 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
   return card;
 }
 
-function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
+function setMessageShimmer(card: HTMLElement | null, label = 'Thinking', withTimer = true) {
   if (!card) return;
   ensureChatShimmerStyle();
   const id = messageHandleId(card);
@@ -817,7 +817,7 @@ function setMessageShimmer(card: HTMLElement | null, label = 'Thinking') {
   }
   card.classList.add('message-card-shimmer');
   card.setAttribute('aria-busy', 'true');
-  if (isGenerating) {
+  if (isGenerating && withTimer) {
     if (!card.dataset.workingStartedAt) card.dataset.workingStartedAt = String(Date.now());
     activeWorkingCard = card;
     if (workingTimer === null) {
@@ -2798,9 +2798,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const speaksFrench = isLikelyFrenchText(prompt);
   const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const status = quickConversation ? null : appendMessage('assistant', '');
-  if (!quickConversation) {
-    setMessageShimmer(status, initialLabel);
+  const status = appendMessage('assistant', '');
+  if (quickConversation) {
+    setMessageShimmer(status, speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...', false);
+  } else {
+    setMessageShimmer(status, initialLabel, true);
     startWorkingTimer(status, initialLabel);
   }
   let generationTouchesPreview = false;

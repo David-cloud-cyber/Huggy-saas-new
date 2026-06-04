@@ -51,6 +51,7 @@ type ModelRateResponse = {
 let settingsStyleInstalled = false;
 let settingsBound = false;
 let aiUsageLoaded = false;
+const SETTINGS_MANAGED_VERSION = '2026-06-04';
 
 const tabAliases: Record<SettingsTab, string> = {
   profile: 'profil',
@@ -499,6 +500,9 @@ export function ensureSettingsPanel() {
     overlay.setAttribute('aria-hidden', 'true');
     document.body.appendChild(overlay);
   }
+  overlay.classList.add('settings-overlay');
+  overlay.dataset.huggySettingsManaged = SETTINGS_MANAGED_VERSION;
+  overlay.setAttribute('aria-hidden', overlay.classList.contains('open') ? 'false' : 'true');
 
   let panel = document.getElementById('settings-panel') as HTMLElement | null;
   if (!panel) {
@@ -512,6 +516,19 @@ export function ensureSettingsPanel() {
   } else {
     panel.classList.add('settings-panel');
     panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
+  }
+  panel.dataset.huggySettingsManaged = SETTINGS_MANAGED_VERSION;
+  panel.setAttribute('aria-label', 'Settings');
+
+  const hasManagedMarkup =
+    Boolean(panel.querySelector('[data-settings-close]')) &&
+    Boolean(panel.querySelector('.settings-content')) &&
+    Boolean(panel.querySelector('#tab-ia'));
+
+  if (!hasManagedMarkup) {
+    panel.innerHTML = settingsMarkup();
+    aiUsageLoaded = false;
+  } else {
     ensureAiUsageTab(panel);
   }
 
@@ -552,6 +569,10 @@ export function closeSettings() {
 }
 
 function bindSettingsPanel() {
+  (window as any).openSettings = openSettings;
+  (window as any).closeSettings = closeSettings;
+  (window as any).ensureSettingsPanel = ensureSettingsPanel;
+
   if (settingsBound) return;
   settingsBound = true;
   document.addEventListener('click', event => {
@@ -577,9 +598,6 @@ function bindSettingsPanel() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') closeSettings();
   });
-
-  (window as any).openSettings = openSettings;
-  (window as any).closeSettings = closeSettings;
 }
 
 function formatCredits(value: unknown) {

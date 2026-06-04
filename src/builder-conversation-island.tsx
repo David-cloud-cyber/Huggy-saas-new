@@ -1372,7 +1372,7 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
   return (
     <div className="huggy-live-status" aria-live="polite">
       <span className="huggy-live-dot" aria-hidden="true" />
-      <span className="huggy-live-text">{headline}</span>
+      <span className="huggy-live-text"><ShiningText text={headline} /></span>
       {showDetail ? <span className="huggy-live-detail">· {cleanDetail}</span> : null}
     </div>
   );
