@@ -2648,8 +2648,100 @@ function buildExistingFilesContextForGeneration(files: GeneratedFile[]) {
   return chunks.join('\n\n') || summarizeProjectFilesForAgent(files);
 }
 
-function agentTextModel(modelId: unknown) {
-  return modelId && modelId !== 'auto' ? normalizeProviderModelForBackend(modelId) : DEFAULT_PROVIDER_MODEL_ID;
+type AgentTaskComplexity = NonNullable<RoutingContext['taskComplexity']>;
+
+function inferAgentTaskComplexity(prompt: string, decision: IntentDecision, files: GeneratedFile[] = []): AgentTaskComplexity {
+  const text = String(prompt || '').toLowerCase();
+  const riskyTerms = [
+    'auth', 'authentication', 'login', 'signup', 'supabase', 'database', 'schema',
+    'migration', 'stripe', 'billing', 'payment', 'paiement', 'credits', 'crédits',
+    'deploy', 'publish', 'vercel', 'railway', 'domain', 'domaine', 'seo',
+    'analytics', 'security', 'rls', 'role', 'permission', 'api externe',
+    'external api', 'refactor', 'refactorise', 'multi screen', 'plusieurs ecrans',
+    'plusieurs écrans',
+  ];
+  const extremeSignals = [
+    'full stack', 'production', 'auth', 'billing', 'database', 'stripe', 'supabase',
+    'multi-tenant', 'marketplace', 'dashboard complet', 'admin panel',
+  ].filter(term => text.includes(term)).length;
+
+  if (
+    decision.selectedModelPolicy === 'premium'
+    || text.length > 1800
+    || (decision.autoPlanRequired && extremeSignals >= 3)
+  ) {
+    return 'extreme';
+  }
+
+  if (
+    decision.selectedModelPolicy === 'balanced'
+    || decision.autoPlanRequired
+    || decision.intent === 'debug_fix'
+    || decision.intent === 'build'
+    || riskyTerms.some(term => text.includes(term))
+    || files.length > 10
+    || text.length > 900
+  ) {
+    return 'complex';
+  }
+
+  if (
+    decision.intent === 'plan'
+    || decision.intent === 'edit'
+    || decision.intent === 'verify'
+    || text.length > 320
+    || files.length > 0
+  ) {
+    return 'medium';
+  }
+
+  return 'simple';
+}
+
+function routingModeForPolicy(policy?: IntentDecision['selectedModelPolicy']): RoutingContext['mode'] {
+  if (policy === 'economy') return 'Fast';
+  if (policy === 'balanced') return 'Balanced';
+  if (policy === 'premium') return 'Premium';
+  return 'Auto';
+}
+
+async function resolveAgentProviderModel(input: {
+  modelId?: unknown;
+  project: GeneratedProject;
+  prompt: string;
+  decision: IntentDecision;
+  files?: GeneratedFile[];
+  userCredits?: number;
+  plan?: string;
+}): Promise<{ model: AllowedModelId; autoRouted: boolean; complexity: AgentTaskComplexity; mode: RoutingContext['mode']; plan: RoutingContext['plan']; credits: number }> {
+  if (input.modelId && input.modelId !== 'auto') {
+    const model = normalizeProviderModelForBackend(input.modelId);
+    validateAllowedModel(model);
+    return {
+      model,
+      autoRouted: false,
+      complexity: inferAgentTaskComplexity(input.prompt, input.decision, input.files || []),
+      mode: 'Custom',
+      plan: (input.plan || 'free') as RoutingContext['plan'],
+      credits: Number.isFinite(Number(input.userCredits)) ? Number(input.userCredits) : FALLBACK_WALLET_CREDITS,
+    };
+  }
+
+  const plan = (input.plan || await getOrganizationPlan(input.project.organization_id).catch(() => 'free')) as RoutingContext['plan'];
+  const credits = Number.isFinite(Number(input.userCredits))
+    ? Number(input.userCredits)
+    : await getDbHelpers().getWallet(input.project.organization_id).catch(() => FALLBACK_WALLET_CREDITS);
+  const complexity = inferAgentTaskComplexity(input.prompt, input.decision, input.files || []);
+  const mode = routingModeForPolicy(input.decision.selectedModelPolicy);
+  const model = await modelRouter.selectModel({
+    plan,
+    mode,
+    userCredits: credits,
+    taskComplexity: complexity,
+    requiredCapabilities: {},
+  });
+  validateAllowedModel(model);
+  return { model, autoRouted: true, complexity, mode, plan, credits };
 }
 
 function buildAgentTextMessages(input: {
@@ -2701,6 +2793,8 @@ async function createAgentTextResponse(input: {
   files: GeneratedFile[];
   decision: IntentDecision;
   modelId?: unknown;
+  userCredits?: number;
+  plan?: string;
   researchContext?: string;
 }): Promise<{ text: string; model: string; cost_usd: number }> {
   const { project, prompt, files, decision, researchContext } = input;
@@ -2728,7 +2822,15 @@ async function createAgentTextResponse(input: {
     throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live AI responses.');
   }
 
-  const selectedModel = agentTextModel(input.modelId);
+  const selectedModel = (await resolveAgentProviderModel({
+    modelId: input.modelId,
+    project,
+    prompt,
+    decision,
+    files,
+    userCredits: input.userCredits,
+    plan: input.plan,
+  })).model;
   validateAllowedModel(selectedModel);
 
   try {
@@ -2763,6 +2865,8 @@ async function streamAgentTextResponse(input: {
   files: GeneratedFile[];
   decision: IntentDecision;
   modelId?: unknown;
+  userCredits?: number;
+  plan?: string;
   researchContext?: string;
   onToken?: (chunk: string, meta: { index: number; model: string }) => Promise<void> | void;
 }): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
@@ -2791,7 +2895,15 @@ async function streamAgentTextResponse(input: {
     throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live AI responses.');
   }
 
-  const selectedModel = agentTextModel(input.modelId);
+  const selectedModel = (await resolveAgentProviderModel({
+    modelId: input.modelId,
+    project,
+    prompt,
+    decision,
+    files,
+    userCredits: input.userCredits,
+    plan: input.plan,
+  })).model;
   validateAllowedModel(selectedModel);
   let text = '';
   let model: string = selectedModel;
@@ -3191,9 +3303,13 @@ function createZipBuffer(files: GeneratedFile[]): Buffer {
 }
 
 async function generateFilesWithAi(input: {
+  project?: GeneratedProject;
   projectName: string;
   prompt: string;
+  decision?: IntentDecision;
   modelId?: string;
+  userCredits?: number;
+  plan?: string;
   existingFiles: GeneratedFile[];
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(getOpenRouterApiKey());
@@ -3201,9 +3317,19 @@ async function generateFilesWithAi(input: {
     throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
   }
 
-  const selectedModel = input.modelId && input.modelId !== 'auto'
-    ? normalizeProviderModelForBackend(input.modelId)
-    : DEFAULT_PROVIDER_MODEL_ID;
+  const selectedModel = input.project && input.decision
+    ? (await resolveAgentProviderModel({
+      modelId: input.modelId,
+      project: input.project,
+      prompt: input.prompt,
+      decision: input.decision,
+      files: input.existingFiles,
+      userCredits: input.userCredits,
+      plan: input.plan,
+    })).model
+    : input.modelId && input.modelId !== 'auto'
+      ? normalizeProviderModelForBackend(input.modelId)
+      : DEFAULT_PROVIDER_MODEL_ID;
   validateAllowedModel(selectedModel);
 
   const fileManifest = input.existingFiles
@@ -5519,6 +5645,24 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
+  const walletForRouting = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  let modelRouting;
+  try {
+    modelRouting = await resolveAgentProviderModel({
+      modelId: requestedModelSelection,
+      project,
+      prompt,
+      decision,
+      files: existingFiles,
+      userCredits: walletForRouting,
+    });
+  } catch (error: any) {
+    return res.status(200).json({
+      ...publicCreditGateResponse(),
+      message: error?.message || 'This action is unavailable with the current plan or credit balance.',
+    });
+  }
+  const effectiveModelSelection = modelRouting.model;
   let agentRunId = '';
   if (AGENT_V2_ENABLED) {
     const contextPack = buildAgentContextPack({
@@ -5529,10 +5673,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       versions: await listProjectVersions(project.id).catch(() => []),
       memory: await listAgentMemory(project.id).catch(() => []),
       previewStatus: project.preview_status,
-      selectedModel: requestedModelSelection,
+      selectedModel: effectiveModelSelection,
       requestId,
     });
-    agentRunId = (await createAgentRun(project, userId, requestId, decision, requestedModelSelection, contextPack)).id;
+    agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack)).id;
   }
   await saveProjectMessage({
     organization_id: project.organization_id,
@@ -5551,15 +5695,15 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   });
 
   if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist') {
-    const cost = estimateActionCost(prompt, decision, requestedModelSelection);
-    const wallet = cost.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
+    const cost = estimateActionCost(prompt, decision, effectiveModelSelection);
+    const wallet = cost.finalCredits > 0 ? walletForRouting : Number.POSITIVE_INFINITY;
     if (wallet < cost.finalCredits) {
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
       return res.status(200).json(publicCreditGateResponse());
     }
     let agentText;
     try {
-      agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: requestedModelSelection });
+      agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
@@ -5604,8 +5748,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     return res.status(403).json({ success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
   }
 
-  const wallet = await helpers.getWallet(userId);
-  const cost = estimateActionCost(prompt, decision, requestedModelSelection);
+  const wallet = walletForRouting;
+  const cost = estimateActionCost(prompt, decision, effectiveModelSelection);
 
   if (wallet < cost.finalCredits) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
@@ -5628,7 +5772,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        executionPlan = (await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: requestedModelSelection })).text;
+        executionPlan = (await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
       } catch {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
       }
@@ -5637,7 +5781,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const generation = await generateFilesWithAi({
       projectName: project.name,
       prompt: executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt,
-      modelId: requestedModelSelection,
+      project,
+      decision,
+      modelId: effectiveModelSelection,
+      userCredits: walletForRouting,
       existingFiles,
     });
 
@@ -6063,6 +6210,27 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const reliability = buildReliabilityDecision(decision);
   const shouldStreamAgentTrace = reliability.should_mutate_files || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
   shouldEmitWorkingTicks = reliability.should_mutate_files || decision.intent === 'plan';
+  const walletForRouting = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  let modelRouting;
+  try {
+    modelRouting = await resolveAgentProviderModel({
+      modelId: requestedModelSelection,
+      project,
+      prompt,
+      decision,
+      files: existingFiles,
+      userCredits: walletForRouting,
+    });
+  } catch (error: any) {
+    await send('credits_insufficient', error?.message || 'Upgrade required', {
+      code: 'UpgradeRequired',
+      action: 'upgrade_required',
+      suggested_action: 'use_auto',
+    });
+    endStream();
+    return;
+  }
+  const effectiveModelSelection = modelRouting.model;
   if (AGENT_V2_ENABLED) {
     const [messages, events, versions, memory, runnerHistory, researchHistory] = await Promise.all([
       listProjectMessagesPage(project.id, 12, null).catch(() => []),
@@ -6080,13 +6248,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       versions,
       memory,
       previewStatus: project.preview_status,
-      selectedModel: requestedModelSelection,
+      selectedModel: effectiveModelSelection,
       requestId,
     });
     const contextPack = AGENT_V3_ENABLED
       ? buildAgentV3Context({ baseContext: baseContextPack, runnerHistory, researchHistory, toolBudget: DEFAULT_AGENT_V3_BUDGET })
       : baseContextPack;
-    const agentRun = await createAgentRun(project, userId, requestId, decision, requestedModelSelection, contextPack);
+    const agentRun = await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack);
     agentRunId = agentRun.id;
     if (AGENT_V3_ENABLED && reliability.requires_runner) {
       await updateAgentRunV3Meta(agentRunId, {
@@ -6122,8 +6290,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_detail: streamCopy('Je determine si je dois repondre, planifier, modifier ou generer.', 'I am deciding whether to answer, plan, edit, or generate.'),
     });
   }
-  const estimate = estimateActionCost(prompt, decision, requestedModelSelection);
-  const wallet = estimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
+  const estimate = estimateActionCost(prompt, decision, effectiveModelSelection);
+  const wallet = estimate.finalCredits > 0 ? walletForRouting : Number.POSITIVE_INFINITY;
   await saveProjectMessage({
     organization_id: project.organization_id,
     project_id: project.id,
@@ -6205,7 +6373,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
     await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
       intent: decision.intent,
-      model: requestedModelSelection,
+      model: effectiveModelSelection,
+      requested_model: requestedModelSelection,
+      auto_routed: modelRouting.autoRouted,
+      task_complexity: modelRouting.complexity,
       fast_path: !shouldStreamAgentTrace,
     });
     let agentText;
@@ -6216,7 +6387,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         prompt,
         files: existingFiles,
         decision,
-        modelId: requestedModelSelection,
+        modelId: effectiveModelSelection,
+        userCredits: walletForRouting,
         researchContext,
         onToken: async (chunk, meta) => {
           if (await stopIfCancelled('answer')) return;
@@ -6329,8 +6501,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
     await send('routing', streamCopy('Selection du modele et du contexte.', 'Selecting the model and preparing project context.'), {
       mode: requestedModelSelection,
+      selected_model: effectiveModelSelection,
+      auto_routed: modelRouting.autoRouted,
+      task_complexity: modelRouting.complexity,
+      routing_mode: modelRouting.mode,
       step_label: streamCopy('Selection du modele.', 'Selecting the model.'),
-      step_detail: streamCopy('Auto est resolu vers un modele autorise avant l appel provider.', 'Auto is resolved to an allowed model before the provider call.'),
+      step_detail: modelRouting.autoRouted
+        ? streamCopy(`Auto a choisi ${effectiveModelSelection} pour une tache ${modelRouting.complexity}.`, `Auto selected ${effectiveModelSelection} for a ${modelRouting.complexity} task.`)
+        : streamCopy(`Modele selectionne: ${effectiveModelSelection}.`, `Selected model: ${effectiveModelSelection}.`),
     });
     let executionPlan = '';
     if (decision.autoPlanRequired) {
@@ -6347,7 +6525,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        const planned = await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: requestedModelSelection, researchContext });
+        const planned = await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
         executionPlan = planned.text;
         await send('plan_ready', executionPlan, { text: executionPlan, model: planned.model, auto_plan_required: true });
       } catch (error) {
@@ -6358,9 +6536,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
     const hasLiveKey = Boolean(getOpenRouterApiKey());
     let generatedText = '';
-    let model: string = requestedModelSelection !== 'auto'
-      ? normalizeProviderModelForBackend(requestedModelSelection)
-      : DEFAULT_PROVIDER_MODEL_ID;
+    let model: string = effectiveModelSelection;
     validateAllowedModel(model);
     let costUsd = 0;
 
