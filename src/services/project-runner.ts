@@ -3,6 +3,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { runBrowserInteractionAudit } from './browser-interaction-runner.ts';
+import type { AgentVerificationCheck } from './agent-v2.ts';
 
 export type RunnerStatus = 'passed' | 'failed' | 'skipped';
 export type RunnerSeverity = 'info' | 'low' | 'medium' | 'high';
@@ -74,6 +76,11 @@ export class HybridProjectRunner implements RunnerAdapter {
 
       const packageFile = input.files.find(file => normalizePath(file.path) === 'package.json');
       checks.push(...this.projectTopologyChecks(input.files, input.previewHtml || '', Boolean(packageFile)));
+      checks.push(...verificationChecksToRunnerChecks(await runBrowserInteractionAudit({
+        files: input.files,
+        previewHtml: input.previewHtml,
+        timeoutMs: Math.min(input.timeoutMs || 120_000, 20_000),
+      })));
       if (packageFile) {
         checks.push(...await this.packageChecks(workdir, packageFile, input.timeoutMs || 120_000));
       } else {
@@ -373,6 +380,16 @@ export function runnerChecksToVerificationChecks(checks: RunnerCheck[]): Array<{
     severity: check.severity,
     message: check.message,
     file: check.file_path,
+  }));
+}
+
+function verificationChecksToRunnerChecks(checks: AgentVerificationCheck[]): RunnerCheck[] {
+  return checks.map(check => ({
+    check_type: check.key,
+    status: check.status === 'fail' ? 'failed' : check.status === 'pass' ? 'passed' : 'skipped',
+    severity: check.severity,
+    message: check.message,
+    file_path: check.file,
   }));
 }
 

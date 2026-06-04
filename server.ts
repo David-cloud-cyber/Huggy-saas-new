@@ -6157,27 +6157,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       return;
     }
 
-    let streamedAnyToken = false;
     let agentText;
-    await send('answer_stream_started', 'Writing the answer.', {
-      intent: quickDecision.intent,
-      fast_path: true,
-    });
     try {
-      agentText = await streamAgentTextResponse({
+      agentText = await createAgentTextResponse({
         project,
         prompt,
         files: [],
         decision: quickDecision,
         modelId: requestedModelSelection,
-        onToken: async (chunk, meta) => {
-          streamedAnyToken = true;
-          await send('answer_token', chunk, {
-            text_delta: chunk,
-            index: meta.index,
-            fast_path: true,
-          });
-        },
       });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
@@ -6192,15 +6179,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
 
     const content = agentText.text;
-    if (!streamedAnyToken) {
-      for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
-        await send('answer_token', chunk, {
-          text_delta: chunk,
-          index,
-          fast_path: true,
-        });
-      }
-    }
     await saveProjectMessage({
       organization_id: project.organization_id,
       project_id: project.id,
@@ -6227,6 +6205,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       original_prompt: prompt,
       reliability: buildReliabilityDecision(quickDecision),
       fast_path: true,
+      no_stream: true,
     });
     await send('done', 'Answer ready.', { fast_path: true });
     endStream();
@@ -6404,30 +6383,43 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_detail: streamCopy('Je donne les prochaines actions sans toucher a la preview.', 'I am giving next actions without touching the preview.'),
       });
     }
-    await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
-      intent: decision.intent,
-      fast_path: !shouldStreamAgentTrace,
-    });
+    const shouldStreamTextResponse = decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
+    if (shouldStreamTextResponse) {
+      await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
+        intent: decision.intent,
+        fast_path: !shouldStreamAgentTrace,
+      });
+    }
     let agentText;
     let streamedAnyToken = false;
     try {
-      agentText = await streamAgentTextResponse({
-        project,
-        prompt,
-        files: existingFiles,
-        decision,
-        modelId: effectiveModelSelection,
-        userCredits: walletForRouting,
-        researchContext,
-        onToken: async (chunk, meta) => {
-          if (await stopIfCancelled('answer')) return;
-          streamedAnyToken = true;
-          await send('answer_token', chunk, {
-            text_delta: chunk,
-            index: meta.index,
+      agentText = shouldStreamTextResponse
+        ? await streamAgentTextResponse({
+            project,
+            prompt,
+            files: existingFiles,
+            decision,
+            modelId: effectiveModelSelection,
+            userCredits: walletForRouting,
+            researchContext,
+            onToken: async (chunk, meta) => {
+              if (await stopIfCancelled('answer')) return;
+              streamedAnyToken = true;
+              await send('answer_token', chunk, {
+                text_delta: chunk,
+                index: meta.index,
+              });
+            },
+          })
+        : await createAgentTextResponse({
+            project,
+            prompt,
+            files: existingFiles,
+            decision,
+            modelId: effectiveModelSelection,
+            userCredits: walletForRouting,
+            researchContext,
           });
-        },
-      });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
       await recordAgentImprovementSignal(project, userId, {
@@ -6473,7 +6465,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         : decision.intent === 'verify'
           ? 'verification_started'
           : 'answering';
-    if (!streamedAnyToken) {
+    if (shouldStreamTextResponse && !streamedAnyToken) {
       for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
         if (await stopIfCancelled('answer')) return;
         await send('answer_token', chunk, {
@@ -6489,6 +6481,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       recommendation: decision.clarification?.recommendation,
       original_prompt: prompt,
       reliability,
+      no_stream: !shouldStreamTextResponse,
       preview: reliability.should_touch_preview ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') } : undefined,
       files: reliability.should_mutate_files ? existingFiles : undefined,
     });

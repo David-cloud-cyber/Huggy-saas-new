@@ -952,9 +952,13 @@ function normalizePromptIntentText(value: string) {
 function isQuickConversationPrompt(value: string, mode: ChatMode) {
   if (mode !== 'auto') return false;
   const normalized = normalizePromptIntentText(value);
-  if (!normalized || normalized.length > 180) return false;
+  if (!normalized || normalized.length > 280) return false;
+  const projectContextHints = /\b(ce projet|cette app|cette application|mon projet|mon app|mon application|l app actuelle|le code actuel|les fichiers|dans le projet|dans l application|preview actuelle|fichiers actuels|current project|current app|current files|existing code)\b/i;
+  if (projectContextHints.test(normalized)) return false;
   const changeHints = /\b(create|build|generate|add|edit|change|modify|fix|debug|deploy|publish|crée|creer|génère|genere|ajoute|modifie|corrige|déploie|deploie|publie|supprime|remplace|couleur|color|button|bouton|texte|text)\b/i;
   if (changeHints.test(normalized)) return false;
+  const technicalActionHints = /\b(api|database|base de donnees|component|composant|page|app|application|site|interface|fonctionnalite|feature|bug|erreur|error|login|auth|supabase|vercel|railway)\b/i;
+  if (technicalActionHints.test(normalized)) return false;
   const direct = new Set([
     'bonjour',
     'bonsoir',
@@ -987,6 +991,9 @@ function isQuickConversationPrompt(value: string, mode: ChatMode) {
     'help me',
   ]);
   if (direct.has(normalized)) return true;
+  if (/\b(explique|pourquoi|comment|conseil|avis|strategie|analyse|compare|resume|reformule|corrige ce texte|que penses tu|peux tu me dire|est ce que|what|why|how|should|can you explain)\b/i.test(normalized)) {
+    return true;
+  }
   return /^(qui es tu|qui es-tu|tu es qui|what are you|what is huggy|c est quoi huggy|c'est quoi huggy|comment tu peux m aider|comment tu peux m'aider)/i.test(normalized);
 }
 
@@ -2747,7 +2754,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const speaksFrench = isLikelyFrenchText(prompt);
   const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const status = appendMessage('assistant', '');
+  const status = quickConversation ? null : appendMessage('assistant', '');
   if (!quickConversation) {
     setMessageShimmer(status, initialLabel);
     startWorkingTimer(status, initialLabel);
@@ -2810,6 +2817,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (assistantHasFinalContent) return responseCard;
     if (shouldPreserveWorkingTrace()) {
       completeMessageShimmer(status, traceLabel);
+      responseCard = appendMessage('assistant', '');
+    } else if (!status) {
       responseCard = appendMessage('assistant', '');
     } else {
       clearMessageShimmer(status);
