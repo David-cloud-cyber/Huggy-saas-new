@@ -57,6 +57,7 @@ const HUGGY_DECISION_HIERARCHY = [
   '8. If the task is complex or risky, keep the final action but set auto_plan_required true before execution.',
   '9. Ask clarification only when acting would likely create the wrong product, damage existing work, or require a missing external key. Do not ask "Build or Plan?"',
   '10. If the user reports that an app disappeared after an edit, classify as debug_fix and preserve/recover the latest viable project files before changing anything else.',
+  '11. If a project already exists and the user gives short feedback such as "non", "pas comme ça", "encore mieux", "trop IA", "pas premium", "continue", or "refais", treat it as an iteration on the latest result unless it is clearly only an emotional comment or a question.',
 ].join('\n');
 
 const HUGGY_AUTO_PLAN_POLICY = [
@@ -212,6 +213,7 @@ const HUGGY_GENERATION_ITERATION_POLICY = [
   'Do not make the preview disappear by returning only a partial fragment. Return complete contents for each changed file.',
   'For tiny changes, do not upgrade architecture unless the existing app is legacy HTML-only and the user asks for meaningful app behavior that requires a modern structure.',
   'If the user says "change the color", "make text bigger", "remove this", or similar, update only the relevant UI/CSS and keep generated data, layout, and preview intact.',
+  'If the user gives short negative or directional feedback after a preview, infer the smallest useful improvement from recent context and preserve the existing app. Do not ask a generic clarification unless there is no safe target at all.',
   'If existing files include a Vite React project, keep that structure. Do not fall back to single-file HTML unless the existing project is already HTML-only and the safest patch is HTML-only.',
   'When updating one component, preserve imports, exports, IDs, event handlers, generated routes, persistence hooks, and preview bootstrap code unless they are the bug.',
 ].join('\n');

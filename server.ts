@@ -840,7 +840,29 @@ async function ensurePersonalOrganization(req: any, organizationId: string) {
   return organizationId;
 }
 
-function getUserProjectRole(_req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
+function getUserProjectRole(req: any): 'owner' | 'admin' | 'editor' | 'viewer' {
+  const metadata = {
+    ...(req.user?.user_metadata || {}),
+    ...(req.user?.app_metadata || {}),
+  };
+  const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
+  const candidates = [
+    metadata.project_role,
+    metadata.projectRole,
+    metadata.organization_role,
+    metadata.organizationRole,
+    metadata.role,
+    ...roles,
+  ]
+    .map(role => String(role || '').toLowerCase().trim())
+    .filter(Boolean);
+
+  for (const role of candidates) {
+    if (role === 'platform_admin' || role === 'owner' || role === 'admin') return role === 'owner' ? 'owner' : 'admin';
+    if (role === 'editor') return 'editor';
+    if (role === 'viewer') return 'viewer';
+  }
+
   return 'owner';
 }
 
@@ -2188,12 +2210,15 @@ class AgentOrchestrator {
     const wantsBuild = forceBuild || (hasAny(buildHints) && understanding.allowsFileAction);
     const wantsConversation = hasAny(conversationHints);
     const wantsNewAppBuild = understanding.category === 'app' && understanding.allowsFileAction;
+    const wantsShortFeedbackIteration = input.hasFiles
+      && understanding.allowsFileAction
+      && understanding.signals?.includes('short_feedback');
     const wantsDebugFix = !wantsNewAppBuild && hasAny(debugHints) && understanding.allowsFileAction;
     const wantsVerify = hasAny(verifyHints);
     const wantsDeployAssist = hasAny(deployHints)
       && !/(crée|creer|create|ajoute|add|modifie|change|corrige|fix|build|implémente|implemente|generate|génère|genere|page|component|dashboard|landing|formulaire|supprime|remove|replace|update|met a jour|mets a jour)/i.test(lower);
     const wantsComplexWork = hasAny(complexHints) || words.length > 28;
-    const wantsEdit = input.hasFiles && hasAny(editHints) && understanding.allowsFileAction;
+    const wantsEdit = wantsShortFeedbackIteration || (input.hasFiles && hasAny(editHints) && understanding.allowsFileAction);
 
     if (!forceBuild && wantsConversation && !hasAny(buildHints)) {
       return decision({
@@ -3186,6 +3211,13 @@ function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
     deleted,
     summary: `${created.length} created, ${modified.length} modified, ${deleted.length} deleted`,
   };
+}
+
+function publicFileStreamSnippet(file: GeneratedFile) {
+  const redacted = String(file.content || '')
+    .replace(/(api[_-]?key|secret|token|password|service[_-]?role)(\s*[:=]\s*)(["']?)[^"'\s]+/gi, '$1$2$3[masked]')
+    .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|sbp_[A-Za-z0-9_]+/g, '[masked-secret]');
+  return redacted.split('\n').slice(0, 26).join('\n').slice(0, 2400);
 }
 
 function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): PreviewBuildResult {
@@ -6040,8 +6072,111 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   let researchResult: ResearchResult | null = null;
   let researchContext = '';
   let runnerResult: RunnerResult | null = null;
+  const streamIsFrench = isLikelyFrenchPrompt(prompt);
+  const streamCopy = (fr: string, en: string) => streamIsFrench ? fr : en;
+  let latestVisibleStreamEvent = 'queued';
+  const contextualWorkingStatus = () => {
+    const statusByEvent: Record<string, { message: string; label: string; detail: string }> = {
+      queued: {
+        message: streamCopy('Je prépare le contexte du projet.', 'Preparing the project context.'),
+        label: streamCopy('Préparation du build.', 'Preparing the build.'),
+        detail: streamCopy('Je garde le run ouvert pendant que le contexte arrive.', 'I am keeping the run open while context loads.'),
+      },
+      routing: {
+        message: streamCopy('J’analyse le contexte et la bonne action.', 'Analyzing context and the right action.'),
+        label: streamCopy('Analyse du contexte.', 'Analyzing context.'),
+        detail: streamCopy('Je vérifie s’il faut répondre, modifier, générer ou demander une précision.', 'I am checking whether to answer, edit, generate, or ask for one detail.'),
+      },
+      planning: {
+        message: streamCopy('Je structure le plan utile avant d’agir.', 'Structuring the useful plan before acting.'),
+        label: streamCopy('Planification.', 'Planning.'),
+        detail: streamCopy('Je limite les étapes aux décisions qui réduisent le risque.', 'I am keeping only steps that reduce risk.'),
+      },
+      model_started: {
+        message: streamCopy('Je génère les fichiers React/Vite.', 'Generating React/Vite files.'),
+        label: streamCopy('Génération des fichiers.', 'Generating files.'),
+        detail: streamCopy('Je produis les composants, styles et interactions nécessaires.', 'I am producing the required components, styles, and interactions.'),
+      },
+      model_streaming: {
+        message: streamCopy('Les fichiers arrivent progressivement.', 'Files are streaming in.'),
+        label: streamCopy('Code en cours.', 'Writing code.'),
+        detail: streamCopy('Je conserve le flux ouvert pendant que le modèle renvoie les fichiers.', 'I am keeping the stream open while the model returns files.'),
+      },
+      file_stream_started: {
+        message: streamCopy('Je prépare un fichier du projet.', 'Preparing a project file.'),
+        label: streamCopy('Fichier en préparation.', 'Preparing file.'),
+        detail: streamCopy('Je transforme la sortie IA en fichier réel du projet.', 'I am turning the AI output into a real project file.'),
+      },
+      file_stream_preview: {
+        message: streamCopy('J’affiche un extrait réel du fichier.', 'Showing a real file snippet.'),
+        label: streamCopy('Aperçu fichier.', 'File preview.'),
+        detail: streamCopy('Cet aperçu vient du fichier parsé, pas d une étape inventée.', 'This preview comes from the parsed file, not an invented step.'),
+      },
+      file_stream_completed: {
+        message: streamCopy('Un fichier est prêt à être fusionné.', 'A file is ready to merge.'),
+        label: streamCopy('Fichier prêt.', 'File ready.'),
+        detail: streamCopy('Je garde ensuite le diff visible pour l itération.', 'I keep the diff visible for iteration afterward.'),
+      },
+      diff_ready: {
+        message: streamCopy('Le diff du projet est prêt.', 'The project diff is ready.'),
+        label: streamCopy('Diff prêt.', 'Diff ready.'),
+        detail: streamCopy('Je résume les fichiers créés, modifiés ou supprimés.', 'I summarize created, modified, and deleted files.'),
+      },
+      files_changed: {
+        message: streamCopy('J’intègre les fichiers générés.', 'Merging generated files.'),
+        label: streamCopy('Fichiers intégrés.', 'Files merged.'),
+        detail: streamCopy('Je prépare le diff avant les checks.', 'I am preparing the diff before checks.'),
+      },
+      preview_skeleton_started: {
+        message: streamCopy('Je prépare la preview progressive.', 'Preparing the progressive preview.'),
+        label: streamCopy('Preview en préparation.', 'Preparing preview.'),
+        detail: streamCopy('L animation reste limitée à l état de build réel.', 'The animation is limited to the real build state.'),
+      },
+      preview_building: {
+        message: streamCopy('Je construis la preview sans remplacer l’ancienne trop tôt.', 'Building the preview without replacing the old one too early.'),
+        label: streamCopy('Construction de la preview.', 'Building preview.'),
+        detail: streamCopy('La preview existante reste protégée jusqu’au résultat prêt.', 'The existing preview stays protected until the result is ready.'),
+      },
+      runner_started: {
+        message: streamCopy('Je lance les checks techniques.', 'Running technical checks.'),
+        label: streamCopy('Checks techniques.', 'Technical checks.'),
+        detail: streamCopy('Je cherche les erreurs bloquantes avant de livrer.', 'I am looking for blocking issues before delivery.'),
+      },
+      visual_inspection_started: {
+        message: streamCopy('Je teste les interactions principales.', 'Testing the main interactions.'),
+        label: streamCopy('Inspection visuelle.', 'Visual inspection.'),
+        detail: streamCopy('Je contrôle boutons, formulaires, états et responsive.', 'I am checking buttons, forms, states, and responsive behavior.'),
+      },
+      auto_fix_started: {
+        message: streamCopy('Je corrige un blocage détecté.', 'Fixing a detected blocker.'),
+        label: streamCopy('Correction ciblée.', 'Targeted fix.'),
+        detail: streamCopy('Je touche seulement ce qui est nécessaire.', 'I am changing only what is necessary.'),
+      },
+      retest_started: {
+        message: streamCopy('Je reteste après correction.', 'Retesting after the fix.'),
+        label: streamCopy('Retest.', 'Retesting.'),
+        detail: streamCopy('Je vérifie que la correction tient.', 'I am checking that the fix holds.'),
+      },
+      quality_gate_started: {
+        message: streamCopy('Je lance le quality gate final.', 'Starting the final quality gate.'),
+        label: streamCopy('Quality gate.', 'Quality gate.'),
+        detail: streamCopy('Je bloque seulement les erreurs graves, puis je garde les notes visibles.', 'I block only serious errors, then keep notes visible.'),
+      },
+      quality_checked: {
+        message: streamCopy('J’applique le contrôle qualité final.', 'Running the final quality gate.'),
+        label: streamCopy('Qualité finale.', 'Final quality.'),
+        detail: streamCopy('Les warnings restent visibles sans bloquer si l’app fonctionne.', 'Warnings stay visible without blocking when the app works.'),
+      },
+    };
+    return statusByEvent[latestVisibleStreamEvent] || {
+      message: streamCopy('Je garde le run actif pendant que Huggy travaille.', 'Keeping the run active while Huggy works.'),
+      label: streamCopy('Travail en cours.', 'Work in progress.'),
+      detail: streamCopy('Le serveur continue la génération ou la vérification.', 'The server is still generating or checking.'),
+    };
+  };
   const send = async (event_type: string, message: string, payload: Record<string, unknown> = {}) => {
     if (streamClosed || res.destroyed || res.writableEnded) return;
+    if (event_type !== 'working_tick') latestVisibleStreamEvent = event_type;
     sequence += 1;
     const publicPayload = redactPublicAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload });
     let event: any = {
@@ -6100,8 +6235,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   workingTimer = setInterval(() => {
     if (!shouldEmitWorkingTicks) return;
-    void send('working_tick', 'Still working.', {
+    const status = contextualWorkingStatus();
+    void send('working_tick', status.message, {
       elapsed_seconds: Math.max(0, Math.floor((Date.now() - streamStartedAt) / 1000)),
+      phase: latestVisibleStreamEvent,
+      step_label: status.label,
+      step_detail: status.detail,
     }).catch(error => {
       console.warn('[huggy:working_tick_failed]', { request_id: requestId, message: error?.message || String(error) });
     });
@@ -6127,8 +6266,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
-  const streamIsFrench = isLikelyFrenchPrompt(prompt);
-  const streamCopy = (fr: string, en: string) => streamIsFrench ? fr : en;
   const quickDecision = intentRouter.decide({ prompt, requestedMode, hasFiles: false });
   if (canUseFastAnswerPath(quickDecision, prompt)) {
     const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
@@ -6612,10 +6749,66 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       { ensureIndex: true },
     );
     files = ensureModernFrontendProject(files, project.name, prompt);
+    const generatedDiff = diffFiles(existingFiles, files);
+    const importantStreamPaths = [
+      ...generatedDiff.created,
+      ...generatedDiff.modified,
+    ]
+      .filter((path, index, list) => list.indexOf(path) === index)
+      .sort((a, b) => {
+        const priority = (path: string) => {
+          if (/^src\/App\.(tsx|jsx|ts|js)$/i.test(path)) return 0;
+          if (/^src\/main\.(tsx|jsx|ts|js)$/i.test(path)) return 1;
+          if (/^src\/.*\.(tsx|jsx)$/i.test(path)) return 2;
+          if (/^src\/.*\.css$/i.test(path)) return 3;
+          if (/package\.json$/i.test(path)) return 4;
+          if (/index\.html$/i.test(path)) return 5;
+          return 10;
+        };
+        return priority(a) - priority(b) || a.localeCompare(b);
+      })
+      .slice(0, 5);
+    for (const path of importantStreamPaths) {
+      const file = files.find(item => item.path === path);
+      if (!file) continue;
+      const language = file.language || inferGeneratedLanguage(file.path);
+      await send('file_stream_started', streamCopy(`Préparation de ${file.path}.`, `Preparing ${file.path}.`), {
+        path: file.path,
+        language,
+        reason: generatedDiff.created.includes(file.path) ? 'created' : 'modified',
+        step_label: streamCopy('Fichier en préparation.', 'Preparing file.'),
+        step_detail: streamCopy('Je convertis la sortie modèle en fichier de projet lisible.', 'I am converting the model output into a readable project file.'),
+      });
+      await send('file_stream_preview', streamCopy(`Aperçu de ${file.path}.`, `Previewing ${file.path}.`), {
+        path: file.path,
+        language,
+        text_delta: publicFileStreamSnippet(file),
+        streamed_chars: String(file.content || '').length,
+        step_label: streamCopy('Aperçu fichier.', 'File preview.'),
+        step_detail: streamCopy('Aperçu public redacted depuis le vrai fichier généré.', 'Redacted public preview from the real generated file.'),
+      });
+      await send('file_stream_completed', streamCopy(`${file.path} prêt.`, `${file.path} ready.`), {
+        path: file.path,
+        language,
+        size: String(file.content || '').length,
+        status: 'ready',
+        step_label: streamCopy('Fichier prêt.', 'File ready.'),
+        step_detail: streamCopy('Le fichier est prêt à être intégré au diff.', 'The file is ready to be merged into the diff.'),
+      });
+    }
+    await send('diff_ready', streamCopy('Diff du projet prêt.', 'Project diff ready.'), {
+      diff: generatedDiff,
+      step_label: streamCopy('Diff prêt.', 'Diff ready.'),
+      step_detail: streamCopy('Je résume exactement ce qui va changer avant les checks.', 'I summarize exactly what will change before checks.'),
+    });
     await send('files_changed', streamCopy('Fichiers integres au projet.', 'Generated files were merged into the project.'), {
-      diff: diffFiles(existingFiles, files),
+      diff: generatedDiff,
       step_label: streamCopy('Fichiers mis a jour.', 'Files updated.'),
       step_detail: streamCopy('Je garde un diff clair pour que tu puisses iterer ensuite.', 'I keep a clear diff so you can iterate afterward.'),
+    });
+    await send('preview_skeleton_started', streamCopy('Activation de la preview progressive.', 'Starting progressive preview state.'), {
+      step_label: streamCopy('Preview progressive.', 'Progressive preview.'),
+      step_detail: streamCopy('Je montre un etat de travail seulement pendant la construction réelle.', 'I show a work state only during the real preview build.'),
     });
     await send('preview_building', streamCopy('Construction de la preview sandbox.', 'Building preview sandbox.'), {
       step_label: streamCopy('Construction de la preview.', 'Building preview.'),
@@ -6799,6 +6992,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       if (await stopIfCancelled('visual_retest')) return;
     }
+    await send('quality_gate_started', streamCopy('Quality gate final lance.', 'Final quality gate started.'), {
+      step_label: streamCopy('Quality gate.', 'Quality gate.'),
+      step_detail: streamCopy('Je vérifie seulement les points qui peuvent casser l experience ou bloquer la suite.', 'I am checking only points that can break the experience or block the next step.'),
+    });
     await send('verification_started', streamCopy('Verification finale des fichiers et de la preview.', 'Verifying generated files and preview.'), {
       step_label: streamCopy('Verification finale.', 'Final verification.'),
       step_detail: streamCopy('Je controle les fichiers, la preview, le design de base et les interactions.', 'I am checking files, preview, basic design, and interactions.'),

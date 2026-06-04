@@ -121,7 +121,19 @@ check(
 
 check(
   'fais ca mieux',
-  { action: 'clarify', allowsFileAction: false, needsClarification: true },
+  { category: 'ui', action: 'file_action', allowsFileAction: true, needsClarification: false },
+  { hasFiles: true },
+);
+
+check(
+  'pas comme ça',
+  { category: 'ui', action: 'file_action', allowsFileAction: true, needsClarification: false },
+  { hasFiles: true },
+);
+
+check(
+  'trop IA',
+  { category: 'ui', action: 'file_action', allowsFileAction: true, needsClarification: false },
   { hasFiles: true },
 );
 

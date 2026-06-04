@@ -2797,12 +2797,33 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   const agentSteps = new Map<string, { label: string; state: 'done' | 'now'; detail?: string }>();
   const shownStreamBlocks = new Set<string>();
+  const streamCodeCards = new Map<string, HTMLElement>();
+  const liveFileSnippets = new Map<string, { code: string; language: string; title: string }>();
   let responseCard: HTMLElement | null = status;
   const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
     if (quickConversation && !generationTouchesPreview) return;
     if (shownStreamBlocks.has(key)) return;
     shownStreamBlocks.add(key);
     appendCodePreviewBlock(options);
+  };
+  const upsertStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
+    if (quickConversation && !generationTouchesPreview) return;
+    const existing = streamCodeCards.get(key);
+    if (existing) {
+      setMessageBlock(existing, {
+        type: 'code_preview',
+        title: options.title,
+        subtitle: options.subtitle,
+        language: options.language || 'text',
+        code: redactStreamingCodeSnippet(options.code),
+        status: options.status || 'done',
+        defaultOpen: options.defaultOpen ?? false,
+      });
+      return existing;
+    }
+    const card = appendCodePreviewBlock(options);
+    if (card) streamCodeCards.set(key, card);
+    return card;
   };
   const syncAgentSteps = (headline = activeWorkingLabel) => {
     if (quickConversation && !generationTouchesPreview) return;
@@ -2961,9 +2982,48 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
       if (eventType === 'working_tick') {
         if (!quickConversation || generationTouchesPreview) {
+          if (payload.step_label) {
+            const phase = String(payload.phase || 'working').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40) || 'working';
+            markAgentStep(`working_${phase}`, visibleStepLabel(say('Travail en cours.', 'Work in progress.')), activeWorkingLabel, trustDetail('Je continue cette etape cote serveur.', 'I am continuing this server-side step.'));
+          }
           renderWorkingLabel(activeWorkingLabel);
           if (generationTouchesPreview) setEmptyPreviewState('working', activeWorkingLabel);
         }
+        return;
+      }
+      if (eventType === 'file_stream_started' || eventType === 'file_token' || eventType === 'file_stream_completed' || eventType === 'file_stream_preview') {
+        const path = String(payload.path || payload.file || 'src/App.tsx').trim() || 'src/App.tsx';
+        const language = String(payload.language || inferCodeLanguage(path));
+        const existing = liveFileSnippets.get(path) || {
+          code: '',
+          language,
+          title: path,
+        };
+        const incoming = String(payload.text_delta || payload.delta || payload.snippet || payload.preview || payload.content || '');
+        const nextCode = eventType === 'file_stream_preview' && incoming
+          ? incoming
+          : `${existing.code}${incoming}`;
+        const status = eventType === 'file_stream_completed' ? 'done' : 'writing';
+        const code = nextCode.trim()
+          ? nextCode
+          : `// ${path}\n// ${say('Huggy prépare ce fichier...', 'Huggy is preparing this file...')}`;
+        liveFileSnippets.set(path, { code, language, title: path });
+        promoteToPreviewWork('Building');
+        if (status === 'done') {
+          finishAgentStep(`file_${path}`, `${path} ${say('pret.', 'ready.')}`, trustDetail('Ce fichier est pret pour la fusion.', 'This file is ready to merge.'));
+        } else {
+          markAgentStep(`file_${path}`, `${say('Ecriture', 'Writing')} ${path}`, 'Building', trustDetail('Je montre un extrait public base sur le flux reel.', 'I am showing a public snippet based on the real stream.'));
+        }
+        upsertStreamCodeBlock(`live_file_${path}`, {
+          title: `${status === 'done' ? say('Fichier prêt', 'File ready') : say('Fichier en cours', 'Writing file')} - ${path}`,
+          subtitle: String(payload.reason || payload.step_detail || event.message || '').trim() || undefined,
+          language,
+          code,
+          status,
+          defaultOpen: false,
+        });
+        setAssistantWorking('Building');
+        setEmptyPreviewState('working', 'Building');
         return;
       }
       if (eventType === 'planning' || eventType === 'research_started' || eventType === 'tool_loop_started' || (eventType === 'answering' && !payload.text)) {
@@ -3053,12 +3113,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
-        const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'diff_ready' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
+        const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building'
           ? 'Building'
-          : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'files_changed'
+          : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'diff_ready' || eventType === 'files_changed'
             ? 'Building'
-          : eventType === 'runner_started' || eventType === 'verification_started' || eventType === 'visual_inspection_started'
+          : eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'visual_inspection_started'
             ? 'Running checks'
             : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed'
               ? 'Retesting'
@@ -3069,8 +3129,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers lancee.', 'File generation started.')), label, trustDetail('Je genere une structure moderne avec composants, styles et interactions.', 'I am generating a modern structure with components, styles, and interactions.'));
         if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${visibleStepLabel(say('Reception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : visibleStepLabel(say('Reception des fichiers.', 'Receiving files.')), label, trustDetail('Je garde le flux ouvert pendant que les fichiers arrivent.', 'I am keeping the stream open while files arrive.'));
         if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));
-        if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les fichiers generes avant les checks.', 'I am merging generated files before checks.'));
-        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
+        if (eventType === 'preview_skeleton_started') markAgentStep('preview', visibleStepLabel(say('Preview progressive activee.', 'Progressive preview started.')), label, trustDetail('L animation preview correspond au build en cours.', 'The preview animation matches the active build.'));
+        if (eventType === 'diff_ready' || eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les fichiers generes avant les checks.', 'I am merging generated files before checks.'));
+        if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
         if (eventType === 'visual_inspection_started') markAgentStep('visual', visibleStepLabel(say('Test des interactions.', 'Testing interactions.')), label, trustDetail('Je controle les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'));
         if (eventType === 'visual_inspection_failed') markAgentStep('visual', visibleStepLabel(say('Interaction a corriger.', 'Interaction issue found.')), 'Fixing', trustDetail('Je ne valide pas une interface avec des controles morts.', 'I do not approve an interface with dead controls.'));
         if (eventType === 'visual_inspection_passed') finishAgentStep('visual', visibleStepLabel(say('Interactions essentielles verifiees.', 'Essential interactions checked.')), trustDetail('Les controles principaux sont utilisables ou affichent un etat honnete.', 'Primary controls are usable or show an honest state.'));
@@ -3085,13 +3146,25 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         setAssistantWorking(label);
         const fileChangingEvent = eventType !== 'verification_started' || generationTouchesPreview;
         if (fileChangingEvent) promoteToPreviewWork(label);
-        if (eventType === 'files_changed') {
+        if (eventType === 'diff_ready' || eventType === 'files_changed') {
           showStreamCodeBlock('files_changed', {
             title: say('Fichiers mis a jour', 'Files updated'),
             subtitle: String(payload.diff?.summary || event.message || '').trim() || undefined,
             language: 'diff',
             code: diffPreviewSnippet(payload.diff),
             status: 'done',
+          });
+        }
+        if (eventType === 'quality_checked') {
+          const quality = payload.quality || {};
+          const reliability = payload.reliability || {};
+          showStreamCodeBlock('quality_checked', {
+            title: say('Controle qualite', 'Quality gate'),
+            subtitle: String((quality as any)?.status || (reliability as any)?.status || event.message || '').trim() || undefined,
+            language: 'json',
+            code: JSON.stringify({ quality, reliability }, null, 2),
+            status: String((reliability as any)?.status || (quality as any)?.status || '').includes('fail') ? 'failed' : 'done',
+            defaultOpen: false,
           });
         }
         if (eventType === 'patch_applied') {

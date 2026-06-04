@@ -172,6 +172,12 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'conseil avant', 'avant de modifier', 'avant de coder', 'avant de toucher',
     'avant de construire', 'avant de generer', 'avant d agir',
   ];
+  const shortIterationFeedbackSignals = [
+    'non', 'pas comme ca', 'pas comme ça', 'encore mieux', 'change', 'continue',
+    'refais', 'trop simple', 'trop ia', 'pas premium', 'c est flou', 'cest flou',
+    'tu n as pas compris', 'tu nas pas compris', 'pas ca', 'pas ça',
+    'mieux', 'plus propre', 'plus pro', 'moins generique',
+  ];
 
   const hasMetaAgent = includesAny(text, metaAgentSignals);
   const hasExample = includesAny(text, exampleSignals);
@@ -185,6 +191,9 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasBadProductDecision = includesAny(text, badProductDecisionSignals);
   const hasPromptRequest = includesAny(text, promptSignals);
   const hasNoAction = includesAny(text, noActionSignals);
+  const hasShortIterationFeedback = Boolean(input.hasFiles)
+    && tokenCount <= 8
+    && includesAny(text, shortIterationFeedbackSignals);
   const hasAnalysisRequest = includesAny(text, [
     'analyse pourquoi', 'analyse comment', 'analyse si', 'analyse le', 'analyse la',
     'analyse les', 'fais une analyse', 'donne une analyse',
@@ -204,7 +213,9 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'navigation', 'filtre', 'filter', 'search', 'recherche', 'tableau', 'table',
     'todo', 'tache', 'taches', 'task', 'tasks', 'suppression', 'delete', 'remove',
     'confirmation', 'confirm', 'undo',
-    'conversation', 'conversations', 'message', 'messages', 'chat', 'streaming',
+    'conversation', 'conversations', 'message', 'messages', 'reponse', 'reponses',
+    'réponse', 'réponses', 'chat', 'streaming', 'feedback', 'retroaction', 'rétroaction',
+    'pouce', 'pouces', 'thumb', 'thumbs', 'like', 'dislike',
     'persistance', 'persist', 'refresh', 'actualisation', 'session', 'localstorage',
     'cta', 'call to action', 'couleur', 'color', 'palette', 'theme',
     'texte', 'text', 'titre', 'title', 'typographie', 'font', 'taille', 'size',
@@ -227,7 +238,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
   ]);
   const explicitApplyToProduct = matchesAny(text, [
-    /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet)\b/,
+    /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet|agent|message|messages|reponse|reponses|réponse|réponses|feedback|retroaction|rétroaction|pouce|pouces)\b/,
     /\b(dans|sur)\b.*\b(huggy|mon saas|mon app|mon application|le builder|dashboard|settings|pricing|auth|footer|api|database)\b/,
   ]);
   const chainedBuildAfterExplanation = matchesAny(text, [
@@ -431,6 +442,16 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.9,
       reason: 'explicit_app_generation_request',
       signals: ['app', 'direct_request', ...(tokenCount <= 7 ? ['defaults_allowed'] : [])],
+    });
+  }
+
+  if (hasShortIterationFeedback && !hasNoAction) {
+    return result({
+      category: 'ui',
+      action: 'file_action',
+      confidence: 0.86,
+      reason: 'short_feedback_iteration_on_existing_project',
+      signals: ['short_feedback', 'iteration'],
     });
   }
 
