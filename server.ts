@@ -1705,7 +1705,12 @@ function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publ
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
   const badge = `
 <a data-huggy-published-badge="true" href="${escapeHtml(href)}" aria-label="Built with Huggy" style="position:fixed;right:14px;bottom:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:999px;background:rgba(28,28,28,.92);color:#fcfbf8;text-decoration:none;font:700 12px/1.1 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 12px 40px rgba(28,28,28,.22),0 0 0 1px rgba(252,251,248,.16) inset;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
-  <span style="display:grid;place-items:center;width:18px;height:18px;border-radius:6px;background:#fffdf8;color:#1c1c1c;font-weight:900;">H</span>
+  <svg aria-hidden="true" viewBox="0 0 32 32" width="20" height="20" style="display:block;flex:0 0 auto;border-radius:6px;box-shadow:0 0 0 1px rgba(252,251,248,.18),0 5px 14px rgba(0,0,0,.22);">
+    <rect width="32" height="32" rx="8" fill="#09090b"/>
+    <path fill="#ffffff" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/>
+    <path fill="#ffffff" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/>
+    <path fill="#ffffff" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/>
+  </svg>
   <span>Built with Huggy</span>
 </a>`;
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${badge}\n</body>`);
