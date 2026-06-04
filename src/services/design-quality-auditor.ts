@@ -41,6 +41,14 @@ const PREVENT_DEFAULT_RE = /preventDefault\(|type=["']submit|formAction|action=/
 const SEARCH_FILTER_RE = /\b(search|filter|filtre|recherche|sort|tri)\b/i;
 const DELETE_RE = /\b(delete|remove|supprimer|effacer|archive|danger|destructive)\b/i;
 const CONFIRM_RE = /\b(confirm\(|dialog|modal|undo|annuler|confirmation|are you sure|etes vous sur|êtes vous sûr)\b/i;
+const UNIMPLEMENTED_RE = /\b(coming soon|not implemented|not wired|TODO:|wire this later|backend coming|placeholder action|fake data only)\b/i;
+const DEAD_NAV_RE = /href=["']#["']|href=["']javascript:void\(0\)["']|onClick=\{\s*\(\)\s*=>\s*\{\s*\}\s*\}/i;
+const TODO_APP_RE = /\b(todo|to-do|task manager|checklist|kanban|tasks?|taches?|tâches?)\b/i;
+const ECOMMERCE_APP_RE = /\b(ecommerce|e-commerce|shop|store|cart|checkout|product|catalog|panier|boutique|commande)\b/i;
+const RESTAURANT_APP_RE = /\b(restaurant|menu|reservation|réservation|booking|hours|horaires|table)\b/i;
+const AUTH_APP_RE = /\b(login|signup|sign in|sign up|auth|password|forgot|register|connexion|inscription)\b/i;
+const OPERATIONAL_APP_RE = /\b(dashboard|admin|crm|erp|analytics|kpi|table|pipeline|invoice|inventory|settings)\b/i;
+const AI_TOOL_APP_RE = /\b(ai tool|prompt|message|stream|preview|output|model selector|assistant)\b/i;
 
 const appRequiredComponentKeywords: Partial<Record<GeneratedAppType, string[]>> = {
   landing_page: ['hero', 'cta', 'proof', 'pricing', 'testimonial', 'faq', 'prompt'],
@@ -257,6 +265,8 @@ export function auditGeneratedFunctionality(input: GeneratedQualityAuditInput): 
     'UI appears to claim real external capabilities without backend support or demo labeling.',
   ));
 
+  checks.push(...auditCoreProductScenarios(bundle, input.platformType || 'generic_web_app'));
+
   checks.push(scoreCheck('functionality_score', scoreChecks(checks), 'Functionality quality score'));
   return checks;
 }
@@ -301,6 +311,118 @@ function normalizePath(value: string) {
 function countKeywordHits(source: string, keywords: string[]) {
   const lower = source.toLowerCase();
   return keywords.reduce((count, keyword) => count + (lower.includes(keyword.toLowerCase()) ? 1 : 0), 0);
+}
+
+function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppType): AgentVerificationCheck[] {
+  const source = bundle.all;
+  const code = bundle.tsx;
+  const checks: AgentVerificationCheck[] = [];
+
+  checks.push(result(
+    'functionality_no_dead_navigation',
+    !(DEAD_NAV_RE.test(bundle.html) || DEAD_NAV_RE.test(code)),
+    'medium',
+    'Navigation and buttons avoid dead placeholder links.',
+    'Generated UI contains dead placeholder links or empty click handlers.',
+  ));
+
+  checks.push(result(
+    'functionality_no_unimplemented_copy',
+    !UNIMPLEMENTED_RE.test(source),
+    'high',
+    'No unimplemented placeholder behavior is exposed.',
+    'Generated UI contains unfinished behavior such as coming soon, not implemented, or placeholder actions.',
+  ));
+
+  if (TODO_APP_RE.test(source)) {
+    const hasTaskState = /\b(useState|setTasks|setTodos|setItems)\b/i.test(code);
+    const canCreate = hasTaskState && /\b(onSubmit|addTask|handleAdd|setTasks\([\s\S]*(\.\.\.|concat\(|completed\s*:))/i.test(code);
+    const canComplete = hasTaskState && /\b(toggleTask|handleToggle|checked=|onChange=\{[\s\S]*toggle|completed\s*:\s*!)/i.test(code);
+    const canDelete = hasTaskState && /\b(deleteTask|handleDelete|removeTask|filter\([\s\S]*(?:!==|id))/i.test(code);
+    const canFilter = /\b(useMemo|filter\(|search|status|active|completed|all|query|setSearch|setFilter)\b/i.test(code);
+    checks.push(result(
+      'functionality_todo_core_loop',
+      canCreate && canComplete && canDelete,
+      'high',
+      'Task app supports create, complete, and delete flows.',
+      'Task app must support adding, completing, and deleting tasks with visible state changes.',
+    ));
+    checks.push(result(
+      'functionality_todo_management_tools',
+      canFilter,
+      'medium',
+      'Task app includes search, status filters, or task management controls.',
+      'Task app should include at least search, status filters, or task management controls.',
+    ));
+  }
+
+  if (platform === 'ecommerce' || ECOMMERCE_APP_RE.test(source)) {
+    const hasCart = /\b(cart|basket|panier|addToCart|setCart|checkoutItems)\b/i.test(code);
+    const hasQuantity = /\b(quantity|qty|increment|decrement|setQuantity|stock|variant)\b/i.test(code);
+    const hasCheckoutFeedback = /\b(checkout|payment|order|commande|receipt|success|confirmation|setStatus|toast)\b/i.test(code);
+    checks.push(result(
+      'functionality_commerce_core_loop',
+      hasCart && hasQuantity && hasCheckoutFeedback,
+      'high',
+      'Commerce app has cart, quantity, and checkout feedback.',
+      'Commerce app must include cart state, quantity/variant handling, and checkout feedback.',
+    ));
+  }
+
+  if (platform === 'restaurant' || RESTAURANT_APP_RE.test(source)) {
+    const hasMenu = /\b(menu|dish|plat|price|prix|category|special)\b/i.test(source);
+    const hasReservation = /\b(reservation|booking|table|date|time|party|guest|setReservation|onSubmit)\b/i.test(code);
+    const hasValidation = FORM_VALIDATION_RE.test(source);
+    checks.push(result(
+      'functionality_restaurant_core_loop',
+      hasMenu && hasReservation && hasValidation,
+      'high',
+      'Restaurant app includes menu plus validated reservation flow.',
+      'Restaurant app must include a real menu and a validated reservation or booking flow.',
+    ));
+  }
+
+  if (platform === 'auth_flow' || AUTH_APP_RE.test(source)) {
+    const hasModes = /\b(login|signup|sign in|sign up|register|forgot|reset|connexion|inscription)\b/i.test(source);
+    const hasPassword = /\b(password|showPassword|confirmPassword|forgot|reset)\b/i.test(code);
+    const hasAuthFeedback = /\b(error|invalid|required|success|loading|disabled|aria-invalid|setError|setStatus)\b/i.test(code);
+    checks.push(result(
+      'functionality_auth_core_loop',
+      hasModes && hasPassword && hasAuthFeedback,
+      'high',
+      'Auth flow includes modes, password handling, and feedback.',
+      'Auth flow must include login/signup or recovery states, password handling, and visible validation feedback.',
+    ));
+  }
+
+  const operationalPlatform = ['saas_dashboard', 'analytics_dashboard', 'admin_panel', 'crm_erp', 'fintech_billing'].includes(platform);
+  if (operationalPlatform || OPERATIONAL_APP_RE.test(source)) {
+    const hasMetrics = /\b(metric|kpi|revenue|balance|usage|count|total|chart|progress|trend)\b/i.test(source);
+    const hasDataOps = /\b(search|filter|sort|table|status|segment|bulk|export|detail|drawer|modal)\b/i.test(source);
+    const hasActionFeedback = /\b(loading|empty|error|success|saved|toast|disabled|pending)\b/i.test(source);
+    checks.push(result(
+      'functionality_operational_core_loop',
+      hasMetrics && hasDataOps && hasActionFeedback,
+      'high',
+      'Operational app includes metrics, data operations, and feedback states.',
+      'Operational app needs metrics, data operations such as search/filter/table/detail, and action feedback states.',
+    ));
+  }
+
+  if (platform === 'ai_tool' || AI_TOOL_APP_RE.test(source)) {
+    const hasPromptInput = /\b(prompt|textarea|input|message|composer|chat)\b/i.test(source);
+    const hasOutput = /\b(output|response|preview|result|message|history|stream)\b/i.test(source);
+    const hasWorkingState = /\b(loading|thinking|stream|pending|generating|error|success|stop|cancel)\b/i.test(source);
+    checks.push(result(
+      'functionality_ai_tool_core_loop',
+      hasPromptInput && hasOutput && hasWorkingState,
+      'high',
+      'AI tool has prompt input, output area, and working states.',
+      'AI tool must include prompt input, output/history, and visible working/error/success states.',
+    ));
+  }
+
+  return checks;
 }
 
 function scoreChecks(checks: AgentVerificationCheck[]) {

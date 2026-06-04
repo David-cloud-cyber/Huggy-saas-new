@@ -131,4 +131,109 @@ const weakFunctionality = auditGeneratedFunctionality({
 assert.equal(weakFunctionality.find(check => check.key === 'functionality_modern_project')?.status, 'fail');
 assert.equal(weakFunctionality.find(check => check.key === 'functionality_primary_controls')?.status, 'fail');
 
+const todoBaseFiles = [
+  ...goodFiles.filter(file => file.path !== 'src/App.tsx' && file.path !== 'index.html'),
+  {
+    path: 'index.html',
+    language: 'html',
+    content: '<!doctype html><html><head><title>Todo App</title><meta name="description" content="Task manager"></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+  },
+];
+
+const weakTodoFiles = [
+  ...todoBaseFiles,
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: `
+      export default function App() {
+        return <main>
+          <h1>Todo app</h1>
+          <p>Coming soon: add tasks, complete tasks and delete tasks.</p>
+          <button>New task</button>
+          <section>No tasks yet</section>
+        </main>;
+      }
+    `,
+  },
+];
+
+const weakTodoFunctionality = auditGeneratedFunctionality({
+  files: weakTodoFiles,
+  previewHtml: todoBaseFiles.find(file => file.path === 'index.html')?.content,
+  platformType: 'generic_web_app',
+  hasExistingFiles: false,
+});
+assert.equal(weakTodoFunctionality.find(check => check.key === 'functionality_no_unimplemented_copy')?.status, 'fail');
+assert.equal(weakTodoFunctionality.find(check => check.key === 'functionality_todo_core_loop')?.status, 'fail');
+
+const strongTodoFiles = [
+  ...todoBaseFiles,
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: `
+      import { useMemo, useState } from "react";
+      type Task = { id: number; title: string; completed: boolean };
+      export default function App() {
+        const [tasks, setTasks] = useState<Task[]>([
+          { id: 1, title: "Sketch onboarding", completed: false },
+          { id: 2, title: "Review mobile layout", completed: true }
+        ]);
+        const [title, setTitle] = useState("");
+        const [search, setSearch] = useState("");
+        const [filter, setFilter] = useState("all");
+        const [status, setStatus] = useState("empty");
+        const visibleTasks = useMemo(() => tasks.filter(task => {
+          const matchesSearch = task.title.toLowerCase().includes(search.toLowerCase());
+          const matchesFilter = filter === "all" || (filter === "completed" ? task.completed : !task.completed);
+          return matchesSearch && matchesFilter;
+        }), [tasks, search, filter]);
+        function addTask(event: React.FormEvent) {
+          event.preventDefault();
+          if (!title.trim()) { setStatus("error"); return; }
+          setTasks([...tasks, { id: Date.now(), title, completed: false }]);
+          setTitle("");
+          setStatus("success");
+        }
+        function toggleTask(id: number) {
+          setTasks(tasks.map(task => task.id === id ? { ...task, completed: !task.completed } : task));
+          setStatus("saved");
+        }
+        function deleteTask(id: number) {
+          if (!confirm("Delete this task? Undo is not available in this demo.")) return;
+          setTasks(tasks.filter(task => task.id !== id));
+          setStatus("success");
+        }
+        return <main aria-label="Todo workspace">
+          <h1>Todo app</h1>
+          <form onSubmit={addTask}>
+            <label>Task title <input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+            <button type="submit">Add task</button>
+          </form>
+          <label>Search <input aria-label="Search tasks" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+          <button type="button" onClick={() => setFilter("all")}>All</button>
+          <button type="button" onClick={() => setFilter("active")}>Active</button>
+          <button type="button" onClick={() => setFilter("completed")}>Completed</button>
+          <p role="status">{status === "error" ? "Validation error" : status === "success" ? "Task saved successfully" : "Empty state ready"}</p>
+          <ul>{visibleTasks.map(task => <li key={task.id}>
+            <label><input type="checkbox" checked={task.completed} onChange={() => toggleTask(task.id)} /> {task.title}</label>
+            <button type="button" onClick={() => deleteTask(task.id)}>Delete</button>
+          </li>)}</ul>
+        </main>;
+      }
+    `,
+  },
+];
+
+const strongTodoFunctionality = auditGeneratedFunctionality({
+  files: strongTodoFiles,
+  previewHtml: todoBaseFiles.find(file => file.path === 'index.html')?.content,
+  platformType: 'generic_web_app',
+  hasExistingFiles: false,
+});
+assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_todo_core_loop')?.status, 'pass');
+assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_todo_management_tools')?.status, 'pass');
+assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_score')?.status, 'pass');
+
 console.log('test-design-quality-auditor passed');
