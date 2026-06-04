@@ -203,6 +203,7 @@ let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let conversationApi: HuggyConversationApi | null = null;
+let conversationFeedbackBridgeBound = false;
 
 function escapeHtml(value: string): string {
   return value
@@ -573,7 +574,37 @@ function ensureConversationApi() {
   const scroll = chatScroll();
   if (!scroll) return null;
   conversationApi = mountBuilderConversation(scroll);
+  bindConversationFeedbackBridge();
   return conversationApi;
+}
+
+function bindConversationFeedbackBridge() {
+  if (conversationFeedbackBridgeBound) return;
+  conversationFeedbackBridgeBound = true;
+  window.addEventListener('huggy-agent-feedback', (event: Event) => {
+    const detail = (event as CustomEvent).detail || {};
+    const feedback = detail.feedback === 'keep' || detail.rating === 'positive' ? 'keep' : 'reject';
+    void recordAgentFeedback(feedback, {
+      source: 'message_hover_toolbar',
+      messageId: String(detail.messageId || ''),
+      role: String(detail.role || ''),
+      content: String(detail.content || ''),
+      rating: detail.rating === 'positive' ? 'positive' : 'negative',
+      reasons: Array.isArray(detail.reasons) ? detail.reasons : [],
+      comment: String(detail.comment || ''),
+    });
+  });
+  window.addEventListener('huggy-edit-message', (event: Event) => {
+    const detail = (event as CustomEvent).detail || {};
+    const content = String(detail.content || '').trim();
+    if (!content) return;
+    const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+    if (!input) return;
+    input.value = content;
+    input.focus();
+    input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+    syncSubmitButtonState();
+  });
 }
 
 function createMessageHandle(messageId: string): MessageHandle {
@@ -1619,11 +1650,11 @@ async function rollbackToVersion(versionId: string) {
   }
 }
 
-function recordAgentFeedback(feedback: 'keep' | 'modify' | 'regenerate' | 'publish' | 'reject') {
+function recordAgentFeedback(feedback: 'keep' | 'modify' | 'regenerate' | 'publish' | 'reject', extra: Record<string, unknown> = {}) {
   if (!currentProjectId) return Promise.resolve();
   return apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/feedback`, {
     method: 'POST',
-    body: JSON.stringify({ feedback, runId: lastAgentRunId, source: 'builder_inline_action' }),
+    body: JSON.stringify({ feedback, runId: lastAgentRunId, source: 'builder_inline_action', ...extra }),
   }).then(() => undefined).catch(() => undefined);
 }
 

@@ -86,7 +86,7 @@ import {
   type IntentUnderstanding,
   type UserIntentCategory,
 } from './src/services/intent-understanding.ts';
-import { buildAgentImprovementSignal } from './src/services/agent-self-improvement.ts';
+import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 
 dotenv.config();
 
@@ -7133,6 +7133,16 @@ app.post('/api/projects/:id/agent/feedback', async (req: any, res: any) => {
   const feedback = allowedFeedback.has(String(req.body?.feedback || ''))
     ? String(req.body.feedback)
     : 'modify';
+  const reasons = Array.isArray(req.body?.reasons)
+    ? req.body.reasons.map((item: any) => String(item || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80)).filter(Boolean).slice(0, 8)
+    : [];
+  const comment = String(req.body?.comment || '').trim().slice(0, 2000);
+  const messageId = String(req.body?.messageId || '').trim().slice(0, 120);
+  const role = ['user', 'assistant', 'system'].includes(String(req.body?.role || ''))
+    ? String(req.body.role)
+    : null;
+  const rating = req.body?.rating === 'positive' ? 'positive' : req.body?.rating === 'negative' ? 'negative' : null;
+  const messageExcerpt = String(req.body?.content || '').trim().slice(0, 1000);
   await saveAgentEvent({
     organization_id: project.organization_id || userId,
     project_id: project.id,
@@ -7145,9 +7155,25 @@ app.post('/api/projects/:id/agent/feedback', async (req: any, res: any) => {
       agent_run_id: req.body?.runId || null,
       version_id: req.body?.versionId || null,
       source: req.body?.source || 'builder',
+      message_id: messageId || null,
+      role,
+      rating,
+      reasons,
+      comment,
+      message_excerpt: messageExcerpt,
     }),
   });
-  res.json({ success: true, feedback });
+  const learningSignal = buildUserFeedbackImprovementSignal({
+    feedback,
+    rating: rating as 'positive' | 'negative' | null,
+    reasons,
+    comment,
+    role,
+    messageExcerpt,
+    source: String(req.body?.source || 'builder').slice(0, 120),
+  });
+  await upsertAgentTypedMemory(project, userId, learningSignal.memoryType, learningSignal.summary, learningSignal.payload).catch(() => null);
+  res.json({ success: true, feedback, rating });
 });
 
 app.get('/api/projects/:id/agent/research', async (req: any, res: any) => {

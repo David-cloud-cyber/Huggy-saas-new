@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CheckIcon, Code2, FileText, MessageSquareIcon, XIcon } from "lucide-react";
+import { CheckIcon, Code2, Copy, FileText, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -107,6 +107,7 @@ export type HuggyConversationMessage = {
   trace?: HuggyAgentTrace | null;
   block?: HuggyConversationBlock;
   actions?: HuggyConversationAction[];
+  createdAt?: string;
 };
 
 export type HuggyConversationApi = {
@@ -433,6 +434,265 @@ function ensureConversationStyles() {
       border-style: dashed;
       font-size: 11.5px;
       text-align: center;
+    }
+
+    .huggy-message-stack {
+      max-width: min(92%, 560px);
+      display: grid;
+      gap: 5px;
+      justify-items: start;
+    }
+
+    .huggy-message-stack .huggy-message-content {
+      max-width: 100%;
+    }
+
+    .huggy-message-user .huggy-message-stack {
+      justify-items: end;
+    }
+
+    .huggy-message-system .huggy-message-stack {
+      max-width: 100%;
+      justify-items: center;
+    }
+
+    .huggy-message-utility {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      color: var(--text-muted);
+      opacity: 0;
+      transform: translateY(-2px);
+      pointer-events: none;
+      transition: opacity 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-message:hover .huggy-message-utility,
+    .huggy-message:focus-within .huggy-message-utility {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .huggy-message-utility button {
+      width: 25px;
+      height: 25px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--text-muted);
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      transition: background 130ms cubic-bezier(.22,1,.36,1), color 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1), border-color 130ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-message-utility button:hover,
+    .huggy-message-utility button:focus-visible,
+    .huggy-message-utility button[data-active="true"] {
+      color: var(--text);
+      background: var(--bg-input);
+      border-color: var(--border-light, var(--border));
+      transform: translateY(-1px);
+      outline: none;
+    }
+
+    .huggy-message-utility button[data-feedback="positive"][data-active="true"] {
+      color: #166534;
+      background: #ecfdf3;
+      border-color: rgba(22,101,52,.16);
+    }
+
+    .huggy-message-utility button[data-feedback="negative"][data-active="true"] {
+      color: #991b1b;
+      background: #fff1f2;
+      border-color: rgba(153,27,27,.16);
+    }
+
+    .huggy-message-utility button[data-tooltip]::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 7px);
+      transform: translateX(-50%) translateY(3px);
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      box-shadow: 0 12px 28px rgba(9,9,11,.14);
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 120ms cubic-bezier(.22,1,.36,1), transform 120ms cubic-bezier(.22,1,.36,1);
+      z-index: 20;
+    }
+
+    .huggy-message-utility button[data-tooltip]:hover::after,
+    .huggy-message-utility button[data-tooltip]:focus-visible::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .huggy-message-time {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 620;
+      font-variant-numeric: tabular-nums;
+      padding: 0 3px;
+    }
+
+    .huggy-feedback-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(9,9,11,.32);
+      backdrop-filter: blur(8px);
+      animation: huggy-feedback-in 150ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-feedback-modal {
+      width: min(720px, 100%);
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-elevated));
+      color: var(--text);
+      box-shadow: 0 24px 80px rgba(9,9,11,.20);
+      padding: 24px;
+    }
+
+    .huggy-feedback-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .huggy-feedback-head h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(22px, 2vw, 32px);
+      line-height: 1.05;
+      letter-spacing: -.025em;
+      font-weight: 820;
+    }
+
+    .huggy-feedback-close {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .huggy-feedback-close:hover {
+      color: var(--text);
+      background: var(--bg-input);
+      border-color: var(--border-light, var(--border));
+    }
+
+    .huggy-feedback-reasons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-bottom: 16px;
+    }
+
+    .huggy-feedback-reason {
+      min-height: 34px;
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 999px;
+      background: var(--bg-input);
+      color: var(--text);
+      padding: 0 13px;
+      font-size: 13px;
+      font-weight: 680;
+      cursor: pointer;
+      transition: background 130ms cubic-bezier(.22,1,.36,1), border-color 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-feedback-reason:hover,
+    .huggy-feedback-reason[data-selected="true"] {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+      transform: translateY(-1px);
+    }
+
+    .huggy-feedback-textarea {
+      width: 100%;
+      min-height: 136px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--bg-input);
+      color: var(--text);
+      padding: 13px 14px;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.55;
+      outline: none;
+      box-shadow: 0 1px 0 rgba(255,255,255,.50) inset;
+    }
+
+    .huggy-feedback-textarea:focus {
+      border-color: var(--border-focus, var(--text));
+      box-shadow: 0 0 0 3px rgba(37,99,235,.10);
+    }
+
+    .huggy-feedback-note {
+      margin: 12px 0 18px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .huggy-message-detail-body {
+      max-height: min(58vh, 460px);
+      overflow: auto;
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 16px;
+      background: var(--bg-input);
+      padding: 14px;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .huggy-feedback-submit {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--text);
+      border-radius: 12px;
+      background: var(--text);
+      color: var(--bg);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 780;
+      cursor: pointer;
+      transition: opacity 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-feedback-submit:hover {
+      transform: translateY(-1px);
+    }
+
+    .huggy-feedback-submit:disabled {
+      opacity: .48;
+      cursor: not-allowed;
+      transform: none;
     }
 
     .huggy-live-status {
@@ -820,12 +1080,30 @@ function ensureConversationStyles() {
       to { opacity: .24; }
     }
 
+    @keyframes huggy-feedback-in {
+      from { opacity: 0; transform: translateY(8px) scale(.985); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @media (hover: none) {
+      .huggy-message-utility {
+        opacity: .82;
+        transform: none;
+        pointer-events: auto;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .huggy-message {
         animation: none !important;
       }
 
       .huggy-message-actions button,
+      .huggy-message-utility,
+      .huggy-message-utility button,
+      .huggy-feedback-backdrop,
+      .huggy-feedback-submit,
+      .huggy-feedback-reason,
       .huggy-conversation-download,
       .huggy-conversation-scroll,
       .huggy-live-dot,
@@ -1141,11 +1419,259 @@ function renderAgentTrace(message: HuggyConversationMessage) {
   );
 }
 
+type MessageFeedbackValue = "positive" | "negative";
+
+type FeedbackModalState = {
+  message: HuggyConversationMessage;
+  rating: MessageFeedbackValue;
+};
+
+const NEGATIVE_FEEDBACK_REASONS = [
+  { id: "incorrect_or_incomplete", label: "Incorrect ou incomplet" },
+  { id: "instructions_not_followed", label: "N'a pas suivi mes instructions" },
+  { id: "off_topic_or_wrong_scope", label: "Hors sujet / portee inadequate" },
+  { id: "lost_context", label: "Contexte perdu" },
+  { id: "slow_or_buggy", label: "Lent ou bogue" },
+  { id: "other", label: "Autre" },
+];
+
+function formatMessageTime(value?: string) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", " h ");
+}
+
+function dispatchConversationFeedback(detail: Record<string, unknown>) {
+  window.dispatchEvent(new CustomEvent("huggy-agent-feedback", { detail }));
+}
+
+function dispatchConversationEdit(message: HuggyConversationMessage) {
+  window.dispatchEvent(new CustomEvent("huggy-edit-message", {
+    detail: {
+      messageId: message.id,
+      content: message.content,
+      role: message.role,
+    },
+  }));
+}
+
+async function copyMessageText(message: HuggyConversationMessage) {
+  const text = message.content || "";
+  try {
+    await navigator.clipboard?.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+}
+
+function MessageUtilityBar({
+  message,
+  feedback,
+  onPositive,
+  onNegative,
+  onExpand,
+}: {
+  message: HuggyConversationMessage;
+  feedback?: MessageFeedbackValue;
+  onPositive: (message: HuggyConversationMessage) => void;
+  onNegative: (message: HuggyConversationMessage) => void;
+  onExpand: (message: HuggyConversationMessage) => void;
+}) {
+  if (message.role === "system" || message.working) return null;
+  const time = formatMessageTime(message.createdAt);
+  const isAssistant = message.role === "assistant";
+
+  return (
+    <div className="huggy-message-utility" aria-label="Message actions">
+      <button type="button" data-tooltip="Copier" aria-label="Copier" onClick={() => void copyMessageText(message)}>
+        <Copy size={15} aria-hidden="true" />
+      </button>
+      {isAssistant ? (
+        <>
+          <button
+            type="button"
+            data-tooltip="Bonne reponse"
+            data-feedback="positive"
+            data-active={feedback === "positive" ? "true" : "false"}
+            aria-label="Bonne reponse"
+            onClick={() => onPositive(message)}
+          >
+            <ThumbsUp size={15} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            data-tooltip="Signaler un probleme"
+            data-feedback="negative"
+            data-active={feedback === "negative" ? "true" : "false"}
+            aria-label="Signaler un probleme"
+            onClick={() => onNegative(message)}
+          >
+            <ThumbsDown size={15} aria-hidden="true" />
+          </button>
+          <button type="button" data-tooltip="Ouvrir" aria-label="Ouvrir le message" onClick={() => onExpand(message)}>
+            <Maximize2 size={15} aria-hidden="true" />
+          </button>
+        </>
+      ) : (
+        <button type="button" data-tooltip="Modifier" aria-label="Modifier ce message" onClick={() => dispatchConversationEdit(message)}>
+          <Pencil size={15} aria-hidden="true" />
+        </button>
+      )}
+      {time ? <span className="huggy-message-time">{time}</span> : null}
+    </div>
+  );
+}
+
+function MessageDetailModal({
+  message,
+  onClose,
+}: {
+  message: HuggyConversationMessage | null;
+  onClose: () => void;
+}) {
+  React.useEffect(() => {
+    if (!message) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [message, onClose]);
+
+  if (!message) return null;
+
+  return (
+    <div className="huggy-feedback-backdrop" role="presentation" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="huggy-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="huggy-message-detail-title">
+        <div className="huggy-feedback-head">
+          <h3 id="huggy-message-detail-title">Message</h3>
+          <button className="huggy-feedback-close" type="button" aria-label="Fermer" onClick={onClose}>
+            <XIcon size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="huggy-message-detail-body">
+          {renderStandardMessageContent(message)}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function FeedbackModal({
+  state,
+  onClose,
+  onSubmit,
+}: {
+  state: FeedbackModalState | null;
+  onClose: () => void;
+  onSubmit: (reasons: string[], comment: string) => void;
+}) {
+  const [reasons, setReasons] = React.useState<string[]>([]);
+  const [comment, setComment] = React.useState("");
+
+  React.useEffect(() => {
+    if (!state) return;
+    setReasons([]);
+    setComment("");
+  }, [state?.message.id]);
+
+  React.useEffect(() => {
+    if (!state) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [state, onClose]);
+
+  if (!state) return null;
+
+  const toggleReason = (reason: string) => {
+    setReasons(current => current.includes(reason)
+      ? current.filter(item => item !== reason)
+      : [...current, reason]);
+  };
+
+  const canSubmit = reasons.length > 0 || comment.trim().length > 0;
+
+  return (
+    <div className="huggy-feedback-backdrop" role="presentation" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="huggy-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="huggy-feedback-title">
+        <div className="huggy-feedback-head">
+          <h3 id="huggy-feedback-title">Partager votre retroaction</h3>
+          <button className="huggy-feedback-close" type="button" aria-label="Fermer" onClick={onClose}>
+            <XIcon size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="huggy-feedback-reasons" aria-label="Raisons du feedback">
+          {NEGATIVE_FEEDBACK_REASONS.map(reason => (
+            <button
+              className="huggy-feedback-reason"
+              key={reason.id}
+              type="button"
+              data-selected={reasons.includes(reason.id) ? "true" : "false"}
+              onClick={() => toggleReason(reason.id)}
+            >
+              + {reason.label}
+            </button>
+          ))}
+        </div>
+        <textarea
+          className="huggy-feedback-textarea"
+          value={comment}
+          onChange={event => setComment(event.target.value)}
+          placeholder="Expliquez ce qui n'allait pas ou ce que Huggy aurait du mieux comprendre..."
+          autoFocus
+        />
+        <p className="huggy-feedback-note">
+          Vos commentaires servent a ameliorer Huggy. Ne partagez pas de mot de passe, cle API ou donnee sensible.
+        </p>
+        <button
+          className="huggy-feedback-submit"
+          type="button"
+          disabled={!canSubmit}
+          onClick={() => onSubmit(reasons, comment)}
+        >
+          Envoyer
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function BuilderConversation({
   messages,
 }: {
   messages: HuggyConversationMessage[];
 }) {
+  const [feedbackByMessage, setFeedbackByMessage] = React.useState<Record<string, MessageFeedbackValue>>({});
+  const [feedbackModal, setFeedbackModal] = React.useState<FeedbackModalState | null>(null);
+  const [expandedMessage, setExpandedMessage] = React.useState<HuggyConversationMessage | null>(null);
+
+  const sendFeedback = React.useCallback((message: HuggyConversationMessage, rating: MessageFeedbackValue, reasons: string[] = [], comment = "") => {
+    setFeedbackByMessage(current => ({ ...current, [message.id]: rating }));
+    dispatchConversationFeedback({
+      messageId: message.id,
+      role: message.role,
+      content: message.content,
+      rating,
+      feedback: rating === "positive" ? "keep" : "reject",
+      reasons,
+      comment,
+    });
+  }, []);
+
   return (
     <Conversation className="relative size-full">
       <ConversationContent>
@@ -1161,30 +1687,48 @@ function BuilderConversation({
             const block = renderMessageBlock(message);
             return (
               <Message from={message.role} key={message.id}>
-                <MessageContent className={trace ? "huggy-message-content-trace" : undefined}>
-                  {trace || block ? (
-                    <>
-                      {trace}
-                      {block}
-                    </>
-                  ) : (
-                    message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
-                  )}
-                {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
-                  <div className="huggy-message-actions">
-                    {message.actions.map(action => (
-                      <button key={action.id} type="button" onClick={action.onClick}>
-                        {action.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                </MessageContent>
+                <div className="huggy-message-stack">
+                  <MessageContent className={trace ? "huggy-message-content-trace" : undefined}>
+                    {trace || block ? (
+                      <>
+                        {trace}
+                        {block}
+                      </>
+                    ) : (
+                      message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
+                    )}
+                  {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
+                    <div className="huggy-message-actions">
+                      {message.actions.map(action => (
+                        <button key={action.id} type="button" onClick={action.onClick}>
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  </MessageContent>
+                  <MessageUtilityBar
+                    message={message}
+                    feedback={feedbackByMessage[message.id]}
+                    onPositive={(target) => sendFeedback(target, "positive")}
+                    onNegative={(target) => setFeedbackModal({ message: target, rating: "negative" })}
+                    onExpand={setExpandedMessage}
+                  />
+                </div>
               </Message>
             );
           })
         )}
       </ConversationContent>
+      <FeedbackModal
+        state={feedbackModal}
+        onClose={() => setFeedbackModal(null)}
+        onSubmit={(reasons, comment) => {
+          if (feedbackModal) sendFeedback(feedbackModal.message, feedbackModal.rating, reasons, comment);
+          setFeedbackModal(null);
+        }}
+      />
+      <MessageDetailModal message={expandedMessage} onClose={() => setExpandedMessage(null)} />
     </Conversation>
   );
 }
@@ -1217,6 +1761,7 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
           trace: message.trace || null,
           block: message.block,
           actions: [],
+          createdAt: new Date().toISOString(),
         },
       ];
       render();

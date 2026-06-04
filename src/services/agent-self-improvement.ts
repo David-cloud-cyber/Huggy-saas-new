@@ -17,6 +17,16 @@ type ImprovementInput = {
   issueCount?: number;
 };
 
+type UserFeedbackInput = {
+  feedback: string;
+  rating?: 'positive' | 'negative' | null;
+  reasons?: string[];
+  comment?: string;
+  role?: string | null;
+  messageExcerpt?: string;
+  source?: string;
+};
+
 function compact(value: unknown, limit = 180) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > limit ? `${text.slice(0, limit - 1)}...` : text;
@@ -70,6 +80,62 @@ export function buildAgentImprovementSignal(input: ImprovementInput) {
           ? 'show_real_agent_steps_and_keep_trace_after_completion'
           : 'stream_answer_in_chat_only_without_preview_or_build_loader',
       },
+    },
+  };
+}
+
+export function buildUserFeedbackImprovementSignal(input: UserFeedbackInput) {
+  const rating = input.rating || (input.feedback === 'keep' ? 'positive' : input.feedback === 'reject' ? 'negative' : null);
+  const reasons = (input.reasons || []).slice(0, 8);
+  const comment = compact(input.comment, 360);
+  const messageExcerpt = compact(input.messageExcerpt, 260);
+  const isNegative = rating === 'negative' || input.feedback === 'reject';
+  const reasonCopy = reasons.length ? ` Reasons: ${reasons.join(', ')}.` : '';
+  const commentCopy = comment ? ` Comment: ${comment}` : '';
+
+  const summary = [
+    'User feedback learning signal.',
+    `Rating ${rating || input.feedback || 'unknown'} from ${input.source || 'builder'}.`,
+    input.role ? `Message role ${input.role}.` : '',
+    reasonCopy.trim(),
+    commentCopy.trim(),
+  ].filter(Boolean).join(' ');
+
+  return {
+    memoryType: 'agent_feedback_learning',
+    summary,
+    payload: {
+      architecture: {
+        feedback_learning: {
+          last_rating: rating,
+          last_feedback: input.feedback,
+          last_source: input.source || 'builder',
+          negative_feedback_requires_attention: isNegative,
+          updated_at: new Date().toISOString(),
+        },
+      },
+      recent_decisions: [{
+        type: 'user_feedback',
+        rating,
+        feedback: input.feedback,
+        reasons,
+        comment,
+        role: input.role || null,
+        message_excerpt: messageExcerpt,
+        created_at: new Date().toISOString(),
+      }],
+      ui_preferences: {
+        feedback_policy: isNegative
+          ? 'prefer_clarification_and_specific_corrections_when_similar_feedback_reappears'
+          : 'preserve_response_style_and_agent_behavior_when_similar_requests_reappear',
+      },
+      known_errors: isNegative ? [{
+        source: input.source || 'builder',
+        reasons,
+        comment,
+        message_excerpt: messageExcerpt,
+        created_at: new Date().toISOString(),
+      }] : [],
     },
   };
 }

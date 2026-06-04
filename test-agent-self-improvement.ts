@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { buildAgentImprovementSignal } from './src/services/agent-self-improvement.ts';
+import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 
 const conversationSignal = buildAgentImprovementSignal({
   prompt: 'bonjour',
@@ -51,5 +51,21 @@ assert.equal(
   generatedSignal.payload.ui_preferences.stream_policy,
   'show_real_agent_steps_and_keep_trace_after_completion',
 );
+
+const feedbackSignal = buildUserFeedbackImprovementSignal({
+  feedback: 'reject',
+  rating: 'negative',
+  reasons: ['instructions_not_followed', 'lost_context'],
+  comment: 'Huggy generated an app when I only asked for advice.',
+  role: 'assistant',
+  messageExcerpt: 'I created the app.',
+  source: 'message_hover_toolbar',
+});
+
+assert.equal(feedbackSignal.memoryType, 'agent_feedback_learning');
+assert.equal(feedbackSignal.payload.architecture.feedback_learning.negative_feedback_requires_attention, true);
+assert.equal(feedbackSignal.payload.recent_decisions[0].reasons.length, 2);
+assert.match(feedbackSignal.payload.ui_preferences.feedback_policy, /prefer_clarification/);
+assert.equal(feedbackSignal.payload.known_errors.length, 1);
 
 console.log('agent-self-improvement tests passed');
