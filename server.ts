@@ -1690,6 +1690,16 @@ function sanitizeDeploymentForUser(deployment: any, publicUrl: string, customDom
   };
 }
 
+function normalizeDeploymentStatusForPersistence(status: unknown): 'ready' | 'failed' {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (/\b(error|failed|failure|canceled|cancelled|removed|deleted)\b/.test(normalized)) return 'failed';
+  // Vercel can return transient states such as INITIALIZING, QUEUED, BUILDING,
+  // or DEPLOYING immediately after accepting the deployment. Huggy persists the
+  // publish snapshot as live because the Vercel URL has already been created;
+  // provider-specific transients must not leak into Supabase enum columns.
+  return 'ready';
+}
+
 function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
   if (!html || html.includes('data-huggy-published-badge="true"')) return html;
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
@@ -3368,8 +3378,9 @@ function withoutUndefinedValues(row: Record<string, any>) {
 }
 
 function deploymentRecordCandidates(record: any) {
+  const status = normalizeDeploymentStatusForPersistence(record.status);
   return [
-    withoutUndefinedValues(record),
+    withoutUndefinedValues({ ...record, status }),
     withoutUndefinedValues({
       id: record.id,
       organization_id: record.organization_id,
@@ -3377,7 +3388,7 @@ function deploymentRecordCandidates(record: any) {
       provider: record.provider,
       provider_deployment_id: record.provider_deployment_id,
       deployment_url: record.deployment_url,
-      status: record.status,
+      status,
       commit_hash: record.commit_hash || null,
       branch: record.branch || 'main',
       created_at: record.created_at,
@@ -3388,7 +3399,7 @@ function deploymentRecordCandidates(record: any) {
       project_id: record.project_id,
       provider: record.provider,
       deployment_url: record.deployment_url,
-      status: record.status,
+      status,
       created_at: record.created_at,
     }),
     withoutUndefinedValues({
@@ -3397,7 +3408,7 @@ function deploymentRecordCandidates(record: any) {
       provider: record.provider,
       provider_deployment_id: record.provider_deployment_id,
       deployment_url: record.deployment_url,
-      status: record.status,
+      status,
       created_at: record.created_at,
     }),
     withoutUndefinedValues({
@@ -3405,14 +3416,20 @@ function deploymentRecordCandidates(record: any) {
       project_id: record.project_id,
       provider: record.provider,
       deployment_url: record.deployment_url,
-      status: record.status,
+      status,
       created_at: record.created_at,
     }),
     withoutUndefinedValues({
       id: record.id,
       project_id: record.project_id,
       deployment_url: record.deployment_url,
-      status: record.status,
+      status,
+      created_at: record.created_at,
+    }),
+    withoutUndefinedValues({
+      id: record.id,
+      project_id: record.project_id,
+      deployment_url: record.deployment_url,
       created_at: record.created_at,
     }),
   ];
@@ -7275,7 +7292,7 @@ async function publishProjectSnapshot(req: any, res: any) {
       public_url: publishStatus.public_url,
       custom_domain: publishStatus.custom_domain,
       badge_required: badgeRequired,
-      status: result.status === 'ready' ? 'ready' : result.status,
+      status: normalizeDeploymentStatusForPersistence(result.status),
       commit_hash: commitHash || null,
       branch,
       created_at: createdAt,
