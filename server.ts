@@ -3639,6 +3639,20 @@ function isMissingAgentV2TableError(error: any) {
   return /agent_runs|agent_run_steps|agent_memories|agent_verifications|agent_runner_results|agent_research_results|schema cache|relation .* does not exist|table .* does not exist|column .* does not exist|could not find .* in the schema cache/i.test(error?.message || '');
 }
 
+const PUBLIC_MODEL_ROUTING_FIELD_RE = /^(model|model_id|model_name|selected_model|requested_model|routed_model|provider_model|selectedModel|requestedModel|auto_routed|task_complexity|routing_mode|selected_model_policy|provider)$/i;
+
+function redactPublicAgentPayload<T>(value: T): T {
+  const base = redactAgentPayload(value);
+  if (Array.isArray(base)) return base.map(item => redactPublicAgentPayload(item)) as T;
+  if (!base || typeof base !== 'object') return base;
+  const output: Record<string, any> = {};
+  for (const [key, item] of Object.entries(base as Record<string, any>)) {
+    if (PUBLIC_MODEL_ROUTING_FIELD_RE.test(key)) continue;
+    output[key] = redactPublicAgentPayload(item);
+  }
+  return output as T;
+}
+
 async function createAgentRun(project: GeneratedProject, userId: string, requestId: string, decision: IntentDecision, modelId: string, contextPack: Record<string, any>) {
   const row = {
     id: `run_${randomUUID()}`,
@@ -3650,8 +3664,8 @@ async function createAgentRun(project: GeneratedProject, userId: string, request
     mode: decision.requestedMode,
     model_id: modelId === 'auto' ? null : modelId,
     status: 'running',
-    context_summary: redactAgentPayload(contextPack),
-    public_payload: redactAgentPayload({
+    context_summary: redactPublicAgentPayload(contextPack),
+    public_payload: redactPublicAgentPayload({
       auto_plan_required: decision.autoPlanRequired,
       next_action: decision.nextAction,
       routing_source: decision.routingSource,
@@ -3674,7 +3688,7 @@ async function createAgentRun(project: GeneratedProject, userId: string, request
 async function updateAgentRunStatus(runId: string, status: string, extra: Record<string, any> = {}) {
   if (!runId) return;
   const client = requireSupabase('Agent run update');
-  const update = redactAgentPayload({
+  const update = redactPublicAgentPayload({
     status,
     ...extra,
     updated_at: new Date().toISOString(),
@@ -3718,7 +3732,7 @@ async function saveAgentRunStep(input: {
     event_type: input.event_type,
     status: input.status || (input.event_type === 'error' ? 'failed' : 'completed'),
     message: input.message,
-    public_payload: redactAgentPayload(input.payload || {}),
+    public_payload: redactPublicAgentPayload(input.payload || {}),
     created_at: new Date().toISOString(),
   };
   const client = requireSupabase('Agent run step persistence');
@@ -3731,18 +3745,18 @@ async function saveAgentRunStep(input: {
 async function listAgentRuns(projectId: string, limitValue = 20) {
   const limit = Math.min(50, Math.max(1, Number(limitValue || 20)));
   const client = requireSupabase('Agent run listing');
-  const { data, error } = await client.from('agent_runs').select('id,request_id,project_id,user_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,public_payload,created_at,updated_at,completed_at,cancelled_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(limit);
+  const { data, error } = await client.from('agent_runs').select('id,request_id,project_id,user_id,intent,status,diagnostic_code,suggested_action,duration_ms,public_payload,created_at,updated_at,completed_at,cancelled_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(limit);
   if (error && isMissingAgentV2TableError(error)) return [];
   if (error) throw new Error(`Supabase agent run listing failed: ${error.message}`);
-  return (data || []).map(redactAgentPayload);
+  return (data || []).map(redactPublicAgentPayload);
 }
 
 async function getAgentRun(projectId: string, runId: string) {
   const client = requireSupabase('Agent run lookup');
-  const { data, error } = await client.from('agent_runs').select('id,request_id,project_id,user_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,public_payload,created_at,updated_at,completed_at,cancelled_at').eq('project_id', projectId).eq('id', runId).maybeSingle();
+  const { data, error } = await client.from('agent_runs').select('id,request_id,project_id,user_id,intent,status,diagnostic_code,suggested_action,duration_ms,public_payload,created_at,updated_at,completed_at,cancelled_at').eq('project_id', projectId).eq('id', runId).maybeSingle();
   if (error && isMissingAgentV2TableError(error)) return null;
   if (error) throw new Error(`Supabase agent run lookup failed: ${error.message}`);
-  return data ? redactAgentPayload(data) : null;
+  return data ? redactPublicAgentPayload(data) : null;
 }
 
 async function getAgentRunSteps(projectId: string, runId: string) {
@@ -3750,7 +3764,7 @@ async function getAgentRunSteps(projectId: string, runId: string) {
   const { data, error } = await client.from('agent_run_steps').select('sequence_number,event_type,status,message,public_payload,created_at').eq('project_id', projectId).eq('agent_run_id', runId).order('sequence_number');
   if (error && isMissingAgentV2TableError(error)) return [];
   if (error) throw new Error(`Supabase agent run steps failed: ${error.message}`);
-  return (data || []).map(redactAgentPayload);
+  return (data || []).map(redactPublicAgentPayload);
 }
 
 async function listAgentMemory(projectId: string) {
@@ -5923,7 +5937,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
     await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${generation.model}`, refId);
-    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, model: generation.model } });
+    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary } });
 
     res.json({
       success: true,
@@ -6006,7 +6020,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const send = async (event_type: string, message: string, payload: Record<string, unknown> = {}) => {
     if (streamClosed || res.destroyed || res.writableEnded) return;
     sequence += 1;
-    const publicPayload = redactAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload });
+    const publicPayload = redactPublicAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload });
     let event: any = {
       id: `${requestId}_${sequence}`,
       organization_id: project.organization_id,
@@ -6124,7 +6138,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     let agentText;
     await send('answer_stream_started', 'Writing the answer.', {
       intent: quickDecision.intent,
-      model: requestedModelSelection,
       fast_path: true,
     });
     try {
@@ -6139,7 +6152,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           await send('answer_token', chunk, {
             text_delta: chunk,
             index: meta.index,
-            model: meta.model,
             fast_path: true,
           });
         },
@@ -6162,7 +6174,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         await send('answer_token', chunk, {
           text_delta: chunk,
           index,
-          model: agentText.model,
           fast_path: true,
         });
       }
@@ -6187,7 +6198,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }).catch(() => null);
     await send(quickDecision.intent === 'clarification_required' ? 'clarification_required' : 'answering', content, {
       text: content,
-      model: agentText.model,
       question: quickDecision.clarification?.question,
       choices: quickDecision.clarification?.choices || [],
       recommendation: quickDecision.clarification?.recommendation,
@@ -6373,10 +6383,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
     await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
       intent: decision.intent,
-      model: effectiveModelSelection,
-      requested_model: requestedModelSelection,
-      auto_routed: modelRouting.autoRouted,
-      task_complexity: modelRouting.complexity,
       fast_path: !shouldStreamAgentTrace,
     });
     let agentText;
@@ -6396,7 +6402,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           await send('answer_token', chunk, {
             text_delta: chunk,
             index: meta.index,
-            model: meta.model,
           });
         },
       });
@@ -6451,13 +6456,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         await send('answer_token', chunk, {
           text_delta: chunk,
           index,
-          model: agentText.model,
         });
       }
     }
     await send(eventName, content, {
       text: content,
-      model: agentText.model,
       question: decision.clarification?.question,
       choices: decision.clarification?.choices || [],
       recommendation: decision.clarification?.recommendation,
@@ -6499,16 +6502,9 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Preparation du build.', 'Preparing the build.'),
       step_detail: streamCopy('Je cree une session annulable avant de toucher aux fichiers.', 'I am creating a cancellable session before touching files.'),
     });
-    await send('routing', streamCopy('Selection du modele et du contexte.', 'Selecting the model and preparing project context.'), {
-      mode: requestedModelSelection,
-      selected_model: effectiveModelSelection,
-      auto_routed: modelRouting.autoRouted,
-      task_complexity: modelRouting.complexity,
-      routing_mode: modelRouting.mode,
-      step_label: streamCopy('Selection du modele.', 'Selecting the model.'),
-      step_detail: modelRouting.autoRouted
-        ? streamCopy(`Auto a choisi ${effectiveModelSelection} pour une tache ${modelRouting.complexity}.`, `Auto selected ${effectiveModelSelection} for a ${modelRouting.complexity} task.`)
-        : streamCopy(`Modele selectionne: ${effectiveModelSelection}.`, `Selected model: ${effectiveModelSelection}.`),
+    await send('routing', streamCopy('Preparation du contexte du projet.', 'Preparing project context.'), {
+      step_label: streamCopy('Preparation du contexte.', 'Preparing context.'),
+      step_detail: streamCopy('Je prepare les informations utiles avant de travailler.', 'I am preparing the useful project context before working.'),
     });
     let executionPlan = '';
     if (decision.autoPlanRequired) {
@@ -6527,7 +6523,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         };
         const planned = await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
         executionPlan = planned.text;
-        await send('plan_ready', executionPlan, { text: executionPlan, model: planned.model, auto_plan_required: true });
+        await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true });
       } catch (error) {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
         await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true, fallback: normalizeProviderError(error) });
@@ -6547,7 +6543,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       validateAllowedModel(selectedModel);
 
       await send('model_started', streamCopy('Generation des fichiers lancee.', 'File generation started.'), {
-        model: selectedModel,
         step_label: streamCopy('Generation des fichiers.', 'Generating files.'),
         step_detail: streamCopy('Je demande une app moderne avec structure React/Vite, interactions et etats UI.', 'I am asking for a modern app with React/Vite structure, interactions, and UI states.'),
       });
@@ -6572,8 +6567,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           if (generatedText.length - lastModelProgressChars >= 1600 || now - lastModelProgressAt >= 2500) {
             lastModelProgressAt = now;
             lastModelProgressChars = generatedText.length;
-            await send('model_streaming', streamCopy('Reception des fichiers generes.', 'Receiving generated files from the model.'), {
-              model,
+            await send('model_streaming', streamCopy('Reception des fichiers generes.', 'Receiving generated files.'), {
               streamed_chars: generatedText.length,
               step_label: streamCopy('Reception du code.', 'Receiving code.'),
               step_detail: streamCopy('Je conserve le flux actif pendant que les fichiers arrivent.', 'I keep the stream active while files arrive.'),
@@ -6862,7 +6856,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       project: updatedProject,
       files,
       preview: { status: pipeline.status, html: previewHtml },
-      model,
       diff,
       auto_fix: autoFix,
       errors: pipeline.errors,
@@ -6887,7 +6880,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
     await updateAgentRunStatus(agentRunId, 'completed', {
       duration_ms: Date.now() - streamStartedAt,
-      public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
+      public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
     });
     await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed' });
     endStream();

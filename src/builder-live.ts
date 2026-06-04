@@ -1520,16 +1520,22 @@ function formatShortDate(value?: string) {
 
 function renderHistoryPanel(runs: AgentRunSummary[] = [], versions: ProjectVersionSummary[] = [], loading = false, error = '') {
   const root = ensureHistoryPanel();
-  const runRows = runs.length ? runs.map(run => `
+  const runRows = runs.length ? runs.map(run => {
+    const runMeta = [
+      formatShortDate(run.created_at),
+      run.duration_ms ? `${Math.max(1, Math.round(run.duration_ms / 1000))}s` : '',
+    ].filter(Boolean).join(' · ');
+    return `
     <div style="border:1px solid var(--border-light);background:var(--bg-elevated);border-radius:10px;padding:10px;display:grid;gap:5px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <strong style="font-size:12px;color:var(--text);">${escapeHtml(run.intent || 'agent run')}</strong>
         <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">${escapeHtml(run.status || 'unknown')}</span>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);">${escapeHtml(run.mode || 'auto')} · ${escapeHtml(run.model_id || 'auto')} · ${formatShortDate(run.created_at)}</div>
+      <div style="font-size:11px;color:var(--text-muted);">${escapeHtml(runMeta)}</div>
       ${run.diagnostic_code ? `<div style="font-size:11px;color:#991b1b;">${escapeHtml(run.diagnostic_code)}</div>` : ''}
     </div>
-  `).join('') : '<div style="color:var(--text-muted);font-size:12px;">No agent runs recorded yet.</div>';
+  `;
+  }).join('') : '<div style="color:var(--text-muted);font-size:12px;">No agent runs recorded yet.</div>';
   const versionRows = versions.length ? versions.map(version => `
     <div style="border:1px solid var(--border-light);background:var(--bg-elevated);border-radius:10px;padding:10px;display:grid;gap:8px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -2705,6 +2711,31 @@ function restoreMessages(payload: ProjectPayload) {
     });
 }
 
+const STREAM_INTERNAL_MODEL_KEYS = [
+  'model',
+  'model_id',
+  'selected_model',
+  'requested_model',
+  'routed_model',
+  'provider_model',
+  'selectedModel',
+  'requestedModel',
+  'auto_routed',
+  'task_complexity',
+  'routing_mode',
+  'selected_model_policy',
+  'provider',
+];
+
+function redactInternalModelFields(payload: any) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+  const redacted = { ...payload };
+  STREAM_INTERNAL_MODEL_KEYS.forEach(key => {
+    if (key in redacted) delete redacted[key];
+  });
+  return redacted;
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   if (isGenerating || !prompt.trim()) return;
   stopRequested = false;
@@ -2803,7 +2834,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       modelId: selectedModel(),
       ...extra,
     }, (eventType, event) => {
-      const payload = event.payload || {};
+      const payload = redactInternalModelFields(event.payload || {});
       const realLabel = (fallback: string) => {
         const raw = String(payload.step_label || payload.message || event.message || fallback || '').trim();
         return raw.replace(/\s+/g, ' ').slice(0, 140) || fallback;
