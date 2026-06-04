@@ -2463,7 +2463,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let streamedText = '';
   let assistantHasFinalContent = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
-  const agentSteps = new Map<string, { label: string; state: 'done' | 'now' }>();
+  const agentSteps = new Map<string, { label: string; state: 'done' | 'now'; detail?: string }>();
   const shownStreamBlocks = new Set<string>();
   let responseCard: HTMLElement | null = status;
   const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
@@ -2478,23 +2478,24 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     activeWorkingSteps = Array.from(agentSteps.entries()).map(([id, step]) => ({
       id,
       label: step.label,
+      detail: step.detail,
       status: step.state === 'now' ? 'active' : 'done',
     }));
     renderWorkingLabel(headline);
   };
-  const markAgentStep = (key: string, label: string, headline = label) => {
+  const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     if (quickConversation && !generationTouchesPreview) return;
     for (const [stepKey, step] of agentSteps) {
       if (stepKey !== key && step.state === 'now') agentSteps.set(stepKey, { ...step, state: 'done' });
     }
-    agentSteps.set(key, { label, state: 'now' });
+    agentSteps.set(key, { label, state: 'now', detail });
     syncAgentSteps(headline);
   };
-  const finishAgentStep = (key: string, label?: string) => {
+  const finishAgentStep = (key: string, label?: string, detail?: string) => {
     if (quickConversation && !generationTouchesPreview) return;
     const current = agentSteps.get(key);
     if (!current && !label) return;
-    agentSteps.set(key, { label: label || current?.label || key, state: 'done' });
+    agentSteps.set(key, { label: label || current?.label || key, state: 'done', detail: detail ?? current?.detail });
     syncAgentSteps();
   };
   const setAssistantWorking = (label: string) => {
@@ -2566,6 +2567,18 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       const visibleIntentLabel = () => normalizedIntent
         ? say(`Intention detectee : ${normalizedIntent}`, `Detected intent: ${normalizedIntent}`)
         : realLabel(say('Mode de reponse choisi.', 'Response mode selected.'));
+      const trustDetail = (fr: string, en: string) => String(payload.step_detail || say(fr, en)).replace(/\s+/g, ' ').slice(0, 180);
+      const intentTrustDetail = () => {
+        const intent = String(payload.intent?.intent || '').trim();
+        const mutates = Boolean(payload.intent?.requiresFileChanges || payload.intent?.requiresPreviewRebuild);
+        if (intent === 'build') return trustDetail('Je vais creer une vraie app interactive, puis la verifier avant de montrer la preview.', 'I will create a real interactive app, then verify it before showing the preview.');
+        if (intent === 'edit') return trustDetail('Je preserve l app existante et je modifie seulement la partie demandee.', 'I will preserve the existing app and change only the requested part.');
+        if (intent === 'debug_fix') return trustDetail('Je cherche la cause probable, je corrige de facon ciblee, puis je relance les checks.', 'I will find the likely cause, apply a targeted fix, then rerun checks.');
+        if (intent === 'plan') return trustDetail('Je prepare un plan sans modifier les fichiers.', 'I will prepare a plan without changing files.');
+        if (intent === 'verify') return trustDetail('Je controle le projet actuel sans le modifier.', 'I will inspect the current project without changing it.');
+        if (!mutates) return trustDetail('Je reponds simplement sans toucher a la preview ni aux fichiers.', 'I will answer without touching the preview or files.');
+        return trustDetail('Je choisis l action la plus sure avant de modifier le projet.', 'I am choosing the safest action before changing the project.');
+      };
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
       if (eventType === 'thinking_step' || eventType === 'planning_step' || eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step' || eventType === 'validation_step') {
@@ -2594,19 +2607,19 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'run_started') {
-        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking');
+        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking', trustDetail('Je demarre un run controle pour garder une trace de ce qui va se passer.', 'I am starting a controlled run so the work stays traceable.'));
         return;
       }
       if (eventType === 'context_loaded') {
-        markAgentStep('context', visibleStepLabel(say('Contexte du projet charge.', 'Project context loaded.')), 'Thinking');
+        markAgentStep('context', visibleStepLabel(say('Contexte du projet charge.', 'Project context loaded.')), 'Thinking', trustDetail('Je lis l etat actuel pour eviter d ecraser ton travail par erreur.', 'I am reading the current state to avoid overwriting your work by mistake.'));
         return;
       }
       if (eventType === 'agent_thinking') {
-        markAgentStep('thinking', visibleStepLabel(say('Analyse de la demande.', 'Analyzing the request.')), 'Thinking');
+        markAgentStep('thinking', visibleStepLabel(say('Analyse de la demande.', 'Analyzing the request.')), 'Thinking', trustDetail('Je decide s il faut repondre, planifier, modifier ou generer.', 'I am deciding whether to answer, plan, edit, or generate.'));
         return;
       }
       if (eventType === 'intent_detected') {
-        markAgentStep('intent', visibleIntentLabel(), 'Thinking');
+        markAgentStep('intent', visibleIntentLabel(), 'Thinking', intentTrustDetail());
         if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
           promoteToPreviewWork('Thinking');
         }
@@ -2627,9 +2640,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             : eventType === 'tool_loop_started'
               ? 'Thinking'
               : 'Thinking';
-        if (eventType === 'planning') markAgentStep('plan', visibleStepLabel(say('Planification du travail utile.', 'Planning the useful work.')), label);
-        if (eventType === 'research_started') markAgentStep('research', visibleStepLabel(say('Recherche des informations utiles.', 'Looking up useful context.')), label);
-        if (eventType === 'tool_loop_started') markAgentStep('tools', visibleStepLabel(say('Preparation des actions techniques.', 'Preparing technical actions.')), label);
+        if (eventType === 'planning') markAgentStep('plan', visibleStepLabel(say('Planification du travail utile.', 'Planning the useful work.')), label, trustDetail('Je pose une sequence courte pour reduire les changements inutiles.', 'I am setting a short sequence to reduce unnecessary changes.'));
+        if (eventType === 'research_started') markAgentStep('research', visibleStepLabel(say('Recherche des informations utiles.', 'Looking up useful context.')), label, trustDetail('Je cherche seulement si la demande depend d informations recentes ou externes.', 'I only research when the request depends on recent or external information.'));
+        if (eventType === 'tool_loop_started') markAgentStep('tools', visibleStepLabel(say('Preparation des actions techniques.', 'Preparing technical actions.')), label, trustDetail('Je limite les outils pour garder le run rapide et controlable.', 'I am limiting tool work so the run stays fast and controlled.'));
         setAssistantWorking(label);
         if (generationTouchesPreview) setEmptyPreviewState('working', label);
         return;
@@ -2637,7 +2650,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'research_result' || eventType === 'research_skipped') {
         finishAgentStep('research', eventType === 'research_result'
           ? realLabel(say('Recherche terminée.', 'Research completed.'))
-          : realLabel(say('Recherche non nécessaire.', 'Research not needed.')));
+          : realLabel(say('Recherche non nécessaire.', 'Research not needed.')),
+          eventType === 'research_result'
+            ? trustDetail('J integre seulement les sources utiles au contexte.', 'I am keeping only useful sources in context.')
+            : trustDetail('Le contexte projet suffit pour continuer.', 'The project context is enough to continue.'));
         setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Thinking');
         if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
         return;
@@ -2645,7 +2661,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'plan_ready' || eventType === 'answering') {
         const text = payload.text || event.message || '';
         if (eventType === 'plan_ready' && payload.auto_plan_required) {
-          finishAgentStep('plan', say('Plan prêt, je passe à la réalisation.', 'Plan ready, moving into the build.'));
+          finishAgentStep('plan', say('Plan pret, je passe a la realisation.', 'Plan ready, moving into the build.'), trustDetail('Le plan sert maintenant de garde-fou pour la generation.', 'The plan now acts as a guardrail for generation.'));
           setAssistantWorking('Building');
         } else {
           const target = commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
@@ -2695,7 +2711,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
-        markAgentStep('fix', realLabel(say('Erreur détectée, correction en préparation.', 'Issue detected, preparing a fix.')), 'Fixing');
+        markAgentStep('fix', realLabel(say('Erreur detectee, correction en preparation.', 'Issue detected, preparing a fix.')), 'Fixing', trustDetail('Je tente de reparer avant de te montrer une preview cassee.', 'I am trying to fix it before showing you a broken preview.'));
         showFixBugBox(payload.errors || [{ message: event.message }]);
       }
       if (eventType === 'verification_started' && payload.text) {
@@ -2703,7 +2719,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
           ? 'Building'
           : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'files_changed'
@@ -2716,17 +2732,19 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
                 ? 'Fixing'
                 : 'Thinking';
         if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Preparation de l espace de travail.', 'Preparing the workspace.')), label);
-        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers lancee.', 'File generation started.')), label);
-        if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${visibleStepLabel(say('Reception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : visibleStepLabel(say('Reception des fichiers.', 'Receiving files.')), label);
-        if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label);
-        if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label);
-        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label);
-        if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Vérifications terminées.', 'Checks completed.')));
-        if (eventType === 'quality_checked') finishAgentStep('verify', visibleStepLabel(say('Qualite verifiee.', 'Quality checked.')));
-        if (eventType === 'runner_failed') markAgentStep('fix', runnerLabel(say('Des vérifications demandent une correction.', 'Checks need a fix.')), label);
-        if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', visibleStepLabel(say('Correction ciblee appliquee.', 'Targeted fix applied.')), label);
-        if (eventType === 'retest_started') markAgentStep('retest', visibleStepLabel(say('Nouvelle verification apres correction.', 'Retesting after the fix.')), label);
-        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', visibleStepLabel(say('Correction terminee.', 'Fix completed.')));
+        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers lancee.', 'File generation started.')), label, trustDetail('Je genere une structure moderne avec composants, styles et interactions.', 'I am generating a modern structure with components, styles, and interactions.'));
+        if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${visibleStepLabel(say('Reception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : visibleStepLabel(say('Reception des fichiers.', 'Receiving files.')), label, trustDetail('Je garde le flux ouvert pendant que les fichiers arrivent.', 'I am keeping the stream open while files arrive.'));
+        if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));
+        if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les fichiers generes avant les checks.', 'I am merging generated files before checks.'));
+        if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
+        if (eventType === 'verification_failed') markAgentStep('fix', visibleStepLabel(say('Blocage detecte.', 'Blocker detected.')), 'Fixing', trustDetail('Je ne valide pas une app qui reste cassee.', 'I do not mark a still-broken app as ready.'));
+        if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Verifications terminees.', 'Checks completed.')), trustDetail('Les checks critiques sont passes.', 'Critical checks passed.'));
+        if (eventType === 'quality_checked') finishAgentStep('verify', visibleStepLabel(say('Qualite verifiee.', 'Quality checked.')), trustDetail('Je garde les warnings comme notes sans bloquer si l app fonctionne.', 'I keep warnings as notes without blocking when the app works.'));
+        if (eventType === 'runner_failed') markAgentStep('fix', runnerLabel(say('Des verifications demandent une correction.', 'Checks need a fix.')), label, trustDetail('Je corrige les blocages concrets avant de finaliser.', 'I am fixing concrete blockers before finishing.'));
+        if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', visibleStepLabel(say('Correction ciblee appliquee.', 'Targeted fix applied.')), label, trustDetail('Je touche seulement les fichiers utiles pour reduire le risque.', 'I am changing only useful files to reduce risk.'));
+        if (eventType === 'retest_started') markAgentStep('retest', visibleStepLabel(say('Nouvelle verification apres correction.', 'Retesting after the fix.')), label, trustDetail('Je relance les checks pour confirmer que la correction tient.', 'I am rerunning checks to confirm the fix holds.'));
+        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', visibleStepLabel(say('Correction terminee.', 'Fix completed.')), trustDetail('Le blocage detecte a ete resolu.', 'The detected blocker has been resolved.'));
+        if (eventType === 'memory_updated') finishAgentStep('memory', visibleStepLabel(say('Memoire mise a jour.', 'Memory updated.')), trustDetail('Je garde les decisions utiles pour les prochaines iterations.', 'I keep useful decisions for future iterations.'));
         setAssistantWorking(label);
         const fileChangingEvent = eventType !== 'verification_started' || generationTouchesPreview;
         if (fileChangingEvent) promoteToPreviewWork(label);
@@ -2753,8 +2771,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'preview_ready') {
-        finishAgentStep('build', say('Preview prête.', 'Preview ready.'));
-        finishAgentStep('verify', say('Dernière vérification terminée.', 'Final check completed.'));
+        finishAgentStep('build', say('Preview prete.', 'Preview ready.'), trustDetail('La preview montre maintenant le resultat le plus recent.', 'The preview now shows the latest result.'));
+        finishAgentStep('verify', say('Derniere verification terminee.', 'Final check completed.'), trustDetail('Les controles finaux sont termines avant le resume.', 'Final checks are complete before the summary.'));
         activateBuilderView('preview');
         renderFiles(payload.files || []);
         if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);

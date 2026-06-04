@@ -637,11 +637,13 @@ const platformIntelligence: Record<GeneratedAppType, PlatformIntelligence> = {
 
 const antiAiDesignRules = [
   'Never produce UI that looks AI-generated, like a Tailwind starter kit, purple-blue gradient page, generic hero, or identical card grid.',
-  'Use a deliberate design system: CSS custom properties for color, type, spacing, radius, shadows, z-index, and motion.',
+  'Use a deliberate mini design system: CSS custom properties for color, semantic states, type, spacing, radius, shadows, z-index, and motion.',
+  'Define one primary color, one secondary/accent color, neutral surfaces/text/borders, and semantic --success, --warning, --error, and --info tokens.',
   'Use at least two distinct font roles: display/body or body/mono, with intentional contrast and safe fallbacks.',
-  'Use a mathematical type scale, context-specific line heights, and tabular numbers for metrics or data.',
+  'Use a fixed type scale close to 12 / 14 / 16 / 20 / 24 / 32 / 48px, context-specific line heights, and tabular numbers for metrics or data.',
   'Use distinctive accent colors that match the product mood; avoid Tailwind default blue, indigo, violet, and the common AI gradient.',
-  'Use 4px-grid spacing. Every value must feel deliberate and consistent.',
+  'Use 4px/8px-grid spacing. Every value must feel deliberate and consistent, never random one-off spacing.',
+  'Buttons and core controls must have an accessible touch target close to 44x44px unless the component is a compact secondary icon with a clear surrounding hit area.',
   'Create component states for hover, active, focus-visible, disabled, loading, empty, success, warning, and error.',
   'Use real perceived-performance patterns: skeletons for loading lists/cards and graceful empty states.',
   'Respect WCAG AA contrast, semantic landmarks, visible focus, and reduced motion.',
@@ -655,7 +657,10 @@ const functionalQualityGate = [
   'Never sacrifice functionality for aesthetics. Every primary UI control must have a working interaction, visible feedback, or an honest placeholder state.',
   'The app must render without a blank preview or obvious JavaScript crash.',
   'Buttons, forms, filters, tabs, modals, menus, toggles, carts, and navigation must update visible state when present.',
-  'Forms must include validation and user feedback.',
+  'Forms must include labels, validation, field-level errors, disabled/loading submit state when sending, and success feedback.',
+  'Search must filter visible data in real time with debounce when the dataset is non-trivial. Filters and sorting must visibly change the displayed content.',
+  'Add actions must add an item locally. Delete/remove actions must ask for confirmation or provide an undo-safe interaction, then update the list.',
+  'Tabs must switch content. Modals/drawers must open, close, support Escape, and not trap the user visually.',
   'Do not claim real backend, payments, auth, emails, AI calls, or persistence unless the generated project actually implements or clearly labels the behavior as demo/local.',
   'If package.json exists, the generated scripts should be runnable by the runner without hidden packages or secrets.',
   'If functionality is mocked, the UI must remain honest, useful, and interactive.',
@@ -663,7 +668,8 @@ const functionalQualityGate = [
 
 const selfAudit = [
   'Before returning JSON, silently audit whether the platform type, layout, typography, color, spacing, motion, loading, empty, error, and responsive states match the prompt.',
-  'Write an internal design brief before coding: target user, product promise, mood, layout, required components, interactions, states, motion, and platform risks.',
+  'Write an internal design brief before coding: problem solved, end user, primary action, critical journey, visual mood, truly necessary screens/components, interactions, states, motion, and platform risks.',
+  'Apply the 3-second rule to every screen: useful title, obvious primary action, discreet secondary actions, clean grid, and clearly separated zones.',
   'If the design feels generic, revise it internally before output.',
   'If the prompt asks for an operational app, do not output a landing page.',
   'If the prompt asks for a landing page, do not output a generic dashboard shell.',
@@ -671,6 +677,7 @@ const selfAudit = [
   'If the prompt asks for finance, health, auth, or admin, prioritize trust, clarity, confirmations, and error states.',
   'Ensure the preview is not blank and index.html is a Vite shell for new apps, not the whole product.',
   'Ensure every primary UI control has behavior, visible feedback, or an honest demo state.',
+  'Ensure final summary is product-oriented, not raw file accounting. Mention what users can test next.',
 ];
 
 function normalizePrompt(prompt: string) {

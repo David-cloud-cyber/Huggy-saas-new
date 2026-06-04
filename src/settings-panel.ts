@@ -93,10 +93,24 @@ function installSettingsStyle() {
       border-left: 1px solid var(--border, #eceae4);
       box-shadow: -24px 0 80px rgba(28,28,28,.12);
       transform: translateX(100%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        transform var(--motion-panel, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+        opacity var(--motion-normal, 180ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+        visibility 0s linear var(--motion-panel, 260ms);
     }
 
     .settings-panel.open {
       transform: translateX(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition:
+        transform var(--motion-panel, 260ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+        opacity var(--motion-normal, 180ms) var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)),
+        visibility 0s linear 0s;
     }
 
     .settings-header {
@@ -448,6 +462,7 @@ export function ensureSettingsPanel() {
     overlay = document.createElement('div');
     overlay.id = 'settings-overlay';
     overlay.className = 'settings-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
     document.body.appendChild(overlay);
   }
 
@@ -457,10 +472,12 @@ export function ensureSettingsPanel() {
     panel.id = 'settings-panel';
     panel.className = 'settings-panel';
     panel.setAttribute('aria-label', 'Settings');
+    panel.setAttribute('aria-hidden', 'true');
     panel.innerHTML = settingsMarkup();
     document.body.appendChild(panel);
   } else {
     panel.classList.add('settings-panel');
+    panel.setAttribute('aria-hidden', panel.classList.contains('open') ? 'false' : 'true');
     ensureAiUsageTab(panel);
   }
 
@@ -484,6 +501,8 @@ export function openSettings(tab: SettingsTab = 'profile') {
   if (!parts) return;
   parts.overlay.classList.add('open');
   parts.panel.classList.add('open');
+  parts.overlay.setAttribute('aria-hidden', 'false');
+  parts.panel.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   activateSettingsTab(tabAliases[tab] || tab);
 }
@@ -493,6 +512,8 @@ export function closeSettings() {
   const panel = document.getElementById('settings-panel');
   overlay?.classList.remove('open');
   panel?.classList.remove('open');
+  overlay?.setAttribute('aria-hidden', 'true');
+  panel?.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
 }
 

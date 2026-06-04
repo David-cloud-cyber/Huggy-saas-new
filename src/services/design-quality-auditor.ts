@@ -24,7 +24,7 @@ type SourceBundle = {
 };
 
 const AI_GRADIENT_RE = /#667eea|#764ba2|#8b5cf6|#3b82f6|linear-gradient\(\s*135deg\s*,\s*#667eea/i;
-const GENERIC_COPY_RE = /\b(feature\s*1|feature\s*2|feature\s*3|lorem ipsum|card title|untitled app|welcome to your app)\b/i;
+const GENERIC_COPY_RE = /\b(feature\s*1|feature\s*2|feature\s*3|lorem ipsum|card title|untitled app|welcome to your app|welcome to your dashboard|powerful features|modern teams|seamless experience|all[- ]in[- ]one platform|transform your workflow|get started today|learn more)\b/i;
 const INTERACTION_RE = /\b(onClick|onSubmit|onChange|addEventListener|useState|useReducer|href=|button[^>]+type=["']submit|form|aria-expanded)\b/i;
 const FORM_VALIDATION_RE = /\b(required|minLength|maxLength|pattern|aria-invalid|setError|error|invalid|validation|validate)\b/i;
 const STATE_RE = /\b(loading|empty|error|success|failed|disabled|skeleton|placeholder|toast|alert|pending|saving|saved)\b/i;
@@ -33,6 +33,14 @@ const MOTION_RE = /transition|animation|@keyframes|transform|opacity/i;
 const REDUCED_MOTION_RE = /prefers-reduced-motion/i;
 const FOCUS_RE = /:focus-visible|outline|focus:ring|aria-label/i;
 const CSS_TOKEN_RE = /:root[\s\S]*--[a-z0-9-]+|--(?:color|bg|text|space|radius|shadow|motion|ease|font)/i;
+const SEMANTIC_TOKEN_RE = /--(?:success|warning|error|info|color-success|color-warning|color-error|color-info)\b/i;
+const SPACING_TOKEN_RE = /--(?:space|spacing)-|--space-\d|gap:\s*(?:var\(--space|[.0-9]+rem)|padding:\s*(?:var\(--space|[.0-9]+rem)/i;
+const TOUCH_TARGET_RE = /(?:min-)?height:\s*(?:44px|2\.75rem|var\(--touch|var\(--control|var\(--button)|(?:min-)?width:\s*(?:44px|2\.75rem|var\(--touch|var\(--control|var\(--button)/i;
+const LABEL_RE = /<label|aria-label|aria-labelledby|htmlFor=/i;
+const PREVENT_DEFAULT_RE = /preventDefault\(|type=["']submit|formAction|action=/i;
+const SEARCH_FILTER_RE = /\b(search|filter|filtre|recherche|sort|tri)\b/i;
+const DELETE_RE = /\b(delete|remove|supprimer|effacer|archive|danger|destructive)\b/i;
+const CONFIRM_RE = /\b(confirm\(|dialog|modal|undo|annuler|confirmation|are you sure|etes vous sur|êtes vous sûr)\b/i;
 
 const appRequiredComponentKeywords: Partial<Record<GeneratedAppType, string[]>> = {
   landing_page: ['hero', 'cta', 'proof', 'pricing', 'testimonial', 'faq', 'prompt'],
@@ -67,6 +75,30 @@ export function auditGeneratedDesign(input: GeneratedQualityAuditInput): AgentVe
   ));
 
   checks.push(result(
+    'design_semantic_tokens',
+    SEMANTIC_TOKEN_RE.test(bundle.css),
+    'medium',
+    'Semantic state tokens are present.',
+    'Generated CSS should define semantic success, warning, error, and info tokens.',
+  ));
+
+  checks.push(result(
+    'design_spacing_system',
+    SPACING_TOKEN_RE.test(bundle.css),
+    'low',
+    'Spacing system is visible in CSS.',
+    'Generated UI should use a clear spacing scale instead of scattered one-off values.',
+  ));
+
+  checks.push(result(
+    'design_touch_targets',
+    TOUCH_TARGET_RE.test(bundle.css),
+    'low',
+    'Primary controls include accessible touch target sizing.',
+    'Buttons and primary controls should target roughly 44px touch areas.',
+  ));
+
+  checks.push(result(
     'design_responsive',
     RESPONSIVE_RE.test(bundle.css),
     'high',
@@ -98,12 +130,14 @@ export function auditGeneratedDesign(input: GeneratedQualityAuditInput): AgentVe
     'Interactive controls need visible focus and accessible naming.',
   ));
 
+  const stateHits = ['loading', 'empty', 'error', 'success', 'disabled', 'skeleton', 'toast', 'pending']
+    .filter(token => bundle.all.includes(token)).length;
   checks.push(result(
     'design_component_states',
-    STATE_RE.test(bundle.all),
+    STATE_RE.test(bundle.all) && stateHits >= 3,
     'medium',
     'Loading, empty, error, or success states are represented.',
-    'Generated app should include real UI states, not only the happy path.',
+    'Generated app should include multiple real UI states, not only the happy path.',
   ));
 
   checks.push(result(
@@ -146,6 +180,8 @@ export function auditGeneratedFunctionality(input: GeneratedQualityAuditInput): 
   const hasModuleScript = /<script[^>]+type=["']module["'][^>]+src=["']\/src\/main\.(tsx|jsx|ts|js)["']/i.test(bundle.html);
   const hasControls = /<button|<input|<select|<textarea|role=["']button|type=["']button/i.test(bundle.all);
   const hasForms = /<form|<input|<select|<textarea/i.test(bundle.all);
+  const hasSearchOrFilter = SEARCH_FILTER_RE.test(bundle.all);
+  const hasDeleteAction = DELETE_RE.test(bundle.all);
 
   if (isNewApp) {
     checks.push(result(
@@ -174,10 +210,18 @@ export function auditGeneratedFunctionality(input: GeneratedQualityAuditInput): 
 
   checks.push(result(
     'functionality_form_feedback',
-    !hasForms || FORM_VALIDATION_RE.test(bundle.all),
+    !hasForms || (FORM_VALIDATION_RE.test(bundle.all) && LABEL_RE.test(bundle.all)),
     'medium',
-    'Forms include validation or feedback.',
-    'Forms need validation, error text, required fields, or visible feedback.',
+    'Forms include labels, validation, or feedback.',
+    'Forms need labels plus validation, error text, required fields, or visible feedback.',
+  ));
+
+  checks.push(result(
+    'functionality_form_submit_handling',
+    !hasForms || PREVENT_DEFAULT_RE.test(bundle.all),
+    'medium',
+    'Form submission is handled intentionally.',
+    'Forms should prevent accidental reloads or define a clear submit action.',
   ));
 
   checks.push(result(
@@ -186,6 +230,22 @@ export function auditGeneratedFunctionality(input: GeneratedQualityAuditInput): 
     'medium',
     'Stateful behavior is present where controls exist.',
     'Interactive apps should update visible state instead of rendering static controls.',
+  ));
+
+  checks.push(result(
+    'functionality_search_filter_behavior',
+    !hasSearchOrFilter || (/useState|useMemo|filter\(|sort\(|debounce|setTimeout|onChange/.test(bundle.tsx) || /addEventListener/.test(bundle.html)),
+    'medium',
+    'Search, filter, or sort controls appear wired to visible behavior.',
+    'Search, filter, or sort UI is present but no filtering/sorting behavior was detected.',
+  ));
+
+  checks.push(result(
+    'functionality_destructive_feedback',
+    !hasDeleteAction || CONFIRM_RE.test(bundle.all),
+    'medium',
+    'Destructive actions include confirmation or undo-safe feedback.',
+    'Delete/remove/destructive actions should ask for confirmation or provide undo-safe feedback.',
   ));
 
   checks.push(result(

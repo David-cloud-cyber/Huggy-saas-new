@@ -50,6 +50,7 @@ export type HuggyConversationTaskItem = {
 export type HuggyAgentTraceStep = {
   id: string;
   label: string;
+  detail?: string;
   status?: "pending" | "active" | "done" | "failed" | "cancelled";
 };
 
@@ -353,7 +354,7 @@ function ensureConversationStyles() {
 
     .huggy-agent-step {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       color: var(--text-sub, var(--text-muted));
       font-size: 11.5px;
@@ -376,6 +377,27 @@ function ensureConversationStyles() {
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+
+    .huggy-agent-step-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .huggy-agent-step-detail {
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.38;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .huggy-agent-step[data-status="active"] .huggy-agent-step-detail {
+      color: var(--text-sub, var(--text-muted));
+      font-weight: 560;
     }
 
     .huggy-agent-step + .huggy-agent-step {
@@ -1101,7 +1123,10 @@ function renderAgentTrace(message: HuggyConversationMessage) {
               ) : (
                 <span className="huggy-agent-step-mark" aria-hidden="true" />
               )}
-              <span className="huggy-agent-step-label">{step.label}</span>
+              <span className="huggy-agent-step-copy">
+                <span className="huggy-agent-step-label">{step.label}</span>
+                {step.detail ? <span className="huggy-agent-step-detail">{step.detail}</span> : null}
+              </span>
             </div>
           );
         })}

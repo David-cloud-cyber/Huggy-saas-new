@@ -2041,7 +2041,8 @@ class AgentOrchestrator {
 
     const wantsBuild = forceBuild || (hasAny(buildHints) && understanding.allowsFileAction);
     const wantsConversation = hasAny(conversationHints);
-    const wantsDebugFix = hasAny(debugHints) && understanding.allowsFileAction;
+    const wantsNewAppBuild = understanding.category === 'app' && understanding.allowsFileAction;
+    const wantsDebugFix = !wantsNewAppBuild && hasAny(debugHints) && understanding.allowsFileAction;
     const wantsVerify = hasAny(verifyHints);
     const wantsDeployAssist = hasAny(deployHints)
       && !/(crée|creer|create|ajoute|add|modifie|change|corrige|fix|build|implémente|implemente|generate|génère|genere|page|component|dashboard|landing|formulaire|supprime|remove|replace|update|met a jour|mets a jour)/i.test(lower);
@@ -2078,6 +2079,22 @@ class AgentOrchestrator {
         nextAction: 'verify',
         selectedModelPolicy: 'auto',
         userVisibleReason: 'This asks for inspection, so Huggy will verify the current project before suggesting fixes.',
+      });
+    }
+
+    if (wantsNewAppBuild) {
+      return decision({
+        intent: 'build',
+        confidence: Math.max(0.92, understanding.confidence),
+        requiresFileChanges: true,
+        requiresPreviewRebuild: true,
+        requiresCredits: true,
+        nextAction: wantsComplexWork ? 'plan_then_build' : 'build',
+        autoPlanRequired: wantsComplexWork || !input.hasFiles,
+        selectedModelPolicy: wantsComplexWork ? 'balanced' : 'economy',
+        userVisibleReason: input.hasFiles
+          ? 'The user explicitly asked for a new app, so Huggy will generate a new build instead of treating the prompt as a bug fix.'
+          : 'The user explicitly asked Huggy to create a new app.',
       });
     }
 
@@ -3510,7 +3527,6 @@ const RELIABILITY_BLOCKING_CHECK_KEYS = new Set([
   'functionality_vite_shell',
   'functionality_primary_controls',
   'control_handlers',
-  'technical_build_score',
   'script_build_safe',
   'script_build_exec',
   'package_parse',
@@ -5604,6 +5620,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
+  const streamIsFrench = isLikelyFrenchPrompt(prompt);
+  const streamCopy = (fr: string, en: string) => streamIsFrench ? fr : en;
   const quickDecision = intentRouter.decide({ prompt, requestedMode, hasFiles: false });
   if (canUseFastAnswerPath(quickDecision, prompt)) {
     const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
@@ -5754,15 +5772,32 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
     }
     if (shouldStreamAgentTrace) {
-      await send('run_started', 'Agent run started.', { agent_run_id: agentRunId, request_id: requestId });
-      await send('context_loaded', 'Project context loaded.', { context: contextPack });
+      await send('run_started', streamCopy('Demande recue.', 'Request received.'), {
+        agent_run_id: agentRunId,
+        request_id: requestId,
+        step_label: streamCopy('Demande recue.', 'Request received.'),
+        step_detail: streamCopy('Je demarre un run trace pour garder le travail lisible.', 'I am starting a traceable run so the work stays readable.'),
+      });
+      await send('context_loaded', streamCopy('Contexte du projet charge.', 'Project context loaded.'), {
+        context: contextPack,
+        step_label: streamCopy('Contexte du projet charge.', 'Project context loaded.'),
+        step_detail: streamCopy('Je lis les fichiers et l historique avant de choisir une action.', 'I am reading files and history before choosing an action.'),
+      });
     }
     if (AGENT_V3_ENABLED && reliability.should_mutate_files) {
-      await send('tool_loop_started', 'Autonomous tool loop started.', { budget: toolLoop.snapshot });
+      await send('tool_loop_started', streamCopy('Boucle outil preparee.', 'Tool loop prepared.'), {
+        budget: toolLoop.snapshot,
+        step_label: streamCopy('Boucle outil preparee.', 'Tool loop prepared.'),
+        step_detail: streamCopy('Je garde les actions bornees pour eviter les boucles et les changements inutiles.', 'I keep actions bounded to avoid loops and unnecessary changes.'),
+      });
     }
   }
   if (shouldStreamAgentTrace) {
-    await send('agent_thinking', 'Thinking through the request.', { request_id: requestId });
+    await send('agent_thinking', streamCopy('Analyse de la demande.', 'Analyzing the request.'), {
+      request_id: requestId,
+      step_label: streamCopy('Analyse de la demande.', 'Analyzing the request.'),
+      step_detail: streamCopy('Je determine si je dois repondre, planifier, modifier ou generer.', 'I am deciding whether to answer, plan, edit, or generate.'),
+    });
   }
   const estimate = estimateActionCost(prompt, decision, requestedModelSelection);
   const wallet = estimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
@@ -5782,7 +5817,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     active_tab: reliability.should_touch_preview ? 'preview' : undefined,
   });
   if (shouldStreamAgentTrace) {
-    await send('intent_detected', decision.userVisibleReason, { intent: decision, reliability });
+    await send('intent_detected', decision.userVisibleReason, {
+      intent: decision,
+      reliability,
+      step_label: streamCopy('Decision prise.', 'Decision selected.'),
+      step_detail: decision.userVisibleReason,
+    });
   }
 
   if (decision.requiresFileChanges && !hasProjectCapability(req, 'build')) {
@@ -5825,11 +5865,20 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   if (decision.intent === 'conversation' || decision.intent === 'clarification_required' || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist') {
     if (decision.intent === 'plan') {
-      await send('planning', 'Preparing a plan without changing files.', {});
+      await send('planning', streamCopy('Je prepare un plan sans modifier les fichiers.', 'Preparing a plan without changing files.'), {
+        step_label: streamCopy('Planification.', 'Planning.'),
+        step_detail: streamCopy('Je separe la reflexion de l execution pour que tu gardes le controle.', 'I am separating thinking from execution so you stay in control.'),
+      });
     } else if (decision.intent === 'verify') {
-      await send('verification_started', 'Checking the current project without changing files.', {});
+      await send('verification_started', streamCopy('Je verifie le projet sans modifier les fichiers.', 'Checking the current project without changing files.'), {
+        step_label: streamCopy('Verification sans modification.', 'Read-only verification.'),
+        step_detail: streamCopy('Je controle l etat actuel avant de proposer une correction.', 'I am checking the current state before suggesting a fix.'),
+      });
     } else if (decision.intent === 'deploy_assist') {
-      await send('answering', 'Preparing deployment guidance without changing files.', {});
+      await send('answering', streamCopy('Je prepare une aide de publication sans modifier les fichiers.', 'Preparing deployment guidance without changing files.'), {
+        step_label: streamCopy('Aide publication.', 'Deployment guidance.'),
+        step_detail: streamCopy('Je donne les prochaines actions sans toucher a la preview.', 'I am giving next actions without touching the preview.'),
+      });
     }
     await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
       intent: decision.intent,
@@ -5949,12 +5998,24 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   if (agentRunId) await updateBuildSessionStatus(buildSessionId, 'running', { agent_run_id: agentRunId });
   await helpers.createReservation(userId, estimate.finalCredits, refId);
 
-  try {
-    await send('queued', 'Generation queued.', { build_session_id: buildSessionId });
-    await send('routing', 'Selecting the model and preparing project context.', { mode: requestedModelSelection });
+    try {
+    await send('queued', streamCopy('Generation mise en file.', 'Generation queued.'), {
+      build_session_id: buildSessionId,
+      step_label: streamCopy('Preparation du build.', 'Preparing the build.'),
+      step_detail: streamCopy('Je cree une session annulable avant de toucher aux fichiers.', 'I am creating a cancellable session before touching files.'),
+    });
+    await send('routing', streamCopy('Selection du modele et du contexte.', 'Selecting the model and preparing project context.'), {
+      mode: requestedModelSelection,
+      step_label: streamCopy('Selection du modele.', 'Selecting the model.'),
+      step_detail: streamCopy('Auto est resolu vers un modele autorise avant l appel provider.', 'Auto is resolved to an allowed model before the provider call.'),
+    });
     let executionPlan = '';
     if (decision.autoPlanRequired) {
-      await send('planning', 'Planning the safest implementation path before changing files.', { auto_plan_required: true });
+      await send('planning', streamCopy('Je planifie le chemin le plus sur avant de modifier les fichiers.', 'Planning the safest implementation path before changing files.'), {
+        auto_plan_required: true,
+        step_label: streamCopy('Plan automatique.', 'Automatic plan.'),
+        step_detail: streamCopy('La demande est assez large pour meriter un plan avant generation.', 'The request is broad enough to deserve a plan before generation.'),
+      });
       try {
         const planDecision: IntentDecision = {
           ...decision,
@@ -5986,7 +6047,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       const selectedModel = model;
       validateAllowedModel(selectedModel);
 
-      await send('model_started', `Streaming response from ${selectedModel}.`, { model: selectedModel });
+      await send('model_started', streamCopy('Generation des fichiers lancee.', 'File generation started.'), {
+        model: selectedModel,
+        step_label: streamCopy('Generation des fichiers.', 'Generating files.'),
+        step_detail: streamCopy('Je demande une app moderne avec structure React/Vite, interactions et etats UI.', 'I am asking for a modern app with React/Vite structure, interactions, and UI states.'),
+      });
       const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
       const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext });
@@ -6008,9 +6073,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           if (generatedText.length - lastModelProgressChars >= 1600 || now - lastModelProgressAt >= 2500) {
             lastModelProgressAt = now;
             lastModelProgressChars = generatedText.length;
-            await send('model_streaming', 'Receiving generated files from the model.', {
+            await send('model_streaming', streamCopy('Reception des fichiers generes.', 'Receiving generated files from the model.'), {
               model,
               streamed_chars: generatedText.length,
+              step_label: streamCopy('Reception du code.', 'Receiving code.'),
+              step_detail: streamCopy('Je conserve le flux actif pendant que les fichiers arrivent.', 'I keep the stream active while files arrive.'),
             });
           }
         } else {
@@ -6020,7 +6087,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       }
     }
 
-    await send('build_started', 'Normalizing generated files and building preview.', {});
+    await send('build_started', streamCopy('Normalisation des fichiers et preparation de la preview.', 'Normalizing generated files and building preview.'), {
+      step_label: streamCopy('Preparation de la preview.', 'Preparing preview.'),
+      step_detail: streamCopy('Je transforme la sortie en projet utilisable avant affichage.', 'I am turning the output into a usable project before display.'),
+    });
     const parsed = parseGeneratedOutput(project.name, generatedText, prompt, { hasExistingFiles: existingFiles.length > 0 });
 
     const mergedByPath = new Map<string, GeneratedFile>();
@@ -6033,8 +6103,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       { ensureIndex: true },
     );
     files = ensureModernFrontendProject(files, project.name, prompt);
-    await send('files_changed', 'Generated files were merged into the project.', { diff: diffFiles(existingFiles, files) });
-    await send('preview_building', 'Building preview sandbox.', {});
+    await send('files_changed', streamCopy('Fichiers integres au projet.', 'Generated files were merged into the project.'), {
+      diff: diffFiles(existingFiles, files),
+      step_label: streamCopy('Fichiers mis a jour.', 'Files updated.'),
+      step_detail: streamCopy('Je garde un diff clair pour que tu puisses iterer ensuite.', 'I keep a clear diff so you can iterate afterward.'),
+    });
+    await send('preview_building', streamCopy('Construction de la preview sandbox.', 'Building preview sandbox.'), {
+      step_label: streamCopy('Construction de la preview.', 'Building preview.'),
+      step_detail: streamCopy('La version publiee reste intacte tant que tu ne cliques pas Publish.', 'The published version stays unchanged until you click Publish.'),
+    });
     let pipeline = runPreviewPipeline(project, files);
     let autoFix = null as any;
     let autoFixAttempts = 0;
@@ -6045,24 +6122,44 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       for (; autoFixAttempts < maxAutoFixAttempts && pipeline.status === 'failed'; autoFixAttempts += 1) {
         toolLoop.claim('preview_auto_fix');
         const attempt = autoFixAttempts + 1;
-        await send('auto_fix_started', `Auto-fix attempt ${attempt} started.`, { attempt });
+        await send('auto_fix_started', streamCopy(`Correction automatique ${attempt} lancee.`, `Auto-fix attempt ${attempt} started.`), {
+          attempt,
+          step_label: streamCopy('Correction preview.', 'Preview fix.'),
+          step_detail: streamCopy('Je repare la preview avant de l afficher.', 'I am repairing the preview before showing it.'),
+        });
         const fix = applyAutoFix(project, files, pipeline.errors);
         autoFix = fix.patch;
         if (!fix.fixed) break;
         files = fix.files;
-        await send('patch_applied', fix.patch?.summary || 'Targeted patch applied.', { patch: fix.patch });
+        await send('patch_applied', fix.patch?.summary || streamCopy('Correction ciblee appliquee.', 'Targeted patch applied.'), {
+          patch: fix.patch,
+          step_label: streamCopy('Patch applique.', 'Patch applied.'),
+          step_detail: streamCopy('Je limite le changement a la cause detectee.', 'I am limiting the change to the detected cause.'),
+        });
         pipeline = runPreviewPipeline(project, files);
       }
       if (pipeline.status === 'ready') {
-        await send('auto_fix_succeeded', 'Auto-fix succeeded and preview is ready.', { patch: autoFix });
+        await send('auto_fix_succeeded', streamCopy('Correction terminee, preview prete.', 'Auto-fix succeeded and preview is ready.'), {
+          patch: autoFix,
+          step_label: streamCopy('Correction terminee.', 'Fix completed.'),
+          step_detail: streamCopy('La preview peut continuer apres correction.', 'The preview can continue after the fix.'),
+        });
       } else {
-        await send('auto_fix_failed', 'Auto-fix could not resolve every issue.', { errors: pipeline.errors });
+        await send('auto_fix_failed', streamCopy('La correction automatique n a pas tout resolu.', 'Auto-fix could not resolve every issue.'), {
+          errors: pipeline.errors,
+          step_label: streamCopy('Blocage restant.', 'Remaining blocker.'),
+          step_detail: streamCopy('Je garde l erreur actionnable au lieu de masquer le probleme.', 'I keep the error actionable instead of hiding the problem.'),
+        });
       }
     }
     let previewHtml = pipeline.html;
     if (AGENT_V3_ENABLED && reliability.requires_runner) {
       toolLoop.claim('project_runner');
-      await send('runner_started', 'Running project checks.', { budget: toolLoop.snapshot });
+      await send('runner_started', streamCopy('Verification technique du projet.', 'Running project checks.'), {
+        budget: toolLoop.snapshot,
+        step_label: streamCopy('Verification du projet.', 'Checking project.'),
+        step_detail: streamCopy('Je cherche les erreurs de build, preview vide, imports manquants et interactions critiques.', 'I am checking build errors, blank preview, missing imports, and critical interactions.'),
+      });
       runnerResult = await projectRunner.run({
         runId: agentRunId || requestId,
         projectId: project.id,
@@ -6072,9 +6169,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
       await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult.status, tool_budget: toolLoop.snapshot });
-      await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? 'Runner checks passed.' : 'Runner checks found issues.', {
+      await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? streamCopy('Checks critiques passes.', 'Runner checks passed.') : streamCopy('Checks a corriger detectes.', 'Runner checks found issues.'), {
         status: runnerResult.status,
         checks: runnerResult.checks,
+        step_label: runnerResult.status === 'passed' ? streamCopy('Checks passes.', 'Checks passed.') : streamCopy('Correction necessaire.', 'Fix needed.'),
+        step_detail: runnerResult.status === 'passed'
+          ? streamCopy('Les verifications bloquantes sont bonnes.', 'Blocking checks passed.')
+          : streamCopy('Je tente une correction ciblee avant de finaliser.', 'I will try a targeted fix before finishing.'),
       });
       if (await stopIfCancelled('runner')) return;
 
@@ -6083,13 +6184,27 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         toolLoop.claim('runner_auto_fix');
         autoFixAttempts += 1;
         const runnerErrors = runnerBlocking.map(check => ({ file: check.file || 'index.html', message: check.message, severity: check.severity }));
-        await send('auto_fix_started', `Auto-fix attempt ${autoFixAttempts} started.`, { attempt: autoFixAttempts, source: 'runner' });
+        await send('auto_fix_started', streamCopy(`Correction automatique ${autoFixAttempts} lancee.`, `Auto-fix attempt ${autoFixAttempts} started.`), {
+          attempt: autoFixAttempts,
+          source: 'runner',
+          step_label: streamCopy('Correction ciblee.', 'Targeted fix.'),
+          step_detail: streamCopy('Je modifie seulement ce qui bloque les checks.', 'I am changing only what blocks the checks.'),
+        });
         const fix = applyAutoFix(project, files, runnerErrors);
         autoFix = fix.patch;
         if (!fix.fixed) break;
         files = fix.files;
-        await send('patch_applied', fix.patch?.summary || 'Targeted patch applied.', { patch: fix.patch, source: 'runner' });
-        await send('retest_started', 'Retesting after auto-fix.', { attempt: autoFixAttempts });
+        await send('patch_applied', fix.patch?.summary || streamCopy('Correction ciblee appliquee.', 'Targeted patch applied.'), {
+          patch: fix.patch,
+          source: 'runner',
+          step_label: streamCopy('Patch applique.', 'Patch applied.'),
+          step_detail: streamCopy('Je corrige uniquement le blocage detecte par le runner.', 'I am fixing only the blocker detected by the runner.'),
+        });
+        await send('retest_started', streamCopy('Nouvelle verification apres correction.', 'Retesting after auto-fix.'), {
+          attempt: autoFixAttempts,
+          step_label: streamCopy('Retest.', 'Retest.'),
+          step_detail: streamCopy('Je confirme que la correction n a pas casse autre chose.', 'I am confirming the fix did not break something else.'),
+        });
         pipeline = runPreviewPipeline(project, files);
         previewHtml = pipeline.html;
         runnerResult = await projectRunner.run({
@@ -6102,14 +6217,21 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
         await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult.status, tool_budget: toolLoop.snapshot });
         runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
-        await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? 'Runner retest passed.' : 'Runner retest still found issues.', {
+        await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? streamCopy('Retest passe.', 'Runner retest passed.') : streamCopy('Le retest trouve encore des soucis.', 'Runner retest still found issues.'), {
           status: runnerResult.status,
           checks: runnerResult.checks,
+          step_label: runnerResult.status === 'passed' ? streamCopy('Retest passe.', 'Retest passed.') : streamCopy('Blocage restant.', 'Remaining blocker.'),
+          step_detail: runnerResult.status === 'passed'
+            ? streamCopy('Le projet est assez stable pour continuer.', 'The project is stable enough to continue.')
+            : streamCopy('Je garde le blocage lisible au lieu de masquer l erreur.', 'I keep the blocker visible instead of hiding the error.'),
         });
         if (await stopIfCancelled('runner_retest')) return;
       }
     }
-    await send('verification_started', 'Verifying generated files and preview.', {});
+    await send('verification_started', streamCopy('Verification finale des fichiers et de la preview.', 'Verifying generated files and preview.'), {
+      step_label: streamCopy('Verification finale.', 'Final verification.'),
+      step_detail: streamCopy('Je controle les fichiers, la preview, le design de base et les interactions.', 'I am checking files, preview, basic design, and interactions.'),
+    });
     const uiPolicy = buildWorldClassUiPolicy({ prompt });
     const verificationChecks = [
       ...verifyGeneratedProject({ projectName: project.name, files, previewHtml }),
@@ -6144,11 +6266,19 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     await send(
       'quality_checked',
       qualitySummary.status === 'passed'
-        ? 'Quality checks passed.'
+        ? streamCopy('Controle qualite passe.', 'Quality checks passed.')
         : qualitySummary.status === 'warning'
-          ? 'Quality checks passed with notes.'
-          : 'Quality checks found issues.',
-      { quality: qualitySummary, summary: verificationSummary, reliability: reliabilitySummary },
+          ? streamCopy('Controle qualite passe avec notes.', 'Quality checks passed with notes.')
+          : streamCopy('Controle qualite avec points a corriger.', 'Quality checks found issues.'),
+      {
+        quality: qualitySummary,
+        summary: verificationSummary,
+        reliability: reliabilitySummary,
+        step_label: qualitySummary.status === 'failed' ? streamCopy('Points a corriger.', 'Issues found.') : streamCopy('Qualite verifiee.', 'Quality checked.'),
+        step_detail: qualitySummary.status === 'failed'
+          ? streamCopy('Je bloque seulement les erreurs graves ou les problemes qui cassent l app.', 'I only block serious errors or issues that break the app.')
+          : streamCopy('Les notes non bloquantes restent visibles pour les prochaines iterations.', 'Non-blocking notes stay visible for future iterations.'),
+      },
     );
 
     if (reliabilitySummary.status === 'failed') {
@@ -6237,11 +6367,20 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       quality: qualitySummary,
       reliability,
       reliability_summary: reliabilitySummary,
+      step_label: streamCopy('Preview prete.', 'Preview ready.'),
+      step_detail: streamCopy('Tu peux maintenant tester et demander une modification sur l existant.', 'You can now test and ask for changes on the existing app.'),
     });
 
     await updateBuildSessionStatus(buildSessionId, 'completed');
-    await send('memory_updated', 'Project memory updated.', { summary: memorySummary });
-    await send('done', 'Generation completed.', {});
+    await send('memory_updated', streamCopy('Memoire projet mise a jour.', 'Project memory updated.'), {
+      summary: memorySummary,
+      step_label: streamCopy('Memoire mise a jour.', 'Memory updated.'),
+      step_detail: streamCopy('Je retiens les decisions utiles pour les prochaines iterations.', 'I keep useful decisions for future iterations.'),
+    });
+    await send('done', streamCopy('Generation terminee.', 'Generation completed.'), {
+      step_label: streamCopy('Termine.', 'Done.'),
+      step_detail: streamCopy('Le run reste visible pour comprendre ce qui a ete fait.', 'The run stays visible so you can understand what happened.'),
+    });
     await updateAgentRunStatus(agentRunId, 'completed', {
       duration_ms: Date.now() - streamStartedAt,
       public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, model, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },

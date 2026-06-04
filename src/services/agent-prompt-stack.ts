@@ -164,7 +164,8 @@ const HUGGY_FUNCTIONAL_QUALITY_POLICY = [
   'Never sacrifice functionality for aesthetics. Every primary UI control must have a working interaction, visible feedback, or an honest placeholder state.',
   'The app must render without a blank preview or obvious JavaScript crash.',
   'Buttons, forms, filters, tabs, modals, menus, toggles, carts, navigation, and primary CTAs must update visible state when present.',
-  'Forms must validate and show clear feedback. Empty, loading, error, success, disabled, and selected states must exist for the core flow.',
+  'Forms must validate and show field-level feedback. Empty, loading, error, success, disabled, and selected states must exist for the core flow.',
+  'Search filters visible content. Filters and sorting visibly change data. Add/delete actions mutate local state with confirmation or undo-safe feedback. Tabs switch content. Modals open, close, and remain accessible.',
   'Do not claim real backend, payments, auth, emails, AI calls, or persistence unless the generated project actually implements it or clearly labels it as demo/local preview behavior.',
   'If package.json exists, generate scripts and dependencies that can pass build/test/lint in a clean runner.',
   'If the quality audit finds weak functionality, missing responsive behavior, dead controls, generic AI design, or a blank preview, revise before claiming the app is ready.',
@@ -172,6 +173,9 @@ const HUGGY_FUNCTIONAL_QUALITY_POLICY = [
 
 const HUGGY_PREMIUM_UI_ESCALATION_POLICY = [
   'Premium UI escalation gate:',
+  'Before coding, answer internally: real problem, end user, primary action, critical journey, visual direction, required screens/components, and required states.',
+  'Every screen must pass the 3-second rule: specific title, obvious primary action, discreet secondary actions, clean grid, and separated zones.',
+  'Every generated app must define a mini design system with primary/secondary accents, neutral surfaces, semantic --success/--warning/--error/--info tokens, type scale, spacing scale, radius scale, shadows, and motion tokens.',
   'Before returning generated app files, silently run three reviews: product fit, visual craft, and functional behavior.',
   'Product fit review: the platform type must match the request. A CRM, marketplace, restaurant app, portfolio, AI tool, fintech app, auth screen, and landing page require different layouts, density, trust signals, and states.',
   'Visual craft review: reject generic AI tells such as oversized hero-only pages, identical card grids, meaningless gradients, flat controls, missing hover/focus states, weak hierarchy, or copy that reads like a template.',

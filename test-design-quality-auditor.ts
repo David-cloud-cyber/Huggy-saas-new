@@ -64,9 +64,19 @@ const goodFiles = [
     path: 'src/index.css',
     language: 'css',
     content: `
-      :root { --bg: #fcfbf8; --text: #1c1c1c; --space-4: 16px; --radius: 16px; --motion: 160ms; }
+      :root {
+        --bg: #fcfbf8;
+        --text: #1c1c1c;
+        --space-4: 16px;
+        --radius: 16px;
+        --motion: 160ms;
+        --success: #16794f;
+        --warning: #a15c00;
+        --error: #b42318;
+        --info: #2457d6;
+      }
       body { background: var(--bg); color: var(--text); }
-      button { transition: transform var(--motion) cubic-bezier(.22,1,.36,1); }
+      button { min-height: 44px; min-width: 44px; transition: transform var(--motion) cubic-bezier(.22,1,.36,1); }
       button:hover { transform: translateY(-1px); }
       button:focus-visible, input:focus-visible { outline: 2px solid #2457d6; }
       .skeleton { animation: pulse 1.2s infinite; }

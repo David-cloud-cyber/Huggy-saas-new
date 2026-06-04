@@ -208,17 +208,17 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasTechnicalTarget = includesAny(text, concreteTechnicalTargets);
   const hasAppTarget = includesAny(text, appTargets);
   const hasRefactorIntent = includesAny(text, ['refactor', 'refactorise', 'refactoriser', 'refonte technique', 'restructure', 'restructurer']);
-  const hasBugReport = includesAny(text, [
-    'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
-    'error', 'request failed', 'crash', 'broken', 'cass', 'ne soumet rien',
-    'soumet rien', 'n envoie rien', 'ne s ouvre pas', 'ne s affiche pas',
-  ]) && hasTechnicalTarget;
   const explicitArtifactPattern = matchesAny(text, [
     /\b(je veux|j aimerais|i want|i need|build me|cree moi|creer moi|genere moi|create a|create an|make me)\b/,
     /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
     /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
   ]);
   const asksForGeneratedArtifact = explicitArtifactPattern && hasAppTarget && !hasNoAction;
+  const hasBugReport = includesAny(text, [
+    'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
+    'error', 'request failed', 'crash', 'broken', 'cass', 'ne soumet rien',
+    'soumet rien', 'n envoie rien', 'ne s ouvre pas', 'ne s affiche pas',
+  ]) && hasTechnicalTarget && !asksForGeneratedArtifact;
   const advisoryQuestionSignals = [
     'bonne idee', 'bon choix', 'mauvaise idee', 'dois je', 'devrais je',
     'est ce que je dois', 'est ce une bonne idee', 'est ce que c est une bonne idee',

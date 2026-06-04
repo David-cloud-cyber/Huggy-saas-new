@@ -76,6 +76,12 @@ check(
 );
 
 check(
+  'Crée une application web de to do list complète et fonctionnelle avec ajout, modification, suppression avec confirmation, filtre par statut, recherche, états vide, succès et erreur, design responsive premium.',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+  { hasFiles: true },
+);
+
+check(
   'génère une app web',
   { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
 );
