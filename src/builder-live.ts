@@ -94,6 +94,7 @@ type PublishStatusPayload = {
   state: 'not_ready' | 'ready_to_publish' | 'published' | 'changes_unpublished';
   public_url: string;
   custom_domain: string | null;
+  current_visitors?: number;
   latest_published_at: string | null;
   project_updated_at: string | null;
   badge_required: boolean;
@@ -152,6 +153,25 @@ type AnalysisPayload = {
       structuredData?: boolean;
     };
   };
+};
+
+type AgentRunSummary = {
+  id: string;
+  intent?: string;
+  mode?: string;
+  model_id?: string;
+  status?: string;
+  diagnostic_code?: string | null;
+  duration_ms?: number | null;
+  created_at?: string;
+};
+
+type ProjectVersionSummary = {
+  id: string;
+  version_number?: number;
+  label?: string;
+  created_at?: string;
+  diff_summary?: { summary?: string; created?: string[]; modified?: string[]; deleted?: string[] };
 };
 
 let currentProjectId = '';
@@ -1100,6 +1120,10 @@ function bindProjectMenu() {
     closeProjectMenu();
     openSettings('ai-usage');
   });
+  document.getElementById('project-menu-history')?.addEventListener('click', () => {
+    closeProjectMenu();
+    void openHistoryPanel();
+  });
   document.getElementById('project-name-save')?.addEventListener('click', () => void saveProjectNameFromMenu());
   document.getElementById('project-name-input')?.addEventListener('keydown', event => {
     if ((event as KeyboardEvent).key === 'Enter') void saveProjectNameFromMenu();
@@ -1205,18 +1229,10 @@ function ensureToolbar() {
   });
 }
 
-function publishStateLabel(state: PublishStatusPayload['state']) {
-  if (state === 'not_ready') return 'Build required';
-  if (state === 'ready_to_publish') return 'Ready to publish';
-  if (state === 'changes_unpublished') return 'Unpublished changes';
-  return 'Live';
-}
-
 function publishPrimaryLabel(status: PublishStatusPayload | null) {
   if (!status?.can_publish) return 'Build first';
-  if (status.state === 'published' && !status.has_unpublished_changes) return 'Republish';
-  if (status.state === 'changes_unpublished') return 'Publish updates';
-  return 'Publish app';
+  if (status.state === 'published' || status.state === 'changes_unpublished') return 'Update';
+  return 'Publish';
 }
 
 function formatPublishDate(value: string | null | undefined) {
@@ -1228,12 +1244,44 @@ function formatPublishDate(value: string | null | undefined) {
   }
 }
 
+let publishPanelMode: 'main' | 'security' | 'domain' = 'main';
+
+function publishPanelTitle(status: PublishStatusPayload | null) {
+  if (!status) return 'Publishing';
+  if (status.state === 'published' || status.state === 'changes_unpublished') return 'Published';
+  if (status.state === 'ready_to_publish') return 'Ready to publish';
+  return 'Publish';
+}
+
+function formatPublishUrl(url: string) {
+  if (!url) return 'Publish to get your live URL';
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}`;
+  } catch {
+    return url.replace(/^https?:\/\//i, '');
+  }
+}
+
+function publishIcon(name: 'copy' | 'link' | 'globe' | 'visitors' | 'shield' | 'settings' | 'check' | 'warning' | 'fail') {
+  const common = 'width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  if (name === 'copy') return `<svg ${common}><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+  if (name === 'link') return `<svg ${common}><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>`;
+  if (name === 'globe') return `<svg ${common}><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z"></path></svg>`;
+  if (name === 'visitors') return `<svg ${common}><path d="M5 20V10"></path><path d="M12 20V4"></path><path d="M19 20v-7"></path></svg>`;
+  if (name === 'shield') return `<svg ${common}><path d="M12 3 20 6v5c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6l8-3Z"></path><path d="m9 12 2 2 4-5"></path></svg>`;
+  if (name === 'settings') return `<svg ${common}><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"></path><path d="M19.4 15a1.8 1.8 0 0 0 .36 2l.06.06a2.1 2.1 0 0 1-3 3l-.06-.06a1.8 1.8 0 0 0-2-.36 1.8 1.8 0 0 0-1.1 1.64V21a2.1 2.1 0 0 1-4.2 0v-.09A1.8 1.8 0 0 0 8.4 19.3a1.8 1.8 0 0 0-2 .36l-.06.06a2.1 2.1 0 1 1-3-3l.06-.06a1.8 1.8 0 0 0 .36-2A1.8 1.8 0 0 0 2.1 13H2a2.1 2.1 0 0 1 0-4.2h.09A1.8 1.8 0 0 0 3.7 7.6a1.8 1.8 0 0 0-.36-2l-.06-.06a2.1 2.1 0 1 1 3-3l.06.06a1.8 1.8 0 0 0 2 .36H8.4A1.8 1.8 0 0 0 9.5 1.3V1a2.1 2.1 0 0 1 4.2 0v.09a1.8 1.8 0 0 0 1.1 1.64 1.8 1.8 0 0 0 2-.36l.06-.06a2.1 2.1 0 1 1 3 3l-.06.06a1.8 1.8 0 0 0-.36 2V7.6a1.8 1.8 0 0 0 1.64 1.1H21a2.1 2.1 0 0 1 0 4.2h-.09A1.8 1.8 0 0 0 19.4 15Z"></path></svg>`;
+  if (name === 'check') return `<svg ${common}><path d="m5 12 4 4L19 6"></path></svg>`;
+  if (name === 'fail') return `<svg ${common}><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>`;
+  return `<svg ${common}><path d="M12 8v5"></path><path d="M12 17h.01"></path><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path></svg>`;
+}
+
 function ensurePublishPanel() {
   let root = document.getElementById('huggy-publish-panel');
   if (root) return root;
   root = document.createElement('div');
   root.id = 'huggy-publish-panel';
-  root.style.cssText = 'position:fixed;inset:0;background:rgba(9,9,11,.42);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(8px);';
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(9,9,11,.58);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);';
   document.body.appendChild(root);
   root.addEventListener('click', event => {
     if (event.target === root) closePublishPanel();
@@ -1248,61 +1296,127 @@ function closePublishPanel() {
   document.getElementById('huggy-publish-panel')?.remove();
 }
 
-function publishCheckIcon(status: PublishCheck['status']) {
-  if (status === 'pass') return '✓';
-  if (status === 'warn') return '!';
-  return '×';
-}
-
 function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = false, error = '') {
   const root = ensurePublishPanel();
   const status = payload?.publish || null;
   const publicUrl = status?.public_url || '';
-  const canOpen = Boolean(publicUrl && payload?.deployment);
+  const publicUrlLabel = formatPublishUrl(publicUrl);
+  const canOpen = Boolean(publicUrl && payload?.deployment && status?.state !== 'not_ready');
   const checks = status?.checks || [];
-  root.innerHTML = `
-    <section style="width:min(460px,100%);border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:16px;box-shadow:0 28px 90px rgba(9,9,11,.24);overflow:hidden;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 16px 12px;border-bottom:1px solid var(--border-light);">
-        <div>
-          <div style="font-size:11px;color:var(--text-muted);font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Publish</div>
-          <h3 style="margin:4px 0 0;font-size:16px;line-height:1.2;">${status ? escapeHtml(publishStateLabel(status.state)) : 'Preparing publish'}</h3>
-        </div>
-        <button type="button" data-publish-action="close" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);width:28px;height:28px;border-radius:8px;cursor:pointer;">×</button>
+  const visitorCount = Math.max(0, Number(status?.current_visitors || 0));
+  const visitorLabel = `${formatCompactNumber(visitorCount)} Visitor${visitorCount === 1 ? '' : 's'}`;
+  const title = publishPanelTitle(status);
+  const primaryLabel = isPublishing ? 'Publishing...' : publishPrimaryLabel(status);
+  const checkCount = Math.max(1, checks.length);
+  const statusDetail = status?.state === 'changes_unpublished'
+    ? 'Your live app is stable. Click Update to publish the latest preview.'
+    : status?.state === 'published'
+      ? 'This URL serves the last published snapshot.'
+      : status?.state === 'ready_to_publish'
+        ? 'Your preview is ready. Publish creates the live snapshot.'
+        : 'Generate a ready preview before publishing.';
+  const securityRows = checks.map(check => {
+    const tone = check.status === 'pass' ? '#7ddf8a' : check.status === 'warn' ? '#fb923c' : '#f87171';
+    const iconName = check.status === 'pass' ? 'check' : check.status === 'warn' ? 'warning' : 'fail';
+    return `
+      <div style="display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:start;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035);">
+        <span style="display:grid;place-items:center;width:30px;height:30px;border-radius:10px;color:${tone};background:rgba(255,255,255,.06);">${publishIcon(iconName as 'check' | 'warning' | 'fail')}</span>
+        <span>
+          <strong style="display:block;color:#f7f7f4;font-size:13px;line-height:1.2;">${escapeHtml(check.label)}</strong>
+          <small style="display:block;margin-top:5px;color:#bbb8ae;font-size:12px;line-height:1.45;">${escapeHtml(check.detail)}</small>
+        </span>
       </div>
-      <div style="padding:16px;display:grid;gap:14px;">
-        ${error ? `<div style="border:1px solid rgba(185,28,28,.28);background:rgba(254,242,242,.88);color:#991b1b;border-radius:10px;padding:10px;font-size:12px;line-height:1.45;">${escapeHtml(error)}</div>` : ''}
-        ${status ? `
-          <div style="border:1px solid var(--border);background:var(--bg-elevated);border-radius:12px;padding:12px;display:grid;gap:8px;">
-            <div style="font-size:11px;color:var(--text-muted);font-weight:800;text-transform:uppercase;letter-spacing:.10em;">Live URL</div>
-            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-              <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;">${escapeHtml(publicUrl)}</span>
-            </div>
-            <div style="font-size:11px;color:var(--text-sub);line-height:1.5;">
-              Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}
-              ${status.badge_required ? '<br>Free plan badge will be visible on the published app.' : ''}
-            </div>
+    `;
+  }).join('');
+  const detailPanel = publishPanelMode === 'security'
+    ? `
+      <div style="display:grid;gap:10px;padding:0 38px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <strong style="color:#f7f7f4;font-size:15px;">Security review</strong>
+          <button type="button" data-publish-action="main" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#e8e5dc;height:30px;border-radius:10px;padding:0 11px;font-weight:750;cursor:pointer;">Back</button>
+        </div>
+        ${securityRows || '<p style="margin:0;color:#bbb8ae;font-size:13px;">No publish checks are available yet.</p>'}
+      </div>
+    `
+    : publishPanelMode === 'domain'
+      ? `
+        <div style="display:grid;gap:12px;padding:0 38px 22px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <strong style="color:#f7f7f4;font-size:15px;">Custom domain</strong>
+            <button type="button" data-publish-action="main" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#e8e5dc;height:30px;border-radius:10px;padding:0 11px;font-weight:750;cursor:pointer;">Back</button>
           </div>
-          <div style="display:grid;gap:8px;">
-            ${checks.map(check => `
-              <div style="display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;font-size:12px;">
-                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:6px;border:1px solid var(--border);background:${check.status === 'pass' ? 'rgba(22,163,74,.10)' : check.status === 'warn' ? 'rgba(217,119,6,.10)' : 'rgba(220,38,38,.10)'};color:${check.status === 'pass' ? '#166534' : check.status === 'warn' ? '#92400e' : '#991b1b'};font-weight:900;">${publishCheckIcon(check.status)}</span>
-                <span>
-                  <strong style="display:block;font-size:12px;color:var(--text);">${escapeHtml(check.label)}</strong>
-                  <small style="display:block;margin-top:2px;color:var(--text-sub);line-height:1.45;">${escapeHtml(check.detail)}</small>
-                </span>
-              </div>
-            `).join('')}
+          <div style="border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:16px;padding:14px;color:#c9c6bc;font-size:13px;line-height:1.55;">
+            ${status?.custom_domain
+              ? `This app is configured for <strong style="color:#fffefa;">${escapeHtml(status.custom_domain)}</strong>. Click Update after DNS changes are verified.`
+              : 'Connect a custom domain from project settings, verify DNS, then click Update. Until then, Huggy serves the app under your Huggy URL.'}
+          </div>
+          <button type="button" data-publish-action="settings" style="height:40px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.07));color:#fffefa;border-radius:13px;font-weight:850;cursor:pointer;">Open settings</button>
+        </div>
+      `
+      : '';
+  root.innerHTML = `
+    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(560px,100%);border:1px solid rgba(255,255,255,.12);background:#151513;color:#fffefa;border-radius:24px;box-shadow:0 34px 110px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.04) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:30px 38px 26px;border-bottom:1px solid rgba(255,255,255,.08);">
+        <div style="min-width:0;">
+          <h3 style="margin:0;color:#fffefa;font-size:30px;line-height:1.05;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
+          <p style="margin:9px 0 0;color:#bbb8ae;font-size:13px;line-height:1.45;">${escapeHtml(statusDetail)}</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;color:#fffefa;font-size:20px;font-weight:850;white-space:nowrap;">
+          <span style="color:#f3f2eb;display:grid;place-items:center;width:28px;height:28px;">${publishIcon('visitors')}</span>
+          <span>${escapeHtml(visitorLabel)}</span>
+        </div>
+      </div>
+      <div style="display:grid;gap:26px;padding:28px 38px 30px;border-bottom:1px solid rgba(255,255,255,.08);">
+        ${error ? `<div style="border:1px solid rgba(248,113,113,.28);background:rgba(127,29,29,.30);color:#fecaca;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.45;">${escapeHtml(error)}</div>` : ''}
+        ${status ? `
+          <div style="display:grid;gap:18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;">
+              <strong style="color:#fffefa;font-size:20px;letter-spacing:-.02em;">Website URL</strong>
+              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:9px;border:0;background:transparent;color:#fffefa;font-size:18px;font-weight:760;cursor:pointer;padding:0;white-space:nowrap;">
+                <span style="display:grid;place-items:center;width:22px;height:22px;">${publishIcon('link')}</span>
+                <span>Add custom domain</span>
+              </button>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;min-width:0;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.035);border-radius:22px;padding:20px 22px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset;">
+              <span title="${escapeHtml(publicUrl)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fffefa;font-size:20px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
+              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:36px;height:36px;border:0;background:transparent;color:${publicUrl ? '#d8d5cc' : '#6f6c64'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;color:#928f86;font-size:12px;line-height:1.4;">
+              <span>Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}</span>
+              <span>${status.badge_required ? 'Free plan badge active' : 'No Huggy badge required'}</span>
+            </div>
           </div>
         ` : `
           <div style="display:grid;gap:10px;">
-            <div class="skeleton" style="height:48px;border-radius:12px;"></div>
-            <div class="skeleton" style="height:82px;border-radius:12px;"></div>
+            <div class="skeleton" style="height:84px;border-radius:22px;background:rgba(255,255,255,.07);"></div>
+            <div class="skeleton" style="height:96px;border-radius:18px;background:rgba(255,255,255,.05);"></div>
           </div>
         `}
-        <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
-          <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${publicUrl ? '1' : '.45'};">Copy link</button>
-          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:9px;padding:0 11px;font-size:12px;font-weight:800;cursor:pointer;opacity:${canOpen ? '1' : '.45'};">Open app</button>
-            <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:32px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.30), transparent 34%), linear-gradient(135deg,#173f8f 0%,#102f70 54%,#151e55 100%);color:#fffefa;border-radius:9px;padding:0 13px;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 10px 24px rgba(12,36,90,.20), inset 0 1px 0 rgba(255,255,255,.16);opacity:${status?.can_publish && !isPublishing ? '1' : '.48'};">${isPublishing ? 'Publishing...' : escapeHtml(publishPrimaryLabel(status))}</button>
+        ${status ? `
+          <div style="display:grid;gap:18px;">
+            <strong style="color:#fffefa;font-size:20px;letter-spacing:-.02em;">Who can see this website</strong>
+            <div style="display:flex;align-items:center;gap:18px;">
+              <div style="display:grid;place-items:center;width:64px;height:64px;border-radius:15px;background:rgba(255,255,255,.08);color:#d8d5cc;">${publishIcon('globe')}</div>
+              <div>
+                <div style="color:#fffefa;font-size:20px;font-weight:850;letter-spacing:-.02em;">Public</div>
+                <div style="margin-top:5px;color:#c8c4bb;font-size:18px;font-weight:620;">Anyone with the URL</div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      ${detailPanel}
+      <div style="display:grid;gap:22px;padding:22px 38px 30px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:46px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:14px;font-size:18px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">
+            Review security <span style="display:inline-grid;place-items:center;min-width:28px;height:28px;margin-left:8px;border-radius:999px;background:#f97316;color:#fff;font-size:15px;font-weight:900;">${checkCount}</span>
+          </button>
+          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:46px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:14px;font-size:18px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">Edit settings</button>
+        </div>
+        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:50px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.26), transparent 34%),linear-gradient(135deg,#3768ff 0%,#2456f3 48%,#173fbd 100%);color:#fffefa;border-radius:14px;font-size:19px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 16px 34px rgba(28,83,255,.28),inset 0 1px 0 rgba(255,255,255,.20);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#8f8c84;font-size:12px;">
+          <button type="button" data-publish-action="close" style="border:0;background:transparent;color:#aaa69d;font-weight:800;cursor:pointer;padding:0;">Close</button>
+          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? '#d8d5cc' : '#69665f'};font-weight:800;cursor:${canOpen ? 'pointer' : 'default'};padding:0;">Open live app</button>
         </div>
       </div>
     </section>
@@ -1312,9 +1426,25 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
     button.addEventListener('click', () => {
       const action = button.dataset.publishAction || 'close';
       if (action === 'close') closePublishPanel();
+      if (action === 'main') {
+        publishPanelMode = 'main';
+        renderPublishPanel(payload, isPublishing, error);
+      }
+      if (action === 'security') {
+        publishPanelMode = publishPanelMode === 'security' ? 'main' : 'security';
+        renderPublishPanel(payload, isPublishing, error);
+      }
+      if (action === 'domain') {
+        publishPanelMode = publishPanelMode === 'domain' ? 'main' : 'domain';
+        renderPublishPanel(payload, isPublishing, error);
+      }
+      if (action === 'settings') {
+        closePublishPanel();
+        openSettings('account');
+      }
       if (action === 'copy' && publicUrl) {
         void navigator.clipboard?.writeText(publicUrl);
-        appendMessage('system', 'Published app link copied.');
+        showTransientNotice('Live app link copied.');
       }
       if (action === 'open' && publicUrl && canOpen) window.open(publicUrl, '_blank', 'noopener,noreferrer');
       if (action === 'publish') void publishCurrentProject(payload);
@@ -1327,6 +1457,7 @@ async function openPublishPanel() {
     appendMessage('system', 'Create or open a project before publishing.');
     return;
   }
+  publishPanelMode = 'main';
   renderPublishPanel(null);
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
@@ -1338,6 +1469,7 @@ async function openPublishPanel() {
 
 async function publishCurrentProject(previousPayload: PublishApiPayload | null) {
   if (!currentProjectId) return;
+  publishPanelMode = 'main';
   renderPublishPanel(previousPayload, true);
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish`, {
@@ -1349,6 +1481,126 @@ async function publishCurrentProject(previousPayload: PublishApiPayload | null) 
   } catch (error) {
     renderPublishPanel(previousPayload, false, error instanceof Error ? error.message : 'Publish failed.');
   }
+}
+
+function ensureHistoryPanel() {
+  let root = document.getElementById('huggy-history-panel');
+  if (root) return root;
+  root = document.createElement('div');
+  root.id = 'huggy-history-panel';
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(9,9,11,.38);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(8px);';
+  document.body.appendChild(root);
+  root.addEventListener('click', event => {
+    if (event.target === root) closeHistoryPanel();
+  });
+  return root;
+}
+
+function closeHistoryPanel() {
+  document.getElementById('huggy-history-panel')?.remove();
+}
+
+function formatShortDate(value?: string) {
+  if (!value) return 'Unknown time';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderHistoryPanel(runs: AgentRunSummary[] = [], versions: ProjectVersionSummary[] = [], loading = false, error = '') {
+  const root = ensureHistoryPanel();
+  const runRows = runs.length ? runs.map(run => `
+    <div style="border:1px solid var(--border-light);background:var(--bg-elevated);border-radius:10px;padding:10px;display:grid;gap:5px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <strong style="font-size:12px;color:var(--text);">${escapeHtml(run.intent || 'agent run')}</strong>
+        <span style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">${escapeHtml(run.status || 'unknown')}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);">${escapeHtml(run.mode || 'auto')} · ${escapeHtml(run.model_id || 'auto')} · ${formatShortDate(run.created_at)}</div>
+      ${run.diagnostic_code ? `<div style="font-size:11px;color:#991b1b;">${escapeHtml(run.diagnostic_code)}</div>` : ''}
+    </div>
+  `).join('') : '<div style="color:var(--text-muted);font-size:12px;">No agent runs recorded yet.</div>';
+  const versionRows = versions.length ? versions.map(version => `
+    <div style="border:1px solid var(--border-light);background:var(--bg-elevated);border-radius:10px;padding:10px;display:grid;gap:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <strong style="font-size:12px;color:var(--text);">Version ${escapeHtml(String(version.version_number || ''))}</strong>
+        <span style="font-size:11px;color:var(--text-muted);">${formatShortDate(version.created_at)}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.45;">${escapeHtml(version.diff_summary?.summary || version.label || 'Saved project version.')}</div>
+      <button type="button" data-history-rollback="${escapeHtml(version.id)}" style="justify-self:start;height:28px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:7px;padding:0 10px;font-size:11px;font-weight:800;cursor:pointer;">Rollback</button>
+    </div>
+  `).join('') : '<div style="color:var(--text-muted);font-size:12px;">No saved versions yet.</div>';
+
+  root.innerHTML = `
+    <section style="width:min(760px,100%);max-height:min(760px,calc(100vh - 32px));overflow:auto;border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:16px;box-shadow:0 28px 90px rgba(9,9,11,.22);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px;border-bottom:1px solid var(--border-light);">
+        <div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Project history</div>
+          <h3 style="margin:4px 0 0;font-size:16px;line-height:1.2;">Runs, versions and rollback</h3>
+        </div>
+        <button type="button" data-history-close style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);width:28px;height:28px;border-radius:8px;cursor:pointer;">×</button>
+      </div>
+      <div style="padding:16px;display:grid;gap:14px;">
+        ${loading ? '<div style="font-size:12px;color:var(--text-muted);">Loading history...</div>' : ''}
+        ${error ? `<div style="border:1px solid rgba(185,28,28,.28);background:rgba(254,242,242,.88);color:#991b1b;border-radius:10px;padding:10px;font-size:12px;">${escapeHtml(error)}</div>` : ''}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+          <div style="display:grid;gap:8px;align-content:start;">
+            <h4 style="margin:0;font-size:13px;">Agent runs</h4>
+            ${runRows}
+          </div>
+          <div style="display:grid;gap:8px;align-content:start;">
+            <h4 style="margin:0;font-size:13px;">Saved versions</h4>
+            ${versionRows}
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+  root.querySelector('[data-history-close]')?.addEventListener('click', closeHistoryPanel);
+  root.querySelectorAll<HTMLButtonElement>('[data-history-rollback]').forEach(button => {
+    button.addEventListener('click', () => void rollbackToVersion(button.dataset.historyRollback || ''));
+  });
+}
+
+async function openHistoryPanel() {
+  if (!currentProjectId) {
+    appendMessage('system', 'Create or open a project before viewing history.');
+    return;
+  }
+  renderHistoryPanel([], [], true);
+  try {
+    const [runsPayload, versionsPayload] = await Promise.all([
+      apiFetch<{ success: boolean; runs: AgentRunSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs?limit=12`),
+      apiFetch<{ success: boolean; versions: ProjectVersionSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/versions`),
+    ]);
+    renderHistoryPanel(runsPayload.runs || [], versionsPayload.versions || []);
+  } catch (error) {
+    renderHistoryPanel([], [], false, error instanceof Error ? error.message : 'Unable to load project history.');
+  }
+}
+
+async function rollbackToVersion(versionId: string) {
+  if (!currentProjectId || !versionId) return;
+  try {
+    const payload = await apiFetch<{ success: boolean; files: GeneratedFile[]; preview?: { html?: string; status?: string }; project?: { name?: string } }>(`/api/projects/${encodeURIComponent(currentProjectId)}/versions/${encodeURIComponent(versionId)}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ source: 'history_panel' }),
+    });
+    renderFiles(payload.files || []);
+    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status || 'ready');
+    if (payload.project?.name) setProjectNameDisplay(payload.project.name);
+    closeHistoryPanel();
+    appendMessage('assistant', 'Rollback complete. The preview now shows the restored version.');
+  } catch (error) {
+    renderHistoryPanel([], [], false, error instanceof Error ? error.message : 'Rollback failed.');
+  }
+}
+
+function recordAgentFeedback(feedback: 'keep' | 'modify' | 'regenerate' | 'publish' | 'reject') {
+  if (!currentProjectId) return Promise.resolve();
+  return apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({ feedback, runId: lastAgentRunId, source: 'builder_inline_action' }),
+  }).then(() => undefined).catch(() => undefined);
 }
 
 const sendIconSvg = `
@@ -2793,7 +3045,26 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const finalText = speaksFrench
           ? `${event.message || 'C’est prêt. J’ai mis à jour la preview.'}${diff}`
           : `${event.message || 'Done. I updated the preview.'}${diff}`;
-        commitAssistantText(finalText, 'Preview ready.', say('Preview prête', 'Preview ready'));
+        const target = commitAssistantText(finalText, 'Preview ready.', say('Preview prête', 'Preview ready'));
+        addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
+          void recordAgentFeedback('keep');
+          appendMessage('system', speaksFrench ? 'Version gardee comme preview actuelle.' : 'Kept as the current preview.');
+        });
+        addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
+          void recordAgentFeedback('modify');
+          const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+          promptInput?.focus();
+          if (promptInput && !promptInput.value.trim()) promptInput.placeholder = speaksFrench ? 'Dis-moi quoi changer dans cette version...' : 'Tell me what to change in this version...';
+        });
+        addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
+          void recordAgentFeedback('regenerate');
+          void generateFromPrompt(prompt, 'build', false, { regenerate: true }, displayText);
+        });
+        addInlineAction(target, 'Publish', () => {
+          void recordAgentFeedback('publish');
+          void openPublishPanel();
+        });
+        addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
         if (payload.errors?.length) showFixBugBox(payload.errors);
         return;
       }

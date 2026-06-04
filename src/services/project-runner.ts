@@ -220,12 +220,32 @@ export class HybridProjectRunner implements RunnerAdapter {
     const hasHandler = /\b(onClick|onSubmit|onChange|addEventListener|useState|useReducer|href=|aria-expanded)\b/i.test(source);
     const hasValidation = /\b(required|minLength|maxLength|pattern|aria-invalid|invalid|error|validation|validate|setError)\b/i.test(source);
     const hasFeedback = /\b(loading|saving|saved|success|error|empty|toast|alert|disabled|pending|cancelled)\b/i.test(source);
+    const hasListExperience = /\b(todo|task|kanban|table|list|catalog|marketplace|inventory|crm|dashboard|reservation|booking)\b/i.test(source);
+    const hasListTools = /\b(search|filter|sort|query|status|category|tag|segment|favorite|favourite)\b/i.test(source);
+    const hasTabs = /\b(tablist|role=["']tab|activeTab|setActiveTab|data-tab|tabs?\b)\b/i.test(source);
+    const hasTabControls = /\b(aria-selected|aria-controls|setActiveTab|onClick|data-tab)\b/i.test(source);
+    const hasModal = /\b(dialog|modal|sheet|drawer|popover|aria-modal)\b/i.test(source);
+    const hasModalState = /\b(isOpen|openModal|closeModal|setOpen|set.*Open|aria-expanded|onClose|onOpen)\b/i.test(source);
+    const hasDestructiveAction = /\b(delete|remove|archive|clear|reset|destroy|supprimer|effacer|retirer)\b/i.test(source);
+    const hasDestructiveSafety = /\b(confirm\(|confirmation|undo|toast|modal|dialog|cancel|annuler|restore|rollback)\b/i.test(source);
 
     if (hasButton) {
       checks.push(hasHandler ? pass('control_handlers', 'Primary controls have handlers or navigation.') : fail('control_handlers', 'high', 'Controls exist but no handlers or navigation were detected.'));
     }
     if (hasForm) {
       checks.push(hasValidation ? pass('form_validation', 'Forms include validation or error feedback.') : fail('form_validation', 'medium', 'Forms need validation and visible feedback.'));
+    }
+    if (hasListExperience) {
+      checks.push(hasListTools ? pass('list_tools', 'List-oriented experience includes search, filters, sorting, or status controls.') : warn('list_tools', 'medium', 'List-oriented apps should include search, filters, sorting, or status controls.'));
+    }
+    if (hasTabs) {
+      checks.push(hasTabControls ? pass('tab_interaction', 'Tabs expose a visible active-state interaction.') : fail('tab_interaction', 'medium', 'Tabs are mentioned but no active-state interaction was detected.'));
+    }
+    if (hasModal) {
+      checks.push(hasModalState ? pass('modal_interaction', 'Modal, drawer, or popover has open/close state.') : fail('modal_interaction', 'medium', 'Modal-like UI needs open/close behavior.'));
+    }
+    if (hasDestructiveAction) {
+      checks.push(hasDestructiveSafety ? pass('destructive_action_safety', 'Destructive actions include confirmation, undo, or feedback.') : fail('destructive_action_safety', 'high', 'Destructive actions need confirmation, undo, or clear feedback.'));
     }
     checks.push(hasFeedback ? pass('ui_feedback_states', 'User feedback states are represented.') : warn('ui_feedback_states', 'medium', 'No loading, empty, error, success, or disabled state was detected.'));
     return checks;

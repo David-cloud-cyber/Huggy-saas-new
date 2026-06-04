@@ -61,6 +61,7 @@ import {
   runnerChecksToVerificationChecks,
   type RunnerResult,
 } from './src/services/project-runner.ts';
+import { inspectVisualPreview } from './src/services/visual-preview-inspector.ts';
 import {
   WebResearchGateway,
   researchToPromptContext,
@@ -530,6 +531,7 @@ type PublishStatus = {
   state: 'not_ready' | 'ready_to_publish' | 'published' | 'changes_unpublished';
   public_url: string;
   custom_domain: string | null;
+  current_visitors: number;
   latest_published_at: string | null;
   project_updated_at: string | null;
   badge_required: boolean;
@@ -544,6 +546,7 @@ type PublishContext = {
   latestDeployment: any | null;
   plan: string;
   customDomain: string | null;
+  currentVisitors?: number;
 };
 
 type AgentEvent = {
@@ -1673,8 +1676,28 @@ async function getLatestDeployment(projectId: string): Promise<any | null> {
   }
 }
 
+async function getPublishCurrentVisitors(projectId: string): Promise<number> {
+  const client = requireSupabase('Publish visitor lookup');
+  try {
+    const cutoffIso = new Date(Date.now() - ANALYTICS_CURRENT_VISITOR_WINDOW_MS).toISOString();
+    const { data, error } = await client
+      .from('project_analytics_sessions')
+      .select('session_id,visitor_id,last_seen_at')
+      .eq('project_id', projectId)
+      .gte('last_seen_at', cutoffIso)
+      .limit(1000);
+    if (error) throw error;
+    return uniqueCount(
+      ((data || []) as any[]).map((session: any) => String(session.visitor_id || session.session_id || ''))
+    );
+  } catch (error: any) {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:publish_visitors_lookup_skipped]', { message: error?.message });
+    return 0;
+  }
+}
+
 function buildPublishStatus(context: PublishContext): PublishStatus {
-  const { project, files, latestDeployment, plan, customDomain } = context;
+  const { project, files, latestDeployment, plan, customDomain, currentVisitors = 0 } = context;
   const latestPublishedAt = latestDeployment?.created_at || null;
   const projectUpdatedAt = getProjectUpdatedAt(project, files);
   const hasUnpublishedChanges = Boolean(
@@ -1697,6 +1720,7 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
     state,
     public_url: publicUrl,
     custom_domain: customDomain,
+    current_visitors: Math.max(0, Number(currentVisitors || 0)),
     latest_published_at: latestPublishedAt,
     project_updated_at: projectUpdatedAt,
     badge_required: isFreePlanKey(plan),
@@ -4656,6 +4680,85 @@ app.get('/api/admin/provider-usage', async (req: any, res) => {
   res.json({ success: true, rows: data || [] });
 });
 
+app.get('/api/admin/agent-observability', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin agent observability');
+  const [runsResult, stepsResult, runnerResult] = await Promise.all([
+    client
+      .from('agent_runs')
+      .select('id,request_id,project_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,created_at,completed_at,cancelled_at')
+      .order('created_at', { ascending: false })
+      .limit(250),
+    client
+      .from('agent_run_steps')
+      .select('agent_run_id,event_type,status,message,created_at')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    client
+      .from('agent_runner_results')
+      .select('agent_run_id,status,check_type,severity,message,duration_ms,created_at')
+      .order('created_at', { ascending: false })
+      .limit(500),
+  ]);
+
+  if (runsResult.error && !isMissingAgentV2TableError(runsResult.error)) return res.status(500).json({ success: false, error: runsResult.error.message });
+  if (stepsResult.error && !isMissingAgentV2TableError(stepsResult.error)) return res.status(500).json({ success: false, error: stepsResult.error.message });
+  if (runnerResult.error && !isMissingAgentV2TableError(runnerResult.error)) return res.status(500).json({ success: false, error: runnerResult.error.message });
+
+  const runs = (runsResult.data || []).map(redactAgentPayload);
+  const steps = (stepsResult.data || []).map(redactAgentPayload);
+  const runnerRows = (runnerResult.data || []).map(redactAgentPayload);
+  const completedDurations = runs
+    .map((run: any) => Number(run.duration_ms || 0))
+    .filter((duration: number) => Number.isFinite(duration) && duration > 0);
+  const countBy = (rows: any[], key: string) => rows.reduce((acc: Record<string, number>, row: any) => {
+    const value = String(row?.[key] || 'unknown');
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+
+  const failedRuns = runs.filter((run: any) => run.status === 'failed');
+  const cancelledRuns = runs.filter((run: any) => run.status === 'cancelled');
+  const runnerFailures = runnerRows.filter((row: any) => row.status === 'failed').slice(0, 30);
+  res.json({
+    success: true,
+    metrics: {
+      total_runs: runs.length,
+      completed_runs: runs.filter((run: any) => run.status === 'completed').length,
+      failed_runs: failedRuns.length,
+      cancelled_runs: cancelledRuns.length,
+      average_duration_ms: completedDurations.length
+        ? Math.round(completedDurations.reduce((sum: number, value: number) => sum + value, 0) / completedDurations.length)
+        : 0,
+      total_steps: steps.length,
+      runner_failures: runnerFailures.length,
+    },
+    distributions: {
+      by_status: countBy(runs, 'status'),
+      by_intent: countBy(runs, 'intent'),
+      by_model: countBy(runs, 'model_id'),
+      by_step_type: countBy(steps, 'event_type'),
+    },
+    recent_errors: failedRuns.slice(0, 25).map((run: any) => ({
+      id: run.id,
+      request_id: run.request_id,
+      project_id: run.project_id,
+      intent: run.intent,
+      model_id: run.model_id,
+      diagnostic_code: run.diagnostic_code,
+      suggested_action: run.suggested_action,
+      created_at: run.created_at,
+    })),
+    runner_failures: runnerFailures.map((row: any) => ({
+      agent_run_id: row.agent_run_id,
+      check_type: row.check_type,
+      severity: row.severity,
+      message: row.message,
+      created_at: row.created_at,
+    })),
+  });
+});
+
 // PATCH /users/me/ai-preferences
 app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
   const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
@@ -5397,6 +5500,11 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         platformType: uiPolicy.appType,
         designDirection: uiPolicy.designDirection,
         hasExistingFiles: existingFiles.length > 0,
+      }),
+      ...inspectVisualPreview({
+        files: finalFiles,
+        previewHtml,
+        platformType: uiPolicy.appType,
       }),
       ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
     ];
@@ -6249,6 +6357,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         designDirection: uiPolicy.designDirection,
         hasExistingFiles: existingFiles.length > 0,
       }),
+      ...inspectVisualPreview({
+        files,
+        previewHtml,
+        platformType: uiPolicy.appType,
+      }),
       ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
     ];
     const verificationSummary = summarizeVerificationChecks(verificationChecks);
@@ -6549,6 +6662,31 @@ app.get('/api/projects/:id/agent/runs/:runId/runner-results', async (req: any, r
   if (!run) return res.status(404).json({ success: false, error: 'Agent run not found.' });
   const results = await listAgentRunnerResults(project.id, req.params.runId, req.query?.limit || 120);
   res.json({ success: true, results });
+});
+
+app.post('/api/projects/:id/agent/feedback', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  const allowedFeedback = new Set(['keep', 'modify', 'regenerate', 'publish', 'reject']);
+  const feedback = allowedFeedback.has(String(req.body?.feedback || ''))
+    ? String(req.body.feedback)
+    : 'modify';
+  await saveAgentEvent({
+    organization_id: project.organization_id || userId,
+    project_id: project.id,
+    user_id: userId,
+    sequence_number: Date.now(),
+    event_type: 'user_feedback',
+    message: `User feedback: ${feedback}.`,
+    payload: redactAgentPayload({
+      feedback,
+      agent_run_id: req.body?.runId || null,
+      version_id: req.body?.versionId || null,
+      source: req.body?.source || 'builder',
+    }),
+  });
+  res.json({ success: true, feedback });
 });
 
 app.get('/api/projects/:id/agent/research', async (req: any, res: any) => {
@@ -6893,13 +7031,14 @@ app.patch('/api/projects/:id/domains/:domainId/primary', async (req, res) => {
 // ──────────────────────────────────────────────────────────────────────
 
 async function createPublishContext(project: GeneratedProject): Promise<PublishContext> {
-  const [files, latestDeployment, plan, customDomain] = await Promise.all([
+  const [files, latestDeployment, plan, customDomain, currentVisitors] = await Promise.all([
     loadProjectFiles(project.id),
     getLatestDeployment(project.id),
     getOrganizationPlan(project.organization_id),
     getPrimaryCustomDomain(project.id),
+    getPublishCurrentVisitors(project.id),
   ]);
-  return { project, files, latestDeployment, plan, customDomain };
+  return { project, files, latestDeployment, plan, customDomain, currentVisitors };
 }
 
 function getPublishPublicUrl(project: GeneratedProject, customDomain: string | null): string {

@@ -166,6 +166,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const noActionSignals = [
     'ne code pas', 'sans coder', 'sans modifier', 'ne modifie rien', 'ne genere rien',
     'dis moi d abord', 'dis-moi d abord', 'explique d abord',
+    'conseil avant', 'avant de modifier', 'avant de coder', 'avant de toucher',
+    'avant de construire', 'avant de generer', 'avant d agir',
   ];
 
   const hasMetaAgent = includesAny(text, metaAgentSignals);
@@ -186,17 +188,25 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   ]);
 
   const directActionPatterns = [
-    /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte|cree|creer|genere|build|update|fais|fait|mets|met|ameliore|ameliorer)\b/,
+    /\b(implemente|applique|corrige|corriger|fix|repare|reparer|modifie|modifier|change|changer|ajoute|ajouter|supprime|supprimer|remplace|remplacer|connecte|connecter|cree|creer|genere|generer|publie|publier|deploie|deployer|build|update|fais|fait|mets|met|ameliore|ameliorer)\b/,
     /\b(make|create|add|remove|replace|modify|implement|build|generate|repair|improve)\b/,
   ];
   const concreteTechnicalTargets = [
     'fichier', 'code', 'component', 'composant', 'page', 'api', 'endpoint', 'backend',
+    'cette app', 'l app', 'l application', 'application actuelle', 'projet actuel',
     'frontend', 'database', 'base de donnees', 'supabase', 'schema', 'migration',
     'auth', 'login', 'bouton', 'button', 'input', 'modal', 'footer', 'header',
     'dashboard', 'builder', 'settings', 'pricing', 'preview', 'publish', 'deploy',
     'fonctionnalite', 'fonctionnalité', 'feature', 'workflow', 'formulaire', 'form',
     'navigation', 'filtre', 'filter', 'search', 'recherche', 'tableau', 'table',
-    'css', 'html', 'react', 'vite', 'typescript', 'javascript',
+    'todo', 'tache', 'taches', 'task', 'tasks', 'suppression', 'delete', 'remove',
+    'confirmation', 'confirm', 'undo',
+    'conversation', 'conversations', 'message', 'messages', 'chat', 'streaming',
+    'persistance', 'persist', 'refresh', 'actualisation', 'session', 'localstorage',
+    'cta', 'call to action', 'couleur', 'color', 'palette', 'theme',
+    'texte', 'text', 'titre', 'title', 'typographie', 'font', 'taille', 'size',
+    'radius', 'border', 'bordure', 'spacing', 'animation', 'loader',
+    'css', 'html', 'react', 'vite', 'typescript', 'javascript', 'js',
   ];
   const appTargets = [
     'app', 'application', 'site web', 'web app', 'landing page', 'saas', 'dashboard',
@@ -221,7 +231,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   ]) && hasTechnicalTarget && !asksForGeneratedArtifact;
   const advisoryQuestionSignals = [
     'bonne idee', 'bon choix', 'mauvaise idee', 'dois je', 'devrais je',
-    'est ce que je dois', 'est ce une bonne idee', 'est ce que c est une bonne idee',
+    'est ce que je dois', 'est-ce que je dois', 'est ce une bonne idee', 'est-ce une bonne idee', 'est ce que c est une bonne idee',
     'should i', 'is it a good idea', 'avant de coder', 'avant de toucher',
     'conseil avant', 'pour mon mvp',
   ];
@@ -254,6 +264,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
               ? 'architecture'
               : hasSensitiveTopic
                 ? 'auth_billing_security'
+                : hasAnalysisRequest
+                  ? 'analysis'
                 : hasStrategy
                   ? 'strategy'
                   : 'explanation',
@@ -341,7 +353,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     });
   }
 
-  if ((hasExplanation || hasStrategy) && !explicitApplyToProduct && !asksForGeneratedArtifact) {
+  if ((hasExplanation || hasStrategy) && !explicitApplyToProduct && !asksForGeneratedArtifact && !hasDirectAction) {
     return result({
       category: hasStrategy ? 'strategy' : 'explanation',
       action: 'answer',
