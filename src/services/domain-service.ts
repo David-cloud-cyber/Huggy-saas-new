@@ -13,6 +13,22 @@ export interface DNSRecordInstruction {
   status: 'pending' | 'verified' | 'failed';
 }
 
+export interface VercelVerificationChallenge {
+  type?: string;
+  domain?: string;
+  name?: string;
+  value?: string;
+  reason?: string;
+}
+
+export interface VercelDomainAssociation {
+  vercel_domain_id: string;
+  verification_token: string;
+  verified: boolean;
+  verification: VercelVerificationChallenge[];
+  raw?: any;
+}
+
 export class domainPlanLimits {
   static getCustomDomainLimit(plan: string | any): number {
     switch (String(plan).toLowerCase()) {
@@ -38,32 +54,159 @@ export class VercelDomainService {
     this.teamId = teamId;
   }
 
-  /**
-   * Safe mock or actual production proxy to Vercel Domains endpoint
-   */
-  async addDomainToVercel(projectId: string, domain: string): Promise<{ vercel_domain_id: string; verification_token: string }> {
-    console.log(`[VERCEL API] Associating domain ${domain} to Vercel Project ${projectId}`);
-    
-    // In production we send POST to https://api.vercel.com/v9/projects/${projectId}/domains
-    // Header Authorization Bearer apiToken
-    const dummyToken = `vc-txt-verification-${Math.random().toString(36).substring(2, 15)}`;
-    
+  private buildTeamQuery() {
+    const params = new URLSearchParams();
+    if (this.teamId) params.set('teamId', this.teamId);
+    return params.toString() ? `?${params.toString()}` : '';
+  }
+
+  private async vercelRequest<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+    const response = await fetch(`https://api.vercel.com${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+
+    const text = await response.text().catch(() => '');
+    let payload: any = {};
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = { message: text };
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        payload?.error?.message ||
+        payload?.message ||
+        `Vercel API returned ${response.status}`;
+      const error = new Error(message) as Error & { statusCode?: number; payload?: any };
+      error.statusCode = response.status;
+      error.payload = payload;
+      throw error;
+    }
+
+    return payload as T;
+  }
+
+  async addDomainToVercel(projectId: string, domain: string): Promise<VercelDomainAssociation> {
+    const payload = await this.vercelRequest<any>(
+      `/v10/projects/${encodeURIComponent(projectId)}/domains${this.buildTeamQuery()}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ name: domain }),
+      },
+    );
+
+    const verification = Array.isArray(payload.verification) ? payload.verification : [];
+    const txtChallenge =
+      verification.find((item: any) => String(item?.type || '').toUpperCase() === 'TXT') ||
+      verification.find((item: any) => item?.value) ||
+      null;
+
     return {
-      vercel_domain_id: `dom_${Math.random().toString(36).substring(2, 10)}`,
-      verification_token: dummyToken
+      vercel_domain_id: String(payload.id || payload.name || domain),
+      verification_token: String(txtChallenge?.value || ''),
+      verified: Boolean(payload.verified),
+      verification,
+      raw: payload,
     };
   }
 
-  async verifyVercelDomain(projectId: string, domain: string): Promise<{ verified: boolean; error?: string }> {
-    console.log(`[VERCEL API] Verifying DNS propagation for ${domain}`);
-    // Proxy query https://api.vercel.com/v9/projects/${projectId}/domains/${domain}/verify
-    return { verified: true };
+  async verifyVercelDomain(projectId: string, domain: string): Promise<{ verified: boolean; error?: string; raw?: any; verification?: VercelVerificationChallenge[] }> {
+    try {
+      const payload = await this.vercelRequest<any>(
+        `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}/verify${this.buildTeamQuery()}`,
+        { method: 'POST' },
+      );
+
+      return {
+        verified: Boolean(payload.verified),
+        raw: payload,
+        verification: Array.isArray(payload.verification) ? payload.verification : [],
+      };
+    } catch (error: any) {
+      return {
+        verified: false,
+        error: error?.message || 'Vercel domain verification failed.',
+        raw: error?.payload,
+      };
+    }
   }
 
   async removeDomainFromVercel(projectId: string, domain: string): Promise<boolean> {
-    console.log(`[VERCEL API] Removing domain ${domain} from Vercel Project ${projectId}`);
+    await this.vercelRequest(
+      `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}${this.buildTeamQuery()}`,
+      { method: 'DELETE' },
+    );
     return true;
   }
+}
+
+function sanitizeDomainInput(domain: string) {
+  const sanitized = String(domain || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/\.$/, '');
+
+  if (!sanitized || sanitized.length > 253 || sanitized.includes('..') || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(sanitized)) {
+    throw new Error('Enter a valid domain name without protocol or path.');
+  }
+
+  return sanitized;
+}
+
+function normalizeRecordType(value: unknown): DNSRecordInstruction['type'] {
+  const type = String(value || 'TXT').toUpperCase();
+  return type === 'A' || type === 'CNAME' || type === 'TXT' ? type : 'TXT';
+}
+
+function buildRoutingRecord(domain: string): Omit<DNSRecordInstruction, 'status'> {
+  const parts = domain.split('.').filter(Boolean);
+  const isSubdomain = parts.length > 2;
+  if (isSubdomain) {
+    return {
+      type: 'CNAME',
+      name: domain.startsWith('www.') ? 'www' : parts[0],
+      value: 'cname.vercel-dns.com',
+    };
+  }
+  return {
+    type: 'A',
+    name: '@',
+    value: '76.76.21.21',
+  };
+}
+
+export function buildDnsRecordInstructionsFromVercel(
+  domain: string,
+  verification: VercelVerificationChallenge[] = [],
+  status: DNSRecordInstruction['status'] = 'pending',
+): DNSRecordInstruction[] {
+  const records = verification
+    .map((item: any) => ({
+      type: normalizeRecordType(item?.type),
+      name: String(item?.domain || item?.name || domain).trim() || domain,
+      value: String(item?.value || '').trim(),
+      status,
+    }))
+    .filter(record => record.value);
+
+  const routing = { ...buildRoutingRecord(domain), status };
+  const seen = new Set<string>();
+  return [...records, routing].filter(record => {
+    const key = `${record.type}:${record.name}:${record.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export class DomainService {
@@ -87,7 +230,7 @@ export class DomainService {
   ) {
     if (!this.supabase) throw new Error('Supabase integration missing');
 
-    const sanitized = domain.trim().toLowerCase();
+    const sanitized = sanitizeDomainInput(domain);
 
     // 1. Reserved subdomain protection
     if (type === 'subdomain') {
@@ -126,8 +269,15 @@ export class DomainService {
     }
 
     // 4. Register
-    const vercelProjectId = process.env.VERCEL_PROJECT_ID || 'proj_default';
+    const vercelProjectId = process.env.VERCEL_PROJECT_ID || '';
+    if (!vercelProjectId) {
+      throw new Error('Vercel domain operations are not configured. Add VERCEL_PROJECT_ID on Railway.');
+    }
     const vercelResp = await this.vercel.addDomainToVercel(vercelProjectId, sanitized);
+    const dnsStatus: DNSRecordInstruction['status'] = vercelResp.verified ? 'verified' : 'pending';
+    const dnsRecords = type === 'custom'
+      ? buildDnsRecordInstructionsFromVercel(sanitized, vercelResp.verification, dnsStatus)
+      : [];
 
     const { data, error } = await this.supabase
       .from('domains')
@@ -136,10 +286,10 @@ export class DomainService {
         project_id: projectId,
         domain: sanitized,
         type,
-        status: type === 'subdomain' ? 'active' : 'pending', // Subdomains are usually instant
+        status: type === 'subdomain' || vercelResp.verified ? 'active' : 'pending',
         vercel_project_id: vercelProjectId,
         vercel_domain_id: vercelResp.vercel_domain_id,
-        verification_token: vercelResp.verification_token,
+        verification_token: vercelResp.verification_token || null,
         last_checked_at: new Date().toISOString()
       }])
       .select()
@@ -147,22 +297,8 @@ export class DomainService {
 
     if (error) throw error;
 
-    // 5. Generate DNS configuration directives for custom domains
     if (type === 'custom') {
-      const records: Omit<DNSRecordInstruction, 'status'>[] = [
-        {
-          type: 'TXT',
-          name: `_vercel-challenge.${sanitized}`,
-          value: vercelResp.verification_token
-        },
-        {
-          type: 'CNAME',
-          name: sanitized.startsWith('www.') ? 'www' : '@',
-          value: 'cname.vercel-dns.com'
-        }
-      ];
-
-      for (const rec of records) {
+      for (const rec of dnsRecords) {
         await this.supabase
           .from('dns_verifications')
           .insert([{
@@ -170,12 +306,12 @@ export class DomainService {
             record_type: rec.type,
             record_name: rec.name,
             record_value: rec.value,
-            status: 'pending'
+            status: rec.status
           }]);
       }
     }
 
-    return data;
+    return { ...data, dns_records: dnsRecords };
   }
 
   async verifyDnsRecords(projectId: string, domainId: string): Promise<any> {
@@ -192,14 +328,18 @@ export class DomainService {
       throw new Error(`Domain not found or unauthorized: ${domainId}`);
     }
 
-    const { verified, error: vErr } = await this.vercel.verifyVercelDomain(domain.vercel_project_id, domain.domain);
+    const { verified, error: vErr, verification } = await this.vercel.verifyVercelDomain(domain.vercel_project_id, domain.domain);
 
     const now = new Date().toISOString();
-    let status = 'pending';
+    let status = verified ? 'active' : 'pending';
     let errorMessage = null;
+    const dnsRecords = buildDnsRecordInstructionsFromVercel(
+      domain.domain,
+      verification || [],
+      verified ? 'verified' : 'pending',
+    );
 
     if (verified) {
-      status = 'verified';
       await this.supabase
         .from('domains')
         .update({ status: 'active', verified_at: now, last_checked_at: now, error_message: null })
@@ -210,18 +350,38 @@ export class DomainService {
         .update({ status: 'verified', checked_at: now })
         .eq('domain_id', domainId);
     } else {
-      status = 'failed';
       errorMessage = vErr || 'DNS validation checked, but records have not propagated yet. Please re-try in a few minutes.';
       await this.supabase
         .from('domains')
-        .update({ status: 'failed', last_checked_at: now, error_message: errorMessage })
+        .update({ status: 'pending', last_checked_at: now, error_message: errorMessage })
         .eq('id', domainId);
+
+      if (dnsRecords.length) {
+        await this.supabase
+          .from('dns_verifications')
+          .delete()
+          .eq('domain_id', domainId);
+
+        for (const rec of dnsRecords) {
+          await this.supabase
+            .from('dns_verifications')
+            .insert([{
+              domain_id: domainId,
+              record_type: rec.type,
+              record_name: rec.name,
+              record_value: rec.value,
+              status: rec.status,
+              checked_at: now,
+            }]);
+        }
+      }
     }
 
     return {
       domain_id: domainId,
-      status: status === 'verified' ? 'active' : 'failed',
-      error: errorMessage
+      status,
+      error: errorMessage,
+      dns_records: dnsRecords,
     };
   }
 
@@ -239,7 +399,11 @@ export class DomainService {
       throw new Error('Authorized domain target not found');
     }
 
-    await this.vercel.removeDomainFromVercel(domain.vercel_project_id || 'proj_default', domain.domain);
+    if (!domain.vercel_project_id) {
+      throw new Error('Vercel project id is missing for this domain.');
+    }
+
+    await this.vercel.removeDomainFromVercel(domain.vercel_project_id, domain.domain);
 
     // Hard / Soft delete depending on compliance state
     await this.supabase

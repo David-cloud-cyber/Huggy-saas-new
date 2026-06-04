@@ -4755,7 +4755,7 @@ function createVercelDomainProxy() {
   if (!token) {
     throw new Error('Vercel domain operations are not configured. Add VERCEL_TOKEN on Railway.');
   }
-  return new VercelDomainService(token);
+  return new VercelDomainService(token, process.env.VERCEL_TEAM_ID || undefined);
 }
 
 async function deployFilesToVercel(
@@ -7971,19 +7971,45 @@ app.get('/api/projects/:id/domains', async (req: any, res) => {
   const client = requireSupabase('Domain listing');
   const { data, error } = await client.from('domains').select('*').eq('project_id', projectId).neq('status', 'removed');
   if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, domains: data || [] });
+  const domains = (data || []) as any[];
+  const ids = domains.map((item: any) => item.id).filter(Boolean);
+  let dnsByDomain = new Map<string, any[]>();
+  if (ids.length) {
+    const dnsResult = await client
+      .from('dns_verifications')
+      .select('*')
+      .in('domain_id', ids);
+    if (!dnsResult.error) {
+      dnsByDomain = ((dnsResult.data || []) as any[]).reduce((map, record) => {
+        const key = String(record.domain_id || '');
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(record);
+        return map;
+      }, new Map<string, any[]>());
+    } else if (!isSchemaShapeError(dnsResult.error)) {
+      return res.status(500).json({ success: false, error: dnsResult.error.message });
+    }
+  }
+  res.json({
+    success: true,
+    domains: domains.map((domain: any) => ({
+      ...domain,
+      dns_records: dnsByDomain.get(String(domain.id)) || [],
+    })),
+  });
 });
 
 // POST /projects/:id/domains
 app.post('/api/projects/:id/domains', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const projectId = req.params.id;
-  const { domain, type, plan = 'pro' } = req.body;
+  const { domain, type } = req.body;
 
   try {
     const project = await loadProject(projectId, userId);
     if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
     if (!requireProjectCapability(req, res, 'deploy', project)) return;
+    const plan = await getOrganizationPlan(project.organization_id);
     const vercelProxy = createVercelDomainProxy();
     const domainService = new DomainService(requireSupabase('Domain creation'), vercelProxy);
     const records = await domainService.registerDomain(project.organization_id, projectId, domain, type || 'custom', plan as any);
