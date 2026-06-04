@@ -14,7 +14,7 @@ const existingPages = [
   { file: 'security.html', path: '/security.html', title: 'Huggy Security — Safer AI App Generation', description: 'Security practices for Huggy projects, generated apps, secrets, billing and deployment workflows.' },
   { file: 'privacy.html', path: '/privacy.html', title: 'Huggy Privacy — Data and Project Privacy', description: 'How Huggy handles prompts, project files, assets, analytics and workspace data.' },
   { file: 'about.html', path: '/about.html', title: 'About Huggy — Production-Ready AI App Builder', description: 'Huggy helps founders, product teams and agencies generate polished apps that can be previewed, connected to data and deployed.' },
-  { file: 'showcase.html', path: '/showcase.html', title: 'Huggy Showcase — Apps Built With Huggy', description: 'Explore apps, templates and product ideas generated with Huggy.' },
+  { file: 'showcase.html', path: '/showcase.html', title: 'Huggy Showcase — Apps Built With Huggy', description: 'Explore published app ideas, launch stories and product workflows generated with Huggy.' },
   { file: 'blog.html', path: '/blog.html', title: 'Huggy Blog — AI App Builder Guides', description: 'Guides, prompts and product lessons for building production-ready apps with AI.' },
   { file: 'community.html', path: '/community.html', title: 'Huggy Community — AI Builders and Product Teams', description: 'Join builders using Huggy to create apps, landing pages, dashboards and internal tools with AI.' },
   { file: 'careers.html', path: '/careers.html', title: 'Huggy Careers — Build the Future of AI App Creation', description: 'Work on Huggy, an AI-native app builder for production-ready web applications.' },
@@ -28,61 +28,100 @@ const noindexPages = [
   { file: 'builder.html', path: '/builder.html', title: 'Huggy — Builder Workspace', description: 'Your private Huggy builder workspace.' },
 ];
 
+const existingPageCopy = {
+  'about.html': {
+    h1: 'About Huggy',
+    subtitle: 'Huggy helps people move from idea to usable web app with an AI agent that can answer, plan, build, verify, iterate and publish.',
+    sections: [
+      ['Why Huggy exists', 'Most people do not fail because they lack ideas. They fail because turning an idea into a working product is slow, fragmented and intimidating. Huggy is built to make that first product loop clearer: explain the goal, inspect the context, generate the app, verify it, improve it and publish only when the owner chooses.'],
+      ['What makes it different', 'Huggy is product-led instead of demo-led. The builder keeps the chat, preview, project files, database notes, usage and publish workflow together so non-technical founders and teams can understand what is happening without pretending to be engineers.'],
+      ['How we build trust', 'The agent is designed to ask before acting when intent is unclear, keep published apps stable until Publish is clicked, avoid exposing internal costs or provider data, and make generated output inspectable instead of mysterious.']
+    ]
+  },
+  'features.html': {
+    h1: 'Features Built Around Real Product Work',
+    subtitle: 'Plan, generate, verify, iterate and publish web apps from one workspace without losing the thread.',
+    sections: [
+      ['Agent that understands intent', 'Huggy separates conversation, strategy, planning, editing, debugging, generation and publishing. Simple questions stay fast. Real build requests trigger the deeper workflow. Ambiguous requests get one useful clarification before files change.'],
+      ['Builder workspace', 'The workspace keeps chat, streaming steps, preview, code, database notes, analysis and publish status together. Users can see what changed, stop a generation, continue iterating and keep the live app stable until they publish.'],
+      ['Quality and launch flow', 'Generated apps are checked for safe paths, usable preview output, basic SEO structure, responsive behavior and obvious runtime issues. Huggy then supports publish status, Huggy-domain URLs, custom-domain planning and free-plan attribution.']
+    ]
+  },
+  'documentation.html': {
+    h1: 'Huggy Documentation',
+    subtitle: 'A practical guide to getting clear results from Huggy: when to chat, when to plan, when to build and when to publish.',
+    sections: [
+      ['Start with the right intent', 'Use Auto when you want Huggy to decide whether to answer, plan or build. Use Plan when scope is unclear. Use Build when the app, page, API or UI change is specific enough to safely modify project files.'],
+      ['Write better prompts', 'Describe the target user, the primary workflow, required screens, data objects, integrations, visual mood and what must not be changed. Huggy can ask follow-up questions when the prompt is too vague.'],
+      ['Iterate safely', 'After generation, ask for focused edits like button color, layout density, mobile behavior or form validation. Preview can change freely, but the published app changes only after you click Publish.']
+    ]
+  },
+  'enterprise.html': {
+    h1: 'Huggy for Teams',
+    subtitle: 'A governed AI app-building workspace for product teams, agencies and organizations that need faster prototypes without losing control.',
+    sections: [
+      ['Shared product workflow', 'Teams can use Huggy to turn briefs into prototypes, review generated screens, inspect database direction, publish controlled versions and keep conversations tied to the project context.'],
+      ['Governance and visibility', 'Usage, model rates, wallet buckets, publish status and project history are designed to stay visible to the right users while internal provider costs and sensitive details remain protected.'],
+      ['Team-ready support', 'Huggy is built for workflows that need review, iteration, custom domains, role-aware access and practical audit trails before generated apps become public.']
+    ]
+  },
+  'security.html': {
+    h1: 'Security and Trust',
+    subtitle: 'Huggy keeps the public product experience useful while protecting secrets, internal costs and provider details from user-facing surfaces.',
+    sections: [
+      ['Sensitive data boundaries', 'User endpoints must never expose provider cost, platform margin, Stripe fees, raw provider payloads, supplier invoice IDs or secrets. Admin-only data stays behind protected roles.'],
+      ['Safer generated output', 'The builder checks generated paths, blocks dangerous filenames, avoids committing environment files and treats external keys as explicit user-controlled configuration.'],
+      ['Auth, publish and ownership', 'Published apps remain separate from builder preview, free apps can show Huggy attribution, and owner-aware links route owners back to the builder while public visitors reach Huggy landing.']
+    ]
+  },
+  'showcase.html': {
+    h1: 'Built With Huggy',
+    subtitle: 'A place for real app examples, launch stories and product workflows created with Huggy.',
+    sections: [
+      ['Proof over claims', 'A strong showcase should explain what each app does, who it serves, what workflow was generated and whether it is preview-only, published or using a custom domain.'],
+      ['Opt-in visibility', 'Private projects should stay private. Showcase entries should be explicit, owner-approved and useful for people evaluating what Huggy can actually produce.'],
+      ['Better discovery', 'Each public example can carry clean metadata, screenshots, app summaries and links back to the builder when the owner wants to share the process.']
+    ]
+  },
+  'blog.html': {
+    h1: 'Huggy Notes',
+    subtitle: 'Product lessons, build patterns and practical guidance for creating better AI-generated apps.',
+    sections: [
+      ['Building with intent', 'Good AI app building starts before code: clarify the user, workflow, platform type, data model and quality bar. Huggy is being shaped around that product discipline.'],
+      ['Design without generic AI tells', 'We write about UI patterns that make generated apps feel specific: platform-aware layouts, useful states, readable hierarchy, honest placeholders and restrained motion.'],
+      ['Reliability over novelty', 'The most valuable AI builder is the one users can trust. That means fewer accidental builds, better verification, persistent conversations and publish flows that do not surprise people.']
+    ]
+  },
+  'community.html': {
+    h1: 'Huggy Community',
+    subtitle: 'A community for founders, designers, agencies and builders learning how to ship useful AI-generated products.',
+    sections: [
+      ['Share what works', 'Community examples should focus on prompts, decisions, iterations and publish outcomes so other builders can learn from real product loops.'],
+      ['Improve the agent', 'Feedback on bad generations, missed intent, broken previews or confusing copy helps Huggy improve through safe product signals rather than storing sensitive data.'],
+      ['Build in public carefully', 'Huggy should make it easy to share public outcomes while keeping private projects, credentials and unfinished experiments protected.']
+    ]
+  },
+  'careers.html': {
+    h1: 'Careers at Huggy',
+    subtitle: 'Help build an AI app builder that feels useful, trustworthy and understandable for people who do not live in code.',
+    sections: [
+      ['Product taste matters', 'We care about systems that know when not to act, interfaces that explain themselves, and generated apps that are functional before they are flashy.'],
+      ['Engineering with restraint', 'The work spans agents, streaming, preview, publish, design systems, billing safety, auth and reliability. Stability matters more than adding another decorative layer.'],
+      ['Who fits here', 'Designers, engineers and operators who enjoy product detail, clear UX writing, pragmatic security and fast iteration will feel at home.']
+    ]
+  },
+  'api-reference.html': {
+    h1: 'API Reference',
+    subtitle: 'Public and internal API surfaces for projects, generation, usage, billing, publish and agent runs.',
+    sections: [
+      ['User-safe responses', 'User-facing endpoints should return credits, status, project data and actionable errors without leaking provider costs, margins, raw payloads, exact sensitive tokens or internal invoices.'],
+      ['Agent and project flow', 'Generation and streaming endpoints carry intent, progress, files changed, verification, preview-ready and cancellation events so the UI can show real work instead of generic loading.'],
+      ['Publish workflow', 'Publishing is separate from preview. The live version updates only after a successful Publish call, and publish status should include the final URL, visibility and domain configuration.']
+    ]
+  }
+};
+
 const generatedPages = [
-  {
-    slug: 'templates',
-    title: 'AI App Templates for Production-Ready Web Apps',
-    description: 'Start faster with Huggy templates for SaaS dashboards, restaurant apps, marketplaces, landing pages, admin panels and portfolios.',
-    h1: 'Templates that become real apps',
-    prompt: 'Create a polished SaaS dashboard with authentication, database schema, analytics and responsive preview.',
-    cards: ['Restaurant app with bookings, menus and local SEO.', 'SaaS dashboard with metrics, users and billing-ready flows.', 'Marketplace with listings, filters, profiles and admin tools.'],
-    faq: ['Can templates still be customized?', 'Yes. Start with a template prompt, then use Plan or Build to adapt every screen, data model and flow.'],
-  },
-  {
-    slug: 'templates/saas-dashboard',
-    title: 'AI SaaS Dashboard Template',
-    description: 'Generate a SaaS dashboard with metrics, billing-ready UI, settings, user workflows and Supabase-ready schema notes.',
-    h1: 'Generate a SaaS dashboard with substance',
-    prompt: 'Create a SaaS dashboard with analytics cards, customer table, billing settings, admin roles and Supabase schema.',
-    cards: ['Data-dense dashboard UI.', 'Settings, teams and billing workflows.', 'Supabase-ready schema notes.'],
-    faq: ['Is this only a mock dashboard?', 'No. Huggy can generate project files, schema notes, preview and deployable output.'],
-  },
-  {
-    slug: 'templates/marketplace',
-    title: 'AI Marketplace App Template',
-    description: 'Build a marketplace app with listings, vendor profiles, search, filters, payments placeholders and admin workflows.',
-    h1: 'Launch a marketplace MVP faster',
-    prompt: 'Create a marketplace app with listings, vendor profiles, search filters, checkout placeholders and admin moderation.',
-    cards: ['Listings, profiles and search.', 'Admin moderation flows.', 'Payment-ready placeholders for Stripe.'],
-    faq: ['Can Huggy ask for API keys?', 'Yes. When a build needs Stripe or other services, Huggy can ask for keys or continue with placeholders.'],
-  },
-  {
-    slug: 'templates/admin-panel',
-    title: 'AI Admin Panel Template',
-    description: 'Generate admin panels with tables, filters, permissions, audit views and responsive operational UI.',
-    h1: 'Admin panels without generic UI',
-    prompt: 'Create an admin panel with user management, permissions, audit log, filters, table actions and clean operational UI.',
-    cards: ['Tables, filters and bulk actions.', 'Roles and permission screens.', 'Audit and activity views.'],
-    faq: ['Is it optimized for repeated use?', 'The prompt asks for dense, scannable operational UI rather than decorative marketing sections.'],
-  },
-  {
-    slug: 'templates/portfolio',
-    title: 'AI Portfolio Website Template',
-    description: 'Generate a distinctive portfolio with case studies, services, contact flow, SEO metadata and responsive presentation.',
-    h1: 'Portfolio pages that do not look generated',
-    prompt: 'Create a premium portfolio website with case studies, services, contact form, SEO metadata and strong editorial design.',
-    cards: ['Case studies and service pages.', 'Editorial design direction.', 'SEO-ready project storytelling.'],
-    faq: ['Can it avoid template-looking designs?', 'Huggy uses its anti-generic UI generation policy to vary typography, layout and visual rhythm.'],
-  },
-  {
-    slug: 'templates/landing-page',
-    title: 'AI Landing Page Builder Template',
-    description: 'Generate SEO-ready landing pages with differentiated design, strong hierarchy, social proof, FAQs and conversion-focused CTA.',
-    h1: 'Generate landing pages built to convert and rank',
-    prompt: 'Create an SEO-ready landing page for a B2B SaaS with strong positioning, proof, FAQ, pricing preview and conversion CTA.',
-    cards: ['Positioning and proof blocks.', 'FAQ and structured content.', 'Conversion CTA connected to builder handoff.'],
-    faq: ['Does Huggy create simple landing pages only?', 'No. It can create full apps or landing pages depending on the selected Build or Plan mode.'],
-  },
   {
     slug: 'use-cases',
     title: 'Huggy Use Cases — Founders, Product Teams and Agencies',
@@ -136,51 +175,6 @@ const generatedPages = [
     prompt: 'Create an internal tool with data table, filters, approval workflow, role controls and audit log.',
     cards: ['Dense operational layouts.', 'Role and approval flows.', 'Audit-friendly screens.'],
     faq: ['Will Huggy make marketing-style dashboards?', 'The generation policy adapts by app type, so operational tools stay restrained and scannable.'],
-  },
-  {
-    slug: 'comparisons',
-    title: 'Huggy Comparisons — Alternatives to Lovable, Bolt, Cursor and Replit',
-    description: 'Compare Huggy against popular AI builders by workflow, SEO, Supabase readiness, design quality, preview, export and deployment.',
-    h1: 'Choose the AI builder for the work you actually ship',
-    prompt: 'Compare Huggy with Lovable and Bolt for a Supabase-ready SaaS MVP.',
-    cards: ['Lovable alternative for SEO-ready projects.', 'Bolt alternative for product workflows.', 'Cursor complement for generated apps.'],
-    faq: ['Is Huggy trying to replace every tool?', 'No. Huggy focuses on AI-native app generation with preview, database visibility, SEO and deployment.'],
-  },
-  {
-    slug: 'comparisons/lovable-alternative',
-    title: 'Lovable Alternative With Supabase, SEO and Premium UI',
-    description: 'Compare Huggy as a Lovable alternative for founders who want Plan/Build, SEO-ready apps, database visibility and clean previews.',
-    h1: 'A Lovable alternative focused on production shape',
-    prompt: 'Create a Lovable-style SaaS MVP with Supabase schema, SEO landing page, dashboard and deployment-ready files.',
-    cards: ['Plan/Build separation.', 'Database and Analysis tabs.', 'SEO-ready app generation.'],
-    faq: ['Why compare with Lovable?', 'Lovable defines the category; Huggy differentiates through SEO, database visibility and design-generation constraints.'],
-  },
-  {
-    slug: 'comparisons/bolt-alternative',
-    title: 'Bolt Alternative for AI Web App Generation',
-    description: 'Use Huggy when you want AI app generation with persistent workspace, project database visibility, SEO focus and deployment workflow.',
-    h1: 'A Bolt alternative for builders who care about polish',
-    prompt: 'Create a Bolt-style web app but with premium UI, SEO metadata, analytics and Supabase schema notes.',
-    cards: ['Persistent workspace.', 'SEO and analytics in product.', 'Design quality as a first-class requirement.'],
-    faq: ['What makes Huggy different from Bolt?', 'Huggy emphasizes generated app quality, SEO readiness, database visibility and Plan/Build control.'],
-  },
-  {
-    slug: 'comparisons/cursor-alternative',
-    title: 'Cursor Alternative for Prompt-to-App Workflows',
-    description: 'Huggy complements coding agents by turning product prompts into full web app previews, project files and deployment-ready output.',
-    h1: 'When you need the app, not only the editor',
-    prompt: 'Create a product-ready app from this idea and ask clarifying questions before building if needed.',
-    cards: ['Agent asks questions when scope is fuzzy.', 'Build modifies files only when requested.', 'Preview and deploy workflows are built in.'],
-    faq: ['Is Huggy an IDE?', 'No. Huggy is an AI app builder. Cursor is a coding environment; Huggy is optimized for app generation and product workflow.'],
-  },
-  {
-    slug: 'comparisons/replit-alternative',
-    title: 'Replit Alternative for AI-Generated Web Apps',
-    description: 'Generate, preview and deploy web apps with Huggy when you want AI app creation centered on product output and SEO readiness.',
-    h1: 'A Replit alternative for focused AI app creation',
-    prompt: 'Create a deployable web app with homepage, dashboard, database schema and SEO-ready metadata.',
-    cards: ['Prompt-to-app flow.', 'Product-first preview.', 'SEO and database checks.'],
-    faq: ['Can Huggy publish apps?', 'Huggy includes deployment workflows and clear configuration errors when external providers need setup.'],
   },
   {
     slug: 'guides',
@@ -250,8 +244,8 @@ const generatedPages = [
     title: 'Built With Huggy — AI-Generated App Showcase',
     description: 'A public showcase strategy for apps, landing pages and dashboards generated with Huggy.',
     h1: 'A showcase built for proof and backlinks',
-    prompt: 'Create a showcase page for apps built with Huggy, grouped by template, industry and launch status.',
-    cards: ['Showcase published apps.', 'Link related templates.', 'Build authority through real examples.'],
+    prompt: 'Create a showcase page for apps built with Huggy, grouped by industry, workflow and launch status.',
+    cards: ['Showcase published apps.', 'Explain what each app proves.', 'Build authority through real examples.'],
     faq: ['Will every app be public?', 'No. Published showcase pages should be opt-in so private projects remain private.'],
   },
   {
@@ -289,6 +283,69 @@ function esc(value) {
 
 function titleCase(value) {
   return String(value).split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function pageCategory(page) {
+  const slug = page.slug || '';
+  if (slug.startsWith('use-cases')) return 'Use case';
+  if (slug.startsWith('guides')) return 'Guide';
+  if (slug.startsWith('tools')) return 'Tool';
+  if (slug.startsWith('prompt-recipes')) return 'Prompt recipe';
+  if (slug === 'built-with-huggy') return 'Showcase';
+  return 'AI app builder';
+}
+
+function enrichPage(page) {
+  const category = pageCategory(page);
+  const slug = page.slug || '';
+  const defaultWorkflow = [
+    'Clarify the user, job-to-be-done and minimum usable workflow before generating.',
+    'Create the product surface with real states: empty, loading, error, success and mobile layouts.',
+    'Run the project through preview, quality checks and iteration before publish.'
+  ];
+  const defaultQuality = [
+    'A clear first screen that shows the actual product experience, not a generic marketing page.',
+    'Accessible typography, visible controls, honest backend placeholders and responsive behavior.',
+    'Copy, metadata and internal links shaped for both search engines and AI answer systems.'
+  ];
+
+  const byCategory = {
+    'Use case': {
+      proofTitle: 'What this workflow should prove',
+      workflow: defaultWorkflow,
+      quality: defaultQuality,
+      cta: 'Use this page as a starting point, then open Huggy with a focused prompt for your audience and workflow.'
+    },
+    Guide: {
+      proofTitle: 'What the guide should help you decide',
+      workflow: ['Define the smallest useful product slice.', 'Choose Plan when scope is unclear and Build when requirements are concrete.', 'Verify the generated app before publishing or handing it to a team.'],
+      quality: defaultQuality,
+      cta: 'The goal is not more pages; it is a tighter build path with fewer vague prompts and fewer broken previews.'
+    },
+    Tool: {
+      proofTitle: 'What the tool should improve',
+      workflow: ['Turn fuzzy product inputs into a sharper brief.', 'Surface risks before generation.', 'Send the refined prompt into Huggy when the next action is clear.'],
+      quality: ['Clear scoring or prioritization.', 'Actionable next steps, not generic advice.', 'A direct handoff into Plan or Build with the right context.'],
+      cta: 'Use the tool to reduce guesswork before asking Huggy to generate or edit project files.'
+    },
+    'Prompt recipe': {
+      proofTitle: 'What the prompt should include',
+      workflow: ['Name the target user and primary workflow.', 'List the screens, data objects and conversion moments.', 'Ask for functional interactions and states, not only visual sections.'],
+      quality: ['Specific UI patterns for the platform type.', 'Realistic mock data and honest integrations.', 'Mobile behavior, accessibility and publish readiness.'],
+      cta: 'Edit the recipe before building so Huggy understands your product, not just the category.'
+    },
+    Showcase: {
+      proofTitle: 'What the showcase should prove',
+      workflow: ['Explain the problem each app solves.', 'Show the generated workflow and publish status.', 'Link back to the build story only when the project owner chooses to share it.'],
+      quality: ['Real examples over inflated claims.', 'Clear attribution to Huggy for free published apps.', 'Search-friendly summaries that help people understand what was built.'],
+      cta: 'A strong showcase should make visitors trust the output because the examples are specific and inspectable.'
+    }
+  };
+
+  return {
+    category,
+    ...(byCategory[category] || byCategory['Use case'])
+  };
 }
 
 function jsonLd(data) {
@@ -377,11 +434,11 @@ function sharedPublicFooter(className = 'footer') {
                         <path d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"></path>
                         <path d="M19 15l.8 2.7L22 18.5l-2.2.8L19 22l-.8-2.7-2.2-.8 2.2-.8L19 15Z"></path>
                     </svg>
-                    Contactez-nous
+                    Parlons produit
                 </div>
-                <p id="footer-title">Intéressé par une collaboration, <span>essayer Huggy ou simplement en savoir plus ?</span></p>
+                <p id="footer-title">Passez d'une idée floue à une app claire, <span>testable, améliorable et publiable avec Huggy.</span></p>
                 <div class="${contactClass}">
-                    <span>Contactez-nous :</span>
+                    <span>Besoin d'aide, d'un partenariat ou d'un accès équipe ?</span>
                     <a href="mailto:contact@huggy.fun">contact@huggy.fun</a>
                 </div>
                 <a class="${wordmarkClass}" href="/" aria-label="Huggy home">huggy</a>
@@ -391,10 +448,11 @@ function sharedPublicFooter(className = 'footer') {
                 <ul class="${linksClass}">
                     <li><a href="/about.html">À propos</a></li>
                     <li><a href="/pricing.html">Tarifs</a></li>
-                    <li><a href="/templates/">Templates</a></li>
-                    <li><a href="/comparisons/">Comparisons</a></li>
+                    <li><a href="/use-cases/">Use cases</a></li>
+                    <li><a href="/guides/">Guides</a></li>
+                    <li><a href="/tools/seo-audit/">SEO audit</a></li>
                     <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/security.html">Security</a></li>
+                    <li><a href="/security.html">Sécurité</a></li>
                     <li><a href="mailto:contact@huggy.fun">Contact</a></li>
                 </ul>
             </div>
@@ -414,6 +472,7 @@ function sharedPublicFooter(className = 'footer') {
 function renderPage(page) {
   const url = `${siteUrl}/${page.slug.replace(/\/?$/, '/')}`;
   const parent = page.slug.includes('/') ? page.slug.split('/')[0] : page.slug;
+  const enriched = enrichPage(page);
   const breadcrumbs = [
     { name: 'Huggy', url: `${siteUrl}/` },
     ...(parent !== page.slug ? [{ name: titleCase(parent), url: `${siteUrl}/${parent}/` }] : []),
@@ -429,17 +488,17 @@ ${baseHead(page, url, breadcrumbs)}
     <nav class="seo-nav" aria-label="Main navigation">
       <a class="seo-brand" href="/"><span class="seo-brand-mark">H</span><span>Huggy</span></a>
       <div class="seo-nav-links">
-        <a href="/templates/">Templates</a>
         <a href="/use-cases/">Use cases</a>
-        <a href="/comparisons/">Comparisons</a>
         <a href="/guides/">Guides</a>
+        <a href="/tools/seo-audit/">SEO audit</a>
+        <a href="/built-with-huggy/">Showcase</a>
         <a class="seo-pill" href="/pricing.html">Pricing</a>
       </div>
     </nav>
     <main>
       <section class="seo-hero">
         <div>
-          <div class="seo-kicker">AI app builder</div>
+          <div class="seo-kicker">${esc(enriched.category)} · AI app builder</div>
           <h1>${esc(page.h1)}</h1>
           <p class="seo-lead">${esc(page.description)}</p>
         </div>
@@ -457,18 +516,23 @@ ${baseHead(page, url, breadcrumbs)}
         </aside>
       </section>
       <section class="seo-section">
-        <h2>Why this wins search intent</h2>
+        <h2>${esc(enriched.proofTitle)}</h2>
         <div class="seo-grid">
           ${page.cards.map((card, index) => `<article class="seo-card"><h3>${esc(['Focused prompt', 'Production shape', 'Search-ready structure'][index] || 'Huggy advantage')}</h3><p>${esc(card)}</p></article>`).join('\n          ')}
         </div>
       </section>
       <section class="seo-section">
-        <h2>What Huggy should generate</h2>
+        <h2>How to approach this in Huggy</h2>
         <div class="seo-grid">
-          <article class="seo-card"><h3>Semantic pages</h3><p>Clear H1, section hierarchy, metadata, Open Graph and structured content aligned to the app type.</p></article>
-          <article class="seo-card"><h3>Real product workflow</h3><p>Project files, responsive preview, database visibility, analytics and deployment path instead of a static mock.</p></article>
-          <article class="seo-card"><h3>Builder handoff</h3><p>Every page can send a tailored prompt into Huggy so visitors move from search intent to creation.</p></article>
+          ${enriched.workflow.map((item, index) => `<article class="seo-card"><h3>${esc(['Clarify', 'Generate', 'Verify'][index] || 'Iterate')}</h3><p>${esc(item)}</p></article>`).join('\n          ')}
         </div>
+      </section>
+      <section class="seo-section">
+        <h2>Quality bar before publish</h2>
+        <div class="seo-grid">
+          ${enriched.quality.map((item, index) => `<article class="seo-card"><h3>${esc(['Usable first screen', 'Functional states', 'Findable structure'][index] || 'Launch quality')}</h3><p>${esc(item)}</p></article>`).join('\n          ')}
+        </div>
+        <p class="seo-lead">${esc(enriched.cta)}</p>
       </section>
       <section class="seo-section">
         <h2>Questions before building</h2>
@@ -577,9 +641,29 @@ function updateExistingFooter(page) {
   fs.writeFileSync(full, html, 'utf8');
 }
 
+function updateExistingPageContent(page) {
+  const copy = existingPageCopy[page.file];
+  if (!copy) return;
+  const full = path.join(root, page.file);
+  if (!fs.existsSync(full)) return;
+  let html = fs.readFileSync(full, 'utf8');
+  const header = `    <header class="page-hero">
+        <h1>${esc(copy.h1)}</h1>
+        <p class="hero-subtitle">${esc(copy.subtitle)}</p>
+    </header>`;
+  const content = `    <div class="page-content">
+${copy.sections.map(([title, body]) => `        <h2>${esc(title)}</h2>
+        <p>${esc(body)}</p>`).join('\n        \n')}
+    </div>`;
+
+  html = html.replace(/    <header class="page-hero">[\s\S]*?    <\/header>/, header);
+  html = html.replace(/    <div class="page-content">[\s\S]*?    <\/div>/, content);
+  fs.writeFileSync(full, html, 'utf8');
+}
+
 function generatePublicAssets(urls) {
   write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
-  write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Templates: ${siteUrl}/templates/\n- Use cases: ${siteUrl}/use-cases/\n- Comparisons: ${siteUrl}/comparisons/\n- Guides: ${siteUrl}/guides/\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
+  write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Use cases: ${siteUrl}/use-cases/\n- Guides: ${siteUrl}/guides/\n- SEO audit: ${siteUrl}/tools/seo-audit/\n- Showcase: ${siteUrl}/built-with-huggy/\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
   write('public/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${url === siteUrl + '/' ? '1.0' : '0.8'}</priority></url>`).join('\n')}\n</urlset>\n`);
   write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#09090b}.icon-fill{fill:#ffffff}@media (prefers-color-scheme:dark){.icon-bg{fill:#ffffff}.icon-fill{fill:#09090b}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);
   write('public/og-huggy.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#ffffff"/><circle cx="1040" cy="100" r="260" fill="#09090b" opacity=".05"/><circle cx="150" cy="540" r="300" fill="#3b7a8c" opacity=".10"/><rect x="84" y="82" width="1032" height="466" rx="42" fill="#ffffff" stroke="#09090b" stroke-opacity=".12"/><text x="138" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#09090b">Huggy</text><text x="138" y="310" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#09090b">Build apps people can use and find.</text><text x="138" y="386" font-family="Arial, sans-serif" font-size="28" fill="#52525b">AI app builder with database, preview, deploy and SEO-ready output.</text></svg>\n`);
@@ -587,6 +671,7 @@ function generatePublicAssets(urls) {
 
 function main() {
   generatedPages.forEach(page => write(path.join(page.slug, 'index.html'), renderPage(page)));
+  existingPages.forEach(updateExistingPageContent);
   existingPages.forEach(updateExistingFooter);
   [...existingPages, ...noindexPages].forEach(injectHeadMeta);
   const urls = [
