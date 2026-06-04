@@ -43,8 +43,8 @@ function normalizeIntentText(value: string) {
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[’']/g, ' ')
-    .replace(/[!?.,;:()[\]{}"“”]/g, ' ')
+    .replace(/[’‘`´ʼʹ']/g, ' ')
+    .replace(/[!?.,;:()[\]{}"“”«»]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -107,6 +107,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'huggy', 'agent', 'quand il doit coder', 'quand coder', 'ne doit pas coder',
     'ne pas coder', 'ne rien generer', 'ne genere pas', 'ne doit jamais coder',
     'intention utilisateur', 'comprendre le message', 'comprehension', 'avant toute action',
+    'ne comprend pas', 'ne comprend pas toujours', 'comprendre l intention',
     'au meme niveau que codex', 'lovable', 'cursor', 'chatgpt',
   ];
   const exampleSignals = [
@@ -166,6 +167,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const noActionSignals = [
     'ne code pas', 'sans coder', 'sans modifier', 'ne modifie rien', 'ne genere rien',
     'dis moi d abord', 'dis-moi d abord', 'explique d abord',
+    'dis moi si tu comprends', 'dis-moi si tu comprends', 'est ce que tu comprends',
+    'est-ce que tu comprends',
     'conseil avant', 'avant de modifier', 'avant de coder', 'avant de toucher',
     'avant de construire', 'avant de generer', 'avant d agir',
   ];
@@ -188,7 +191,7 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   ]);
 
   const directActionPatterns = [
-    /\b(implemente|applique|corrige|corriger|fix|repare|reparer|modifie|modifier|change|changer|ajoute|ajouter|supprime|supprimer|remplace|remplacer|connecte|connecter|cree|creer|genere|generer|publie|publier|deploie|deployer|build|update|fais|fait|mets|met|ameliore|ameliorer)\b/,
+    /\b(implemente|implementes|applique|appliques|corrige|corriges|corriger|fix|repare|repares|reparer|modifie|modifies|modifier|change|changes|changer|ajoute|ajoutes|ajouter|supprime|supprimes|supprimer|remplace|remplaces|remplacer|connecte|connectes|connecter|cree|crees|creer|genere|generes|generer|publie|publies|publier|deploie|deploies|deployer|build|update|fais|fait|mets|met|ameliore|ameliores|ameliorer)\b/,
     /\b(make|create|add|remove|replace|modify|implement|build|generate|repair|improve)\b/,
   ];
   const concreteTechnicalTargets = [
@@ -223,7 +226,32 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
     /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
   ]);
-  const asksForGeneratedArtifact = explicitArtifactPattern && hasAppTarget && !hasNoAction;
+  const explicitApplyToProduct = matchesAny(text, [
+    /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet)\b/,
+    /\b(dans|sur)\b.*\b(huggy|mon saas|mon app|mon application|le builder|dashboard|settings|pricing|auth|footer|api|database)\b/,
+  ]);
+  const chainedBuildAfterExplanation = matchesAny(text, [
+    /\b(puis|ensuite|apres|après)\b.*\b(cree|creer|genere|generer|build|implemente|applique)\b/,
+    /\b(cree|creer|genere|generer|build|implemente|applique)\b.*\b(puis|ensuite|apres|après)\b/,
+  ]);
+  const explanatoryOrMetaRequest =
+    (hasExplanation || hasAnalysisRequest || hasMetaAgent || hasExample || hasStrategy)
+    && !explicitApplyToProduct
+    && requestedMode !== 'build'
+    && !chainedBuildAfterExplanation;
+  const isExistingProjectEditRequest =
+    Boolean(input.hasFiles)
+    && hasDirectAction
+    && includesAny(text, ['cette app', 'dans cette app', 'l app', 'mon app', 'cette application', 'le projet', 'projet actuel'])
+    && !matchesAny(text, [
+      /\b(cree|creer|genere|generer|build|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
+    ]);
+  const asksForGeneratedArtifact =
+    explicitArtifactPattern
+    && hasAppTarget
+    && !hasNoAction
+    && !explanatoryOrMetaRequest
+    && !isExistingProjectEditRequest;
   const hasBugReport = includesAny(text, [
     'ne fonctionne pas', 'ne marche pas', 'marche pas', 'bug', 'erreur',
     'error', 'request failed', 'crash', 'broken', 'cass', 'ne soumet rien',
@@ -236,11 +264,6 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'conseil avant', 'pour mon mvp',
   ];
   const hasAdvisoryQuestion = hasExplanation && includesAny(text, advisoryQuestionSignals);
-
-  const explicitApplyToProduct = matchesAny(text, [
-    /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet)\b/,
-    /\b(dans|sur)\b.*\b(huggy|mon saas|mon app|mon application|le builder|dashboard|settings|pricing|auth|footer|api|database)\b/,
-  ]);
 
   if (hasBadProductDecision) {
     return result({
@@ -293,6 +316,24 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.92,
       reason: hasMetaAgent ? 'meta_agent_or_product_strategy' : 'example_or_hypothetical_request',
       signals: [...(hasMetaAgent ? ['meta_agent'] : []), ...(hasExample ? ['example'] : [])],
+    });
+  }
+
+  if (
+    explanatoryOrMetaRequest
+    && (hasExplanation || hasStrategy || hasAnalysisRequest)
+    && !hasProductReview
+    && !hasUxReview
+    && !hasArchitectureReview
+    && !hasSensitiveTopic
+    && !hasBugReport
+  ) {
+    return result({
+      category: hasAdvisoryQuestion || hasStrategy ? 'strategy' : hasAnalysisRequest ? 'analysis' : 'explanation',
+      action: 'answer',
+      confidence: 0.91,
+      reason: hasAdvisoryQuestion || hasStrategy ? 'strategy_request_before_action' : hasAnalysisRequest ? 'analysis_request_before_action' : 'explanation_request_before_action',
+      signals: hasAdvisoryQuestion || hasStrategy ? ['strategy'] : hasAnalysisRequest ? ['analysis'] : ['explanation'],
     });
   }
 

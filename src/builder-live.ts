@@ -930,7 +930,12 @@ function showTransientNotice(body: string, duration = 2400) {
 }
 
 function isLikelyFrenchText(value: string) {
-  return /\b(je|tu|vous|nous|veux|j'aimerais|crée|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application|couleur|bouton)\b/i.test(value);
+  const normalized = String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’‘`´ʼʹ]/g, "'");
+  return /\b(je|tu|vous|nous|veux|j'aimerais|j aimerais|qu'est ce|qu est ce|cree|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application|couleur|bouton)\b/i.test(normalized);
 }
 
 function normalizePromptIntentText(value: string) {
@@ -938,7 +943,8 @@ function normalizePromptIntentText(value: string) {
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[!?.,;:]/g, ' ')
+    .replace(/[’‘`´ʼʹ']/g, ' ')
+    .replace(/[!?.,;:()[\]{}"“”«»]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

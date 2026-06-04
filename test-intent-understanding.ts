@@ -32,6 +32,22 @@ check(
 );
 
 check(
+  'dis-moi si tu comprends : j’aimerais créer une app restaurant mais je veux seulement ton avis pour l’instant',
+  { action: 'answer', allowsFileAction: false },
+);
+
+check(
+  'qu’est-ce que tu sais faire ?',
+  { category: 'explanation', action: 'answer', allowsFileAction: false },
+);
+
+check(
+  'explique pourquoi mon SaaS génère une app alors que je demandais une analyse',
+  { action: 'answer', allowsFileAction: false },
+  { hasFiles: true },
+);
+
+check(
   'ameliore ce prompt systeme anti design IA pour les plateformes SaaS et e-commerce',
   { category: 'prompt', action: 'answer', allowsFileAction: false },
 );
@@ -93,6 +109,12 @@ check(
 
 check(
   'change la couleur du bouton principal en bleu',
+  { category: 'ui', action: 'file_action', allowsFileAction: true },
+  { hasFiles: true },
+);
+
+check(
+  'j’aimerais que tu changes la couleur du bouton principal dans cette app',
   { category: 'ui', action: 'file_action', allowsFileAction: true },
   { hasFiles: true },
 );

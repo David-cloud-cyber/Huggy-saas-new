@@ -267,29 +267,28 @@ function ensureConversationStyles() {
 
     .huggy-agent-trace {
       display: grid;
-      gap: 9px;
-      width: min(100%, 520px);
-      border: 1px solid var(--border-light, var(--border));
-      border-radius: 14px;
+      gap: 7px;
+      width: min(100%, 560px);
+      border-left: 1px solid var(--border-light, var(--border));
+      border-radius: 0;
       position: relative;
-      overflow: hidden;
-      background:
-        radial-gradient(circle at 14% 0%, rgba(59,130,246,.07), transparent 36%),
-        color-mix(in srgb, var(--bg-surface) 90%, var(--bg-elevated));
-      box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 10px 24px rgba(9,9,11,.045);
-      padding: 10px;
+      overflow: visible;
+      background: transparent;
+      box-shadow: none;
+      padding: 2px 0 2px 12px;
       color: var(--text);
     }
 
     .huggy-agent-trace[data-status="active"]::after {
       content: "";
       position: absolute;
-      left: 10px;
-      right: 10px;
-      bottom: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(37,99,235,.58), transparent);
-      transform: translateX(-62%);
+      left: -1px;
+      top: 20px;
+      bottom: 8px;
+      width: 1px;
+      background: linear-gradient(180deg, rgba(37,99,235,.56), transparent);
+      opacity: .75;
+      transform: none;
       animation: huggy-agent-rail 1.6s cubic-bezier(.22,1,.36,1) infinite;
     }
 
@@ -347,9 +346,9 @@ function ensureConversationStyles() {
 
     .huggy-agent-steps {
       display: grid;
-      gap: 5px;
-      padding-top: 8px;
-      border-top: 1px solid var(--border-light, var(--border));
+      gap: 6px;
+      padding-top: 2px;
+      border-top: 0;
     }
 
     .huggy-agent-step {
@@ -412,6 +411,13 @@ function ensureConversationStyles() {
       width: 1px;
       height: 8px;
       background: var(--border-light, var(--border));
+    }
+
+    .huggy-message-content-trace {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      padding: 2px 0;
     }
 
     .huggy-message-user .huggy-message-content {
@@ -809,9 +815,9 @@ function ensureConversationStyles() {
     }
 
     @keyframes huggy-agent-rail {
-      from { transform: translateX(-64%); opacity: .32; }
-      50% { opacity: .9; }
-      to { transform: translateX(64%); opacity: .32; }
+      from { opacity: .24; }
+      50% { opacity: .82; }
+      to { opacity: .24; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -1112,7 +1118,7 @@ function renderAgentTrace(message: HuggyConversationMessage) {
         {trace.elapsed ? <span className="huggy-agent-trace-elapsed" aria-hidden="true">{trace.elapsed}</span> : null}
       </div>
       <div className="huggy-agent-steps">
-        {steps.slice(-6).map(step => {
+        {steps.map(step => {
           const stepStatus = step.status || "pending";
           return (
             <div className="huggy-agent-step" data-status={stepStatus} key={step.id || step.label}>
@@ -1150,22 +1156,20 @@ function BuilderConversation({
             title="Start a conversation"
           />
         ) : (
-          messages.map(message => (
-            <Message from={message.role} key={message.id}>
-              <MessageContent>
-                {(() => {
-                  const trace = renderAgentTrace(message);
-                  const block = renderMessageBlock(message);
-                  if (trace || block) {
-                    return (
-                      <>
-                        {trace}
-                        {block}
-                      </>
-                    );
-                  }
-                  return message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message);
-                })()}
+          messages.map(message => {
+            const trace = renderAgentTrace(message);
+            const block = renderMessageBlock(message);
+            return (
+              <Message from={message.role} key={message.id}>
+                <MessageContent className={trace ? "huggy-message-content-trace" : undefined}>
+                  {trace || block ? (
+                    <>
+                      {trace}
+                      {block}
+                    </>
+                  ) : (
+                    message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
+                  )}
                 {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
                   <div className="huggy-message-actions">
                     {message.actions.map(action => (
@@ -1175,9 +1179,10 @@ function BuilderConversation({
                     ))}
                   </div>
                 ) : null}
-              </MessageContent>
-            </Message>
-          ))
+                </MessageContent>
+              </Message>
+            );
+          })
         )}
       </ConversationContent>
     </Conversation>
