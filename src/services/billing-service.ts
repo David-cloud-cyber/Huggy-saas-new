@@ -42,6 +42,15 @@ export interface PlanConfig {
   features: string[];
 }
 
+export interface PlanEconomicsGuardrail {
+  plan: PlanKey;
+  grossMarginTarget: string;
+  netMarginTarget: string;
+  maxMonthlyAiCloudExposureUsd: number | null;
+  monetizationPath: string[];
+  internalNote: string;
+}
+
 export interface TopupProduct {
   id: string;
   plan: 'pro' | 'scale';
@@ -244,6 +253,41 @@ export const SAAS_PLANS: Record<PlanKey, PlanConfig> = {
   },
 };
 
+export const PLAN_ECONOMICS_GUARDRAILS: Record<PlanKey, PlanEconomicsGuardrail> = {
+  free: {
+    plan: 'free',
+    grossMarginTarget: 'controlled_acquisition',
+    netMarginTarget: 'loss_limited',
+    maxMonthlyAiCloudExposureUsd: 1,
+    monetizationPath: ['upgrade_to_pro', 'credit_topup_after_upgrade', 'cloud_topup_after_upgrade'],
+    internalNote: 'Free should prove value with strict credits, limited Cloud balance, limited storage, and no unlimited promise.',
+  },
+  pro: {
+    plan: 'pro',
+    grossMarginTarget: '60-75%',
+    netMarginTarget: '20-35%',
+    maxMonthlyAiCloudExposureUsd: 8,
+    monetizationPath: ['credit_topups', 'cloud_topups', 'custom_domain', 'upgrade_to_scale'],
+    internalNote: 'Pro must stay margin-aware: efficient model routing, bounded runner work, and paid topups for heavy usage.',
+  },
+  scale: {
+    plan: 'scale',
+    grossMarginTarget: '75-85%',
+    netMarginTarget: '35-50%',
+    maxMonthlyAiCloudExposureUsd: 50,
+    monetizationPath: ['larger_credit_usage', 'cloud_topups', 'auto_topup', 'enterprise_expansion'],
+    internalNote: 'Scale is the main growth plan for serious builders, teams, storage-heavy apps, custom domains, and production traffic.',
+  },
+  enterprise: {
+    plan: 'enterprise',
+    grossMarginTarget: '80-90%',
+    netMarginTarget: '40-60%',
+    maxMonthlyAiCloudExposureUsd: null,
+    monetizationPath: ['platform_fee', 'volume_pricing', 'dedicated_backend', 'support_onboarding', 'custom_limits'],
+    internalNote: 'Enterprise should be negotiated around volume, governance, dedicated infrastructure, onboarding, and support.',
+  },
+};
+
 export const TOPUP_PRODUCTS: TopupProduct[] = [
   { id: 'topup_pro_50', plan: 'pro', credits: 50, price: 10.00, expiresMonths: 12 },
   { id: 'topup_pro_100', plan: 'pro', credits: 100, price: 20.00, expiresMonths: 12 },
@@ -278,6 +322,11 @@ export function getPlanConfig(value: unknown): PlanConfig | null {
 
 export function getPublicPlans() {
   return Object.fromEntries(PUBLIC_PRICING_PLAN_KEYS.map(key => [key, SAAS_PLANS[key]])) as Record<PublicPlanKey, PlanConfig>;
+}
+
+export function getPlanEconomicsGuardrail(value: unknown): PlanEconomicsGuardrail | null {
+  const key = getPlanConfig(value)?.key || normalizePlanKey(value);
+  return key ? PLAN_ECONOMICS_GUARDRAILS[key] : null;
 }
 
 export function getCloudUsageCategories() {

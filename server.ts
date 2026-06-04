@@ -40,6 +40,7 @@ import {
   SAAS_PLANS,
   TOPUP_PRODUCTS,
   CLOUD_TOPUP_PRODUCTS,
+  PLAN_ECONOMICS_GUARDRAILS,
   getCloudUsageCategories,
   getPlanConfig,
   getPublicPlans,
@@ -5304,7 +5305,7 @@ app.get('/api/admin/billing/margins', async (req: any, res) => {
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, rows: data || [] });
+  res.json({ success: true, rows: data || [], guardrails: PLAN_ECONOMICS_GUARDRAILS });
 });
 
 app.get('/api/admin/ai-costs', async (req: any, res) => {

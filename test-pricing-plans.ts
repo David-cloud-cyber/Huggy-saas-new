@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import {
   PUBLIC_PRICING_PLAN_KEYS,
   CLOUD_TOPUP_PRODUCTS,
+  PLAN_ECONOMICS_GUARDRAILS,
   SAAS_PLANS,
   TOPUP_PRODUCTS,
+  getPlanEconomicsGuardrail,
   getCloudUsageCategories,
   getPlanConfig,
   getPublicPlans,
@@ -77,6 +79,17 @@ assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.id === 'cloud_topup_10'), tr
 assert.ok(getCloudUsageCategories().some(category => category.id === 'database_storage'));
 assert.ok(getCloudUsageCategories().some(category => category.id === 'file_storage'));
 assert.ok(getCloudUsageCategories().some(category => category.id === 'ai_app_usage'));
+
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.free.maxMonthlyAiCloudExposureUsd, 1);
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.pro.grossMarginTarget, '60-75%');
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.pro.maxMonthlyAiCloudExposureUsd, 8);
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.scale.grossMarginTarget, '75-85%');
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.scale.maxMonthlyAiCloudExposureUsd, 50);
+assert.equal(PLAN_ECONOMICS_GUARDRAILS.enterprise.grossMarginTarget, '80-90%');
+assert.equal(getPlanEconomicsGuardrail('plan_scale')?.plan, 'scale');
+assert.equal(getPlanEconomicsGuardrail('business'), null);
+assert.ok(PLAN_ECONOMICS_GUARDRAILS.free.internalNote.includes('no unlimited promise'));
+assert.ok(PLAN_ECONOMICS_GUARDRAILS.scale.monetizationPath.includes('cloud_topups'));
 
 assert.equal(domainPlanLimits.getCustomDomainLimit('free'), 0);
 assert.equal(domainPlanLimits.getCustomDomainLimit('pro'), 1);

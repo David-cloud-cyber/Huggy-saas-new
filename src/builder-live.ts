@@ -631,10 +631,22 @@ function currentWorkingDetail() {
   return latest.replace(/^(done|now):\s*/, '').trim();
 }
 
+function publicWorkingHeadline(label: string) {
+  const normalized = String(label || '').toLowerCase();
+  if (normalized.includes('planning')) return 'Planning the work';
+  if (normalized.includes('building')) return 'Generating files';
+  if (normalized.includes('running checks')) return 'Checking the result';
+  if (normalized.includes('retesting')) return 'Retesting after the fix';
+  if (normalized.includes('fixing')) return 'Applying a targeted fix';
+  if (normalized.includes('preview')) return 'Preparing preview';
+  return 'Understanding the request';
+}
+
 function buildWorkingTrace(card: HTMLElement | null, label: string, status: HuggyAgentTrace['status'] = 'active'): HuggyAgentTrace {
   const startedAt = Number(card?.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
   const detail = currentWorkingDetail();
+  const headline = publicWorkingHeadline(label);
   const fallbackStatus: NonNullable<NonNullable<HuggyAgentTrace['steps']>[number]['status']> = status === 'done' ? 'done' : status || 'active';
   const steps = activeWorkingSteps.length
     ? activeWorkingSteps.map(step => ({
@@ -647,7 +659,7 @@ function buildWorkingTrace(card: HTMLElement | null, label: string, status: Hugg
         status: fallbackStatus,
       }];
   return {
-    title: label || 'Working',
+    title: status === 'done' ? 'Run complete' : headline,
     elapsed,
     status,
     steps,
@@ -666,11 +678,12 @@ function renderWorkingLabel(label = activeWorkingLabel) {
   const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
   const detail = currentWorkingDetail();
-  const normalizedLabel = activeWorkingLabel.toLowerCase();
+  const headline = publicWorkingHeadline(activeWorkingLabel);
+  const normalizedLabel = headline.toLowerCase();
   const normalizedDetail = detail.toLowerCase();
   const detailSuffix = detail && !normalizedLabel.includes(normalizedDetail) ? ` · ${detail}` : '';
   applyWorkingTrace(activeWorkingCard, activeWorkingLabel, 'active');
-  updateMessage(activeWorkingCard, `${activeWorkingLabel} · Working for ${elapsed}${detailSuffix}`);
+  updateMessage(activeWorkingCard, `${headline} · Working for ${elapsed}${detailSuffix}`);
 }
 
 function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
@@ -2919,9 +2932,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return summary ? `Files updated: ${summary}` : realLabel('Files updated.');
       };
       const normalizedIntent = String(payload.intent?.intent || payload.intent || '').replace(/_/g, ' ').trim();
-      const visibleIntentLabel = () => normalizedIntent
-        ? say(`Intention detectee : ${normalizedIntent}`, `Detected intent: ${normalizedIntent}`)
-        : realLabel(say('Mode de reponse choisi.', 'Response mode selected.'));
+      const visibleIntentLabel = () => {
+        const intent = normalizedIntent.toLowerCase();
+        if (intent.includes('clarification')) return visibleStepLabel(say('Un point doit etre precise.', 'One detail needs clarification.'));
+        if (intent.includes('debug')) return visibleStepLabel(say('Bug concret identifie.', 'Concrete issue identified.'));
+        if (intent.includes('edit')) return visibleStepLabel(say('Modification ciblee detectee.', 'Targeted change detected.'));
+        if (intent.includes('build')) return visibleStepLabel(say('Construction utile detectee.', 'Build request understood.'));
+        if (intent.includes('plan')) return visibleStepLabel(say('Plan utile detecte.', 'Useful plan requested.'));
+        if (intent.includes('verify')) return visibleStepLabel(say('Verification demandee.', 'Check requested.'));
+        if (intent.includes('deploy')) return visibleStepLabel(say('Publication ou domaine a traiter.', 'Publish or domain work detected.'));
+        return visibleStepLabel(say('Demande comprise.', 'Request understood.'));
+      };
       const trustDetail = (fr: string, en: string) => String(payload.step_detail || say(fr, en)).replace(/\s+/g, ' ').slice(0, 180);
       const intentTrustDetail = () => {
         const intent = String(payload.intent?.intent || '').trim();
@@ -2962,15 +2983,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'run_started') {
-        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking', trustDetail('Je demarre un run controle pour garder une trace de ce qui va se passer.', 'I am starting a controlled run so the work stays traceable.'));
+        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking', trustDetail('Je garde une trace claire du travail reel effectue.', 'I keep a clear trace of the real work performed.'));
         return;
       }
       if (eventType === 'context_loaded') {
-        markAgentStep('context', visibleStepLabel(say('Contexte du projet charge.', 'Project context loaded.')), 'Thinking', trustDetail('Je lis l etat actuel pour eviter d ecraser ton travail par erreur.', 'I am reading the current state to avoid overwriting your work by mistake.'));
+        markAgentStep('context', visibleStepLabel(say('Projet inspecte.', 'Project inspected.')), 'Thinking', trustDetail('Je lis l etat actuel pour garder ce qui fonctionne deja.', 'I am reading the current state so I keep what already works.'));
         return;
       }
       if (eventType === 'agent_thinking') {
-        markAgentStep('thinking', visibleStepLabel(say('Analyse de la demande.', 'Analyzing the request.')), 'Thinking', trustDetail('Je decide s il faut repondre, planifier, modifier ou generer.', 'I am deciding whether to answer, plan, edit, or generate.'));
+        markAgentStep('thinking', visibleStepLabel(say('Demande analysee.', 'Request analyzed.')), 'Thinking', trustDetail('Je choisis l action la plus sure avant de toucher au projet.', 'I am choosing the safest action before touching the project.'));
         return;
       }
       if (eventType === 'intent_detected') {
@@ -3125,14 +3146,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
               : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
                 ? 'Fixing'
                 : 'Thinking';
-        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Preparation de l espace de travail.', 'Preparing the workspace.')), label);
-        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers lancee.', 'File generation started.')), label, trustDetail('Je genere une structure moderne avec composants, styles et interactions.', 'I am generating a modern structure with components, styles, and interactions.'));
-        if (eventType === 'model_streaming') markAgentStep('model', payload.streamed_chars ? `${visibleStepLabel(say('Reception des fichiers.', 'Receiving files.'))} (${payload.streamed_chars} chars)` : visibleStepLabel(say('Reception des fichiers.', 'Receiving files.')), label, trustDetail('Je garde le flux ouvert pendant que les fichiers arrivent.', 'I am keeping the stream open while files arrive.'));
+        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Espace de travail prepare.', 'Workspace prepared.')), label);
+        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers.', 'Generating files.')), label, trustDetail('Je cree une structure moderne avec composants, styles et interactions utiles.', 'I am creating a modern structure with useful components, styles, and interactions.'));
+        if (eventType === 'model_streaming') markAgentStep('model', visibleStepLabel(say('Fichiers en cours de generation.', 'Files are being generated.')), label, trustDetail('Je recois les changements cote serveur sans afficher de donnees internes.', 'I am receiving server-side changes without showing internal data.'));
         if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));
-        if (eventType === 'preview_skeleton_started') markAgentStep('preview', visibleStepLabel(say('Preview progressive activee.', 'Progressive preview started.')), label, trustDetail('L animation preview correspond au build en cours.', 'The preview animation matches the active build.'));
-        if (eventType === 'diff_ready' || eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les fichiers generes avant les checks.', 'I am merging generated files before checks.'));
-        if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
-        if (eventType === 'visual_inspection_started') markAgentStep('visual', visibleStepLabel(say('Test des interactions.', 'Testing interactions.')), label, trustDetail('Je controle les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'));
+        if (eventType === 'preview_skeleton_started') markAgentStep('preview', visibleStepLabel(say('Preview en preparation.', 'Preview is being prepared.')), label, trustDetail('L animation preview correspond au build en cours.', 'The preview animation matches the active build.'));
+        if (eventType === 'diff_ready' || eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les changements avant les checks.', 'I am merging changes before checks.'));
+        if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification technique.', 'Technical checks.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
+        if (eventType === 'visual_inspection_started') markAgentStep('visual', visibleStepLabel(say('Inspection des interactions.', 'Interaction inspection.')), label, trustDetail('Je controle les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'));
         if (eventType === 'visual_inspection_failed') markAgentStep('visual', visibleStepLabel(say('Interaction a corriger.', 'Interaction issue found.')), 'Fixing', trustDetail('Je ne valide pas une interface avec des controles morts.', 'I do not approve an interface with dead controls.'));
         if (eventType === 'visual_inspection_passed') finishAgentStep('visual', visibleStepLabel(say('Interactions essentielles verifiees.', 'Essential interactions checked.')), trustDetail('Les controles principaux sont utilisables ou affichent un etat honnete.', 'Primary controls are usable or show an honest state.'));
         if (eventType === 'verification_failed') markAgentStep('fix', visibleStepLabel(say('Blocage detecte.', 'Blocker detected.')), 'Fixing', trustDetail('Je ne valide pas une app qui reste cassee.', 'I do not mark a still-broken app as ready.'));
