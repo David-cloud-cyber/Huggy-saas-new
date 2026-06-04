@@ -3363,11 +3363,14 @@ async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
   return (data || []) as GeneratedFile[];
 }
 
-async function saveDeploymentRecord(record: any) {
-  const client = requireSupabase('Deployment persistence');
-  let { error } = await client.from('deployments').insert([record]);
-  if (error && isSchemaShapeError(error)) {
-    const compactRecord = {
+function withoutUndefinedValues(row: Record<string, any>) {
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== undefined));
+}
+
+function deploymentRecordCandidates(record: any) {
+  return [
+    withoutUndefinedValues(record),
+    withoutUndefinedValues({
       id: record.id,
       organization_id: record.organization_id,
       project_id: record.project_id,
@@ -3378,11 +3381,66 @@ async function saveDeploymentRecord(record: any) {
       commit_hash: record.commit_hash || null,
       branch: record.branch || 'main',
       created_at: record.created_at,
-    };
-    const retry = await client.from('deployments').insert([compactRecord]);
-    error = retry.error;
+    }),
+    withoutUndefinedValues({
+      id: record.id,
+      organization_id: record.organization_id,
+      project_id: record.project_id,
+      provider: record.provider,
+      deployment_url: record.deployment_url,
+      status: record.status,
+      created_at: record.created_at,
+    }),
+    withoutUndefinedValues({
+      id: record.id,
+      project_id: record.project_id,
+      provider: record.provider,
+      provider_deployment_id: record.provider_deployment_id,
+      deployment_url: record.deployment_url,
+      status: record.status,
+      created_at: record.created_at,
+    }),
+    withoutUndefinedValues({
+      id: record.id,
+      project_id: record.project_id,
+      provider: record.provider,
+      deployment_url: record.deployment_url,
+      status: record.status,
+      created_at: record.created_at,
+    }),
+    withoutUndefinedValues({
+      id: record.id,
+      project_id: record.project_id,
+      deployment_url: record.deployment_url,
+      status: record.status,
+      created_at: record.created_at,
+    }),
+  ];
+}
+
+async function saveDeploymentRecord(record: any) {
+  const client = requireSupabase('Deployment persistence');
+  const triedShapes = new Set<string>();
+  let lastError: any = null;
+
+  for (const candidate of deploymentRecordCandidates(record)) {
+    const shapeKey = Object.keys(candidate).sort().join(',');
+    if (!shapeKey || triedShapes.has(shapeKey)) continue;
+    triedShapes.add(shapeKey);
+
+    const { error } = await client.from('deployments').insert([candidate]);
+    if (!error) return candidate;
+
+    lastError = error;
+    if (!isSchemaShapeError(error)) break;
   }
-  if (error) throw new Error(`Supabase deployment persistence failed: ${error.message}`);
+
+  throw createPublicError(
+    `Vercel created the deployment, but Huggy could not save it in Supabase: ${lastError?.message || 'unknown persistence error'}`,
+    500,
+    'DEPLOYMENT_PERSISTENCE_FAILED_AFTER_VERCEL_SUCCESS',
+    'apply_deployments_migration',
+  );
 }
 
 async function saveAgentEvent(event: AgentEvent) {
@@ -7284,6 +7342,7 @@ app.get('/api/projects/:id/deployments', async (req: any, res) => {
   const publicUrl = getPublishPublicUrl(project, customDomain);
   const client = requireSupabase('Deployment listing');
   const { data, error } = await client.from('deployments').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
+  if (error && isSchemaShapeError(error)) return res.json({ success: true, deployments: [] });
   if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, deployments: (data || []).map((item: any) => sanitizeDeploymentForUser(item, publicUrl, customDomain)) });
 });

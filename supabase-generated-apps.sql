@@ -73,8 +73,12 @@ alter table public.deployments add column if not exists organization_id uuid;
 alter table public.deployments add column if not exists provider text default 'vercel';
 alter table public.deployments add column if not exists provider_deployment_id text;
 alter table public.deployments add column if not exists deployment_url text;
+alter table public.deployments add column if not exists public_url text;
+alter table public.deployments add column if not exists custom_domain text;
+alter table public.deployments add column if not exists badge_required boolean default false;
 alter table public.deployments add column if not exists commit_hash text;
 alter table public.deployments add column if not exists branch text default 'main';
+alter table public.deployments add column if not exists updated_at timestamptz default now();
 
 alter table public.projects enable row level security;
 alter table public.project_files enable row level security;
