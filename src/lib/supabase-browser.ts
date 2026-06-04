@@ -20,20 +20,27 @@ export function getRedirectTarget(): string {
 }
 
 export async function getVerifiedSession() {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !sessionData.session) return null;
+  try {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const session = sessionData?.session;
+    if (sessionError || !session) return null;
 
-  const { data: userData, error: userError } = await supabase.auth.getUser(
-    sessionData.session.access_token,
-  );
+    const { data: userData, error: userError } = await supabase.auth.getUser(
+      session.access_token,
+    );
+    const user = userData?.user;
 
-  if (userError || !userData.user) {
+    if (userError || !user) {
+      await supabase.auth.signOut();
+      return null;
+    }
+
+    return {
+      session,
+      user,
+    };
+  } catch {
     await supabase.auth.signOut();
     return null;
   }
-
-  return {
-    session: sessionData.session,
-    user: userData.user,
-  };
 }

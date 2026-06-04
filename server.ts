@@ -204,17 +204,46 @@ async function requireAuth(req: any, res: any, next: any) {
   }
 
   const authClient = getSupabaseAuthClient();
-  const { data, error } = await authClient.auth.getUser(token);
-
-  if (error || !data?.user) {
+  let authResult: any;
+  try {
+    authResult = await authClient.auth.getUser(token);
+  } catch {
     return res.status(401).json({
       success: false,
       error: 'Invalid or expired session',
+      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+      suggested_action: 'sign_in_again',
+    });
+  }
+  const data = authResult?.data;
+  const error = authResult?.error;
+  const user = data?.user;
+
+  if (error || !user) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid or expired session',
+      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+      suggested_action: 'sign_in_again',
     });
   }
 
-  req.user = data.user;
+  req.user = user;
   return next();
+}
+
+function requireAuthenticatedUser(req: any, res: any, requestId?: string) {
+  const user = req.user;
+  if (user?.id) return user;
+  res.status(401).json({
+    success: false,
+    error: 'Your session could not be read. Please refresh the page and sign in again.',
+    message: 'Your session could not be read. Please refresh the page and sign in again.',
+    diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+    request_id: requestId,
+    suggested_action: 'sign_in_again',
+  });
+  return null;
 }
 
 app.get('/api/auth/me', requireAuth, (req: any, res) => {
@@ -312,6 +341,14 @@ function requireSupabase(feature: string) {
 
 function diagnoseProviderError(error: any) {
   const message = String(error?.message || error || 'Generation failed.');
+  if (/Cannot read properties of undefined \(reading ['"]user['"]\)|auth session|invalid or expired session|session could not be read/i.test(message)) {
+    return {
+      message: 'Your session could not be read. Please refresh the page and sign in again.',
+      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+      suggested_action: 'sign_in_again',
+      status: 401,
+    };
+  }
   if (error?.diagnosticCode) {
     const suggestedByCode: Record<string, string> = {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
@@ -5701,7 +5738,9 @@ app.get('/api/projects', async (req: any, res: any) => {
 
 app.post('/api/projects', async (req: any, res: any) => {
   try {
-    const userId = getUserOrgId(req);
+    const authUser = requireAuthenticatedUser(req, res);
+    if (!authUser) return;
+    const userId = authUser.id;
     const organizationId = await ensurePersonalOrganization(req, userId);
     const name = sanitizeProjectName(req.body?.name);
     const prompt = String(req.body?.prompt || req.body?.description || '').trim();
@@ -5946,7 +5985,9 @@ app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
 
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const requestId = `req_${randomUUID()}`;
-  const userId = getUserOrgId(req);
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = authUser.id;
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
@@ -6335,7 +6376,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const requestId = `req_${randomUUID()}`;
   try {
-  const userId = getUserOrgId(req);
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = authUser.id;
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
