@@ -3013,14 +3013,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_building'
           ? 'Building'
           : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'files_changed'
             ? 'Building'
-          : eventType === 'runner_started' || eventType === 'verification_started'
+          : eventType === 'runner_started' || eventType === 'verification_started' || eventType === 'visual_inspection_started'
             ? 'Running checks'
-            : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed'
+            : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed'
               ? 'Retesting'
               : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
                 ? 'Fixing'
@@ -3031,6 +3031,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));
         if (eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les fichiers generes avant les checks.', 'I am merging generated files before checks.'));
         if (eventType === 'runner_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification du resultat.', 'Checking the result.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
+        if (eventType === 'visual_inspection_started') markAgentStep('visual', visibleStepLabel(say('Test des interactions.', 'Testing interactions.')), label, trustDetail('Je controle les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'));
+        if (eventType === 'visual_inspection_failed') markAgentStep('visual', visibleStepLabel(say('Interaction a corriger.', 'Interaction issue found.')), 'Fixing', trustDetail('Je ne valide pas une interface avec des controles morts.', 'I do not approve an interface with dead controls.'));
+        if (eventType === 'visual_inspection_passed') finishAgentStep('visual', visibleStepLabel(say('Interactions essentielles verifiees.', 'Essential interactions checked.')), trustDetail('Les controles principaux sont utilisables ou affichent un etat honnete.', 'Primary controls are usable or show an honest state.'));
         if (eventType === 'verification_failed') markAgentStep('fix', visibleStepLabel(say('Blocage detecte.', 'Blocker detected.')), 'Fixing', trustDetail('Je ne valide pas une app qui reste cassee.', 'I do not mark a still-broken app as ready.'));
         if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Verifications terminees.', 'Checks completed.')), trustDetail('Les checks critiques sont passes.', 'Critical checks passed.'));
         if (eventType === 'quality_checked') finishAgentStep('verify', visibleStepLabel(say('Qualite verifiee.', 'Quality checked.')), trustDetail('Je garde les warnings comme notes sans bloquer si l app fonctionne.', 'I keep warnings as notes without blocking when the app works.'));

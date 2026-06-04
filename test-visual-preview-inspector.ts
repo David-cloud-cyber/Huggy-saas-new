@@ -34,6 +34,9 @@ assert.equal(goodChecks.find(check => check.key === 'visual_primary_controls')?.
 assert.equal(goodChecks.find(check => check.key === 'visual_controls_have_behavior')?.status, 'pass');
 assert.equal(goodChecks.find(check => check.key === 'visual_destructive_confirmation')?.status, 'pass');
 assert.equal(goodChecks.find(check => check.key === 'visual_list_tools')?.status, 'pass');
+assert.equal(goodChecks.find(check => check.key === 'visual_no_dead_primary_controls')?.status, 'pass');
+assert.equal(goodChecks.find(check => check.key === 'visual_state_changes_after_actions')?.status, 'pass');
+assert.equal(goodChecks.find(check => check.key === 'visual_no_dead_destinations')?.status, 'pass');
 
 const weakChecks = inspectVisualPreview({
   platformType: 'generic_web_app',
@@ -45,6 +48,57 @@ const weakChecks = inspectVisualPreview({
 
 assert.equal(weakChecks.find(check => check.key === 'visual_controls_have_behavior')?.status, 'fail');
 assert.equal(weakChecks.find(check => check.key === 'visual_destructive_confirmation')?.status, 'fail');
+assert.equal(weakChecks.find(check => check.key === 'visual_no_dead_primary_controls')?.status, 'fail');
+assert.equal(weakChecks.find(check => check.key === 'visual_state_changes_after_actions')?.status, 'fail');
 assert.ok(weakChecks.some(check => check.status === 'fail'));
+
+const deadDestinationChecks = inspectVisualPreview({
+  platformType: 'marketplace',
+  previewHtml: '<!doctype html><html><body><main><h1>Marketplace</h1><a href="#">Open listing</a><button onClick={() => {}}>Save</button></main></body></html>',
+  files: [
+    { path: 'src/App.tsx', language: 'tsx', content: 'export default function App(){ return <main><a href="#">Open listing</a><button onClick={() => {}}>Save</button></main> }' },
+  ],
+});
+
+assert.equal(deadDestinationChecks.find(check => check.key === 'visual_no_dead_destinations')?.status, 'fail');
+
+const weakAuthChecks = inspectVisualPreview({
+  platformType: 'auth_flow',
+  previewHtml: '<!doctype html><html><body><main><h1>Login</h1><input aria-label="Email"><input aria-label="Password"><button>Sign in</button></main></body></html>',
+  files: [
+    { path: 'src/App.tsx', language: 'tsx', content: 'export default function App(){ return <main><h1>Login</h1><input aria-label="Email" /><input aria-label="Password" /><button>Sign in</button></main> }' },
+  ],
+});
+
+assert.equal(weakAuthChecks.find(check => check.key === 'visual_form_submit_feedback')?.status, 'fail');
+
+const switchableUiChecks = inspectVisualPreview({
+  platformType: 'saas_dashboard',
+  previewHtml: '<!doctype html><html><body><main><h1>Dashboard</h1><button>Overview</button><button>Settings</button><div role="dialog">Details</div></main></body></html>',
+  files: [
+    {
+      path: 'src/App.tsx',
+      language: 'tsx',
+      content: `
+        import { useState } from 'react';
+        export default function App(){
+          const [activeTab, setActiveTab] = useState('overview');
+          const [isOpen, setOpen] = useState(false);
+          return <main>
+            <button role="tab" aria-selected={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Overview</button>
+            <button role="tab" aria-selected={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>Settings</button>
+            <button onClick={() => setOpen(true)}>Open details</button>
+            {isOpen ? <div role="dialog" aria-modal="true"><button onClick={() => setOpen(false)}>Close</button></div> : null}
+            <p>empty error success</p>
+          </main>
+        }
+      `,
+    },
+    { path: 'src/index.css', language: 'css', content: '@media(max-width: 720px){main{display:block}}' },
+  ],
+});
+
+assert.equal(switchableUiChecks.find(check => check.key === 'visual_tabs_are_switchable')?.status, 'pass');
+assert.equal(switchableUiChecks.find(check => check.key === 'visual_modal_can_open_and_close')?.status, 'pass');
 
 console.log('test-visual-preview-inspector passed');

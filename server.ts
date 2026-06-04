@@ -3226,12 +3226,13 @@ function applyAutoFix(project: GeneratedProject, files: GeneratedFile[], errors:
       .replace(/from\s+['"]__missing_import__['"];?/g, '')
       .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+/g, 'SECRET_CONFIGURED_SERVER_SIDE');
 
-    if (content === file.content) {
-      content += `\n<!-- Huggy auto-fix note: ${escapeHtml(primary.message || 'Preview issue checked')} -->\n`;
-    }
-
     return { ...file, content, updated_at: new Date().toISOString() };
   });
+  const changed = patched.some((file, index) => file.content !== files[index]?.content);
+
+  if (!changed) {
+    return { files, fixed: false, patch: null as any };
+  }
 
   return {
     files: patched,
@@ -5861,6 +5862,28 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }
     }
     const uiPolicy = buildWorldClassUiPolicy({ prompt });
+    let visualBlocking = inspectVisualPreview({
+      files: finalFiles,
+      previewHtml,
+      platformType: uiPolicy.appType,
+    }).filter(isBlockingVerificationFailure);
+    for (let attempt = 1; visualBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
+      const fix = applyAutoFix(project, finalFiles, visualBlocking.map(check => ({
+        file: check.file || 'src/App.tsx',
+        message: check.message,
+        severity: check.severity,
+      })));
+      autoFix = fix.patch;
+      if (!fix.fixed) break;
+      finalFiles = fix.files;
+      pipeline = runPreviewPipeline(project, finalFiles);
+      previewHtml = pipeline.html;
+      visualBlocking = inspectVisualPreview({
+        files: finalFiles,
+        previewHtml,
+        platformType: uiPolicy.appType,
+      }).filter(isBlockingVerificationFailure);
+    }
     const verificationChecks = [
       ...verifyGeneratedProject({ projectName: project.name, files: finalFiles, previewHtml }),
       ...auditGeneratedDesign({
@@ -6721,11 +6744,72 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         if (await stopIfCancelled('runner_retest')) return;
       }
     }
+    const uiPolicy = buildWorldClassUiPolicy({ prompt });
+    await send('visual_inspection_started', streamCopy('Inspection des interactions principales.', 'Inspecting primary interactions.'), {
+      step_label: streamCopy('Test des interactions.', 'Testing interactions.'),
+      step_detail: streamCopy('Je verifie les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'),
+    });
+    let visualChecks = inspectVisualPreview({
+      files,
+      previewHtml,
+      platformType: uiPolicy.appType,
+    });
+    let visualBlocking = visualChecks.filter(isBlockingVerificationFailure);
+    await send(visualBlocking.length ? 'visual_inspection_failed' : 'visual_inspection_passed', visualBlocking.length ? streamCopy('Interactions a corriger detectees.', 'Interaction issues detected.') : streamCopy('Interactions essentielles verifiees.', 'Essential interactions checked.'), {
+      checks: visualChecks,
+      step_label: visualBlocking.length ? streamCopy('Interaction a corriger.', 'Interaction issue.') : streamCopy('Interactions OK.', 'Interactions OK.'),
+      step_detail: visualBlocking.length
+        ? streamCopy('Je tente une correction si un patch fiable est possible.', 'I will try a correction if a reliable patch is possible.')
+        : streamCopy('Les controles principaux ont des comportements visibles ou des etats honnetes.', 'Primary controls have visible behavior or honest states.'),
+    });
+    if (await stopIfCancelled('visual_inspection')) return;
+
+    while (visualBlocking.length && autoFixAttempts < maxAutoFixAttempts) {
+      autoFixAttempts += 1;
+      const visualErrors = visualBlocking.map(check => ({ file: check.file || 'src/App.tsx', message: check.message, severity: check.severity }));
+      await send('auto_fix_started', streamCopy(`Correction interaction ${autoFixAttempts} lancee.`, `Interaction fix attempt ${autoFixAttempts} started.`), {
+        attempt: autoFixAttempts,
+        source: 'visual_inspection',
+        step_label: streamCopy('Correction interaction.', 'Interaction fix.'),
+        step_detail: streamCopy('Je ne modifie que ce qui bloque les interactions essentielles.', 'I only change what blocks essential interactions.'),
+      });
+      const fix = applyAutoFix(project, files, visualErrors);
+      autoFix = fix.patch;
+      if (!fix.fixed) break;
+      files = fix.files;
+      await send('patch_applied', fix.patch?.summary || streamCopy('Correction interaction appliquee.', 'Interaction patch applied.'), {
+        patch: fix.patch,
+        source: 'visual_inspection',
+        step_label: streamCopy('Patch applique.', 'Patch applied.'),
+        step_detail: streamCopy('Je reteste la preview apres correction.', 'I retest the preview after the correction.'),
+      });
+      pipeline = runPreviewPipeline(project, files);
+      previewHtml = pipeline.html;
+      await send('retest_started', streamCopy('Retest des interactions.', 'Retesting interactions.'), {
+        attempt: autoFixAttempts,
+        source: 'visual_inspection',
+        step_label: streamCopy('Retest interaction.', 'Interaction retest.'),
+        step_detail: streamCopy('Je confirme que les controles restent utilisables.', 'I confirm the controls remain usable.'),
+      });
+      visualChecks = inspectVisualPreview({
+        files,
+        previewHtml,
+        platformType: uiPolicy.appType,
+      });
+      visualBlocking = visualChecks.filter(isBlockingVerificationFailure);
+      await send(visualBlocking.length ? 'visual_inspection_failed' : 'visual_inspection_passed', visualBlocking.length ? streamCopy('Blocage interaction restant.', 'Remaining interaction blocker.') : streamCopy('Retest interaction passe.', 'Interaction retest passed.'), {
+        checks: visualChecks,
+        step_label: visualBlocking.length ? streamCopy('Blocage restant.', 'Remaining blocker.') : streamCopy('Retest passe.', 'Retest passed.'),
+        step_detail: visualBlocking.length
+          ? streamCopy('Je garde le probleme visible au lieu de masquer un faux succes.', 'I keep the issue visible instead of hiding a false success.')
+          : streamCopy('La preview garde ses interactions essentielles.', 'The preview keeps its essential interactions.'),
+      });
+      if (await stopIfCancelled('visual_retest')) return;
+    }
     await send('verification_started', streamCopy('Verification finale des fichiers et de la preview.', 'Verifying generated files and preview.'), {
       step_label: streamCopy('Verification finale.', 'Final verification.'),
       step_detail: streamCopy('Je controle les fichiers, la preview, le design de base et les interactions.', 'I am checking files, preview, basic design, and interactions.'),
     });
-    const uiPolicy = buildWorldClassUiPolicy({ prompt });
     const verificationChecks = [
       ...verifyGeneratedProject({ projectName: project.name, files, previewHtml }),
       ...auditGeneratedDesign({
