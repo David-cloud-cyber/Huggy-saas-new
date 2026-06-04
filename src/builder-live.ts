@@ -204,6 +204,7 @@ let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
+const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
 
 function escapeHtml(value: string): string {
   return value
@@ -395,6 +396,47 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
 function getProjectIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get('project') || '';
+}
+
+function isRealProjectId(value?: string | null) {
+  const clean = String(value || '').trim();
+  return Boolean(clean && !clean.startsWith('proj-') && /^[a-zA-Z0-9_-]{8,}$/.test(clean));
+}
+
+function rememberLastBuilderProjectId(projectId = currentProjectId) {
+  if (!isRealProjectId(projectId)) return;
+  try {
+    localStorage.setItem(LAST_BUILDER_PROJECT_STORAGE_KEY, String(projectId));
+  } catch {
+    // Local persistence is only a safety net for builder restore.
+  }
+}
+
+function forgetLastBuilderProjectId(projectId?: string) {
+  try {
+    const remembered = localStorage.getItem(LAST_BUILDER_PROJECT_STORAGE_KEY) || '';
+    if (!projectId || remembered === projectId) localStorage.removeItem(LAST_BUILDER_PROJECT_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function rememberedLastBuilderProjectId() {
+  try {
+    const remembered = localStorage.getItem(LAST_BUILDER_PROJECT_STORAGE_KEY) || '';
+    return isRealProjectId(remembered) ? remembered : '';
+  } catch {
+    return '';
+  }
+}
+
+function setCurrentBuilderProjectId(projectId: string, updateUrl = true) {
+  currentProjectId = isRealProjectId(projectId) ? String(projectId).trim() : '';
+  if (!currentProjectId) return;
+  rememberLastBuilderProjectId(currentProjectId);
+  if (updateUrl && getProjectIdFromUrl() !== currentProjectId) {
+    window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
+  }
 }
 
 function getInitialBuilderHandoff() {
@@ -785,11 +827,11 @@ function clearInlineBlocks() {
   if (host) host.innerHTML = '';
 }
 
-function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
+function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, options: { working?: boolean } = {}) {
   ensureChatShimmerStyle();
   const api = ensureConversationApi();
   if (api) {
-    const id = api.addMessage({ role: kind, content: body });
+    const id = api.addMessage({ role: kind, content: body, working: Boolean(options.working) });
     return createMessageHandle(id);
   }
 
@@ -803,6 +845,10 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string) {
   `;
   const paragraph = card.querySelector('.msg-body-paragraph');
   if (paragraph) paragraph.textContent = body;
+  if (options.working) {
+    card.classList.add('message-card-shimmer');
+    card.setAttribute('aria-busy', 'true');
+  }
   scroll.appendChild(card);
   scroll.scrollTop = scroll.scrollHeight;
   return card;
@@ -2566,27 +2612,59 @@ function activateDatabaseView() {
 }
 
 async function ensureProject() {
-  currentProjectId = getProjectIdFromUrl();
+  const routeProjectId = getProjectIdFromUrl();
+  currentProjectId = isRealProjectId(routeProjectId) ? routeProjectId : '';
 
-  if (!currentProjectId || String(currentProjectId).startsWith('proj-')) {
-    return {
-      success: true,
-      project: {
-        id: '',
-        name: currentProjectName || 'Untitled app',
-        preview_status: 'idle',
-      },
-      files: [],
-      messages: [],
-      events: [],
-      preview: {
-        status: 'idle',
-        html: currentPreviewHtml,
-      },
-    } as ProjectPayload;
+  if (currentProjectId) {
+    rememberLastBuilderProjectId(currentProjectId);
+    return apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
   }
 
-  return apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
+  const userState = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state').catch(() => null);
+  userWorkspaceState = userState?.state || null;
+  const stateProjectId = isRealProjectId(userWorkspaceState?.last_project_id) ? String(userWorkspaceState?.last_project_id) : '';
+  const fallbackProjectId = stateProjectId || rememberedLastBuilderProjectId();
+
+  if (fallbackProjectId) {
+    setCurrentBuilderProjectId(fallbackProjectId);
+    try {
+      return await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
+    } catch (error) {
+      forgetLastBuilderProjectId(fallbackProjectId);
+      currentProjectId = '';
+      window.history.replaceState({}, '', '/builder.html');
+      if (userWorkspaceState?.last_project_id === fallbackProjectId) {
+        await apiFetch('/api/users/me/workspace-state', {
+          method: 'PATCH',
+          body: JSON.stringify({ last_project_id: null, last_route: '/builder.html' }),
+        }).catch(() => null);
+      }
+      console.warn('[huggy] Unable to restore last builder project.', error);
+    }
+  }
+
+  return {
+    success: true,
+    project: {
+      id: '',
+      name: currentProjectName || 'Untitled app',
+      preview_status: 'idle',
+    },
+    files: [],
+    messages: [],
+    events: [],
+    preview: {
+      status: 'idle',
+      html: currentPreviewHtml,
+    },
+    workspace_state: userWorkspaceState ? {
+      draft_prompt: userWorkspaceState.builder_draft_prompt || '',
+      selected_mode: userWorkspaceState.builder_selected_mode || 'auto',
+      selected_model: userWorkspaceState.builder_selected_model || 'auto',
+      active_tab: userWorkspaceState.builder_active_tab || 'preview',
+      preview_device: userWorkspaceState.builder_preview_device || 'desktop',
+    } : null,
+  } as ProjectPayload;
 }
 
 function projectNameFromPrompt(prompt: string) {
@@ -2614,9 +2692,8 @@ async function ensureProjectForPrompt(prompt: string) {
       prompt: initialPrompt,
     }),
   });
-  currentProjectId = created.project.id;
+  setCurrentBuilderProjectId(created.project.id);
   setProjectNameDisplay(created.project.name || selectedName);
-  window.history.replaceState({}, '', `/builder.html?project=${encodeURIComponent(currentProjectId)}`);
   await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/workspace-state`, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -2708,6 +2785,9 @@ async function loadProject() {
   const loading = showTransientNotice('Loading project files, timeline and preview...', 0);
   try {
     const payload = await ensureProject();
+    if (isRealProjectId(payload.project?.id || currentProjectId)) {
+      setCurrentBuilderProjectId(String(payload.project?.id || currentProjectId));
+    }
     if (!currentProjectId) {
       const userState = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state').catch(() => null);
       userWorkspaceState = userState?.state || null;
@@ -2798,9 +2878,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const speaksFrench = isLikelyFrenchText(prompt);
   const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const status = appendMessage('assistant', '');
+  const firstWorkingLabel = quickConversation
+    ? (speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...')
+    : initialLabel;
+  const status = appendMessage('assistant', firstWorkingLabel, { working: true });
   if (quickConversation) {
-    setMessageShimmer(status, speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...', false);
+    setMessageShimmer(status, firstWorkingLabel, false);
   } else {
     setMessageShimmer(status, initialLabel, true);
     startWorkingTimer(status, initialLabel);

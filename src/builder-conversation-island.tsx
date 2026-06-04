@@ -1392,7 +1392,9 @@ function renderAgentTrace(message: HuggyConversationMessage) {
     <div className="huggy-agent-trace" data-status={status}>
       <div className="huggy-agent-trace-head">
         <span className="huggy-agent-trace-dot" aria-hidden="true" />
-        <span className="huggy-agent-trace-title">{title}</span>
+        <span className="huggy-agent-trace-title">
+          {status === "active" ? <ShiningText text={title} /> : title}
+        </span>
         {trace.elapsed ? <span className="huggy-agent-trace-elapsed" aria-hidden="true">{trace.elapsed}</span> : null}
       </div>
       <div className="huggy-agent-steps">
