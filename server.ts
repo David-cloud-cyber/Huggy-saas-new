@@ -411,6 +411,85 @@ function normalizeProviderError(error: any): string {
   return diagnoseProviderError(error).message;
 }
 
+function createPublicError(message: string, statusCode = 500, diagnosticCode = 'SERVER_ERROR', suggestedAction = 'retry') {
+  const error = new Error(message) as Error & {
+    statusCode?: number;
+    diagnostic_code?: string;
+    suggested_action?: string;
+  };
+  error.statusCode = statusCode;
+  error.diagnostic_code = diagnosticCode;
+  error.suggested_action = suggestedAction;
+  return error;
+}
+
+function diagnosePublishError(error: any) {
+  const message = String(error?.message || error || 'Publish failed.');
+  const statusCode = Number(error?.statusCode || 500);
+  if (error?.diagnostic_code) {
+    return {
+      message,
+      diagnostic_code: String(error.diagnostic_code),
+      suggested_action: String(error.suggested_action || 'retry'),
+      status: statusCode,
+    };
+  }
+  if (/VERCEL_TOKEN|not configured/i.test(message)) {
+    return {
+      message: 'Publishing is not configured on the server. Add VERCEL_TOKEN on Railway, redeploy, then retry.',
+      diagnostic_code: 'VERCEL_NOT_CONFIGURED',
+      suggested_action: 'configure_vercel_token',
+      status: 503,
+    };
+  }
+  if (/401|403|unauthorized|forbidden|invalid token/i.test(message)) {
+    return {
+      message: 'Vercel rejected the publish token. Update VERCEL_TOKEN on Railway and redeploy.',
+      diagnostic_code: 'VERCEL_TOKEN_INVALID',
+      suggested_action: 'update_vercel_token',
+      status: 503,
+    };
+  }
+  if (/rate limit|too many requests|429/i.test(message)) {
+    return {
+      message: 'Vercel rate limited the publish request. Wait a moment, then click Update again.',
+      diagnostic_code: 'VERCEL_RATE_LIMITED',
+      suggested_action: 'retry_later',
+      status: 429,
+    };
+  }
+  if (/payload|too large|413/i.test(message)) {
+    return {
+      message: 'The generated app is too large for this publish request. Remove heavy inline assets or export large media to Storage, then retry.',
+      diagnostic_code: 'VERCEL_PAYLOAD_TOO_LARGE',
+      suggested_action: 'reduce_assets',
+      status: 413,
+    };
+  }
+  if (/bad request|invalid|400|files/i.test(message)) {
+    return {
+      message: 'Vercel rejected the deployment payload. Huggy kept the live app unchanged; rebuild the preview and try Publish again.',
+      diagnostic_code: 'VERCEL_BAD_REQUEST',
+      suggested_action: 'rebuild_then_publish',
+      status: 502,
+    };
+  }
+  if (/fetch failed|network|timeout|ENOTFOUND|ECONNRESET|5\d\d|unavailable/i.test(message)) {
+    return {
+      message: 'Vercel is temporarily unavailable or unreachable. The live app was not changed; retry in a moment.',
+      diagnostic_code: 'VERCEL_UNAVAILABLE',
+      suggested_action: 'retry',
+      status: 502,
+    };
+  }
+  return {
+    message: message || 'Publish failed. The live app was not changed.',
+    diagnostic_code: 'PUBLISH_FAILED',
+    suggested_action: 'retry',
+    status: statusCode >= 400 && statusCode < 600 ? statusCode : 500,
+  };
+}
+
 function isUuid(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -4231,7 +4310,12 @@ async function deployFilesToVercel(
 ) {
   const token = getVercelToken();
   if (!token) {
-    throw new Error('Vercel deployment is not configured. Add VERCEL_TOKEN on Railway to publish generated apps.');
+    throw createPublicError(
+      'Vercel deployment is not configured. Add VERCEL_TOKEN on Railway to publish generated apps.',
+      503,
+      'VERCEL_NOT_CONFIGURED',
+      'configure_vercel_token',
+    );
   }
 
   const prepareHtml = (html: string) => {
@@ -4291,7 +4375,30 @@ async function deployFilesToVercel(
 
   const payload: any = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error?.message || payload?.message || `Vercel API returned ${response.status}`);
+    const providerMessage = payload?.error?.message || payload?.message || `Vercel API returned ${response.status}`;
+    const error = createPublicError(
+      `${providerMessage}${payload?.error?.code ? ` (${payload.error.code})` : ''}`,
+      response.status,
+      response.status === 401 || response.status === 403
+        ? 'VERCEL_TOKEN_INVALID'
+        : response.status === 429
+          ? 'VERCEL_RATE_LIMITED'
+          : response.status === 413
+            ? 'VERCEL_PAYLOAD_TOO_LARGE'
+            : response.status >= 500
+              ? 'VERCEL_UNAVAILABLE'
+              : 'VERCEL_BAD_REQUEST',
+      response.status === 401 || response.status === 403
+        ? 'update_vercel_token'
+        : response.status === 429
+          ? 'retry_later'
+          : response.status === 413
+            ? 'reduce_assets'
+            : response.status >= 500
+              ? 'retry'
+              : 'rebuild_then_publish',
+    );
+    throw error;
   }
 
   const url = payload.url ? `https://${String(payload.url).replace(/^https?:\/\//, '')}` : '';
@@ -7046,32 +7153,53 @@ function getPublishPublicUrl(project: GeneratedProject, customDomain: string | n
 }
 
 async function publishProjectSnapshot(req: any, res: any) {
+  const requestId = `pub_${randomUUID()}`;
   const projectId = req.params.id;
   const userId = getUserOrgId(req);
   const { commitHash, branch = 'main', userCredits = 100 } = req.body || {};
-  if (!requireProjectCapability(req, res, 'deploy')) return;
-  if (!enforceRateLimit(`publish:${userId}`, 6, 60_000)) {
-    return res.status(429).json({ success: false, error: 'Too many publish requests. Please wait a moment.' });
-  }
-
-  if (userCredits < 2) {
-    return res.status(200).json(publicCreditGateResponse());
-  }
-
-  const project = await loadProject(projectId, userId);
-  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-
-  const context = await createPublishContext(project);
-  const publishStatus = buildPublishStatus(context);
-  if (!publishStatus.can_publish) {
-    return res.status(409).json({
-      success: false,
-      error: 'Build a ready preview before publishing.',
-      publish: publishStatus,
-    });
-  }
-
   try {
+    if (!requireProjectCapability(req, res, 'deploy')) return;
+    if (!enforceRateLimit(`publish:${userId}`, 6, 60_000)) {
+      return res.status(429).json({
+        success: false,
+        error: 'Too many publish requests. Please wait a moment.',
+        message: 'Too many publish requests. Please wait a moment.',
+        diagnostic_code: 'PUBLISH_RATE_LIMITED',
+        request_id: requestId,
+        suggested_action: 'retry_later',
+      });
+    }
+
+    if (userCredits < 2) {
+      return res.status(200).json({ ...publicCreditGateResponse(), request_id: requestId });
+    }
+
+    const project = await loadProject(projectId, userId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found.',
+        message: 'Project not found.',
+        diagnostic_code: 'PROJECT_NOT_FOUND',
+        request_id: requestId,
+        suggested_action: 'open_project',
+      });
+    }
+
+    const context = await createPublishContext(project);
+    const publishStatus = buildPublishStatus(context);
+    if (!publishStatus.can_publish) {
+      return res.status(409).json({
+        success: false,
+        error: 'Build a ready preview before publishing.',
+        message: 'Build a ready preview before publishing.',
+        diagnostic_code: 'PREVIEW_NOT_READY',
+        request_id: requestId,
+        suggested_action: 'build_first',
+        publish: publishStatus,
+      });
+    }
+
     const publicOrigin = getHuggyPublicOrigin();
     const badgeRequired = publishStatus.badge_required;
     const result = await deployFilesToVercel(project, context.files, {
@@ -7104,9 +7232,21 @@ async function publishProjectSnapshot(req: any, res: any) {
       publish: nextStatus,
     });
   } catch (error: any) {
-    res.status(error.message?.includes('not configured') ? 503 : 502).json({
+    const diagnostic = diagnosePublishError(error);
+    console.error('[huggy:publish_failed]', {
+      request_id: requestId,
+      project_id: projectId,
+      user_id: userId,
+      diagnostic_code: diagnostic.diagnostic_code,
+      message: error?.message || String(error),
+    });
+    res.status(diagnostic.status).json({
       success: false,
-      error: error.message,
+      error: diagnostic.message,
+      message: diagnostic.message,
+      diagnostic_code: diagnostic.diagnostic_code,
+      request_id: requestId,
+      suggested_action: diagnostic.suggested_action,
     });
   }
 }

@@ -1254,7 +1254,7 @@ function publishPanelTitle(status: PublishStatusPayload | null) {
 }
 
 function formatPublishUrl(url: string) {
-  if (!url) return 'Publish to get your live URL';
+  if (!url) return 'Not published yet';
   try {
     const parsed = new URL(url);
     return `${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname}`;
@@ -1299,9 +1299,14 @@ function closePublishPanel() {
 function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = false, error = '') {
   const root = ensurePublishPanel();
   const status = payload?.publish || null;
-  const publicUrl = status?.public_url || '';
+  const hasPublishedDeployment = Boolean(
+    payload?.deployment &&
+    status &&
+    (status.state === 'published' || status.state === 'changes_unpublished')
+  );
+  const publicUrl = hasPublishedDeployment ? status?.public_url || '' : '';
   const publicUrlLabel = formatPublishUrl(publicUrl);
-  const canOpen = Boolean(publicUrl && payload?.deployment && status?.state !== 'not_ready');
+  const canOpen = Boolean(publicUrl && hasPublishedDeployment);
   const checks = status?.checks || [];
   const visitorCount = Math.max(0, Number(status?.current_visitors || 0));
   const visitorLabel = `${formatCompactNumber(visitorCount)} Visitor${visitorCount === 1 ? '' : 's'}`;
@@ -1309,12 +1314,12 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
   const primaryLabel = isPublishing ? 'Publishing...' : publishPrimaryLabel(status);
   const checkCount = Math.max(1, checks.length);
   const statusDetail = status?.state === 'changes_unpublished'
-    ? 'Your live app is stable. Click Update to publish the latest preview.'
+    ? 'Live is stable. Update publishes the latest preview.'
     : status?.state === 'published'
-      ? 'This URL serves the last published snapshot.'
+      ? 'This URL serves the last published version.'
       : status?.state === 'ready_to_publish'
-        ? 'Your preview is ready. Publish creates the live snapshot.'
-        : 'Generate a ready preview before publishing.';
+        ? 'Publish creates the live URL.'
+        : 'Build a ready preview first.';
   const securityRows = checks.map(check => {
     const tone = check.status === 'pass' ? '#7ddf8a' : check.status === 'warn' ? '#fb923c' : '#f87171';
     const iconName = check.status === 'pass' ? 'check' : check.status === 'warn' ? 'warning' : 'fail';
@@ -1355,35 +1360,35 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
       `
       : '';
   root.innerHTML = `
-    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(460px,100%);border:1px solid rgba(255,255,255,.12);background:#151513;color:#fffefa;border-radius:20px;box-shadow:0 28px 80px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.04) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 24px 18px;border-bottom:1px solid rgba(255,255,255,.08);">
+    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(390px,100%);border:1px solid rgba(255,255,255,.12);background:#151513;color:#fffefa;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.04) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08);">
         <div style="min-width:0;">
-          <h3 style="margin:0;color:#fffefa;font-size:22px;line-height:1.08;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
-          <p style="margin:7px 0 0;color:#bbb8ae;font-size:12px;line-height:1.4;">${escapeHtml(statusDetail)}</p>
+          <h3 style="margin:0;color:#fffefa;font-size:18px;line-height:1.1;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
+          <p style="margin:5px 0 0;color:#bbb8ae;font-size:11px;line-height:1.35;">${escapeHtml(statusDetail)}</p>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;color:#fffefa;font-size:14px;font-weight:850;white-space:nowrap;">
-          <span style="color:#f3f2eb;display:grid;place-items:center;width:20px;height:20px;">${publishIcon('visitors')}</span>
+        <div style="display:flex;align-items:center;gap:6px;color:#fffefa;font-size:12px;font-weight:850;white-space:nowrap;">
+          <span style="color:#f3f2eb;display:grid;place-items:center;width:17px;height:17px;">${publishIcon('visitors')}</span>
           <span>${escapeHtml(visitorLabel)}</span>
         </div>
       </div>
-      <div style="display:grid;gap:18px;padding:20px 24px 22px;border-bottom:1px solid rgba(255,255,255,.08);">
+      <div style="display:grid;gap:14px;padding:16px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
         ${error ? `<div style="border:1px solid rgba(248,113,113,.28);background:rgba(127,29,29,.30);color:#fecaca;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;">${escapeHtml(error)}</div>` : ''}
         ${status ? `
-          <div style="display:grid;gap:12px;">
+          <div style="display:grid;gap:9px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <strong style="color:#fffefa;font-size:15px;letter-spacing:-.02em;">Website URL</strong>
-              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#fffefa;font-size:12px;font-weight:760;cursor:pointer;padding:0;white-space:nowrap;">
+              <strong style="color:#fffefa;font-size:13px;letter-spacing:-.02em;">Website URL</strong>
+              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#fffefa;font-size:11px;font-weight:760;cursor:pointer;padding:0;white-space:nowrap;">
                 <span style="display:grid;place-items:center;width:16px;height:16px;">${publishIcon('link')}</span>
                 <span>Add custom domain</span>
               </button>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;min-width:0;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.035);border-radius:16px;padding:13px 14px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset;">
-              <span title="${escapeHtml(publicUrl)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fffefa;font-size:15px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
-              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:28px;height:28px;border:0;background:transparent;color:${publicUrl ? '#d8d5cc' : '#6f6c64'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.035);border-radius:13px;padding:10px 11px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset;">
+              <span title="${escapeHtml(publicUrl || publicUrlLabel)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${publicUrl ? '#fffefa' : '#8f8b82'};font-size:13px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
+              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:24px;height:24px;border:0;background:transparent;color:${publicUrl ? '#d8d5cc' : '#6f6c64'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;color:#928f86;font-size:11px;line-height:1.35;">
-              <span>Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}</span>
-              <span>${status.badge_required ? 'Free plan badge active' : 'No Huggy badge required'}</span>
+              <span>${hasPublishedDeployment ? `Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}` : 'URL appears after first publish'}</span>
+              <span>${status.badge_required ? 'Badge active' : 'No badge'}</span>
             </div>
           </div>
         ` : `
@@ -1393,28 +1398,28 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
           </div>
         `}
         ${status ? `
-          <div style="display:grid;gap:12px;">
-            <strong style="color:#fffefa;font-size:15px;letter-spacing:-.02em;">Who can see this website</strong>
-            <div style="display:flex;align-items:center;gap:12px;">
-              <div style="display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.08);color:#d8d5cc;">${publishIcon('globe')}</div>
+          <div style="display:grid;gap:9px;">
+            <strong style="color:#fffefa;font-size:13px;letter-spacing:-.02em;">Who can see this website</strong>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.08);color:#d8d5cc;">${publishIcon('globe')}</div>
               <div>
-                <div style="color:#fffefa;font-size:15px;font-weight:850;letter-spacing:-.02em;">Public</div>
-                <div style="margin-top:3px;color:#c8c4bb;font-size:13px;font-weight:620;">Anyone with the URL</div>
+                <div style="color:#fffefa;font-size:13px;font-weight:850;letter-spacing:-.02em;">Public</div>
+                <div style="margin-top:2px;color:#c8c4bb;font-size:12px;font-weight:620;">Anyone with the URL</div>
               </div>
             </div>
           </div>
         ` : ''}
       </div>
       ${detailPanel}
-      <div style="display:grid;gap:14px;padding:16px 24px 20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:38px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:12px;font-size:13px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">
-            Review security <span style="display:inline-grid;place-items:center;min-width:21px;height:21px;margin-left:6px;border-radius:999px;background:#f97316;color:#fff;font-size:12px;font-weight:900;">${checkCount}</span>
+      <div style="display:grid;gap:11px;padding:13px 18px 16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:32px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">
+            Security <span style="display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;border-radius:999px;background:#f97316;color:#fff;font-size:10px;font-weight:900;">${checkCount}</span>
           </button>
-          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:38px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:12px;font-size:13px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">Edit settings</button>
+          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:32px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">Settings</button>
         </div>
-        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:42px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.26), transparent 34%),linear-gradient(135deg,#3768ff 0%,#2456f3 48%,#173fbd 100%);color:#fffefa;border-radius:12px;font-size:15px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 12px 28px rgba(28,83,255,.24),inset 0 1px 0 rgba(255,255,255,.20);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#8f8c84;font-size:12px;">
+        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:36px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.26), transparent 34%),linear-gradient(135deg,#3768ff 0%,#2456f3 48%,#173fbd 100%);color:#fffefa;border-radius:10px;font-size:13px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 10px 22px rgba(28,83,255,.22),inset 0 1px 0 rgba(255,255,255,.20);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#8f8c84;font-size:11px;">
           <button type="button" data-publish-action="close" style="border:0;background:transparent;color:#aaa69d;font-weight:800;cursor:pointer;padding:0;">Close</button>
           <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? '#d8d5cc' : '#69665f'};font-weight:800;cursor:${canOpen ? 'pointer' : 'default'};padding:0;">Open live app</button>
         </div>
