@@ -1700,6 +1700,34 @@ function normalizeDeploymentStatusForPersistence(status: unknown): 'ready' | 'fa
   return 'ready';
 }
 
+function getVercelProjectName(project: Pick<GeneratedProject, 'id' | 'slug'>) {
+  const slug = String(project.slug || project.id || 'app')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    || 'app';
+  return `huggy-${slug}`.slice(0, 52).replace(/-+$/g, '') || 'huggy-app';
+}
+
+function toHttpsUrl(hostOrUrl: unknown) {
+  const raw = String(hostOrUrl || '').trim();
+  if (!raw) return '';
+  return `https://${raw.replace(/^https?:\/\//i, '').replace(/\/.*$/, '')}`;
+}
+
+function getPublicVercelDeploymentUrl(project: GeneratedProject, payload: any) {
+  const aliases = [
+    ...(Array.isArray(payload?.alias) ? payload.alias : []),
+    ...(Array.isArray(payload?.aliases) ? payload.aliases : []),
+  ]
+    .map(toHttpsUrl)
+    .filter(Boolean)
+    .filter(url => /\.vercel\.app$/i.test(new URL(url).hostname))
+    .filter(url => !/-projects\.vercel\.app$/i.test(new URL(url).hostname));
+  return aliases[0] || `https://${getVercelProjectName(project)}.vercel.app`;
+}
+
 function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
   if (!html || html.includes('data-huggy-published-badge="true"')) return html;
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
@@ -4438,7 +4466,7 @@ async function deployFilesToVercel(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: `huggy-${project.slug}`.slice(0, 52),
+      name: getVercelProjectName(project),
       target: 'production',
       files: deploymentFiles,
       projectSettings: {
@@ -4481,7 +4509,7 @@ async function deployFilesToVercel(
     throw error;
   }
 
-  const url = payload.url ? `https://${String(payload.url).replace(/^https?:\/\//, '')}` : '';
+  const url = getPublicVercelDeploymentUrl(project, payload) || (payload.url ? `https://${String(payload.url).replace(/^https?:\/\//, '')}` : '');
   return {
     provider_deployment_id: payload.id || payload.uid || null,
     deployment_url: url,
@@ -7417,39 +7445,85 @@ function isKnownHuggyHost(host: string): boolean {
   ].some((known: string) => normalized === known || normalized.startsWith(`${known}:`));
 }
 
-function renderPublishedWrapper(project: GeneratedProject, deploymentUrl: string) {
-  const title = escapeHtml(project.name || 'Huggy app');
-  const src = escapeHtml(deploymentUrl);
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${title}</title>
-  <style>
-    html,body{margin:0;width:100%;height:100%;background:#fcfbf8;color:#1c1c1c;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    iframe{display:block;width:100%;height:100dvh;border:0;background:#fff}
-    .fallback{display:grid;place-items:center;min-height:100dvh;padding:24px;text-align:center}
-    .fallback a{color:#1c1c1c;font-weight:800}
-  </style>
-</head>
-<body>
-  <iframe title="${title}" src="${src}" loading="eager" referrerpolicy="strict-origin-when-cross-origin"></iframe>
-  <noscript><main class="fallback"><p>This app is live. <a href="${src}">Open it here</a>.</p></main></noscript>
-</body>
-</html>`;
+function stripHuggyPublishedBadge(html: string) {
+  return html.replace(/<a\b[^>]*\bdata-huggy-published-badge=["']true["'][\s\S]*?<\/a>/gi, '');
+}
+
+function rewritePublishedHtmlForProxy(html: string, project: GeneratedProject, deployment: any, proxyBasePath: string) {
+  let output = html;
+  if (deployment?.badge_required) {
+    output = injectHuggyPublishedBadge(stripHuggyPublishedBadge(output), project, getHuggyPublicOrigin());
+  }
+  if (proxyBasePath) {
+    const base = proxyBasePath.replace(/\/+$/, '');
+    output = output
+      .replace(/\b(src|href)=["']\/(?!\/|api\/|built-with-huggy\/|p\/)([^"']*)["']/gi, (_match, attr, target) => `${attr}="${base}/${target}"`)
+      .replace(/url\(\s*(['"]?)\/(?!\/|api\/|built-with-huggy\/|p\/)([^'")]+)\1\s*\)/gi, (_match, quote, target) => `url(${quote}${base}/${target}${quote})`);
+  }
+  return output;
+}
+
+function buildPublishedProxyTargets(project: GeneratedProject, deploymentUrl: string, requestPath: string) {
+  const safePath = requestPath && requestPath.startsWith('/') ? requestPath : `/${requestPath || ''}`;
+  const candidates = [deploymentUrl, `https://${getVercelProjectName(project)}.vercel.app`].filter(Boolean);
+  const unique = Array.from(new Set(candidates));
+  return unique.map(candidate => {
+    const url = new URL(candidate);
+    const requestUrl = new URL(`https://huggy.local${safePath}`);
+    url.pathname = requestUrl.pathname || '/';
+    url.search = requestUrl.search;
+    return url;
+  });
+}
+
+async function proxyPublishedDeployment(project: GeneratedProject, deployment: any, req: any, res: any, proxyBasePath = '') {
+  const deploymentUrl = String(deployment?.deployment_url || '');
+  if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
+
+  const requestPath = String(req.url || '/');
+  const targets = buildPublishedProxyTargets(project, deploymentUrl, requestPath);
+  let lastStatus = 502;
+
+  for (const target of targets) {
+    const upstream = await fetch(target.toString(), {
+      headers: {
+        accept: String(req.headers.accept || '*/*'),
+        'user-agent': 'Huggy published-app proxy',
+      },
+    });
+
+    lastStatus = upstream.status;
+    if ((upstream.status === 401 || upstream.status === 403) && /-projects\.vercel\.app$/i.test(target.hostname)) {
+      continue;
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+    const cacheControl = upstream.headers.get('cache-control') || 'public, max-age=60, stale-while-revalidate=300';
+    res.status(upstream.status);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', cacheControl);
+    res.setHeader('X-Huggy-Published-App', project.id);
+
+    if (contentType.includes('text/html')) {
+      const html = await upstream.text();
+      return res.send(upstream.ok ? rewritePublishedHtmlForProxy(html, project, deployment, proxyBasePath) : html);
+    }
+
+    const body = Buffer.from(await upstream.arrayBuffer());
+    return res.send(body);
+  }
+
+  return res.status(lastStatus).send('The published Vercel app is not publicly accessible yet. Click Publish again after Railway redeploys, or check Vercel deployment protection.');
 }
 
 // Public published app route. This reads the latest publish snapshot only.
-app.get('/p/:slug', async (req, res) => {
+app.use('/p/:slug', async (req: any, res: any, next: any) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   try {
     const project = await loadPublicProjectBySlug(req.params.slug);
     if (!project) return res.status(404).send('Published app not found.');
     const deployment = await getLatestDeployment(project.id);
-    const deploymentUrl = String(deployment?.deployment_url || '');
-    if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-    res.send(renderPublishedWrapper(project, deploymentUrl));
+    return proxyPublishedDeployment(project, deployment, req, res, `/p/${encodeURIComponent(req.params.slug)}`);
   } catch (error: any) {
     res.status(500).send(escapeHtml(error?.message || 'Unable to load published app.'));
   }
@@ -7495,17 +7569,14 @@ app.get('/built-with-huggy/:projectId', async (req, res) => {
 });
 
 app.use(async (req, res, next) => {
-  if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.startsWith('/assets')) return next();
+  if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
   const host = normalizeDomainHost(req.hostname || req.headers.host || '');
   if (isKnownHuggyHost(host)) return next();
   try {
     const project = await loadPublicProjectByCustomDomain(host);
     if (!project) return next();
     const deployment = await getLatestDeployment(project.id);
-    const deploymentUrl = String(deployment?.deployment_url || '');
-    if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
-    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-    return res.send(renderPublishedWrapper(project, deploymentUrl));
+    return proxyPublishedDeployment(project, deployment, req, res);
   } catch (error: any) {
     return res.status(500).send(escapeHtml(error?.message || 'Unable to load custom domain app.'));
   }
