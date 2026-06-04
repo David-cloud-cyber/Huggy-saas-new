@@ -166,13 +166,70 @@ const SUPABASE_SERVER_CLIENT_OPTIONS = {
   },
 };
 
+function getSupabaseProjectRef(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return host.endsWith('.supabase.co') ? host.split('.')[0] : host;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+function getJwtPayload(value: string) {
+  try {
+    const part = value.split('.')[1];
+    if (!part) return null;
+    const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function classifySupabaseKey(value?: string) {
+  const key = String(value || '').trim();
+  if (!key) return 'missing';
+  if (key.startsWith('sbp_')) return 'personal_access_token';
+  if (key.startsWith('sb_secret_')) return 'secret_key';
+  if (key.startsWith('sb_publishable_')) return 'publishable_key';
+  const payload = getJwtPayload(key);
+  const role = typeof payload?.role === 'string' ? payload.role : '';
+  if (role === 'service_role') return 'jwt_service_role';
+  if (role === 'anon') return 'jwt_anon';
+  return 'unknown';
+}
+
+function isSupabaseProjectApiKey(value?: string) {
+  return ['secret_key', 'publishable_key', 'jwt_service_role', 'jwt_anon'].includes(classifySupabaseKey(value));
+}
+
+function getSupabaseRuntimeDiagnostics() {
+  const backendUrl = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const frontendUrl = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
+  return {
+    backend_project_ref: getSupabaseProjectRef(backendUrl),
+    frontend_project_ref: getSupabaseProjectRef(frontendUrl),
+    project_refs_match: getSupabaseProjectRef(backendUrl) === getSupabaseProjectRef(frontendUrl),
+    service_role_key_kind: classifySupabaseKey(serviceRoleKey),
+    service_role_project_api_key: isSupabaseProjectApiKey(serviceRoleKey),
+    auth_key_kind: classifySupabaseKey(publishableKey),
+  };
+}
+
 let supabase: any = null;
 function getSupabase() {
   if (!supabase) {
     const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (url && key) {
+    if (url && key && isSupabaseProjectApiKey(key)) {
       supabase = createClient(url, key, SUPABASE_SERVER_CLIENT_OPTIONS);
+    } else if (key && !isSupabaseProjectApiKey(key)) {
+      console.warn('[huggy:supabase_service_role_invalid]', {
+        key_kind: classifySupabaseKey(key),
+        expected: 'Supabase project API key, not a personal access token',
+      });
     }
   }
   return supabase;
@@ -183,9 +240,9 @@ function getSupabaseAuthClient() {
   if (!supabaseAuth) {
     const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
     const key =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_PUBLISHABLE_KEY ||
       process.env.SUPABASE_ANON_KEY ||
+      (isSupabaseProjectApiKey(process.env.SUPABASE_SERVICE_ROLE_KEY) ? process.env.SUPABASE_SERVICE_ROLE_KEY : '') ||
       DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
     supabaseAuth = createClient(url, key, SUPABASE_SERVER_CLIENT_OPTIONS);
@@ -301,6 +358,7 @@ app.get('/api/debug/auth-session', requireAuth, (req: any, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
+  const supabaseDiagnostics = getSupabaseRuntimeDiagnostics();
   res.json({
     success: true,
     status: 'ok',
@@ -309,10 +367,13 @@ app.get('/api/health', (_req, res) => {
     static_dist: pathExists(staticRoot),
     integrations: {
       supabase_url: Boolean(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL),
-      supabase_service_role: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      supabase_service_role: supabaseDiagnostics.service_role_project_api_key,
       openrouter: Boolean(getOpenRouterApiKey()),
       vercel: Boolean(getVercelToken()),
       stripe: Boolean(process.env.STRIPE_SECRET_KEY),
+    },
+    diagnostics: {
+      supabase: supabaseDiagnostics,
     },
   });
 });
