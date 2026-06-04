@@ -1,4 +1,4 @@
-import { getVerifiedSession } from './supabase-browser';
+import { getVerifiedSession, refreshVerifiedSession } from './supabase-browser';
 import { createJsonSseParser } from './sse-parser';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -39,24 +39,47 @@ function extractApiMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function isAuthSessionUnavailable(payload: unknown, status: number): boolean {
+  if (status !== 401 || typeof payload !== 'object' || !payload) return false;
+  const record = payload as { diagnostic_code?: unknown; suggested_action?: unknown };
+  return record.diagnostic_code === 'AUTH_SESSION_UNAVAILABLE' || record.suggested_action === 'sign_in_again';
+}
+
+function redirectToAuth() {
+  window.location.href = `/auth.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const verified = await getVerifiedSession();
+  let verified = await getVerifiedSession();
   if (!verified?.session?.access_token) {
-    window.location.href = `/auth.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+    verified = await refreshVerifiedSession();
+  }
+  if (!verified?.session?.access_token) {
+    redirectToAuth();
     throw new ApiError('Authentication required', 401, null);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const buildRequest = (accessToken: string) => ({
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${verified.session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       ...(options.headers || {}),
     },
   });
 
-  const payload = await response.json().catch(() => ({}));
+  let response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token));
+  let payload = await response.json().catch(() => ({}));
+  if (!response.ok && isAuthSessionUnavailable(payload, response.status)) {
+    verified = await refreshVerifiedSession();
+    if (verified?.session?.access_token) {
+      response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token));
+      payload = await response.json().catch(() => ({}));
+    }
+  }
+
   if (!response.ok) {
+    if (isAuthSessionUnavailable(payload, response.status)) redirectToAuth();
     const message = extractApiMessage(payload, `Request failed with ${response.status}`);
     throw new ApiError(message, response.status, payload);
   }
@@ -70,26 +93,44 @@ export async function apiStream(
   onEvent: (eventType: string, data: any) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const verified = await getVerifiedSession();
+  let verified = await getVerifiedSession();
   if (!verified?.session?.access_token) {
-    window.location.href = `/auth.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+    verified = await refreshVerifiedSession();
+  }
+  if (!verified?.session?.access_token) {
+    redirectToAuth();
     throw new ApiError('Authentication required', 401, null);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const buildRequest = (accessToken: string, requestSignal?: AbortSignal) => ({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${verified.session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(body || {}),
-    signal,
+    signal: requestSignal,
   });
 
+  let response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token, signal));
   if (!response.ok || !response.body) {
-    const payload = await response.json().catch(() => ({}));
-    const message = extractApiMessage(payload, `Stream failed with ${response.status}`);
-    throw new ApiError(message, response.status, payload);
+    let payload = await response.json().catch(() => ({}));
+    if (!signal?.aborted && isAuthSessionUnavailable(payload, response.status)) {
+      verified = await refreshVerifiedSession();
+      if (verified?.session?.access_token) {
+        response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token, signal));
+        if (response.ok && response.body) {
+          // Continue with the refreshed stream below.
+        } else {
+          payload = await response.json().catch(() => ({}));
+        }
+      }
+    }
+    if (!response.ok || !response.body) {
+      if (isAuthSessionUnavailable(payload, response.status)) redirectToAuth();
+      const message = extractApiMessage(payload, `Stream failed with ${response.status}`);
+      throw new ApiError(message, response.status, payload);
+    }
   }
 
   const reader = response.body.getReader();

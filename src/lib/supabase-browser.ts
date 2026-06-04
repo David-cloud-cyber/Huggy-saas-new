@@ -44,3 +44,13 @@ export async function getVerifiedSession() {
     return null;
   }
 }
+
+export async function refreshVerifiedSession() {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data?.session) return null;
+    return getVerifiedSession();
+  } catch {
+    return null;
+  }
+}

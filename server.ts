@@ -183,6 +183,7 @@ function getSupabaseAuthClient() {
   if (!supabaseAuth) {
     const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
     const key =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_PUBLISHABLE_KEY ||
       process.env.SUPABASE_ANON_KEY ||
       DEFAULT_SUPABASE_PUBLISHABLE_KEY;
@@ -207,7 +208,11 @@ async function requireAuth(req: any, res: any, next: any) {
   let authResult: any;
   try {
     authResult = await authClient.auth.getUser(token);
-  } catch {
+  } catch (error: any) {
+    console.warn('[huggy:auth_session_unavailable]', {
+      reason: 'supabase_get_user_threw',
+      message: error?.message || String(error),
+    });
     return res.status(401).json({
       success: false,
       error: 'Invalid or expired session',
@@ -220,6 +225,11 @@ async function requireAuth(req: any, res: any, next: any) {
   const user = data?.user;
 
   if (error || !user) {
+    console.warn('[huggy:auth_session_unavailable]', {
+      reason: error ? 'supabase_get_user_error' : 'missing_user',
+      message: error?.message || null,
+      status: error?.status || null,
+    });
     return res.status(401).json({
       success: false,
       error: 'Invalid or expired session',
@@ -233,17 +243,40 @@ async function requireAuth(req: any, res: any, next: any) {
 }
 
 function requireAuthenticatedUser(req: any, res: any, requestId?: string) {
+  try {
+    return getAuthenticatedUserOrThrow(req, requestId);
+  } catch (error: any) {
+    console.warn('[huggy:auth_session_missing_after_middleware]', {
+      request_id: requestId || null,
+      path: req.path,
+      has_authorization: Boolean(req.headers?.authorization),
+      message: error?.message || String(error),
+    });
+    res.status(401).json({
+      success: false,
+      error: error?.message || 'Your session could not be read. Please refresh the page and sign in again.',
+      message: error?.message || 'Your session could not be read. Please refresh the page and sign in again.',
+      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+      request_id: requestId,
+      suggested_action: 'sign_in_again',
+    });
+    return null;
+  }
+}
+
+function getAuthenticatedUserOrThrow(req: any, requestId?: string) {
   const user = req.user;
   if (user?.id) return user;
-  res.status(401).json({
-    success: false,
-    error: 'Your session could not be read. Please refresh the page and sign in again.',
-    message: 'Your session could not be read. Please refresh the page and sign in again.',
-    diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
-    request_id: requestId,
-    suggested_action: 'sign_in_again',
-  });
-  return null;
+  const error = new Error('Your session could not be read. Please refresh the page and sign in again.') as any;
+  error.statusCode = 401;
+  error.status = 401;
+  error.diagnosticCode = 'AUTH_SESSION_UNAVAILABLE';
+  error.diagnostic_code = 'AUTH_SESSION_UNAVAILABLE';
+  error.requestId = requestId;
+  error.request_id = requestId;
+  error.suggestedAction = 'sign_in_again';
+  error.suggested_action = 'sign_in_again';
+  throw error;
 }
 
 app.get('/api/auth/me', requireAuth, (req: any, res) => {
@@ -254,6 +287,16 @@ app.get('/api/auth/me', requireAuth, (req: any, res) => {
       email: req.user.email,
       role: req.user.role,
     },
+  });
+});
+
+app.get('/api/debug/auth-session', requireAuth, (req: any, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    success: true,
+    has_user: Boolean(req.user?.id),
+    user_id: req.user?.id || null,
+    email: req.user?.email || null,
   });
 });
 
@@ -341,7 +384,15 @@ function requireSupabase(feature: string) {
 
 function diagnoseProviderError(error: any) {
   const message = String(error?.message || error || 'Generation failed.');
-  if (/Cannot read properties of undefined \(reading ['"]user['"]\)|auth session|invalid or expired session|session could not be read/i.test(message)) {
+  if (/Cannot read properties of undefined \(reading ['"]user['"]\)/i.test(message)) {
+    return {
+      message: 'Huggy hit an internal auth state bug. Please sign in again; if it keeps happening, check the server logs for the request ID.',
+      diagnostic_code: 'AUTH_USER_UNDEFINED_BUG',
+      suggested_action: 'check_server_auth_flow',
+      status: 500,
+    };
+  }
+  if (/auth session|invalid or expired session|session could not be read|AUTH_SESSION_UNAVAILABLE/i.test(message)) {
     return {
       message: 'Your session could not be read. Please refresh the page and sign in again.',
       diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
@@ -364,6 +415,8 @@ function diagnoseProviderError(error: any) {
       MODEL_UNAVAILABLE: 'use_auto',
       MODEL_NOT_ALLOWED: 'use_auto',
       PROVIDER_CIRCUIT_OPEN: 'retry_or_use_auto',
+      AUTH_SESSION_UNAVAILABLE: 'sign_in_again',
+      AUTH_USER_UNDEFINED_BUG: 'check_server_auth_flow',
     };
     return {
       message: String(error.diagnosticCode) === 'MODEL_OUTPUT_PARSE_FAILED'
