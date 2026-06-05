@@ -72,8 +72,8 @@ assert(
 );
 
 assert(
-  authPageSource.includes('data-provider="google"') && authPageSource.includes('data-oauth-label'),
-  'auth page must include the rebuilt Google sign-in control',
+  authPageSource.includes('data-provider="google"') && authPageSource.includes('Continue with Google'),
+  'auth page must include the Google sign-in control',
 );
 
 console.log('auth-state guards passed');

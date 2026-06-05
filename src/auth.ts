@@ -49,11 +49,17 @@ function setOAuthBusy(activeButton: HTMLButtonElement | null, isBusy: boolean) {
     button.disabled = isBusy;
     button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     const label = button.querySelector('[data-oauth-label]');
-    if (!label) return;
-    if (isBusy && button === activeButton) {
-      label.textContent = 'Opening Google...';
-    } else {
-      label.textContent = 'Continue with Google';
+    if (label) {
+      label.textContent = isBusy && button === activeButton ? 'Opening Google...' : 'Continue with Google';
+      return;
+    }
+
+    if (!button.dataset.defaultLabel) {
+      button.dataset.defaultLabel = button.textContent?.trim() || 'Continue with Google';
+    }
+    const textNode = Array.from(button.childNodes).reverse().find(node => node.nodeType === Node.TEXT_NODE);
+    if (textNode) {
+      textNode.textContent = isBusy && button === activeButton ? ' Opening Google...' : ` ${button.dataset.defaultLabel}`;
     }
   });
 }
