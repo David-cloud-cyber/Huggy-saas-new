@@ -250,15 +250,58 @@ function getSupabaseAuthClient() {
   return supabaseAuth;
 }
 
+const AUTH_SESSION_UNAVAILABLE_MESSAGE = 'Your session could not be read. Please refresh the page and sign in again.';
+
+function createAuthSessionUnavailableError(requestId?: string, message = AUTH_SESSION_UNAVAILABLE_MESSAGE) {
+  const error = new Error(message) as any;
+  error.statusCode = 401;
+  error.status = 401;
+  error.diagnosticCode = 'AUTH_SESSION_UNAVAILABLE';
+  error.diagnostic_code = 'AUTH_SESSION_UNAVAILABLE';
+  error.requestId = requestId;
+  error.request_id = requestId;
+  error.suggestedAction = 'sign_in_again';
+  error.suggested_action = 'sign_in_again';
+  return error;
+}
+
+function authSessionUnavailablePayload(requestId?: string, message = AUTH_SESSION_UNAVAILABLE_MESSAGE) {
+  return {
+    success: false,
+    error: message,
+    message,
+    diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+    request_id: requestId,
+    suggested_action: 'sign_in_again',
+  };
+}
+
+function getRequiredAuth(req: any, requestId?: string) {
+  const user = req.auth?.user || req.user;
+  if (user?.id) {
+    return {
+      user,
+      userId: String(user.id),
+      email: String(user.email || ''),
+    };
+  }
+
+  console.warn('[huggy:server_auth_state_invariant]', {
+    request_id: requestId || null,
+    path: req.path,
+    has_authorization: Boolean(req.headers?.authorization),
+    invariant: 'SERVER_AUTH_STATE_INVARIANT',
+  });
+
+  throw createAuthSessionUnavailableError(requestId);
+}
+
 async function requireAuth(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
   if (!token) {
-    return res.status(401).json({
-      success: false,
-      error: 'Authentication required',
-    });
+    return res.status(401).json(authSessionUnavailablePayload(undefined, 'Authentication required'));
   }
 
   const authClient = getSupabaseAuthClient();
@@ -270,12 +313,7 @@ async function requireAuth(req: any, res: any, next: any) {
       reason: 'supabase_get_user_threw',
       message: error?.message || String(error),
     });
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid or expired session',
-      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
-      suggested_action: 'sign_in_again',
-    });
+    return res.status(401).json(authSessionUnavailablePayload(undefined, 'Invalid or expired session'));
   }
   const data = authResult?.data;
   const error = authResult?.error;
@@ -287,21 +325,21 @@ async function requireAuth(req: any, res: any, next: any) {
       message: error?.message || null,
       status: error?.status || null,
     });
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid or expired session',
-      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
-      suggested_action: 'sign_in_again',
-    });
+    return res.status(401).json(authSessionUnavailablePayload(undefined, 'Invalid or expired session'));
   }
 
   req.user = user;
+  req.auth = {
+    user,
+    userId: String(user.id),
+    email: String(user.email || ''),
+  };
   return next();
 }
 
 function requireAuthenticatedUser(req: any, res: any, requestId?: string) {
   try {
-    return getAuthenticatedUserOrThrow(req, requestId);
+    return getRequiredAuth(req, requestId).user;
   } catch (error: any) {
     console.warn('[huggy:auth_session_missing_after_middleware]', {
       request_id: requestId || null,
@@ -309,51 +347,35 @@ function requireAuthenticatedUser(req: any, res: any, requestId?: string) {
       has_authorization: Boolean(req.headers?.authorization),
       message: error?.message || String(error),
     });
-    res.status(401).json({
-      success: false,
-      error: error?.message || 'Your session could not be read. Please refresh the page and sign in again.',
-      message: error?.message || 'Your session could not be read. Please refresh the page and sign in again.',
-      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
-      request_id: requestId,
-      suggested_action: 'sign_in_again',
-    });
+    res.status(401).json(authSessionUnavailablePayload(requestId, error?.message || AUTH_SESSION_UNAVAILABLE_MESSAGE));
     return null;
   }
 }
 
 function getAuthenticatedUserOrThrow(req: any, requestId?: string) {
-  const user = req.user;
-  if (user?.id) return user;
-  const error = new Error('Your session could not be read. Please refresh the page and sign in again.') as any;
-  error.statusCode = 401;
-  error.status = 401;
-  error.diagnosticCode = 'AUTH_SESSION_UNAVAILABLE';
-  error.diagnostic_code = 'AUTH_SESSION_UNAVAILABLE';
-  error.requestId = requestId;
-  error.request_id = requestId;
-  error.suggestedAction = 'sign_in_again';
-  error.suggested_action = 'sign_in_again';
-  throw error;
+  return getRequiredAuth(req, requestId).user;
 }
 
 app.get('/api/auth/me', requireAuth, (req: any, res) => {
+  const auth = getRequiredAuth(req);
   res.json({
     success: true,
     user: {
-      id: req.user.id,
-      email: req.user.email,
-      role: req.user.role,
+      id: auth.userId,
+      email: auth.email,
+      role: auth.user.role,
     },
   });
 });
 
 app.get('/api/debug/auth-session', requireAuth, (req: any, res) => {
+  const auth = getRequiredAuth(req);
   res.setHeader('Cache-Control', 'no-store');
   res.json({
     success: true,
-    has_user: Boolean(req.user?.id),
-    user_id: req.user?.id || null,
-    email: req.user?.email || null,
+    has_user: true,
+    user_id: auth.userId,
+    email: auth.email || null,
   });
 });
 
@@ -446,11 +468,15 @@ function requireSupabase(feature: string) {
 function diagnoseProviderError(error: any) {
   const message = String(error?.message || error || 'Generation failed.');
   if (/Cannot read properties of undefined \(reading ['"]user['"]\)/i.test(message)) {
+    console.error('[huggy:server_auth_state_invariant]', {
+      invariant: 'SERVER_AUTH_STATE_INVARIANT',
+      message,
+    });
     return {
-      message: 'Huggy hit an internal auth state bug. Please sign in again; if it keeps happening, check the server logs for the request ID.',
-      diagnostic_code: 'AUTH_USER_UNDEFINED_BUG',
-      suggested_action: 'check_server_auth_flow',
-      status: 500,
+      message: AUTH_SESSION_UNAVAILABLE_MESSAGE,
+      diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+      suggested_action: 'sign_in_again',
+      status: 401,
     };
   }
   if (/auth session|invalid or expired session|session could not be read|AUTH_SESSION_UNAVAILABLE/i.test(message)) {
@@ -462,6 +488,18 @@ function diagnoseProviderError(error: any) {
     };
   }
   if (error?.diagnosticCode) {
+    if (String(error.diagnosticCode) === 'AUTH_USER_UNDEFINED_BUG') {
+      console.error('[huggy:server_auth_state_invariant]', {
+        invariant: 'SERVER_AUTH_STATE_INVARIANT',
+        message,
+      });
+      return {
+        message: AUTH_SESSION_UNAVAILABLE_MESSAGE,
+        diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
+        suggested_action: 'sign_in_again',
+        status: 401,
+      };
+    }
     const suggestedByCode: Record<string, string> = {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
@@ -477,7 +515,6 @@ function diagnoseProviderError(error: any) {
       MODEL_NOT_ALLOWED: 'use_auto',
       PROVIDER_CIRCUIT_OPEN: 'retry_or_use_auto',
       AUTH_SESSION_UNAVAILABLE: 'sign_in_again',
-      AUTH_USER_UNDEFINED_BUG: 'check_server_auth_flow',
     };
     return {
       message: String(error.diagnosticCode) === 'MODEL_OUTPUT_PARSE_FAILED'
@@ -931,7 +968,7 @@ type ExternalApiRequirement = {
 };
 
 function getUserOrgId(req: any): string {
-  return req.user?.id || DEFAULT_ORG_ID;
+  return getRequiredAuth(req).userId;
 }
 
 function getOrganizationFallbackValue(column: string, req: any, organizationId: string, now: string) {
@@ -5565,7 +5602,7 @@ app.get('/api/admin/agent-observability', async (req: any, res) => {
 // PATCH /users/me/ai-preferences
 app.patch('/api/users/me/ai-preferences', async (req: any, res) => {
   const { default_routing_mode, max_credits_per_action, ask_confirm_before_premium, auto_revert_to_auto } = req.body;
-  const uid = req.user?.id || DEFAULT_ORG_ID;
+  const uid = getRequiredAuth(req).userId;
 
   const updated = {
     user_id: uid,

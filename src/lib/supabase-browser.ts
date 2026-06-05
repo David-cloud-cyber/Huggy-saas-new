@@ -19,28 +19,57 @@ export function getRedirectTarget(): string {
   return '/dashboard.html';
 }
 
+type BrowserSession = Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'];
+
+function isConfirmedInvalidSessionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as { status?: unknown; message?: unknown; code?: unknown; name?: unknown };
+  const status = Number(record.status || 0);
+  const text = `${record.name || ''} ${record.code || ''} ${record.message || ''}`.toLowerCase();
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 403 ||
+    /invalid.*jwt|jwt.*expired|session.*not.*found|refresh.*token.*not.*found|invalid.*refresh|token.*expired|not authenticated/.test(text)
+  );
+}
+
+async function verifySessionUser(session: BrowserSession) {
+  if (!session?.access_token) return { verified: null, error: null };
+  try {
+    const { data: userData, error } = await supabase.auth.getUser(session.access_token);
+    const user = userData?.user;
+    if (error || !user) return { verified: null, error: error || new Error('Supabase user missing from session') };
+    return {
+      verified: {
+        session,
+        user,
+      },
+      error: null,
+    };
+  } catch (error) {
+    return { verified: null, error };
+  }
+}
+
 export async function getVerifiedSession() {
   try {
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     const session = sessionData?.session;
     if (sessionError || !session) return null;
 
-    const { data: userData, error: userError } = await supabase.auth.getUser(
-      session.access_token,
-    );
-    const user = userData?.user;
+    const first = await verifySessionUser(session);
+    if (first.verified) return first.verified;
 
-    if (userError || !user) {
+    const refreshed = await refreshVerifiedSession();
+    if (refreshed) return refreshed;
+
+    if (isConfirmedInvalidSessionError(first.error)) {
       await supabase.auth.signOut();
-      return null;
     }
 
-    return {
-      session,
-      user,
-    };
+    return null;
   } catch {
-    await supabase.auth.signOut();
     return null;
   }
 }
@@ -48,9 +77,18 @@ export async function getVerifiedSession() {
 export async function refreshVerifiedSession() {
   try {
     const { data, error } = await supabase.auth.refreshSession();
-    if (error || !data?.session) return null;
-    return getVerifiedSession();
-  } catch {
+    if (error || !data?.session) {
+      if (isConfirmedInvalidSessionError(error)) await supabase.auth.signOut();
+      return null;
+    }
+
+    const verified = await verifySessionUser(data.session);
+    if (verified.verified) return verified.verified;
+
+    if (isConfirmedInvalidSessionError(verified.error)) await supabase.auth.signOut();
+    return null;
+  } catch (error) {
+    if (isConfirmedInvalidSessionError(error)) await supabase.auth.signOut();
     return null;
   }
 }
