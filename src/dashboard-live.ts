@@ -4,20 +4,7 @@ import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
-
-type ProjectResponse = {
-  success: boolean;
-  project: {
-    id: string;
-    name: string;
-    slug: string;
-    template?: string;
-    theme?: string;
-    model_id?: string;
-    prompt?: string;
-    created_at?: string;
-  };
-};
+import { startCreateProjectFlow } from './services/create-project-flow';
 
 type ProjectListResponse = {
   success: boolean;
@@ -186,6 +173,15 @@ function installContinueLastProject(state: UserWorkspaceState | null) {
     window.location.href = `/builder.html?project=${encodeURIComponent(state.last_project_id || '')}`;
   });
   subtitle.insertAdjacentElement('afterend', button);
+}
+
+function projectNameFromPrompt(prompt: string) {
+  const words = prompt
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 5);
+  return words.join(' ') || 'New Huggy app';
 }
 
 async function hydrateWorkspaceState() {
@@ -539,20 +535,110 @@ function bindLiveProjectCreation() {
     showProjectError('');
 
     try {
-      const response = await apiFetch<ProjectResponse>('/api/projects', {
-        method: 'POST',
-        body: JSON.stringify({ name, template, theme, model, prompt, features }),
+      await startCreateProjectFlow({
+        prompt,
+        mode: selectedDashboardMode(),
+        source: 'modal',
+        projectName: name,
+        template,
+        theme,
+        model,
+        features,
+      }, {
+        createProject: true,
+        onStatus: status => {
+          button.textContent = status;
+        },
       });
-
-      sessionStorage.removeItem('huggy-initial-prompt');
-      sessionStorage.removeItem('huggy-requested-mode');
-      localStorage.removeItem('huggy-initial-prompt');
-      window.location.href = `/builder.html?project=${encodeURIComponent(response.project.id)}`;
     } catch (error) {
       showProjectError(error instanceof Error ? error.message : 'Unable to create the project.');
     } finally {
       setCreateBusy(button, false);
     }
+  });
+}
+
+function bindDashboardPromptCreation() {
+  const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+  const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
+  if (!textarea || !submit || submit.dataset.huggyCreateFlowBound === 'true') return;
+  submit.dataset.huggyCreateFlowBound = 'true';
+  submit.addEventListener('click', event => {
+    const prompt = textarea.value.trim();
+    if (!prompt) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    submit.classList.add('is-loading');
+    const original = submit.innerHTML;
+    void startCreateProjectFlow({
+      prompt,
+      mode: selectedDashboardMode(),
+      source: 'dashboard',
+      projectName: projectNameFromPrompt(prompt),
+      model: 'auto',
+      template: 'custom',
+      theme: 'light',
+    }, {
+      createProject: true,
+      onStatus: status => {
+        submit.textContent = status;
+      },
+    }).catch(error => {
+      submit.classList.remove('is-loading');
+      submit.innerHTML = original;
+      const grid = document.querySelector('.projects-grid') as HTMLElement | null;
+      if (grid) {
+        grid.insertAdjacentHTML('afterbegin', `
+          <div class="empty-state" style="padding:14px;margin-bottom:10px;">
+            <h3 class="empty-title">Workspace could not start</h3>
+            <p class="empty-desc">${escapeHtml(error instanceof Error ? error.message : 'Unable to create the project.')}</p>
+          </div>
+        `);
+      }
+    });
+  }, true);
+}
+
+type DashboardMobileTarget = 'create' | 'projects' | 'usage' | 'account';
+
+function setDashboardMobileTarget(target: DashboardMobileTarget) {
+  document.querySelectorAll<HTMLButtonElement>('[data-mobile-dashboard-target]').forEach(button => {
+    const active = button.dataset.mobileDashboardTarget === target;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function scrollDashboardTo(selector: string) {
+  const element = document.querySelector(selector) as HTMLElement | null;
+  if (!element) return;
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  element.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+}
+
+function bindDashboardMobileNav() {
+  document.querySelectorAll<HTMLButtonElement>('[data-mobile-dashboard-target]').forEach(button => {
+    if (button.dataset.huggyMobileNavBound === 'true') return;
+    button.dataset.huggyMobileNavBound = 'true';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      const target = (button.dataset.mobileDashboardTarget || 'create') as DashboardMobileTarget;
+      setDashboardMobileTarget(target);
+      if (target === 'projects') {
+        scrollDashboardTo('.projects-grid');
+        return;
+      }
+      if (target === 'usage') {
+        openSettings('ai-usage');
+        return;
+      }
+      if (target === 'account') {
+        openSettings('profile');
+        return;
+      }
+      scrollDashboardTo('.create-section');
+    });
   });
 }
 
@@ -562,6 +648,8 @@ function initDashboardLive() {
   initDashboardChrome();
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
+  bindDashboardPromptCreation();
+  bindDashboardMobileNav();
   bindDashboardWorkspacePersistence();
   void hydrateWorkspaceState();
   void loadLiveProjects();

@@ -1445,6 +1445,10 @@
 
     .hidden { display: none !important; }
 
+    .mobile-dashboard-nav {
+      display: none;
+    }
+
     /* RESPONSIVE */
     @media (max-width: 1024px) {
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1452,6 +1456,52 @@
     @media (max-width: 900px) {
       .sidebar { display: none; }
       .main-area { width: 100vw; }
+      .content-area { padding-bottom: 96px; }
+      .mobile-dashboard-nav {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        z-index: 220;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+        box-shadow: 0 14px 34px rgba(24, 22, 17, 0.14);
+        backdrop-filter: blur(18px);
+      }
+      .mobile-dashboard-nav button {
+        min-width: 0;
+        height: 42px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: var(--text-muted);
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        transition: transform var(--motion-fast, 120ms) var(--motion-ease, ease), background var(--motion-fast, 120ms) var(--motion-ease, ease), color var(--motion-fast, 120ms) var(--motion-ease, ease);
+      }
+      .mobile-dashboard-nav button svg {
+        width: 15px;
+        height: 15px;
+      }
+      .mobile-dashboard-nav button.active {
+        background: var(--text);
+        color: var(--bg);
+      }
+      .mobile-dashboard-nav button:active {
+        transform: scale(0.98);
+      }
     }
     @media (max-width: 640px) {
       .kpi-grid { grid-template-columns: 1fr; }
@@ -1973,6 +2023,33 @@
 
       </div>
     </div>
+
+    <nav class="mobile-dashboard-nav" aria-label="Dashboard navigation">
+      <button type="button" class="active" data-mobile-dashboard-target="create" aria-pressed="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v14"></path><path d="M5 12h14"></path>
+        </svg>
+        <span>Create</span>
+      </button>
+      <button type="button" data-mobile-dashboard-target="projects" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M3 10h18"></path><path d="M9 20V10"></path>
+        </svg>
+        <span>Projects</span>
+      </button>
+      <button type="button" data-mobile-dashboard-target="usage" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19V5"></path><path d="M9 19v-8"></path><path d="M14 19v-5"></path><path d="M19 19V8"></path>
+        </svg>
+        <span>Usage</span>
+      </button>
+      <button type="button" data-mobile-dashboard-target="account" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path>
+        </svg>
+        <span>Account</span>
+      </button>
+    </nav>
 
   </div>
 

@@ -4,6 +4,7 @@ import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions, storePendingPromptAttachments, type PendingPromptAttachment } from './prompt-input-actions';
+import { startCreateProjectFlow } from './services/create-project-flow';
 import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
 
 // Helper to handle potential null elements gracefully
@@ -152,33 +153,36 @@ function init() {
             }
         });
 
-        function handleSubmit() {
+        async function handleSubmit() {
             if (!textarea || !submitBtn) return;
             const val = textarea.value.trim();
             if (!val) return;
 
-            // Save for builder synchronization
-            sessionStorage.setItem('huggy-initial-prompt', val);
-            sessionStorage.setItem('huggy-requested-mode', selectedPromptMode);
-
             submitBtn.disabled = true;
             const btnSpan = submitBtn.querySelector('span');
-            if (btnSpan) btnSpan.textContent = 'Designing...';
+            if (btnSpan) btnSpan.textContent = 'Preparing workspace...';
             textarea.disabled = true;
             textarea.style.opacity = '0.5';
 
-            setTimeout(() => {
-                if (btnSpan) btnSpan.textContent = 'Redirecting...';
-                if (curtain) {
-                    curtain.style.transformOrigin = 'top';
-                    curtain.classList.add('falling');
-                    setTimeout(() => {
-                        window.location.href = '/builder.html?new=1';
-                    }, 600);
-                } else {
-                    window.location.href = '/builder.html?new=1';
-                }
-            }, 1200);
+            try {
+                await startCreateProjectFlow({
+                    prompt: val,
+                    mode: selectedPromptMode,
+                    source: 'landing',
+                    projectName: val,
+                }, {
+                    createProject: true,
+                    onStatus: status => {
+                        if (btnSpan) btnSpan.textContent = status;
+                    },
+                });
+            } catch (error) {
+                submitBtn.disabled = false;
+                textarea.disabled = false;
+                textarea.style.opacity = '1';
+                if (btnSpan) btnSpan.textContent = 'Start building';
+                showToast(error instanceof Error ? error.message : 'Unable to prepare your workspace.');
+            }
         }
 
         submitBtn?.addEventListener('click', handleSubmit);
@@ -551,19 +555,18 @@ function init() {
             if (input.file) {
                 await storePendingPromptAttachments([await readImportFile(input.file)]);
             }
-            sessionStorage.setItem('huggy-initial-prompt', shortPromptBySource[source]);
-            sessionStorage.setItem('huggy-requested-mode', context.mode === 'research_site' ? 'auto' : 'build');
-            sessionStorage.setItem('huggy-import-context', JSON.stringify(context));
             closeModal();
-            if (curtain) {
-                curtain.style.transformOrigin = 'top';
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = `/builder.html?new=1&import=${encodeURIComponent(source)}`;
-                }, 420);
-            } else {
-                window.location.href = `/builder.html?new=1&import=${encodeURIComponent(source)}`;
-            }
+            showToast('Preparing your workspace...');
+            await startCreateProjectFlow({
+                prompt: shortPromptBySource[source],
+                mode: context.mode === 'research_site' ? 'auto' : 'build',
+                importContext: context,
+                source: 'import',
+                projectName: `${source} import`,
+            }, {
+                createProject: true,
+                onStatus: showToast,
+            });
         };
         void go().catch(error => showToast(error instanceof Error ? error.message : 'Unable to start import.'));
     }

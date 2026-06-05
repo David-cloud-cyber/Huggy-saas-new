@@ -14,6 +14,7 @@ import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationA
 import { isSeniorStreamEvent } from './streaming/agent-stream-event-map';
 import { createInitialAgentStreamState, reduceAgentStreamEvent, type AgentStreamUiState } from './streaming/agent-stream-reducer';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
+import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
 import {
   DESIGN_WORKSHOP_OPTIONS,
   designWorkshopOptionLabel,
@@ -249,7 +250,8 @@ let mediaSettings: MediaSettings = {
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
 let currentProjectName = 'Untitled app';
-let initialBuilderHandoff: { prompt: string; mode: ChatMode; importContext?: Record<string, unknown> } | null = null;
+let initialBuilderHandoff: { prompt: string; mode: ChatMode; importContext?: Record<string, unknown>; source?: string; shouldAutoRun?: boolean } | null = null;
+let initialGenerationStarted = false;
 let analysisPollTimer: number | null = null;
 let analysisRange = '30d';
 let projectWorkspaceState: WorkspaceState | null = null;
@@ -811,6 +813,7 @@ function setActiveWorkshop(workshop: StudioWorkshop, options: { focusInput?: boo
   localStorage.setItem(ACTIVE_WORKSHOP_STORAGE_KEY, activeWorkshop);
   refreshWorkshopInputContext();
   syncWorkshopPreview();
+  syncProjectReadinessClass();
   if (options.focusInput) {
     document.getElementById('chat-textarea-box')?.focus();
   }
@@ -1141,11 +1144,12 @@ function setCurrentBuilderProjectId(projectId: string, updateUrl = true) {
 
 function getInitialBuilderHandoff() {
   if (initialBuilderHandoff) return initialBuilderHandoff;
-  const sessionPrompt = sessionStorage.getItem('huggy-initial-prompt')?.trim() || '';
+  const pendingFlow = readCreateProjectFlow();
+  const sessionPrompt = pendingFlow?.prompt?.trim() || sessionStorage.getItem('huggy-initial-prompt')?.trim() || '';
   const legacyPrompt = localStorage.getItem('huggy-initial-prompt')?.trim() || '';
-  const rawMode = sessionStorage.getItem('huggy-requested-mode');
+  const rawMode = pendingFlow?.mode || sessionStorage.getItem('huggy-requested-mode');
   const rawImportContext = sessionStorage.getItem('huggy-import-context') || localStorage.getItem('huggy-import-context') || '';
-  let importContext: Record<string, unknown> | undefined;
+  let importContext: Record<string, unknown> | undefined = pendingFlow?.importContext;
   if (rawImportContext) {
     try {
       const parsed = JSON.parse(rawImportContext);
@@ -1158,7 +1162,10 @@ function getInitialBuilderHandoff() {
     prompt: sessionPrompt || legacyPrompt,
     mode: rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto',
     importContext,
+    source: pendingFlow?.source,
+    shouldAutoRun: Boolean(pendingFlow?.prompt) || new URLSearchParams(window.location.search).get('run') === 'initial',
   };
+  clearCreateProjectFlow();
   sessionStorage.removeItem('huggy-initial-prompt');
   sessionStorage.removeItem('huggy-requested-mode');
   sessionStorage.removeItem('huggy-import-context');
@@ -2012,6 +2019,7 @@ function setPreview(html: string, status = 'ready') {
   currentPreviewHtml = html;
   emptyPreviewMode = 'ready';
   emptyPreviewLabel = '';
+  syncProjectReadinessClass();
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (frame) {
     frame.dataset.emptyPreview = 'false';
@@ -2036,6 +2044,7 @@ function setPreview(html: string, status = 'ready') {
 
 function renderFiles(files: GeneratedFile[]) {
   currentFiles = files;
+  syncProjectReadinessClass();
   const tree = document.querySelector('.explorer-tree-scroll');
   if (tree) {
     tree.innerHTML = '';
@@ -2066,6 +2075,12 @@ function renderFiles(files: GeneratedFile[]) {
   if (code) {
     code.innerHTML = '<div class="code-empty-state"><h3>No source file loaded</h3><p>Generated files will be loaded from the project once Huggy receives them from the backend.</p></div>';
   }
+}
+
+function syncProjectReadinessClass() {
+  const hasFiles = currentFiles.length > 0;
+  const hasPreview = Boolean(currentPreviewHtml.trim());
+  document.body.classList.toggle('huggy-new-project-mode', !hasFiles && !hasPreview && activeWorkshop === 'chat');
 }
 
 function selectFile(filePath: string) {
@@ -3384,38 +3399,7 @@ function activateDatabaseView() {
   void loadDatabase();
 }
 
-async function ensureProject() {
-  const routeProjectId = getProjectIdFromUrl();
-  currentProjectId = isRealProjectId(routeProjectId) ? routeProjectId : '';
-
-  if (currentProjectId) {
-    rememberLastBuilderProjectId(currentProjectId);
-    return apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
-  }
-
-  const userState = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state').catch(() => null);
-  userWorkspaceState = userState?.state || null;
-  const stateProjectId = isRealProjectId(userWorkspaceState?.last_project_id) ? String(userWorkspaceState?.last_project_id) : '';
-  const fallbackProjectId = stateProjectId || rememberedLastBuilderProjectId();
-
-  if (fallbackProjectId) {
-    setCurrentBuilderProjectId(fallbackProjectId);
-    try {
-      return await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
-    } catch (error) {
-      forgetLastBuilderProjectId(fallbackProjectId);
-      currentProjectId = '';
-      window.history.replaceState({}, '', '/builder.html');
-      if (userWorkspaceState?.last_project_id === fallbackProjectId) {
-        await apiFetch('/api/users/me/workspace-state', {
-          method: 'PATCH',
-          body: JSON.stringify({ last_project_id: null, last_route: '/builder.html' }),
-        }).catch(() => null);
-      }
-      console.warn('[huggy] Unable to restore last builder project.', error);
-    }
-  }
-
+function emptyBuilderProjectPayload(): ProjectPayload {
   return {
     success: true,
     project: {
@@ -3438,6 +3422,47 @@ async function ensureProject() {
       preview_device: userWorkspaceState.builder_preview_device || 'desktop',
     } : null,
   } as ProjectPayload;
+}
+
+async function ensureProject() {
+  const params = new URLSearchParams(window.location.search);
+  const wantsFreshProject = params.get('new') === '1';
+  const routeProjectId = getProjectIdFromUrl();
+  currentProjectId = isRealProjectId(routeProjectId) ? routeProjectId : '';
+
+  if (currentProjectId) {
+    rememberLastBuilderProjectId(currentProjectId);
+    return apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
+  }
+
+  const userState = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state').catch(() => null);
+  userWorkspaceState = userState?.state || null;
+  if (wantsFreshProject) {
+    currentProjectId = '';
+    return emptyBuilderProjectPayload();
+  }
+  const stateProjectId = isRealProjectId(userWorkspaceState?.last_project_id) ? String(userWorkspaceState?.last_project_id) : '';
+  const fallbackProjectId = stateProjectId || rememberedLastBuilderProjectId();
+
+  if (fallbackProjectId) {
+    setCurrentBuilderProjectId(fallbackProjectId);
+    try {
+      return await apiFetch<ProjectPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}`);
+    } catch (error) {
+      forgetLastBuilderProjectId(fallbackProjectId);
+      currentProjectId = '';
+      window.history.replaceState({}, '', '/builder.html');
+      if (userWorkspaceState?.last_project_id === fallbackProjectId) {
+        await apiFetch('/api/users/me/workspace-state', {
+          method: 'PATCH',
+          body: JSON.stringify({ last_project_id: null, last_route: '/builder.html' }),
+        }).catch(() => null);
+      }
+      console.warn('[huggy] Unable to restore last builder project.', error);
+    }
+  }
+
+  return emptyBuilderProjectPayload();
 }
 
 function projectNameFromPrompt(prompt: string) {
@@ -3583,6 +3608,7 @@ async function loadProject() {
     } else {
       setEmptyPreviewState('idle');
     }
+    syncProjectReadinessClass();
     restoreMessages(payload);
     const activeTab = payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab;
     if (activeTab === 'code' || activeTab === 'database' || activeTab === 'analysis') {
@@ -4916,6 +4942,28 @@ function hydrateDashboardPrompt() {
   if (submit) syncSubmitButtonState();
 }
 
+function maybeStartInitialGeneration() {
+  if (initialGenerationStarted || isGenerating) return;
+  const handoff = getInitialBuilderHandoff();
+  if (!handoff.shouldAutoRun) return;
+  const prompt = handoff.prompt.trim();
+  if (!prompt) return;
+  initialGenerationStarted = true;
+
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  if (input && input.value.trim() === prompt) {
+    input.value = '';
+    input.style.height = '48px';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  scheduleWorkspaceSave({ draft_prompt: '', selected_mode: handoff.mode }, true);
+  void generateFromPrompt(prompt, handoff.mode, false, {
+    importContext: handoff.importContext,
+    createFlowSource: handoff.source || new URLSearchParams(window.location.search).get('source') || 'builder',
+    initialRun: true,
+  });
+}
+
 function ensureResizableSidebar() {
   const body = document.querySelector('.workspace-body') as HTMLElement | null;
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
@@ -4965,6 +5013,54 @@ function ensureResizableSidebar() {
   });
 }
 
+type MobileBuilderView = 'chat' | 'preview' | 'code' | 'design' | 'more';
+
+function setMobileBuilderView(view: MobileBuilderView) {
+  const body = document.querySelector('.workspace-body') as HTMLElement | null;
+  if (!body) return;
+  body.dataset.mobileView = view;
+  document.querySelectorAll<HTMLButtonElement>('[data-mobile-builder-view]').forEach(button => {
+    const active = button.dataset.mobileBuilderView === view;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  if (view === 'preview') {
+    closeProjectMenu();
+    activateBuilderView('preview');
+    return;
+  }
+  if (view === 'code') {
+    closeProjectMenu();
+    activateBuilderView('code');
+    return;
+  }
+  if (view === 'design') {
+    closeProjectMenu();
+    setActiveWorkshop('design', { focusInput: true });
+    return;
+  }
+  if (view === 'more') {
+    openProjectMenu();
+    return;
+  }
+  closeProjectMenu();
+  setActiveWorkshop('chat', { focusInput: true });
+}
+
+function bindMobileBuilderShell() {
+  const body = document.querySelector('.workspace-body') as HTMLElement | null;
+  if (body && !body.dataset.mobileView) body.dataset.mobileView = 'chat';
+  document.querySelectorAll<HTMLButtonElement>('[data-mobile-builder-view]').forEach(button => {
+    if (button.dataset.huggyMobileBuilderBound === 'true') return;
+    button.dataset.huggyMobileBuilderBound = 'true';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      setMobileBuilderView((button.dataset.mobileBuilderView || 'chat') as MobileBuilderView);
+    });
+  });
+}
+
 function init() {
   initHuggyMotion();
   ensureSettingsPanel();
@@ -4978,6 +5074,7 @@ function init() {
   ensureResizableSidebar();
   bindProjectMenu();
   bindPreviewDeviceToggle();
+  bindMobileBuilderShell();
   initStudioWorkshops();
   initPromptInputActions({
     persistForBuilder: false,
@@ -4987,7 +5084,7 @@ function init() {
   normalizeAiChatInputs();
   bindChat();
   hydrateDashboardPrompt();
-  void loadProject();
+  void loadProject().then(() => maybeStartInitialGeneration());
 }
 
 window.addEventListener('huggy:auth-ready', init);
