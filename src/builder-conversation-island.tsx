@@ -32,6 +32,10 @@ import {
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "./components/ai-elements/task";
+import { AgentActivityCard } from "./components/streaming/AgentActivityCard";
+import type { AgentStreamUiState } from "./streaming/agent-stream-reducer";
+import "./styles/agent-motion.css";
+import "./styles/agent-streaming.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
 
@@ -62,6 +66,10 @@ export type HuggyAgentTrace = {
 };
 
 export type HuggyConversationBlock =
+  | {
+      type: "agent_activity";
+      state: AgentStreamUiState;
+    }
   | {
       type: "reasoning";
       title?: string;
@@ -1256,6 +1264,10 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
+  if (block.type === "agent_activity") {
+    return <AgentActivityCard state={block.state} />;
+  }
+
   if (block.type === "reasoning") {
     return (
       <Reasoning isStreaming={Boolean(block.isStreaming)}>
@@ -1419,6 +1431,80 @@ function renderAgentTrace(message: HuggyConversationMessage) {
       </div>
     </div>
   );
+}
+
+const BuilderConversationMessageItem = React.memo(function BuilderConversationMessageItem({
+  message,
+  feedback,
+  onPositive,
+  onNegative,
+  onExpand,
+}: {
+  message: HuggyConversationMessage;
+  feedback?: MessageFeedbackValue;
+  onPositive: (message: HuggyConversationMessage) => void;
+  onNegative: (message: HuggyConversationMessage) => void;
+  onExpand: (message: HuggyConversationMessage) => void;
+}) {
+  const block = renderMessageBlock(message);
+  const trace = message.block?.type === "agent_activity" ? null : renderAgentTrace(message);
+  const contentIsTraceLike = Boolean(trace || message.block?.type === "agent_activity");
+
+  return (
+    <Message from={message.role}>
+      <div className="huggy-message-stack">
+        <MessageContent className={contentIsTraceLike ? "huggy-message-content-trace" : undefined}>
+          {trace || block ? (
+            <>
+              {trace}
+              {block}
+            </>
+          ) : (
+            message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
+          )}
+          {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
+            <div className="huggy-message-actions">
+              {message.actions.map(action => (
+                <button key={action.id} type="button" onClick={action.onClick}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </MessageContent>
+        <MessageUtilityBar
+          message={message}
+          feedback={feedback}
+          onPositive={onPositive}
+          onNegative={onNegative}
+          onExpand={onExpand}
+        />
+      </div>
+    </Message>
+  );
+});
+
+function compactMessagesForRender(messages: HuggyConversationMessage[]) {
+  const visible = messages.length > 140 ? messages.slice(-140) : messages;
+  let completedActivitySeen = 0;
+  return [...visible].reverse().map(message => {
+    if (message.block?.type !== "agent_activity") return message;
+    if (message.block.state.status !== "done") return message;
+    completedActivitySeen += 1;
+    if (completedActivitySeen <= 2) return message;
+    return {
+      ...message,
+      block: {
+        type: "agent_activity" as const,
+        state: {
+          ...message.block.state,
+          phases: message.block.state.phases.slice(-3),
+          files: message.block.state.files.slice(-3),
+          details: [],
+        },
+      },
+    };
+  }).reverse();
 }
 
 type MessageFeedbackValue = "positive" | "negative";
@@ -1673,6 +1759,8 @@ function BuilderConversation({
       comment,
     });
   }, []);
+  const handlePositive = React.useCallback((target: HuggyConversationMessage) => sendFeedback(target, "positive"), [sendFeedback]);
+  const handleNegative = React.useCallback((target: HuggyConversationMessage) => setFeedbackModal({ message: target, rating: "negative" }), []);
 
   return (
     <Conversation className="relative size-full">
@@ -1684,42 +1772,16 @@ function BuilderConversation({
             title="Start a conversation"
           />
         ) : (
-          messages.map(message => {
-            const trace = renderAgentTrace(message);
-            const block = renderMessageBlock(message);
-            return (
-              <Message from={message.role} key={message.id}>
-                <div className="huggy-message-stack">
-                  <MessageContent className={trace ? "huggy-message-content-trace" : undefined}>
-                    {trace || block ? (
-                      <>
-                        {trace}
-                        {block}
-                      </>
-                    ) : (
-                      message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
-                    )}
-                  {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
-                    <div className="huggy-message-actions">
-                      {message.actions.map(action => (
-                        <button key={action.id} type="button" onClick={action.onClick}>
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  </MessageContent>
-                  <MessageUtilityBar
-                    message={message}
-                    feedback={feedbackByMessage[message.id]}
-                    onPositive={(target) => sendFeedback(target, "positive")}
-                    onNegative={(target) => setFeedbackModal({ message: target, rating: "negative" })}
-                    onExpand={setExpandedMessage}
-                  />
-                </div>
-              </Message>
-            );
-          })
+          messages.map(message => (
+            <BuilderConversationMessageItem
+              feedback={feedbackByMessage[message.id]}
+              key={message.id}
+              message={message}
+              onExpand={setExpandedMessage}
+              onNegative={handleNegative}
+              onPositive={handlePositive}
+            />
+          ))
         )}
       </ConversationContent>
       <FeedbackModal
@@ -1742,10 +1804,13 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
 
   const root: Root = createRoot(host);
   let messages: HuggyConversationMessage[] = [];
+  let renderFrame = 0;
 
   const render = () => {
-    root.render(<BuilderConversation messages={[...messages]} />);
-    requestAnimationFrame(() => {
+    if (renderFrame) return;
+    renderFrame = requestAnimationFrame(() => {
+      renderFrame = 0;
+      root.render(<BuilderConversation messages={compactMessagesForRender(messages)} />);
       host.scrollTop = host.scrollHeight;
     });
   };

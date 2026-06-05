@@ -78,6 +78,21 @@ class FakeOpenRouter {
 
 {
   const fake = new FakeOpenRouter();
+  fake.failures.push(...Array.from({ length: 20 }, () => new Error('AbortError: aborted')));
+  const gateway = new ProviderGateway(fake as any, { failureThreshold: 50 });
+  await assert.rejects(() => gateway.chat('google/gemini-3-pro-preview', messages, { maxAttempts: 1 }), (error: any) => {
+    assert.ok(error instanceof ProviderGatewayError);
+    assert.equal(error.diagnosticCode, 'PROVIDER_TIMEOUT');
+    assert.equal(error.retryable, true);
+    assert.match(error.message, /tried allowed fallbacks/i);
+    return true;
+  });
+  assert.ok(fake.calls.length > 1);
+  assert.equal(fake.calls.includes('auto'), false);
+}
+
+{
+  const fake = new FakeOpenRouter();
   fake.failures.push(...Array.from({ length: 12 }, () => new Error('OpenRouter HTTP 500: upstream unavailable')));
   const gateway = new ProviderGateway(fake as any, { failureThreshold: 2, breakerMs: 60_000 });
   await assert.rejects(() => gateway.chat('google/gemini-3.5-flash', messages, { maxAttempts: 1 }));

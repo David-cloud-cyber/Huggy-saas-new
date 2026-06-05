@@ -225,9 +225,12 @@ export class ProviderGateway {
       });
     }
     if (/timeout|AbortError|aborted|OpenRouter HTTP 5|ECONNRESET|ENOTFOUND|fetch failed|network|provider|upstream/i.test(message)) {
-      return new ProviderGatewayError('The AI provider is temporarily unavailable. Please retry or choose another allowed model.', {
-        diagnosticCode: /timeout|AbortError|aborted/i.test(message) ? 'PROVIDER_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
-        statusCode: /timeout|AbortError|aborted/i.test(message) ? 504 : 502,
+      const isTimeout = /timeout|AbortError|aborted/i.test(message);
+      return new ProviderGatewayError(isTimeout
+        ? 'The AI provider did not answer in time after Huggy tried allowed fallbacks.'
+        : 'The AI provider is temporarily unavailable after Huggy tried allowed fallbacks.', {
+        diagnosticCode: isTimeout ? 'PROVIDER_TIMEOUT' : 'PROVIDER_UNAVAILABLE',
+        statusCode: isTimeout ? 504 : 502,
         retryable: true,
         modelId,
       });

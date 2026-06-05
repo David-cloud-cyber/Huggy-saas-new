@@ -11,6 +11,8 @@ import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
+import { isSeniorStreamEvent } from './streaming/agent-stream-event-map';
+import { createInitialAgentStreamState, reduceAgentStreamEvent, type AgentStreamUiState } from './streaming/agent-stream-reducer';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import {
   DESIGN_WORKSHOP_OPTIONS,
@@ -229,6 +231,7 @@ let activeWorkingCard: HTMLElement | null = null;
 let activeWorkingLabel = 'Thinking';
 let activeWorkingDetails: string[] = [];
 let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
+let activeAgentActivityMessageId = '';
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
 let designSettings: DesignWorkshopSettings = {
@@ -1357,6 +1360,52 @@ function bindConversationFeedbackBridge() {
     input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
     syncSubmitButtonState();
   });
+  window.addEventListener('huggy:stream-preview-action', (event: Event) => {
+    const action = String((event as CustomEvent).detail?.action || '');
+    if (action === 'open') activateBuilderView('preview');
+    if (action === 'mobile') {
+      activateBuilderView('preview');
+      setPreviewDevice('mobile');
+    }
+    if (action === 'publish') void openPublishPanel();
+  });
+  window.addEventListener('huggy:stream-file-action', (event: Event) => {
+    const detail = (event as CustomEvent).detail || {};
+    const action = String(detail.action || '');
+    const path = String(detail.path || '');
+    if (!path) return;
+    if (action === 'open') {
+      activateBuilderView('code');
+      const target = Array.from(document.querySelectorAll<HTMLElement>('.tree-file')).find(item => item.textContent?.includes(path));
+      target?.click();
+    }
+    if (action === 'rollback') {
+      appendMessage('system', `Rollback for ${path} will use the project history panel.`);
+      void openHistoryPanel();
+    }
+  });
+  window.addEventListener('huggy:stream-command', (event: Event) => {
+    const action = String((event as CustomEvent).detail?.action || '');
+    if (action === 'stop') {
+      void cancelBuild();
+      return;
+    }
+    if (action === 'files') {
+      activateBuilderView('code');
+      return;
+    }
+    if (action === 'rollback') {
+      void openHistoryPanel();
+      return;
+    }
+    if (action === 'media') {
+      setActiveWorkshop('media', { focusInput: true });
+      return;
+    }
+    if (action === 'focus-input') {
+      document.getElementById('chat-textarea-box')?.focus();
+    }
+  });
 }
 
 function createMessageHandle(messageId: string): MessageHandle {
@@ -1420,6 +1469,7 @@ function buildWorkingTrace(card: HTMLElement | null, label: string, status: Hugg
 
 function applyWorkingTrace(card: HTMLElement | null, label = activeWorkingLabel, status: HuggyAgentTrace['status'] = 'active') {
   const id = messageHandleId(card);
+  if (id && id === activeAgentActivityMessageId) return;
   if (!id || !conversationApi?.setTrace) return;
   conversationApi.setTrace(id, buildWorkingTrace(card, label, status));
 }
@@ -1604,7 +1654,7 @@ function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
   stopWorkingTimer(card);
   const id = messageHandleId(card);
   if (id && conversationApi) {
-    conversationApi.setTrace?.(id, finalTrace);
+    if (id !== activeAgentActivityMessageId) conversationApi.setTrace?.(id, finalTrace);
     conversationApi.clearWorking(id);
   }
   card.classList.remove('message-card-shimmer');
@@ -1636,6 +1686,11 @@ function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock
   if (id && conversationApi?.setBlock) {
     conversationApi.setBlock(id, block);
   }
+}
+
+function setAgentActivityBlock(card: HTMLElement | null, state: AgentStreamUiState | null) {
+  if (!card || !state) return;
+  setMessageBlock(card, { type: 'agent_activity', state });
 }
 
 function buildPlanBlock(content: string, prompt: string, open = false): HuggyConversationBlock {
@@ -1962,7 +2017,14 @@ function setPreview(html: string, status = 'ready') {
     frame.dataset.emptyPreview = 'false';
     frame.dataset.emptyPreviewMode = 'ready';
     frame.removeAttribute('data-media-preview');
+    frame.style.transition = 'opacity 180ms cubic-bezier(.22,1,.36,1), transform 180ms cubic-bezier(.22,1,.36,1)';
+    frame.style.opacity = '0.72';
+    frame.style.transform = 'scale(.998)';
     frame.srcdoc = html;
+    requestAnimationFrame(() => {
+      frame.style.opacity = '1';
+      frame.style.transform = 'scale(1)';
+    });
   }
   setPreviewDevice(selectedPreviewDevice, false);
 
@@ -3625,6 +3687,62 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const streamCodeCards = new Map<string, HTMLElement>();
   const liveFileSnippets = new Map<string, { code: string; language: string; title: string }>();
   let responseCard: HTMLElement | null = status;
+  let agentActivityState: AgentStreamUiState | null = null;
+  let agentActivityFrame = 0;
+  let lastActivityTickAt = 0;
+  const elapsedForStatus = () => {
+    const startedAt = Number(status?.dataset.workingStartedAt || 0);
+    return startedAt ? formatWorkingDuration(Date.now() - startedAt) : undefined;
+  };
+  const ensureAgentActivity = (headline = speaksFrench ? 'Huggy comprend la demande' : 'Huggy understands the request') => {
+    if (quickConversation && !generationTouchesPreview) return null;
+    if (!status) return null;
+    const id = messageHandleId(status);
+    if (id) activeAgentActivityMessageId = id;
+    if (!agentActivityState) {
+      agentActivityState = createInitialAgentStreamState({
+        headline,
+        detail: speaksFrench
+          ? 'Je garde uniquement les etapes reelles du serveur.'
+          : 'I am showing only real server-side steps.',
+        elapsed: elapsedForStatus(),
+        runHeader: {
+          workflow: requestedMode === 'plan' ? 'Plan' : requestedMode === 'build' ? 'Build' : 'Auto',
+          objective: safePrompt.length > 96 ? `${safePrompt.slice(0, 93)}...` : safePrompt,
+          scope: currentProjectName && currentProjectName !== 'Untitled app' ? currentProjectName : 'Current project',
+          rollbackAvailable: Boolean(currentProjectId && currentFiles.length),
+          status: speaksFrench ? 'Preparation du run' : 'Preparing run',
+        },
+      });
+      setAgentActivityBlock(status, agentActivityState);
+    }
+    return agentActivityState;
+  };
+  const flushAgentActivity = () => {
+    agentActivityFrame = 0;
+    if (agentActivityState) setAgentActivityBlock(status, agentActivityState);
+  };
+  const pushAgentActivity = (type: string, payload: Record<string, any> = {}, message?: string) => {
+    if (type === 'working_tick') {
+      const now = Date.now();
+      if (now - lastActivityTickAt < 1600) return;
+      lastActivityTickAt = now;
+    }
+    const current = ensureAgentActivity();
+    if (!current) return;
+    agentActivityState = reduceAgentStreamEvent(current, {
+      type,
+      payload,
+      message,
+      elapsed: elapsedForStatus(),
+    });
+    if (!agentActivityFrame) agentActivityFrame = window.requestAnimationFrame(flushAgentActivity);
+  };
+  if (!quickConversation) {
+    ensureAgentActivity(initialLabel === 'Planning'
+      ? (speaksFrench ? 'Huggy prepare le plan' : 'Huggy is preparing the plan')
+      : (speaksFrench ? 'Huggy prepare le travail' : 'Huggy is preparing the work'));
+  }
   const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
     if (quickConversation && !generationTouchesPreview) return;
     if (shownStreamBlocks.has(key)) return;
@@ -3687,6 +3805,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (generationTouchesPreview) return;
     generationTouchesPreview = true;
     activeGenerationTouchesPreview = true;
+    ensureAgentActivity(label);
     activateBuilderView('preview');
     setEmptyPreviewState('working', label);
   };
@@ -3811,6 +3930,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       };
       if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
       if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
+      if (isSeniorStreamEvent(eventType) || eventType === 'working_tick') {
+        pushAgentActivity(eventType, payload, event.message);
+      }
       if (eventType === 'thinking_step' || eventType === 'planning_step' || eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step' || eventType === 'validation_step') {
         const stepKey = `${eventType}_${String(payload.id || payload.key || payload.label || event.message || '').slice(0, 28)}`;
         const label = eventType === 'planning_step'
@@ -4107,6 +4229,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'cancelled') {
+        pushAgentActivity('cancelled', payload, event.message || 'Generation stopped.');
         commitAssistantText(event.message || 'Generation stopped.', 'Generation stopped.', say('Arrêté', 'Stopped'));
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Generation stopped');
         setBusy(false);
@@ -4122,6 +4245,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         setBusy(false);
       }
       if (eventType === 'error') {
+        pushAgentActivity('error', payload, event.message);
         commitAssistantText(formatAgentErrorMessage(event), 'Generation failed.', say('Erreur', 'Error'));
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
       }
@@ -4130,8 +4254,16 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if ((error as Error).name === 'AbortError') {
       const stoppedText = stopRequested ? 'Generation stopped.' : 'Build cancelled.';
       const id = messageHandleId(status);
-      if (id && conversationApi?.setTrace) {
+      if (id && conversationApi?.setTrace && id !== activeAgentActivityMessageId) {
         conversationApi.setTrace(id, buildWorkingTrace(status, stoppedText, 'cancelled'));
+      }
+      if (agentActivityState) {
+        agentActivityState = reduceAgentStreamEvent(agentActivityState, {
+          type: 'cancelled',
+          message: stoppedText,
+          elapsed: elapsedForStatus(),
+        });
+        setAgentActivityBlock(status, agentActivityState);
       }
       clearMessageShimmer(status);
       appendMessage('assistant', stoppedText);
@@ -4139,18 +4271,28 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
       const id = messageHandleId(status);
-      if (id && conversationApi?.setTrace) {
+      if (id && conversationApi?.setTrace && id !== activeAgentActivityMessageId) {
         conversationApi.setTrace(id, buildWorkingTrace(status, say('Erreur', 'Error'), 'failed'));
+      }
+      if (agentActivityState) {
+        agentActivityState = reduceAgentStreamEvent(agentActivityState, {
+          type: 'error',
+          message: errorText,
+          elapsed: elapsedForStatus(),
+        });
+        setAgentActivityBlock(status, agentActivityState);
       }
       clearMessageShimmer(status);
       appendMessage('assistant', errorText);
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
+    if (agentActivityFrame) window.cancelAnimationFrame(agentActivityFrame);
     setBusy(false);
     activeAbort = null;
     stopRequested = false;
     activeGenerationTouchesPreview = false;
+    activeAgentActivityMessageId = '';
   }
 }
 

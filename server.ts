@@ -552,10 +552,15 @@ function diagnoseProviderError(error: any) {
       PROVIDER_CIRCUIT_OPEN: 'retry_or_use_auto',
       AUTH_SESSION_UNAVAILABLE: 'sign_in_again',
     };
+    const publicMessageByCode: Record<string, string> = {
+      PROVIDER_TIMEOUT: 'The AI provider did not answer in time. Huggy kept the project unchanged. Retry with Auto, or choose a faster allowed model.',
+      PROVIDER_UNAVAILABLE: 'The AI provider is temporarily unavailable. Huggy kept the project unchanged. Retry in a moment or use Auto.',
+      PROVIDER_CIRCUIT_OPEN: 'This model is cooling down after repeated provider failures. Use Auto or retry shortly.',
+    };
     return {
       message: String(error.diagnosticCode) === 'MODEL_OUTPUT_PARSE_FAILED'
         ? 'Huggy could not safely read the AI output, so the existing app was kept unchanged. Please retry with Auto or ask for a smaller targeted change.'
-        : message,
+        : publicMessageByCode[String(error.diagnosticCode)] || message,
       diagnostic_code: String(error.diagnosticCode),
       suggested_action: suggestedByCode[String(error.diagnosticCode)] || 'retry_or_use_auto',
       status: Number(error.statusCode || 502),
@@ -611,7 +616,7 @@ function diagnoseProviderError(error: any) {
   }
   if (/timeout|AbortError|aborted/i.test(rawMessage)) {
     return {
-      message: 'The AI provider took too long to respond. Please retry or choose Auto.',
+      message: 'The AI provider did not answer in time. Huggy kept the project unchanged. Retry with Auto, or choose a faster allowed model.',
       diagnostic_code: 'PROVIDER_TIMEOUT',
       suggested_action: 'retry_or_use_auto',
       status: 504,
@@ -3318,10 +3323,15 @@ async function streamAgentTextResponse(input: {
   let streamed = false;
 
   try {
+    const textResponseTimeoutMs = decision.intent === 'plan'
+      ? 30_000
+      : decision.intent === 'deploy_assist'
+        ? 14_000
+        : 12_000;
     for await (const event of providerGateway.streamChat(
       selectedModel,
       buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
-      { timeoutMs: decision.intent === 'plan' ? 45_000 : 28_000 },
+      { timeoutMs: textResponseTimeoutMs },
     )) {
       if (event.type === 'token') {
         const chunk = event.text || '';
@@ -8366,7 +8376,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
       let lastModelProgressAt = Date.now();
       let lastModelProgressChars = 0;
-      for await (const event of providerGateway.streamChat(selectedModel, messages)) {
+      for await (const event of providerGateway.streamChat(selectedModel, messages, { timeoutMs: 150_000 })) {
         const session = await getBuildSession(buildSessionId);
         if (session?.status === 'cancelled') {
           await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId, agent_run_id: agentRunId });

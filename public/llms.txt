@@ -7,9 +7,7 @@ Huggy is an AI app builder for creating, previewing, iterating and publishing pr
 - Pricing: https://huggy.fun/pricing.html
 - Features: https://huggy.fun/features.html
 - Documentation: https://huggy.fun/documentation.html
-- Use cases: https://huggy.fun/use-cases/
 - Guides: https://huggy.fun/guides/
-- SEO audit: https://huggy.fun/tools/seo-audit/
 - Showcase: https://huggy.fun/built-with-huggy/
 
 ## Product facts
