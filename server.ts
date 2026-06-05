@@ -110,6 +110,7 @@ import {
   MEDIA_MODEL_REGISTRY,
   estimateMediaCredits,
   isMediaModelAvailable,
+  isMarketingMediaKind,
   mediaOutputForKind,
   mediaSettingsSummary,
   normalizeMediaSettings,
@@ -117,6 +118,21 @@ import {
   type HuggyMediaSettings,
 } from './src/services/media-model-registry.ts';
 import { FalMediaGateway, type FalMediaAsset } from './src/services/fal-media-gateway.ts';
+import {
+  applyImportContextToPrompt,
+  buildImportContext,
+  publicImportContext,
+} from './src/services/import-intelligence.ts';
+import {
+  applySeniorAgentContextToPrompt,
+  compileSeniorAgentContext,
+  type SeniorAgentContext,
+} from './src/services/senior-agent-os.ts';
+import { buildAgentMoatIntelligence } from './src/services/agent-moat-intelligence.ts';
+import {
+  designWorkshopInstructionLines,
+  normalizeDesignWorkshopSettings,
+} from './src/services/design-workshop.ts';
 
 dotenv.config();
 
@@ -308,6 +324,15 @@ function getRequiredAuth(req: any, requestId?: string) {
   throw createAuthSessionUnavailableError(requestId);
 }
 
+function getOptionalAuthState(req: any) {
+  const user = req?.auth?.user || req?.user || null;
+  return {
+    user,
+    userId: req?.auth?.userId || user?.id || null,
+    email: req?.auth?.email || user?.email || null,
+  };
+}
+
 async function requireAuth(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -399,6 +424,7 @@ app.get('/api/health', (_req, res) => {
     service: 'huggy-saas',
     time: new Date().toISOString(),
     static_dist: pathExists(staticRoot),
+    project_refs_match: supabaseDiagnostics.project_refs_match,
     integrations: {
       supabase_url: Boolean(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL),
       supabase_service_role: supabaseDiagnostics.service_role_project_api_key,
@@ -491,6 +517,14 @@ function diagnoseProviderError(error: any) {
       diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
       suggested_action: 'sign_in_again',
       status: 401,
+    };
+  }
+  if (/Cannot read properties of undefined \(reading ['"]auth['"]\)/i.test(rawMessage)) {
+    return {
+      message: 'Le code genere essaie d utiliser Auth sans client configure. Huggy va corriger le client Auth automatiquement.',
+      diagnostic_code: 'SUPABASE_AUTH_CLIENT_UNDEFINED',
+      suggested_action: 'fix_generated_auth_client',
+      status: 500,
     };
   }
   if (/auth session|invalid or expired session|session could not be read|AUTH_SESSION_UNAVAILABLE/i.test(rawMessage)) {
@@ -947,6 +981,7 @@ function normalizeStudioContext(value: any): StudioContextKind {
 function studioContextInstruction(value: any) {
   const context = normalizeStudioContext(value);
   if (context === 'design') {
+    const settings = normalizeDesignWorkshopSettings(value?.settings || value?.designSettings || {});
     return [
       'Huggy Design workspace context:',
       '- Interpret the request as UI/UX, product design, visual system, prototype, or targeted interface refinement.',
@@ -955,6 +990,9 @@ function studioContextInstruction(value: any) {
       '- For applied design work, favor Opus-level visual reasoning: hierarchy, spacing, motion, states, responsive behavior, and product taste.',
       '- Offer critique, copy, or strategy without touching files unless the user clearly asks to apply changes.',
       '- If the user is only asking for advice or explanation, answer without modifying files.',
+      '- Design Mode must never touch auth, database, billing, secrets, payment logic, provider keys, or business-critical backend behavior unless the user explicitly leaves Design mode and asks for engineering work.',
+      '- For small visual edits, patch only the relevant CSS/component files and preserve rollback/version history.',
+      ...designWorkshopInstructionLines(settings),
     ].join('\n');
   }
   if (context === 'decks') {
@@ -989,6 +1027,10 @@ function studioContextInstruction(value: any) {
 function applyStudioContextToPrompt(prompt: string, studioContext: any) {
   const instruction = studioContextInstruction(studioContext);
   return instruction ? `${instruction}\n\nUser request:\n${prompt}` : prompt;
+}
+
+function applyRequestContextToPrompt(prompt: string, studioContext: any, importContext: any) {
+  return applyImportContextToPrompt(applyStudioContextToPrompt(prompt, studioContext), importContext);
 }
 
 type PreviewBuildResult = {
@@ -1182,7 +1224,7 @@ function getUserProjectRole(req: any, project?: GeneratedProject): ProjectRole {
 }
 
 function isPlatformAdmin(req: any) {
-  const metadata = (req.auth?.user || req.user)?.app_metadata || {};
+  const metadata = getOptionalAuthState(req).user?.app_metadata || {};
   const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
   return metadata.role === 'platform_admin' || roles.includes('platform_admin');
 }
@@ -3557,6 +3599,174 @@ function publicFileStreamSnippet(file: GeneratedFile) {
   return redacted.split('\n').slice(0, 26).join('\n').slice(0, 2400);
 }
 
+const GENERATED_SUPABASE_AUTH_CLIENT_MESSAGE = 'Le code genere essaie d utiliser Auth sans client configure. Huggy va corriger le client Auth automatiquement.';
+const GENERATED_SUPABASE_CLIENT_PATH = 'src/lib/supabase.ts';
+const SUPABASE_AUTH_METHOD_PATTERN = /\bauth\s*\.\s*(getSession|getUser|signIn|signInWithPassword|signInWithOAuth|signUp|signOut|onAuthStateChange|resetPasswordForEmail|updateUser)\b/i;
+
+function fileUsesGeneratedSupabaseAuth(file: GeneratedFile) {
+  const content = file.content || '';
+  if (/\bsupabase\s*\.\s*auth\b/i.test(content)) return true;
+  return SUPABASE_AUTH_METHOD_PATTERN.test(content) && /supabase|@supabase\/supabase-js|Huggy Cloud|authentication|auth/i.test(content);
+}
+
+function fileDefinesGeneratedSupabaseClient(file: GeneratedFile) {
+  const content = file.content || '';
+  return /\bcreateClient\s*\(/i.test(content)
+    || /\bgetSupabaseClient\s*\(/i.test(content)
+    || /\bexport\s+const\s+supabase\b/i.test(content)
+    || /\bcreateHuggyCloudClient\s*\(/i.test(content)
+    || /\bhuggyCloudAuth\b/i.test(content)
+    || /Huggy Cloud auth client/i.test(content);
+}
+
+function detectGeneratedSupabaseAuthIssue(files: GeneratedFile[]) {
+  const authFiles = files.filter(fileUsesGeneratedSupabaseAuth);
+  if (!authFiles.length) return null;
+  const unresolvedBareClientFile = authFiles.find(file => /\bsupabase\s*\.\s*auth\b/i.test(file.content || '') && !hasGeneratedSupabaseImportOrLocalClient(file.content || ''));
+  if (unresolvedBareClientFile) {
+    return {
+      file: unresolvedBareClientFile.path || GENERATED_SUPABASE_CLIENT_PATH,
+      message: GENERATED_SUPABASE_AUTH_CLIENT_MESSAGE,
+      severity: 'high',
+      diagnostic_code: 'SUPABASE_AUTH_CLIENT_UNDEFINED',
+      suggested_action: 'fix_generated_auth_client',
+    };
+  }
+  const hasClient = files.some(fileDefinesGeneratedSupabaseClient);
+  if (hasClient) return null;
+  return {
+    file: authFiles[0]?.path || GENERATED_SUPABASE_CLIENT_PATH,
+    message: GENERATED_SUPABASE_AUTH_CLIENT_MESSAGE,
+    severity: 'high',
+    diagnostic_code: 'SUPABASE_AUTH_CLIENT_UNDEFINED',
+    suggested_action: 'fix_generated_auth_client',
+  };
+}
+
+function generatedSupabaseClientFile(): GeneratedFile {
+  return {
+    path: GENERATED_SUPABASE_CLIENT_PATH,
+    language: 'ts',
+    updated_at: new Date().toISOString(),
+    content: `import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_HUGGY_CLOUD_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_HUGGY_CLOUD_SUPABASE_ANON_KEY || '';
+
+const missingAuthMessage = 'Huggy Cloud Auth is not configured for this preview yet. The app is running in safe demo mode.';
+
+function missingAuthResult() {
+  return { data: { user: null, session: null }, error: new Error(missingAuthMessage) };
+}
+
+function createPreviewAuthStub() {
+  const subscription = { unsubscribe() {} };
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      getUser: async () => ({ data: { user: null }, error: null }),
+      signInWithPassword: async () => missingAuthResult(),
+      signInWithOAuth: async () => missingAuthResult(),
+      signUp: async () => missingAuthResult(),
+      signOut: async () => ({ error: null }),
+      resetPasswordForEmail: async () => missingAuthResult(),
+      updateUser: async () => missingAuthResult(),
+      onAuthStateChange: () => ({ data: { subscription } }),
+    },
+  };
+}
+
+export const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
+
+export const supabase = hasSupabaseConfig
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createPreviewAuthStub() as any;
+
+export function getSupabaseClient() {
+  return supabase;
+}
+
+export function getAuthPreviewStatus() {
+  return hasSupabaseConfig
+    ? { ready: true, message: 'Huggy Cloud Auth is configured.' }
+    : { ready: false, message: missingAuthMessage };
+}
+`,
+  };
+}
+
+function relativeImportPath(fromFilePath: string, targetWithoutExtension: string) {
+  const normalizedFrom = String(fromFilePath || 'src/App.tsx').replace(/\\/g, '/');
+  const fromDir = path.posix.dirname(normalizedFrom);
+  let relative = path.posix.relative(fromDir, targetWithoutExtension);
+  if (!relative.startsWith('.')) relative = `./${relative}`;
+  return relative.replace(/\\/g, '/');
+}
+
+function insertGeneratedImport(content: string, importLine: string) {
+  if (content.includes(importLine)) return content;
+  const lines = content.split(/\r?\n/);
+  let index = 0;
+  while (index < lines.length && /^\s*['"]use (client|strict)['"];?\s*$/.test(lines[index] || '')) {
+    index += 1;
+  }
+  lines.splice(index, 0, importLine);
+  return lines.join('\n');
+}
+
+function hasGeneratedSupabaseImportOrLocalClient(content: string) {
+  return /from\s+['"][^'"]*supabase['"]/i.test(content)
+    || /\bcreateClient\s*\(/i.test(content)
+    || /\bgetSupabaseClient\s*\(/i.test(content)
+    || /\bconst\s+supabase\s*=/i.test(content)
+    || /\blet\s+supabase\s*=/i.test(content)
+    || /\bvar\s+supabase\s*=/i.test(content);
+}
+
+function ensureSupabaseDependency(files: GeneratedFile[]) {
+  return files.map(file => {
+    if (file.path !== 'package.json') return file;
+    try {
+      const pkg = JSON.parse(file.content || '{}');
+      pkg.dependencies = pkg.dependencies || {};
+      if (!pkg.dependencies['@supabase/supabase-js']) {
+        pkg.dependencies['@supabase/supabase-js'] = '^2.45.4';
+      }
+      return { ...file, content: `${JSON.stringify(pkg, null, 2)}\n`, updated_at: new Date().toISOString() };
+    } catch {
+      return file;
+    }
+  });
+}
+
+function applyGeneratedSupabaseAuthClientFix(files: GeneratedFile[]) {
+  const now = new Date().toISOString();
+  let changed = false;
+  let nextFiles = files.map(file => {
+    if (!fileUsesGeneratedSupabaseAuth(file)) return file;
+    if (hasGeneratedSupabaseImportOrLocalClient(file.content || '')) return file;
+    const importPath = relativeImportPath(file.path, 'src/lib/supabase');
+    const importLine = `import { getSupabaseClient } from '${importPath}';`;
+    const content = insertGeneratedImport(file.content || '', importLine)
+      .replace(/\bsupabase\s*\.\s*auth\b/g, 'getSupabaseClient().auth');
+    if (content === file.content) return file;
+    changed = true;
+    return { ...file, content, updated_at: now };
+  });
+
+  if (!nextFiles.some(file => file.path === GENERATED_SUPABASE_CLIENT_PATH)) {
+    nextFiles = [...nextFiles, generatedSupabaseClientFile()];
+    changed = true;
+  }
+
+  const withDependency = ensureSupabaseDependency(nextFiles);
+  if (withDependency.some((file, index) => file.content !== nextFiles[index]?.content)) {
+    changed = true;
+  }
+
+  return { files: withDependency, changed };
+}
+
 function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): PreviewBuildResult {
   const errors: any[] = [];
   for (const file of files) {
@@ -3570,6 +3780,8 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
       errors.push({ file: file.path, message: 'Missing import detected.', severity: 'medium' });
     }
   }
+  const supabaseAuthIssue = detectGeneratedSupabaseAuthIssue(files);
+  if (supabaseAuthIssue) errors.push(supabaseAuthIssue);
 
   const html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
   if (!html.trim() || /__HUGGY_FORCE_ERROR__/i.test(html)) {
@@ -3587,6 +3799,22 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
 function applyAutoFix(project: GeneratedProject, files: GeneratedFile[], errors: any[]) {
   if (!errors.length) return { files, fixed: false, patch: null as any };
   const primary = errors[0];
+  if (errors.some(error => error?.diagnostic_code === 'SUPABASE_AUTH_CLIENT_UNDEFINED' || error?.suggested_action === 'fix_generated_auth_client')) {
+    const fix = applyGeneratedSupabaseAuthClientFix(files);
+    if (fix.changed) {
+      return {
+        files: fix.files,
+        fixed: true,
+        patch: {
+          id: randomUUID(),
+          project_id: project.id,
+          target_file: GENERATED_SUPABASE_CLIENT_PATH,
+          summary: 'Added a safe Huggy Cloud Auth client for generated Supabase auth usage.',
+          created_at: new Date().toISOString(),
+        },
+      };
+    }
+  }
   const targetPath = primary.file || 'index.html';
   const patched = files.map(file => {
     if (file.path !== targetPath) return file;
@@ -3681,6 +3909,7 @@ async function generateFilesWithAi(input: {
   userCredits?: number;
   plan?: string;
   existingFiles: GeneratedFile[];
+  seniorAgentContext?: SeniorAgentContext;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(getOpenRouterApiKey());
   if (!hasLiveKey) {
@@ -3725,6 +3954,7 @@ async function generateFilesWithAi(input: {
         existingFiles: fileManifest || 'No existing files yet.',
         existingFilesContent,
         uiGenerationPolicy: uiPolicy.userContext,
+        seniorAgentOS: input.seniorAgentContext || undefined,
       }),
     },
   ], { maxAttempts: 1, timeoutMs: 90_000 });
@@ -3750,6 +3980,7 @@ function buildGenerationMessages(input: {
   prompt: string;
   existingFiles: GeneratedFile[];
   researchContext?: string;
+  seniorAgentContext?: SeniorAgentContext;
 }) {
   const fileManifest = input.existingFiles
     .map(file => `${file.path} (${file.content.length} chars)`)
@@ -3776,6 +4007,7 @@ function buildGenerationMessages(input: {
         existingFilesContent,
         uiGenerationPolicy: uiPolicy.userContext,
         researchContext: input.researchContext || undefined,
+        seniorAgentOS: input.seniorAgentContext || undefined,
       }),
     },
   ];
@@ -5868,7 +6100,7 @@ app.get('/api/admin/provider-usage', async (req: any, res) => {
 app.get('/api/admin/agent-observability', async (req: any, res) => {
   if (!requirePlatformAdmin(req, res)) return;
   const client = requireSupabase('Admin agent observability');
-  const [runsResult, stepsResult, runnerResult] = await Promise.all([
+  const [runsResult, stepsResult, runnerResult, researchResult] = await Promise.all([
     client
       .from('agent_runs')
       .select('id,request_id,project_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,created_at,completed_at,cancelled_at')
@@ -5884,15 +6116,22 @@ app.get('/api/admin/agent-observability', async (req: any, res) => {
       .select('agent_run_id,status,check_type,severity,message,duration_ms,created_at')
       .order('created_at', { ascending: false })
       .limit(500),
+    client
+      .from('agent_research_results')
+      .select('agent_run_id,provider,status,diagnostic_code,message,created_at')
+      .order('created_at', { ascending: false })
+      .limit(200),
   ]);
 
   if (runsResult.error && !isMissingAgentV2TableError(runsResult.error)) return res.status(500).json({ success: false, error: runsResult.error.message });
   if (stepsResult.error && !isMissingAgentV2TableError(stepsResult.error)) return res.status(500).json({ success: false, error: stepsResult.error.message });
   if (runnerResult.error && !isMissingAgentV2TableError(runnerResult.error)) return res.status(500).json({ success: false, error: runnerResult.error.message });
+  if (researchResult.error && !isMissingAgentV2TableError(researchResult.error)) return res.status(500).json({ success: false, error: researchResult.error.message });
 
   const runs = (runsResult.data || []).map(redactAgentPayload);
   const steps = (stepsResult.data || []).map(redactAgentPayload);
   const runnerRows = (runnerResult.data || []).map(redactAgentPayload);
+  const researchRows = (researchResult.data || []).map(redactAgentPayload);
   const completedDurations = runs
     .map((run: any) => Number(run.duration_ms || 0))
     .filter((duration: number) => Number.isFinite(duration) && duration > 0);
@@ -5905,6 +6144,13 @@ app.get('/api/admin/agent-observability', async (req: any, res) => {
   const failedRuns = runs.filter((run: any) => run.status === 'failed');
   const cancelledRuns = runs.filter((run: any) => run.status === 'cancelled');
   const runnerFailures = runnerRows.filter((row: any) => row.status === 'failed').slice(0, 30);
+  const feedbackEvents = steps.filter((row: any) => row.event_type === 'user_feedback');
+  const moatIntelligence = buildAgentMoatIntelligence({
+    runs,
+    runnerFailures,
+    researchRows,
+    feedbackEvents,
+  });
   res.json({
     success: true,
     metrics: {
@@ -5917,13 +6163,17 @@ app.get('/api/admin/agent-observability', async (req: any, res) => {
         : 0,
       total_steps: steps.length,
       runner_failures: runnerFailures.length,
+      research_events: researchRows.length,
+      feedback_events: feedbackEvents.length,
     },
     distributions: {
       by_status: countBy(runs, 'status'),
       by_intent: countBy(runs, 'intent'),
       by_model: countBy(runs, 'model_id'),
       by_step_type: countBy(steps, 'event_type'),
+      by_research_status: countBy(researchRows, 'status'),
     },
+    moat_intelligence: moatIntelligence,
     recent_errors: failedRuns.slice(0, 25).map((run: any) => ({
       id: run.id,
       request_id: run.request_id,
@@ -6499,13 +6749,19 @@ function buildMediaPrompt(input: {
   project: GeneratedProject;
 }) {
   const output = mediaOutputForKind(input.settings.kind);
+  const isMarketingKit = output === 'marketing_kit';
   return [
-    `Create a ${output} concept for Huggy Media.`,
+    isMarketingKit
+      ? 'Create a launch-ready marketing kit for Huggy Media.'
+      : `Create a ${output} concept for Huggy Media.`,
     `Project: ${input.project.name}.`,
     `Format: ${input.settings.format}.`,
     `Duration: ${input.settings.duration}.`,
     `Asset type: ${input.settings.kind.replace(/_/g, ' ')}.`,
-    'Style: clean, premium, marketing-ready, direct, modern, not generic AI design.',
+    'Style: clean, premium, marketing-ready, direct, modern, specific to the project, not generic AI design.',
+    isMarketingKit
+      ? 'Include launch headline, positioning, social posts, WhatsApp copy, ad angles, CTA, brand asset guidance, and one-pager outline.'
+      : 'If this is a rendered asset, keep the result visually simple, brand-safe, and useful for launch.',
     'If this is UGC or an ad, include a strong first-second hook, clear product promise, simple visual sequence, and CTA.',
     `User request: ${input.prompt}`,
   ].join('\n');
@@ -6513,6 +6769,11 @@ function buildMediaPrompt(input: {
 
 function mediaKindLabel(kind: HuggyMediaSettings['kind']) {
   const labels: Record<HuggyMediaSettings['kind'], string> = {
+    launch_kit: 'Launch kit',
+    social_posts: 'Social posts',
+    ads_creatives: 'Ads creatives',
+    brand_assets: 'Brand assets',
+    pitch_one_pager: 'Pitch / one-pager',
     video_ad: 'Video ad',
     ugc: 'UGC ad',
     storyboard: 'Storyboard',
@@ -6521,6 +6782,84 @@ function mediaKindLabel(kind: HuggyMediaSettings['kind']) {
     thumbnail: 'Thumbnail',
   };
   return labels[kind] || 'Media';
+}
+
+function projectAudienceHint(project: GeneratedProject, prompt: string) {
+  const source = `${project.name || ''} ${prompt || ''}`.toLowerCase();
+  if (/restaurant|menu|reservation|food|cafe|bar/.test(source)) return 'local customers who want to book, order or discover the offer quickly';
+  if (/e-?commerce|shop|store|product|checkout|cart/.test(source)) return 'buyers comparing products and looking for trust, price and proof';
+  if (/saas|dashboard|crm|analytics|tool|startup/.test(source)) return 'busy teams who want a faster workflow and a clear business outcome';
+  if (/portfolio|agency|creator|studio/.test(source)) return 'clients who want to understand the work, credibility and next step quickly';
+  if (/course|school|education|learn/.test(source)) return 'learners or parents looking for clarity, confidence and progress';
+  return 'people who need the project promise explained clearly before they take action';
+}
+
+function buildMediaKitSections(input: {
+  project: GeneratedProject;
+  prompt: string;
+  settings: HuggyMediaSettings;
+}) {
+  const projectName = input.project.name || 'this app';
+  const audience = projectAudienceHint(input.project, input.prompt);
+  const cleanPrompt = input.prompt.replace(/\s+/g, ' ').trim();
+  const promise = cleanPrompt.length > 12
+    ? cleanPrompt
+    : `${projectName} helps users get from idea to a useful result faster.`;
+  const cta = input.settings.kind === 'pitch_one_pager'
+    ? 'Book a demo'
+    : input.settings.kind === 'social_posts'
+      ? 'Try it today'
+      : 'Launch with Huggy';
+  const angle = input.settings.kind === 'ads_creatives'
+    ? 'Turn the pain point into a fast, visible before/after.'
+    : input.settings.kind === 'brand_assets'
+      ? 'Make every asset feel consistent, trustworthy and easy to reuse.'
+      : input.settings.kind === 'pitch_one_pager'
+        ? 'Lead with the problem, show the product, then prove the opportunity.'
+        : 'Show the app as a practical launch-ready solution.';
+
+  return [
+    {
+      title: 'Launch headline',
+      body: `${projectName}: ${promise}`,
+    },
+    {
+      title: 'Audience',
+      body: audience,
+    },
+    {
+      title: 'Core angle',
+      body: angle,
+    },
+    {
+      title: 'Facebook / Instagram',
+      body: `Your next launch asset is ready. ${projectName} turns the main promise into a simple experience people can understand in seconds. ${cta}.`,
+    },
+    {
+      title: 'LinkedIn',
+      body: `We built ${projectName} to make the value obvious: clear workflow, polished interface, and a direct path from interest to action. ${cta}.`,
+    },
+    {
+      title: 'WhatsApp',
+      body: `Hi, I just launched ${projectName}. It helps ${audience}. Want me to send you the link?`,
+    },
+    {
+      title: 'Ad variant A',
+      body: `Hook: Stop losing time on manual work. Visual: app screen in context. CTA: ${cta}.`,
+    },
+    {
+      title: 'Ad variant B',
+      body: `Hook: See the result before you commit. Visual: before/after split. CTA: ${cta}.`,
+    },
+    {
+      title: 'Brand assets',
+      body: 'Use one hero screenshot, one square social card, one vertical story, one simple logo lockup, and one short CTA line.',
+    },
+    {
+      title: 'One-pager outline',
+      body: `Problem, audience, product promise, 3 key benefits, proof or preview screenshot, pricing/next step, CTA: ${cta}.`,
+    },
+  ];
 }
 
 function renderMediaAsset(asset: FalMediaAsset) {
@@ -6542,6 +6881,7 @@ function renderHuggyMediaPreviewHtml(input: {
 }) {
   const kind = mediaKindLabel(input.settings.kind);
   const output = mediaOutputForKind(input.settings.kind);
+  const isMarketingKit = output === 'marketing_kit';
   const statusCopy: Record<'completed' | 'queued' | 'not_configured' | 'locked' | 'failed', string> = {
     completed: 'Asset ready',
     queued: 'Render queued',
@@ -6550,7 +6890,7 @@ function renderHuggyMediaPreviewHtml(input: {
     failed: 'Render needs retry',
   };
   const heroCopy = input.providerStatus === 'completed'
-    ? 'Your generated asset is ready.'
+    ? isMarketingKit ? 'Your marketing kit is ready.' : 'Your generated asset is ready.'
     : input.providerStatus === 'queued'
       ? 'The render was accepted and is being processed.'
       : input.providerStatus === 'locked'
@@ -6558,12 +6898,14 @@ function renderHuggyMediaPreviewHtml(input: {
         : input.providerStatus === 'failed'
           ? 'The provider could not complete this render.'
           : 'Huggy prepared the creative direction. Connect fal.ai to render real media.';
-  const cards = [
-    ['Hook', input.settings.kind === 'ugc' ? 'Open with a human, problem-first line that feels native to Reels/TikTok.' : 'Lead with the clearest product promise in the first second.'],
-    ['Visual rhythm', output === 'image' ? 'One strong focal point, product-first composition, clean negative space.' : '3 short beats: problem, transformation, proof or CTA.'],
-    ['Brand fit', 'Use the project tone, avoid stock-looking scenes, keep text short and readable.'],
-    ['Next action', input.assets.length ? 'Download, reuse, or ask Huggy for a variation.' : 'Render when provider access is ready, or ask for a cheaper/faster variant.'],
-  ];
+  const cards = isMarketingKit
+    ? buildMediaKitSections({ project: input.project, prompt: input.prompt, settings: input.settings })
+    : [
+      { title: 'Hook', body: input.settings.kind === 'ugc' ? 'Open with a human, problem-first line that feels native to Reels/TikTok.' : 'Lead with the clearest product promise in the first second.' },
+      { title: 'Visual rhythm', body: output === 'image' ? 'One strong focal point, product-first composition, clean negative space.' : '3 short beats: problem, transformation, proof or CTA.' },
+      { title: 'Brand fit', body: 'Use the project tone, avoid stock-looking scenes, keep text short and readable.' },
+      { title: 'Next action', body: input.assets.length ? 'Download, reuse, or ask Huggy for a variation.' : 'Render when provider access is ready, or ask for a cheaper/faster variant.' },
+    ];
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -6578,14 +6920,14 @@ function renderHuggyMediaPreviewHtml(input: {
 .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:99px;background:#3b82f6;box-shadow:0 0 0 5px rgba(59,130,246,.12)}
 h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacing:-.05em;max-width:780px}.summary{margin:0;max-width:680px;color:var(--muted);font-size:clamp(14px,1.7vw,18px);line-height:1.55}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;background:var(--panel);padding:9px 12px;font-size:12px;font-weight:800;color:var(--ink);white-space:nowrap}
-.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:16px;align-items:stretch}.stage,.brief{border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 24px 70px rgba(28,28,28,.08);overflow:hidden}
-.stage{min-height:420px;display:grid;place-items:center;padding:18px}.asset-wrap{width:100%;height:100%;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,var(--soft),var(--panel));border:1px solid var(--line);overflow:hidden}
+.grid{display:grid;grid-template-columns:${isMarketingKit ? '1fr' : 'minmax(0,1.25fr) minmax(280px,.75fr)'};gap:16px;align-items:stretch}.stage,.brief{border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 24px 70px rgba(28,28,28,.08);overflow:hidden}
+.stage{min-height:${isMarketingKit ? 'auto' : '420px'};display:grid;place-items:center;padding:18px}.asset-wrap{width:100%;height:100%;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,var(--soft),var(--panel));border:1px solid var(--line);overflow:hidden}
 .media-preview-asset{max-width:100%;max-height:68vh;border-radius:16px;display:block;object-fit:contain}.placeholder{padding:32px;text-align:center;max-width:520px}.orb{width:138px;height:138px;margin:0 auto 22px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.9) 23%,rgba(49,95,220,.55) 52%,rgba(28,28,28,.18) 76%);box-shadow:0 24px 80px rgba(49,95,220,.24);animation:pulse 4s cubic-bezier(.22,1,.36,1) infinite}
 .placeholder strong{display:block;font-size:22px;margin-bottom:8px}.placeholder span{color:var(--muted);font-size:14px;line-height:1.5}.brief{padding:18px;display:grid;gap:10px}.meta{display:flex;flex-wrap:wrap;gap:8px}.pill{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:7px 9px;font-size:12px;font-weight:800;color:var(--ink)}
-.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card span{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.card p{margin:0;color:var(--ink);font-size:13px;line-height:1.48}
+.kit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card span{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.card p{margin:0;color:var(--ink);font-size:13px;line-height:1.48}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.actions a,.actions button{height:34px;border-radius:999px;border:1px solid var(--line);background:var(--ink);color:var(--bg);padding:0 13px;font:800 12px Inter,system-ui;text-decoration:none;display:inline-flex;align-items:center}
 .actions button{background:transparent;color:var(--ink)}.error{color:#b42318;font-size:12px;margin-top:8px}
-@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.04);opacity:1}}@media(max-width:820px){.grid{grid-template-columns:1fr}.media-head{display:grid}.stage{min-height:340px}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.04);opacity:1}}@media(max-width:820px){.grid,.kit-grid{grid-template-columns:1fr}.media-head{display:grid}.stage{min-height:${isMarketingKit ? 'auto' : '340px'}}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
 </style>
 </head>
 <body>
@@ -6599,11 +6941,11 @@ h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacin
     <div class="status">${escapeHtml(statusCopy[input.providerStatus])}</div>
   </section>
   <section class="grid">
-    <div class="stage">
+    ${isMarketingKit ? '' : `<div class="stage">
       <div class="asset-wrap">
         ${input.assets.length ? input.assets.map(renderMediaAsset).join('') : `<div class="placeholder"><div class="orb" aria-hidden="true"></div><strong>${escapeHtml(kind)} brief ready</strong><span>${escapeHtml(input.prompt)}</span>${input.errorMessage ? `<div class="error">${escapeHtml(input.errorMessage)}</div>` : ''}</div>`}
       </div>
-    </div>
+    </div>`}
     <aside class="brief">
       <div class="meta">
         <span class="pill">${escapeHtml(input.settings.format)}</span>
@@ -6611,11 +6953,13 @@ h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacin
         <span class="pill">${escapeHtml(input.modelLabel)}</span>
         <span class="pill">~${input.estimatedCredits} credits</span>
       </div>
-      ${cards.map(([title, body]) => `<div class="card"><span>${escapeHtml(title)}</span><p>${escapeHtml(body)}</p></div>`).join('')}
+      <div class="${isMarketingKit ? 'kit-grid' : ''}">
+        ${cards.map(card => `<div class="card"><span>${escapeHtml(card.title)}</span><p>${escapeHtml(card.body)}</p></div>`).join('')}
+      </div>
       <div class="actions">
         ${input.assets[0]?.url ? `<a href="${escapeHtml(input.assets[0].url)}" download>Download</a>` : ''}
-        <button type="button">Make variation</button>
-        <button type="button">Use in app</button>
+        <button type="button">${isMarketingKit ? 'Make more variants' : 'Make variation'}</button>
+        <button type="button">${isMarketingKit ? 'Turn into visual' : 'Use in app'}</button>
       </div>
     </aside>
   </section>
@@ -6691,6 +7035,7 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
   const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
   const modelAvailable = isMediaModelAvailable(model, plan);
   const output = mediaOutputForKind(settings.kind);
+  const isMarketingKit = isMarketingMediaKind(settings.kind);
 
   await saveProjectMessage({
     organization_id: project.organization_id,
@@ -6710,6 +7055,10 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
   } else if (wallet < estimatedCredits) {
     providerStatus = 'locked';
     errorMessage = 'Not enough credits for this media render.';
+  } else if (isMarketingKit) {
+    providerStatus = 'completed';
+    const finalBalance = await helpers.updateWallet(userId, -estimatedCredits);
+    await helpers.addLedger(userId, 'usage', -estimatedCredits, finalBalance, `Generated ${mediaKindLabel(settings.kind)} with Huggy Media`, requestId);
   } else {
     try {
       const mediaPrompt = buildMediaPrompt({ prompt, settings, project });
@@ -6740,9 +7089,13 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
   const isFrench = isLikelyFrenchPrompt(prompt);
   const assistantText = isFrench
     ? [
-      assets.length ? 'Le media est pret dans la preview.' : 'J ai prepare un brief media propre dans la preview.',
+      isMarketingKit
+        ? 'J ai prepare un kit marketing propre dans la preview.'
+        : assets.length ? 'Le media est pret dans la preview.' : 'J ai prepare un brief media propre dans la preview.',
       `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Modele: ${model.label}.`,
-      providerStatus === 'not_configured'
+      isMarketingKit
+        ? `Credits estimes: ${estimatedCredits}. Tu peux demander une variante, un format social ou une version visuelle.`
+        : providerStatus === 'not_configured'
         ? 'fal.ai n est pas encore configure cote serveur, donc je ne pretends pas avoir rendu une vraie video/image.'
         : providerStatus === 'locked'
           ? 'Ce rendu demande un plan ou des credits suffisants.'
@@ -6751,9 +7104,13 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
             : `Credits estimes: ${estimatedCredits}.`,
     ].join('\n')
     : [
-      assets.length ? 'The media asset is ready in Preview.' : 'I prepared a clean media brief in Preview.',
+      isMarketingKit
+        ? 'I prepared a clean marketing kit in Preview.'
+        : assets.length ? 'The media asset is ready in Preview.' : 'I prepared a clean media brief in Preview.',
       `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Model: ${model.label}.`,
-      providerStatus === 'not_configured'
+      isMarketingKit
+        ? `Estimated credits: ${estimatedCredits}. You can ask for variants, a social format, or a rendered visual next.`
+        : providerStatus === 'not_configured'
         ? 'fal.ai is not configured on the server yet, so I am not pretending a real image/video was rendered.'
         : providerStatus === 'locked'
           ? 'This render needs the right plan or enough credits.'
@@ -6796,6 +7153,42 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
   });
 });
 
+app.post('/api/import/prepare', async (req: any, res: any) => {
+  const requestId = `imp_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+
+  const importContext = buildImportContext({
+    source: req.body?.source,
+    mode: req.body?.mode,
+    url: req.body?.url || req.body?.source_url,
+    fileName: req.body?.fileName || req.body?.file_name,
+    mimeType: req.body?.mimeType || req.body?.mime_type,
+    hasAttachment: Boolean(req.body?.hasAttachment),
+  }, {
+    figmaConfigured: Boolean(process.env.FIGMA_ACCESS_TOKEN || process.env.FIGMA_TOKEN),
+    githubConfigured: Boolean(process.env.GITHUB_TOKEN || process.env.GITHUB_IMPORT_TOKEN),
+  });
+
+  if (!importContext) {
+    return res.status(400).json({
+      success: false,
+      message: 'Unsupported import source.',
+      diagnostic_code: 'IMPORT_SOURCE_UNSUPPORTED',
+      request_id: requestId,
+      suggested_action: 'choose_figma_github_image_or_url',
+    });
+  }
+
+  const status = importContext.status === 'invalid' ? 400 : 200;
+  return res.status(status).json({
+    success: importContext.status !== 'invalid',
+    request_id: requestId,
+    import: publicImportContext(importContext),
+    prompt: importContext.prompt,
+  });
+});
+
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const requestId = `req_${randomUUID()}`;
   const authUser = requireAuthenticatedUser(req, res, requestId);
@@ -6807,7 +7200,19 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   const studioContext = req.body?.studioContext;
-  const agentPrompt = applyStudioContextToPrompt(prompt, studioContext);
+  const importContext = req.body?.importContext;
+  const preparedImportContext = buildImportContext({
+    source: importContext?.source,
+    mode: importContext?.mode,
+    url: importContext?.source_url || importContext?.url,
+    fileName: importContext?.file_name || importContext?.fileName,
+    mimeType: importContext?.mime_type || importContext?.mimeType,
+    hasAttachment: Boolean(importContext?.file_name || importContext?.hasAttachment),
+  }, {
+    figmaConfigured: Boolean(process.env.FIGMA_ACCESS_TOKEN || process.env.FIGMA_TOKEN || importContext?.status === 'ready'),
+    githubConfigured: Boolean(process.env.GITHUB_TOKEN || process.env.GITHUB_IMPORT_TOKEN || importContext?.status === 'ready'),
+  }) || importContext;
+  const agentPrompt = applyRequestContextToPrompt(prompt, studioContext, preparedImportContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
@@ -6828,6 +7233,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
+  const seniorAgentContext = compileSeniorAgentContext({
+    prompt: agentPrompt,
+    project,
+    files: existingFiles,
+    decision,
+    importContext: preparedImportContext || undefined,
+  });
+  const agentPromptForText = decision.intent === 'conversation'
+    ? agentPrompt
+    : applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext);
   const huggyCloudPlan = reliability.should_mutate_files
     ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
       console.warn('[huggy:cloud_requirement_generate_skipped]', { message: error?.message || String(error) });
@@ -6854,7 +7269,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const effectiveModelSelection = modelRouting.model;
   let agentRunId = '';
   if (AGENT_V2_ENABLED) {
-    const contextPack = buildAgentContextPack({
+    const contextPack = {
+      ...buildAgentContextPack({
       project,
       files: existingFiles,
       messages: await listProjectMessagesPage(project.id, 12, null).catch(() => []),
@@ -6864,7 +7280,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       previewStatus: project.preview_status,
       selectedModel: effectiveModelSelection,
       requestId,
-    });
+      }),
+      senior_agent_os: seniorAgentContext,
+    };
     agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack)).id;
   }
   await saveProjectMessage({
@@ -6892,7 +7310,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     let agentText;
     try {
-      agentText = await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
+      agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
@@ -6961,7 +7379,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        executionPlan = (await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
+        executionPlan = (await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
       } catch {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
       }
@@ -6975,6 +7393,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       modelId: effectiveModelSelection,
       userCredits: walletForRouting,
       existingFiles,
+      seniorAgentContext,
     });
 
     const mergedByPath = new Map<string, GeneratedFile>();
@@ -7200,7 +7619,19 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   const studioContext = req.body?.studioContext;
-  const agentPrompt = applyStudioContextToPrompt(prompt, studioContext);
+  const importContext = req.body?.importContext;
+  const preparedImportContext = buildImportContext({
+    source: importContext?.source,
+    mode: importContext?.mode,
+    url: importContext?.source_url || importContext?.url,
+    fileName: importContext?.file_name || importContext?.fileName,
+    mimeType: importContext?.mime_type || importContext?.mimeType,
+    hasAttachment: Boolean(importContext?.file_name || importContext?.hasAttachment),
+  }, {
+    figmaConfigured: Boolean(process.env.FIGMA_ACCESS_TOKEN || process.env.FIGMA_TOKEN || importContext?.status === 'ready'),
+    githubConfigured: Boolean(process.env.GITHUB_TOKEN || process.env.GITHUB_IMPORT_TOKEN || importContext?.status === 'ready'),
+  }) || importContext;
+  const agentPrompt = applyRequestContextToPrompt(prompt, studioContext, preparedImportContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`stream:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
@@ -7238,6 +7669,21 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         message: streamCopy('J’analyse le contexte et la bonne action.', 'Analyzing context and the right action.'),
         label: streamCopy('Analyse du contexte.', 'Analyzing context.'),
         detail: streamCopy('Je vérifie s’il faut répondre, modifier, générer ou demander une précision.', 'I am checking whether to answer, edit, generate, or ask for one detail.'),
+      },
+      codebase_indexed: {
+        message: streamCopy('Je cartographie le projet avant d’agir.', 'Mapping the project before acting.'),
+        label: streamCopy('Projet indexé.', 'Project indexed.'),
+        detail: streamCopy('Je repère routes, composants, APIs, données et fichiers critiques.', 'I am finding routes, components, APIs, data, and critical files.'),
+      },
+      task_decomposed: {
+        message: streamCopy('Je découpe la demande en étapes utiles.', 'Splitting the request into useful steps.'),
+        label: streamCopy('Tâche découpée.', 'Task decomposed.'),
+        detail: streamCopy('Je transforme l’objectif en travail produit, technique et qualité.', 'I am turning the goal into product, engineering, and quality work.'),
+      },
+      policy_checked: {
+        message: streamCopy('Je pose les garde-fous avant exécution.', 'Setting guardrails before execution.'),
+        label: streamCopy('Garde-fous validés.', 'Guardrails checked.'),
+        detail: streamCopy('Je fixe les limites, rollback et checks pour éviter une livraison cassée.', 'I am setting limits, rollback, and checks to avoid a broken delivery.'),
       },
       planning: {
         message: streamCopy('Je structure le plan utile avant d’agir.', 'Structuring the useful plan before acting.'),
@@ -7510,6 +7956,16 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     lastPlan,
   });
   const reliability = buildReliabilityDecision(decision);
+  const seniorAgentContext = compileSeniorAgentContext({
+    prompt: agentPrompt,
+    project,
+    files: existingFiles,
+    decision,
+    importContext: preparedImportContext || undefined,
+  });
+  const agentPromptForText = decision.intent === 'conversation'
+    ? agentPrompt
+    : applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext);
   const huggyCloudPlan = reliability.should_mutate_files
     ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
       console.warn('[huggy:cloud_requirement_stream_skipped]', { message: error?.message || String(error) });
@@ -7548,17 +8004,20 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       AGENT_V3_ENABLED ? listAgentRunnerResults(project.id, undefined, 24).catch(() => []) : Promise.resolve([]),
       AGENT_V3_ENABLED ? listAgentResearchResults(project.id, 16).catch(() => []) : Promise.resolve([]),
     ]);
-    const baseContextPack = buildAgentContextPack({
-      project,
-      files: existingFiles,
-      messages,
-      events,
-      versions,
-      memory,
-      previewStatus: project.preview_status,
-      selectedModel: effectiveModelSelection,
-      requestId,
-    });
+    const baseContextPack = {
+      ...buildAgentContextPack({
+        project,
+        files: existingFiles,
+        messages,
+        events,
+        versions,
+        memory,
+        previewStatus: project.preview_status,
+        selectedModel: effectiveModelSelection,
+        requestId,
+      }),
+      senior_agent_os: seniorAgentContext,
+    };
     const contextPack = AGENT_V3_ENABLED
       ? buildAgentV3Context({ baseContext: baseContextPack, runnerHistory, researchHistory, toolBudget: DEFAULT_AGENT_V3_BUDGET })
       : baseContextPack;
@@ -7582,6 +8041,39 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_label: streamCopy('Contexte du projet charge.', 'Project context loaded.'),
         step_detail: streamCopy('Je lis les fichiers et l historique avant de choisir une action.', 'I am reading files and history before choosing an action.'),
       });
+      await send('codebase_indexed', streamCopy('Projet indexe.', 'Project indexed.'), {
+        project_index: seniorAgentContext.project_index,
+        step_label: streamCopy('Projet indexe.', 'Project indexed.'),
+        step_detail: streamCopy('Je cartographie routes, composants, APIs, donnees et fichiers critiques avant de modifier.', 'I am mapping routes, components, APIs, data, and critical files before editing.'),
+      });
+      await send('task_decomposed', streamCopy('Tache decomposee.', 'Task decomposed.'), {
+        tasks: seniorAgentContext.task_decomposition,
+        blueprint: seniorAgentContext.blueprint,
+        step_label: streamCopy('Tache decomposee.', 'Task decomposed.'),
+        step_detail: streamCopy('Je transforme la demande en etapes produit et qualite pour eviter une generation generique.', 'I am turning the request into product and quality steps so it does not become a generic generation.'),
+      });
+      await send('policy_checked', streamCopy('Garde-fous valides.', 'Guardrails checked.'), {
+        policy: {
+          state_machine: seniorAgentContext.policy.state_machine,
+          action_contract: seniorAgentContext.policy.action_contract,
+          cost_tier: seniorAgentContext.policy.cost_tier,
+        },
+        step_label: streamCopy('Garde-fous valides.', 'Guardrails checked.'),
+        step_detail: streamCopy('Je fixe les limites de changement, rollback, verification et no-fake-success avant execution.', 'I set change limits, rollback, verification, and no-fake-success before execution.'),
+      });
+      const publicImport = publicImportContext(preparedImportContext || null);
+      if (publicImport) {
+        await send('import_started', publicImport.message || streamCopy('Import prepare.', 'Import prepared.'), {
+          import: publicImport,
+          step_label: streamCopy('Source importee.', 'Import source prepared.'),
+          step_detail: streamCopy('Je transforme cette source en produit responsive et utilisable, pas en copie statique.', 'I am turning this source into a responsive usable product, not a static copy.'),
+        });
+        await send('import_analyzed', streamCopy('Contraintes d import analysees.', 'Import constraints analyzed.'), {
+          import: publicImport,
+          step_label: streamCopy('Import analyse.', 'Import analyzed.'),
+          step_detail: streamCopy('Je complete les etats, interactions et responsive manquants.', 'I will complete missing states, interactions, and responsive behavior.'),
+        });
+      }
     }
     if (AGENT_V3_ENABLED && reliability.should_mutate_files) {
       await send('tool_loop_started', streamCopy('Boucle outil preparee.', 'Tool loop prepared.'), {
@@ -7655,7 +8147,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
 
-  if (AGENT_V3_ENABLED && shouldUseWebResearch({ prompt: agentPrompt, intent: decision.intent, requiresFileChanges: reliability.should_mutate_files })) {
+  const importResearchNeeded = ['figma', 'github', 'url'].includes(String(publicImportContext(preparedImportContext || null)?.source || ''));
+  if (AGENT_V3_ENABLED && (importResearchNeeded || shouldUseWebResearch({ prompt: agentPrompt, intent: decision.intent, requiresFileChanges: reliability.should_mutate_files }))) {
     toolLoop.claim('web_research');
     await send('research_started', 'Researching current context.', { query: prompt.slice(0, 180), budget: toolLoop.snapshot });
     researchResult = await webResearchGateway.search(agentPrompt, { maxResults: 4, timeoutMs: 12_000 });
@@ -7701,7 +8194,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       agentText = shouldStreamTextResponse
         ? await streamAgentTextResponse({
             project,
-            prompt: agentPrompt,
+            prompt: agentPromptForText,
             files: existingFiles,
             decision,
             modelId: effectiveModelSelection,
@@ -7718,7 +8211,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           })
         : await createAgentTextResponse({
             project,
-            prompt: agentPrompt,
+            prompt: agentPromptForText,
             files: existingFiles,
             decision,
             modelId: effectiveModelSelection,
@@ -7842,7 +8335,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        const planned = await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
+        const planned = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
         executionPlan = planned.text;
         await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true });
       } catch (error) {
@@ -7869,7 +8362,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
-      const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext });
+      const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext, seniorAgentContext });
 
       let lastModelProgressAt = Date.now();
       let lastModelProgressChars = 0;
@@ -8381,7 +8874,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     console.error('[huggy:generate_stream_preflight_failed]', {
       request_id: requestId,
       project_id: req.params?.id,
-      user_id: req.auth?.userId || null,
+      user_id: getOptionalAuthState(req).userId,
       diagnostic_code: diagnostic.diagnostic_code,
       message: redactSecrets(error?.message || String(error), '[redacted]'),
     });

@@ -3,7 +3,8 @@ import './index.css';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
-import { initPromptInputActions } from './prompt-input-actions';
+import { initPromptInputActions, storePendingPromptAttachments, type PendingPromptAttachment } from './prompt-input-actions';
+import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -496,21 +497,150 @@ function init() {
         if (e.target === modalOverlay) closeModal();
     });
 
+    function readImportFile(file: File): Promise<PendingPromptAttachment> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Unable to read this image.'));
+            reader.onload = () => resolve({
+                id: `import-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                name: file.name,
+                type: file.type || 'application/octet-stream',
+                size: file.size,
+                lastModified: file.lastModified || Date.now(),
+                dataUrl: typeof reader.result === 'string' ? reader.result : '',
+                status: 'pending',
+            });
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function startImport(source: HuggyImportSource, input: { url?: string; mode?: string; file?: File } = {}) {
+        const shortPromptBySource: Record<HuggyImportSource, string> = {
+            figma: `Convert this Figma design into a responsive Huggy app: ${input.url || ''}`.trim(),
+            github: `Import this GitHub repo, detect the app structure, run checks, and prepare it for Huggy edits: ${input.url || ''}`.trim(),
+            image: input.file
+                ? `Recreate the uploaded image as a clean, responsive and editable app.`
+                : `Recreate an uploaded screenshot as a clean, responsive and editable app.`,
+            url: `${input.mode === 'research_site' ? 'Research this website and summarize what Huggy should use:' : input.mode === 'use_as_inspiration' ? 'Use this website as inspiration for an original responsive app:' : 'Rebuild this website as an original responsive app:'} ${input.url || ''}`.trim(),
+        };
+        const context = buildImportContext({
+            source,
+            mode: input.mode,
+            url: input.url,
+            fileName: input.file?.name,
+            mimeType: input.file?.type,
+            hasAttachment: Boolean(input.file),
+        }, {
+            figmaConfigured: false,
+            githubConfigured: true,
+        });
+        if (!context) {
+            showToast('Choose Figma, GitHub, Image or URL.');
+            return;
+        }
+        if (context.status === 'invalid') {
+            showToast(context.limitations[0] || 'This import source is not valid.');
+            return;
+        }
+        if (source === 'image' && !input.file) {
+            showToast('Upload a screenshot or image first.');
+            return;
+        }
+
+        const go = async () => {
+            if (input.file) {
+                await storePendingPromptAttachments([await readImportFile(input.file)]);
+            }
+            sessionStorage.setItem('huggy-initial-prompt', shortPromptBySource[source]);
+            sessionStorage.setItem('huggy-requested-mode', context.mode === 'research_site' ? 'auto' : 'build');
+            sessionStorage.setItem('huggy-import-context', JSON.stringify(context));
+            closeModal();
+            if (curtain) {
+                curtain.style.transformOrigin = 'top';
+                curtain.classList.add('falling');
+                setTimeout(() => {
+                    window.location.href = `/builder.html?new=1&import=${encodeURIComponent(source)}`;
+                }, 420);
+            } else {
+                window.location.href = `/builder.html?new=1&import=${encodeURIComponent(source)}`;
+            }
+        };
+        void go().catch(error => showToast(error instanceof Error ? error.message : 'Unable to start import.'));
+    }
+
+    function importModalHtml(source: HuggyImportSource) {
+        const titles: Record<HuggyImportSource, string> = {
+            figma: 'Import from Figma',
+            github: 'Import from GitHub',
+            image: 'Import from Image',
+            url: 'Import from URL',
+        };
+        const descriptions: Record<HuggyImportSource, string> = {
+            figma: 'Paste a Figma link. Huggy will convert the design into a responsive app with real components and missing interactions.',
+            github: 'Paste a repository URL. Huggy will inspect the structure, detect the framework, run checks and prepare a preview.',
+            image: 'Upload a screenshot or mockup. Huggy will recreate it as a clean, responsive and editable app.',
+            url: 'Paste a website URL. Huggy can rebuild your own site, use a site as inspiration, or research it safely.',
+        };
+        const input = source === 'image'
+            ? `<input id="import-file" type="file" accept="image/*" style="width:100%;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:12px;padding:12px;font-size:13px;">`
+            : `<input id="import-url" type="url" placeholder="${source === 'figma' ? 'https://www.figma.com/design/...' : source === 'github' ? 'https://github.com/owner/repo' : 'https://example.com'}" style="width:100%;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:12px;padding:13px 14px;font-size:13px;outline:none;">`;
+        const urlModes = source === 'url'
+            ? `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;">
+                <button type="button" class="import-mode active" data-import-mode="rebuild_as_app">Rebuild app</button>
+                <button type="button" class="import-mode" data-import-mode="clone_my_site">Clone my site</button>
+                <button type="button" class="import-mode" data-import-mode="use_as_inspiration">Inspiration</button>
+                <button type="button" class="import-mode" data-import-mode="research_site">Research</button>
+              </div>`
+            : '';
+        return `
+            <div style="display:grid;gap:18px;padding:4px 0 2px;">
+                <div style="display:grid;gap:8px;">
+                    <div style="width:34px;height:34px;border-radius:11px;background:color-mix(in srgb,var(--accent,#315fdc) 14%,transparent);display:grid;place-items:center;color:var(--accent,#315fdc);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                    </div>
+                    <h2 style="margin:0;font-size:22px;letter-spacing:-.02em;">${titles[source]}</h2>
+                    <p style="margin:0;color:var(--text-muted);line-height:1.55;font-size:13px;">${descriptions[source]}</p>
+                </div>
+                <div style="display:grid;gap:10px;">
+                    ${input}
+                    ${urlModes}
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button type="button" id="import-cancel" style="height:38px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:999px;padding:0 14px;font-weight:750;cursor:pointer;">Cancel</button>
+                    <button type="button" id="import-start" style="height:38px;border:1px solid #111;background:#111;color:#fff;border-radius:999px;padding:0 16px;font-weight:800;cursor:pointer;">Start import</button>
+                </div>
+                <style>
+                    .import-mode{height:34px;border:1px solid var(--border);background:var(--bg-input);color:var(--text-muted);border-radius:999px;font-size:12px;font-weight:750;cursor:pointer}
+                    .import-mode.active{background:#111;color:#fff;border-color:#111}
+                </style>
+            </div>
+        `;
+    }
+
+    function bindImportModal(source: HuggyImportSource) {
+        let selectedMode = source === 'url' ? 'rebuild_as_app' : undefined;
+        document.querySelectorAll<HTMLButtonElement>('.import-mode').forEach(button => {
+            button.addEventListener('click', () => {
+                selectedMode = button.dataset.importMode || 'rebuild_as_app';
+                document.querySelectorAll('.import-mode').forEach(item => item.classList.remove('active'));
+                button.classList.add('active');
+            });
+        });
+        document.getElementById('import-cancel')?.addEventListener('click', closeModal);
+        document.getElementById('import-start')?.addEventListener('click', () => {
+            const url = (document.getElementById('import-url') as HTMLInputElement | null)?.value.trim() || '';
+            const file = (document.getElementById('import-file') as HTMLInputElement | null)?.files?.[0];
+            startImport(source, { url, mode: selectedMode, file });
+        });
+    }
+
     // Import buttons
     document.querySelectorAll('.import-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const platform = btn.querySelector('span')?.textContent;
-            openModal(`
-                <div style="text-align: center; padding: 20px 0;">
-                    <div style="width: 60px; height: 60px; background: var(--accent-dim); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    </div>
-                    <h2 style="margin-bottom: 12px; font-weight: 700;">Import from ${platform}</h2>
-                    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 32px;">Connect your account to sync your ${platform} designs directly into your generation pipeline.</p>
-                    <button class="sign-in-btn" style="width: 100%; justify-content: center; padding: 14px;">Connect Account</button>
-                    <p style="font-size: 11px; color: var(--text-sub); margin-top: 16px;">Coming soon to Pro and Enterprise plans.</p>
-                </div>
-            `);
+            const source = (btn as HTMLElement).dataset.importSource as HuggyImportSource | undefined;
+            if (!source) return;
+            openModal(importModalHtml(source));
+            bindImportModal(source);
         });
     });
 

@@ -1,4 +1,9 @@
 export type HuggyMediaKind =
+  | 'launch_kit'
+  | 'social_posts'
+  | 'ads_creatives'
+  | 'brand_assets'
+  | 'pitch_one_pager'
   | 'video_ad'
   | 'ugc'
   | 'storyboard'
@@ -20,6 +25,7 @@ export type HuggyMediaModelPreference =
   | 'openai_image';
 
 export type HuggyMediaModelId =
+  | 'huggy/media-kit'
   | 'bytedance/seedance-2.0/fast/text-to-video'
   | 'bytedance/seedance-2.0/text-to-video'
   | 'fal-ai/veo3.1'
@@ -38,8 +44,8 @@ export type HuggyMediaSettings = {
 export type HuggyMediaModelDefinition = {
   id: HuggyMediaModelId;
   label: string;
-  family: 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai';
-  output: 'video' | 'image';
+  family: 'huggy' | 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai';
+  output: 'marketing_kit' | 'video' | 'image';
   quality: 'fast' | 'balanced' | 'premium';
   endpointId: string;
   recommendedFor: HuggyMediaKind[];
@@ -49,6 +55,17 @@ export type HuggyMediaModelDefinition = {
 };
 
 export const MEDIA_MODEL_REGISTRY: HuggyMediaModelDefinition[] = [
+  {
+    id: 'huggy/media-kit',
+    label: 'Huggy Marketing Kit',
+    family: 'huggy',
+    output: 'marketing_kit',
+    quality: 'balanced',
+    endpointId: 'internal-marketing-kit',
+    recommendedFor: ['launch_kit', 'social_posts', 'ads_creatives', 'brand_assets', 'pitch_one_pager'],
+    creditBase: 4,
+    minPlan: 'free',
+  },
   {
     id: 'bytedance/seedance-2.0/fast/text-to-video',
     label: 'Seedance 2.0 Fast',
@@ -134,6 +151,11 @@ export const MEDIA_MODEL_REGISTRY: HuggyMediaModelDefinition[] = [
 ];
 
 const MEDIA_KINDS = new Set<HuggyMediaKind>([
+  'launch_kit',
+  'social_posts',
+  'ads_creatives',
+  'brand_assets',
+  'pitch_one_pager',
   'video_ad',
   'ugc',
   'storyboard',
@@ -157,7 +179,7 @@ const MEDIA_MODEL_PREFERENCES = new Set<HuggyMediaModelPreference>([
 ]);
 
 export function normalizeMediaSettings(value: any): HuggyMediaSettings {
-  const kind = MEDIA_KINDS.has(value?.kind) ? value.kind : 'video_ad';
+  const kind = MEDIA_KINDS.has(value?.kind) ? value.kind : 'launch_kit';
   const format = MEDIA_FORMATS.has(value?.format) ? value.format : '9:16';
   const duration = MEDIA_DURATIONS.has(value?.duration) ? value.duration : '8s';
   const modelPreference = MEDIA_MODEL_PREFERENCES.has(value?.modelPreference)
@@ -171,7 +193,16 @@ export function mediaDurationSeconds(duration: HuggyMediaDuration): number {
   return Number(duration.replace('s', '')) || 8;
 }
 
-export function mediaOutputForKind(kind: HuggyMediaKind): 'video' | 'image' | 'storyboard' {
+export function isMarketingMediaKind(kind: HuggyMediaKind) {
+  return kind === 'launch_kit'
+    || kind === 'social_posts'
+    || kind === 'ads_creatives'
+    || kind === 'brand_assets'
+    || kind === 'pitch_one_pager';
+}
+
+export function mediaOutputForKind(kind: HuggyMediaKind): 'marketing_kit' | 'video' | 'image' | 'storyboard' {
+  if (isMarketingMediaKind(kind)) return 'marketing_kit';
   if (kind === 'product_image' || kind === 'thumbnail') return 'image';
   if (kind === 'storyboard') return 'storyboard';
   return 'video';
@@ -190,7 +221,8 @@ export function isMediaModelAvailable(model: HuggyMediaModelDefinition, plan: st
 }
 
 export function selectMediaModel(settings: HuggyMediaSettings, plan = 'free'): HuggyMediaModelDefinition {
-  const desiredOutput = mediaOutputForKind(settings.kind) === 'image' ? 'image' : 'video';
+  const output = mediaOutputForKind(settings.kind);
+  const desiredOutput = output === 'marketing_kit' ? 'marketing_kit' : output === 'image' ? 'image' : 'video';
   const available = MEDIA_MODEL_REGISTRY.filter(model => (
     model.output === desiredOutput
     && model.recommendedFor.includes(settings.kind)
@@ -222,6 +254,22 @@ export function selectMediaModel(settings: HuggyMediaSettings, plan = 'free'): H
 }
 
 export function estimateMediaCredits(settings: HuggyMediaSettings, model: HuggyMediaModelDefinition): number {
+  if (model.output === 'marketing_kit') {
+    const kitCredits: Record<HuggyMediaKind, number> = {
+      launch_kit: 6,
+      social_posts: 4,
+      ads_creatives: 6,
+      brand_assets: 5,
+      pitch_one_pager: 10,
+      video_ad: model.creditBase,
+      ugc: model.creditBase,
+      storyboard: model.creditBase,
+      product_image: model.creditBase,
+      social_creative: model.creditBase,
+      thumbnail: model.creditBase,
+    };
+    return kitCredits[settings.kind] || model.creditBase;
+  }
   if (model.output === 'image') return model.creditBase;
   const duration = mediaDurationSeconds(settings.duration);
   return Math.max(model.creditBase, model.creditBase + Math.ceil(duration * (model.creditPerSecond || 2)));
@@ -229,6 +277,11 @@ export function estimateMediaCredits(settings: HuggyMediaSettings, model: HuggyM
 
 export function mediaSettingsSummary(settings: HuggyMediaSettings) {
   const kindLabels: Record<HuggyMediaKind, string> = {
+    launch_kit: 'Launch kit',
+    social_posts: 'Social posts',
+    ads_creatives: 'Ads creatives',
+    brand_assets: 'Brand assets',
+    pitch_one_pager: 'Pitch / one-pager',
     video_ad: 'Video ad',
     ugc: 'UGC',
     storyboard: 'Storyboard',

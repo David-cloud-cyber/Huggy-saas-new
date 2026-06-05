@@ -12,6 +12,12 @@ import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
+import {
+  DESIGN_WORKSHOP_OPTIONS,
+  designWorkshopOptionLabel,
+  normalizeDesignWorkshopSettings,
+  type DesignWorkshopSettings,
+} from './services/design-workshop';
 
 type ChatMode = 'auto' | 'plan' | 'build';
 type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
@@ -51,7 +57,7 @@ type ProjectPayload = {
 type MediaGeneratePayload = {
   success: boolean;
   status: 'completed' | 'queued' | 'not_configured' | 'locked' | 'failed';
-  output: 'video' | 'image' | 'storyboard';
+  output: 'marketing_kit' | 'video' | 'image' | 'storyboard';
   settings: MediaSettings;
   model: {
     id: string;
@@ -89,7 +95,7 @@ type UserWorkspaceState = {
 
 type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 type EmptyPreviewMode = 'idle' | 'working';
-type MediaKind = 'video_ad' | 'ugc' | 'storyboard' | 'product_image' | 'social_creative' | 'thumbnail';
+type MediaKind = 'launch_kit' | 'social_posts' | 'ads_creatives' | 'brand_assets' | 'pitch_one_pager' | 'video_ad' | 'ugc' | 'storyboard' | 'product_image' | 'social_creative' | 'thumbnail';
 type MediaFormat = '9:16' | '1:1' | '4:5' | '16:9' | '3:4';
 type MediaDuration = '5s' | '8s' | '10s' | '15s' | '30s';
 type MediaModelPreference = 'auto' | 'best_quality' | 'fast' | 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai_image';
@@ -225,8 +231,14 @@ let activeWorkingDetails: string[] = [];
 let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
+let designSettings: DesignWorkshopSettings = {
+  action: 'autopilot',
+  scope: 'focused',
+  target: 'auto',
+  direction: 'auto',
+};
 let mediaSettings: MediaSettings = {
-  kind: 'video_ad',
+  kind: 'launch_kit',
   format: '9:16',
   duration: '8s',
   modelPreference: 'auto',
@@ -234,7 +246,7 @@ let mediaSettings: MediaSettings = {
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
 let currentProjectName = 'Untitled app';
-let initialBuilderHandoff: { prompt: string; mode: ChatMode } | null = null;
+let initialBuilderHandoff: { prompt: string; mode: ChatMode; importContext?: Record<string, unknown> } | null = null;
 let analysisPollTimer: number | null = null;
 let analysisRange = '30d';
 let projectWorkspaceState: WorkspaceState | null = null;
@@ -248,6 +260,7 @@ let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
 const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
 const ACTIVE_WORKSHOP_STORAGE_KEY = 'huggy-active-workshop';
+const DESIGN_SETTINGS_STORAGE_KEY = 'huggy-design-settings';
 const MEDIA_SETTINGS_STORAGE_KEY = 'huggy-media-settings';
 
 const WORKSHOP_CONFIG: Record<StudioWorkshop, {
@@ -281,7 +294,7 @@ const WORKSHOP_CONFIG: Record<StudioWorkshop, {
   media: {
     label: 'Huggy Media',
     shortLabel: 'Media',
-    placeholder: 'Describe the video, image, UGC ad or campaign asset you want',
+    placeholder: 'Describe the launch kit, post, ad, visual or media asset you want',
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 10h5"></path><path d="M3 14h5"></path><path d="M16 14h5"></path>',
     promptPrefix: 'Huggy Media workspace: treat this as a creative marketing media request for images, videos, UGC ads, product storytelling, thumbnails, social creatives, app teasers, or campaign assets. Do not build a web app unless the user explicitly asks to use the asset inside the app. Choose media format and model intelligently from the compact settings, keep the result in Preview, and never expose provider costs.',
   },
@@ -312,6 +325,11 @@ const MEDIA_OPTIONS: {
     { value: '3:4', label: '3:4', hint: 'Portrait' },
   ],
   kind: [
+    { value: 'launch_kit', label: 'Launch kit', hint: 'Posts + CTAs' },
+    { value: 'social_posts', label: 'Social posts', hint: 'FB/LinkedIn/WhatsApp' },
+    { value: 'ads_creatives', label: 'Ads', hint: 'A/B angles' },
+    { value: 'brand_assets', label: 'Brand assets', hint: 'Visual system' },
+    { value: 'pitch_one_pager', label: 'One-pager', hint: 'Pitch copy' },
     { value: 'video_ad', label: 'Video ad', hint: 'Campaign' },
     { value: 'ugc', label: 'UGC', hint: 'Creator-style' },
     { value: 'storyboard', label: 'Storyboard', hint: 'Plan shots' },
@@ -342,7 +360,7 @@ function normalizeMediaSettings(value: any): MediaSettings {
   return {
     modelPreference: pick('modelPreference', 'auto'),
     format: pick('format', '9:16'),
-    kind: pick('kind', 'video_ad'),
+    kind: pick('kind', 'launch_kit'),
     duration: pick('duration', '8s'),
   };
 }
@@ -370,6 +388,198 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+const DESIGN_CONTROL_ORDER: Array<keyof typeof DESIGN_WORKSHOP_OPTIONS> = ['action', 'scope', 'target', 'direction'];
+
+function loadDesignSettings() {
+  try {
+    designSettings = normalizeDesignWorkshopSettings(JSON.parse(localStorage.getItem(DESIGN_SETTINGS_STORAGE_KEY) || '{}'));
+  } catch {
+    designSettings = normalizeDesignWorkshopSettings({});
+  }
+}
+
+function saveDesignSettings() {
+  try {
+    localStorage.setItem(DESIGN_SETTINGS_STORAGE_KEY, JSON.stringify(designSettings));
+  } catch {
+    // Non-critical UI preference.
+  }
+}
+
+function ensureDesignControlsStyle() {
+  if (document.getElementById('huggy-design-controls-style')) return;
+  const style = document.createElement('style');
+  style.id = 'huggy-design-controls-style';
+  style.textContent = `
+    .huggy-design-controls {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 7px 14px 0;
+      max-width: calc(100% - 28px);
+    }
+    .huggy-design-controls.visible { display: flex; }
+    .huggy-design-pill {
+      height: 23px;
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 84%, transparent);
+      color: var(--text-muted);
+      padding: 0 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font: 760 10px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+      cursor: pointer;
+      transition: border-color 140ms cubic-bezier(.22,1,.36,1), color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), transform 140ms cubic-bezier(.22,1,.36,1);
+    }
+    .huggy-design-pill:hover,
+    .huggy-design-pill[aria-expanded="true"] {
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+    .huggy-design-pill svg {
+      width: 11px;
+      height: 11px;
+      opacity: .78;
+    }
+    .huggy-design-popover {
+      position: fixed;
+      z-index: 12000;
+      min-width: 188px;
+      max-width: min(272px, calc(100vw - 24px));
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+      box-shadow: 0 18px 52px rgba(28,28,28,.16);
+      backdrop-filter: blur(18px) saturate(150%);
+      display: grid;
+      gap: 3px;
+    }
+    .huggy-design-menu-option {
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .huggy-design-menu-option:hover,
+    .huggy-design-menu-option.active {
+      background: var(--accent-dim);
+    }
+    .huggy-design-menu-option strong {
+      font-size: 11px;
+      font-weight: 820;
+    }
+    .huggy-design-menu-option span {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    @media (max-width: 520px) {
+      .huggy-design-controls { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+      .huggy-design-pill { flex: 0 0 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .huggy-design-pill { transition: none; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function closeDesignSettingsMenu() {
+  document.getElementById('huggy-design-popover')?.remove();
+  document.querySelectorAll<HTMLElement>('.huggy-design-pill[aria-expanded="true"]').forEach(button => {
+    button.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function openDesignSettingsMenu(key: keyof typeof DESIGN_WORKSHOP_OPTIONS, anchor: HTMLElement) {
+  closeDesignSettingsMenu();
+  const rect = anchor.getBoundingClientRect();
+  const popover = document.createElement('div');
+  popover.id = 'huggy-design-popover';
+  popover.className = 'huggy-design-popover';
+  popover.style.left = `${Math.min(rect.left, window.innerWidth - 284)}px`;
+  popover.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 280)}px`;
+  popover.setAttribute('role', 'menu');
+  anchor.setAttribute('aria-expanded', 'true');
+  popover.innerHTML = DESIGN_WORKSHOP_OPTIONS[key].map(option => {
+    const active = designSettings[key] === option.value;
+    return `
+      <button class="huggy-design-menu-option${active ? ' active' : ''}" type="button" role="menuitem" data-design-value="${escapeHtml(String(option.value))}">
+        <strong>${escapeHtml(option.label)}</strong>
+        <span>${escapeHtml(option.hint)}</span>
+      </button>
+    `;
+  }).join('');
+  popover.querySelectorAll<HTMLElement>('[data-design-value]').forEach(option => {
+    option.addEventListener('click', () => {
+      (designSettings as any)[key] = option.dataset.designValue || designSettings[key];
+      saveDesignSettings();
+      closeDesignSettingsMenu();
+      syncDesignControls();
+    });
+  });
+  document.body.appendChild(popover);
+  setTimeout(() => {
+    const close = (event: MouseEvent) => {
+      if (popover.contains(event.target as Node) || anchor.contains(event.target as Node)) return;
+      closeDesignSettingsMenu();
+      document.removeEventListener('click', close, true);
+    };
+    document.addEventListener('click', close, true);
+  }, 0);
+}
+
+function ensureDesignControls() {
+  ensureDesignControlsStyle();
+  let controls = document.getElementById('huggy-design-controls') as HTMLElement | null;
+  if (controls) return controls;
+  const context = document.getElementById('huggy-workshop-context');
+  controls = document.createElement('div');
+  controls.id = 'huggy-design-controls';
+  controls.className = 'huggy-design-controls';
+  controls.setAttribute('aria-label', 'Huggy Design settings');
+  context?.insertAdjacentElement('afterend', controls);
+  return controls;
+}
+
+function syncDesignControls() {
+  const controls = ensureDesignControls();
+  controls.classList.toggle('visible', activeWorkshop === 'design');
+  controls.setAttribute('aria-hidden', activeWorkshop === 'design' ? 'false' : 'true');
+  if (activeWorkshop !== 'design') {
+    closeDesignSettingsMenu();
+    return;
+  }
+  controls.innerHTML = DESIGN_CONTROL_ORDER.map(key => `
+    <button class="huggy-design-pill" type="button" data-design-control="${key}" aria-haspopup="menu" aria-expanded="false">
+      <span>${escapeHtml(designWorkshopOptionLabel(key, (designSettings as any)[key]))}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+  `).join('');
+  controls.querySelectorAll<HTMLElement>('[data-design-control]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openDesignSettingsMenu(button.dataset.designControl as keyof typeof DESIGN_WORKSHOP_OPTIONS, button);
+    });
+  });
 }
 
 function normalizeWorkshop(value: unknown): StudioWorkshop {
@@ -587,6 +797,7 @@ function refreshWorkshopInputContext() {
     context.insertAdjacentHTML('afterbegin', workshopIconSvg(activeWorkshop));
     label.textContent = config.label;
   }
+  syncDesignControls();
   syncMediaControls();
 }
 
@@ -603,6 +814,7 @@ function setActiveWorkshop(workshop: StudioWorkshop, options: { focusInput?: boo
 }
 
 function loadActiveWorkshop() {
+  loadDesignSettings();
   loadMediaSettings();
   const requested = normalizeWorkshop(new URLSearchParams(window.location.search).get('workshop'));
   const saved = normalizeWorkshop(localStorage.getItem(ACTIVE_WORKSHOP_STORAGE_KEY));
@@ -619,6 +831,7 @@ function studioPromptContextPayload() {
         workshop: activeWorkshop,
         label: config.label,
         instruction: config.promptPrefix || '',
+        ...(activeWorkshop === 'design' ? { settings: designSettings } : {}),
         ...(activeWorkshop === 'media' ? { settings: mediaSettings } : {}),
       };
 }
@@ -811,12 +1024,12 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   if (address) address.textContent = mode === 'working' ? `${statusSlug}.huggy.local` : 'preview.huggy.local / waiting';
 }
 
-function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Ready for media') {
-  const kind = mediaOptionLabel('kind', mediaSettings.kind);
-  const format = mediaSettings.format;
-  const duration = mediaSettings.duration;
-  const model = mediaOptionLabel('modelPreference', mediaSettings.modelPreference);
+function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
   const isWorking = state === 'working';
+  const status = isWorking ? title || 'Generating media' : 'Media results will appear here';
+  const helper = isWorking
+    ? 'Huggy is preparing the asset from your current request.'
+    : 'Use the main input to create an image, video, UGC ad, storyboard or campaign asset.';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -825,35 +1038,21 @@ function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Read
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#315fdc}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(59,130,246,.13),transparent 36%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
-.wrap{min-height:100vh;display:grid;place-items:center;padding:28px}.panel{width:min(820px,100%);border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 28px 90px rgba(28,28,28,.09);padding:clamp(22px,4vw,42px);display:grid;gap:22px}
-.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 6px rgba(59,130,246,.11)}
-h1{margin:8px 0 8px;font-size:clamp(34px,6vw,68px);line-height:.9;letter-spacing:-.055em}.copy{margin:0;color:var(--muted);font-size:15px;line-height:1.55;max-width:580px}.orb{width:156px;height:156px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.95) 22%,rgba(49,95,220,.56) 55%,rgba(28,28,28,.12) 78%);box-shadow:0 26px 90px rgba(49,95,220,.24);animation:${isWorking ? 'pulse 2.8s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
-.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid var(--line);border-radius:999px;background:var(--soft);padding:8px 10px;font-size:12px;font-weight:820;color:var(--ink)}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card strong{display:block;font-size:13px;margin-bottom:6px}.card span{color:var(--muted);font-size:12px;line-height:1.45}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}@media(max-width:720px){.top{display:grid}.cards{grid-template-columns:1fr}.orb{width:120px;height:120px}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+.empty{display:grid;justify-items:center;gap:10px;text-align:center;max-width:360px;color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--panel) 88%,transparent);padding:9px 13px;color:var(--ink);font-size:13px;font-weight:750;box-shadow:0 8px 28px rgba(28,28,28,.06)}
+.dot{width:8px;height:8px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 5px rgba(59,130,246,.10);animation:${isWorking ? 'pulse 1.6s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+.helper{margin:0;font-size:12px;line-height:1.45;color:var(--muted)}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
+@media(prefers-reduced-motion:reduce){.dot{animation:none}}
 </style>
 </head>
 <body>
 <main class="wrap">
-  <section class="panel">
-    <div class="top">
-      <div>
-        <div class="eyebrow"><span class="dot"></span>Huggy Media</div>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="copy">Create UGC ads, product videos, storyboards, thumbnails, hero visuals and campaign assets with one assistant. Choose options only when you need control.</p>
-      </div>
-      <div class="orb" aria-hidden="true"></div>
-    </div>
-    <div class="chips">
-      <span class="chip">${escapeHtml(model)}</span>
-      <span class="chip">${escapeHtml(format)}</span>
-      <span class="chip">${escapeHtml(kind)}</span>
-      <span class="chip">${escapeHtml(duration)}</span>
-    </div>
-    <div class="cards">
-      <div class="card"><strong>Media Lab</strong><span>Create standalone ads and visuals even without a web app.</span></div>
-      <div class="card"><strong>Project-aware</strong><span>When useful, Huggy can use the current app tone and branding.</span></div>
-      <div class="card"><strong>Auto model</strong><span>Huggy picks the best model for quality, speed, credits and format.</span></div>
-    </div>
+  <section class="empty" aria-label="Huggy Media preview">
+    <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span>${escapeHtml(status)}</div>
+    <p class="helper">${escapeHtml(helper)}</p>
   </section>
 </main>
 </body>
@@ -877,7 +1076,7 @@ function syncWorkshopPreview() {
   if (!frame) return;
   if (activeWorkshop === 'media') {
     activateBuilderView('preview');
-    setMediaPreviewHtml(currentMediaPreviewHtml || mediaPreviewShellHtml('idle', 'Ready for media'));
+    setMediaPreviewHtml(currentMediaPreviewHtml || mediaPreviewShellHtml('idle', 'Media output'));
     return;
   }
   if (frame.dataset.mediaPreview === 'true') {
@@ -942,13 +1141,26 @@ function getInitialBuilderHandoff() {
   const sessionPrompt = sessionStorage.getItem('huggy-initial-prompt')?.trim() || '';
   const legacyPrompt = localStorage.getItem('huggy-initial-prompt')?.trim() || '';
   const rawMode = sessionStorage.getItem('huggy-requested-mode');
+  const rawImportContext = sessionStorage.getItem('huggy-import-context') || localStorage.getItem('huggy-import-context') || '';
+  let importContext: Record<string, unknown> | undefined;
+  if (rawImportContext) {
+    try {
+      const parsed = JSON.parse(rawImportContext);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) importContext = parsed;
+    } catch {
+      importContext = undefined;
+    }
+  }
   initialBuilderHandoff = {
     prompt: sessionPrompt || legacyPrompt,
     mode: rawMode === 'plan' ? 'plan' : rawMode === 'build' ? 'build' : 'auto',
+    importContext,
   };
   sessionStorage.removeItem('huggy-initial-prompt');
   sessionStorage.removeItem('huggy-requested-mode');
+  sessionStorage.removeItem('huggy-import-context');
   localStorage.removeItem('huggy-initial-prompt');
+  localStorage.removeItem('huggy-import-context');
   return initialBuilderHandoff;
 }
 
@@ -3375,10 +3587,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const safePrompt = redactSecrets(prompt).trim();
   const safeDisplayText = redactSecrets(displayText);
   if (isGenerating || !safePrompt) return;
+  const handoff = getInitialBuilderHandoff();
   const effectiveExtra = {
     ...extra,
     ...(extra.studioContext === undefined && activeWorkshop !== 'chat' ? { studioContext: studioPromptContextPayload() } : {}),
+    ...(extra.importContext === undefined && handoff.importContext ? { importContext: handoff.importContext } : {}),
   };
+  if (handoff.importContext && effectiveExtra.importContext === handoff.importContext) {
+    delete handoff.importContext;
+  }
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
@@ -3771,7 +3988,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
         return;
       }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'diff_ready' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
+      if (eventType === 'queued' || eventType === 'routing' || eventType === 'codebase_indexed' || eventType === 'task_decomposed' || eventType === 'policy_checked' || eventType === 'import_started' || eventType === 'import_analyzed' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'diff_ready' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
         const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building'
           ? 'Building'
           : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'diff_ready' || eventType === 'files_changed'
@@ -3784,6 +4001,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
                 ? 'Fixing'
                 : 'Thinking';
         if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Espace de travail prepare.', 'Workspace prepared.')), label);
+        if (eventType === 'codebase_indexed') markAgentStep('index', visibleStepLabel(say('Projet indexe.', 'Project indexed.')), 'Thinking', trustDetail('Je repere les routes, composants, APIs et fichiers critiques avant toute action.', 'I map routes, components, APIs, and critical files before any action.'));
+        if (eventType === 'task_decomposed') markAgentStep('decompose', visibleStepLabel(say('Tache decomposee.', 'Task decomposed.')), 'Planning', trustDetail('Je transforme la demande en etapes produit et qualite pour eviter une sortie generique.', 'I turn the request into product and quality steps to avoid a generic output.'));
+        if (eventType === 'policy_checked') finishAgentStep('guardrails', visibleStepLabel(say('Garde-fous valides.', 'Guardrails checked.')), trustDetail('Je garde les limites, rollback et verifications avant de livrer.', 'I keep scope limits, rollback, and checks in place before delivery.'));
+        if (eventType === 'import_started') markAgentStep('import', visibleStepLabel(say('Source importee.', 'Import source prepared.')), 'Thinking', trustDetail('Je transforme la source en produit utilisable, pas en copie statique.', 'I am turning the source into a usable product, not a static copy.'));
+        if (eventType === 'import_analyzed') finishAgentStep('import', visibleStepLabel(say('Import analyse.', 'Import analyzed.')), trustDetail('Les etats, interactions et responsive manquants seront completes.', 'Missing states, interactions, and responsive behavior will be completed.'));
         if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers.', 'Generating files.')), label, trustDetail('Je cree une structure moderne avec composants, styles et interactions utiles.', 'I am creating a modern structure with useful components, styles, and interactions.'));
         if (eventType === 'model_streaming') markAgentStep('model', visibleStepLabel(say('Fichiers en cours de generation.', 'Files are being generated.')), label, trustDetail('Je recois les changements cote serveur sans afficher de donnees internes.', 'I am receiving server-side changes without showing internal data.'));
         if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));

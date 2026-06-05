@@ -330,13 +330,20 @@
             color: var(--text-muted);
         }
 
-        .auth-footer a {
+        .auth-footer a,
+        .auth-footer button {
             color: var(--accent);
             text-decoration: none;
             font-weight: 500;
+            border: 0;
+            padding: 0;
+            background: transparent;
+            font: inherit;
+            cursor: pointer;
         }
 
-        .auth-footer a:hover {
+        .auth-footer a:hover,
+        .auth-footer button:hover {
             text-decoration: underline;
         }
 
@@ -356,13 +363,15 @@
             display: block;
         }
 
-        .auth-status.error {
+        .auth-status.error,
+        .auth-status[data-tone="error"] {
             color: #F87171;
             border-color: rgba(248, 113, 113, 0.24);
             background: rgba(248, 113, 113, 0.08);
         }
 
-        .auth-status.success {
+        .auth-status.success,
+        .auth-status[data-tone="success"] {
             color: #4ADE80;
             border-color: rgba(74, 222, 128, 0.24);
             background: rgba(74, 222, 128, 0.08);
@@ -766,7 +775,7 @@
             </div>
 
             <form id="auth-form">
-                <div class="form-group" id="name-group" style="display:none;">
+                <div class="form-group" id="name-field" hidden>
                     <label class="label">Full Name</label>
                     <input type="text" class="input" placeholder="John Doe" id="input-name" autocomplete="name">
                 </div>
@@ -780,6 +789,7 @@
                 </div>
                 
                 <button type="submit" class="btn-submit" id="btn-submit">Sign In</button>
+                <div id="auth-status" class="auth-status" role="status" aria-live="polite"></div>
             </form>
 
             <div class="social-divider">
@@ -799,7 +809,7 @@
             </div>
 
             <div class="auth-footer" id="auth-footer-text">
-                Don't have an account? <a href="#" id="link-signup">Sign up for free</a>
+                New to Huggy? <button type="button" data-auth-switch="signup">Create an account</button>
             </div>
         </div>
         </section>
@@ -826,129 +836,60 @@
     </div>
 
     <script>
-        // Global navigation helper using standardized curtain
-        function navigate(url) {
+        (function() {
             const curtain = document.getElementById('curtain');
-            if (curtain) {
-                curtain.style.background = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#060606';
-                curtain.classList.remove('rising');
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = url;
-                }, 600);
-            } else {
-                window.location.href = url;
+            const html = document.documentElement;
+            const themeBtn = document.getElementById('theme-btn');
+            const moonIcon = document.getElementById('moon-icon');
+            const sunIcon = document.getElementById('sun-icon');
+            let curtainBusy = false;
+
+            function updateIcons(theme) {
+                moonIcon?.classList.toggle('hidden', theme !== 'dark');
+                sunIcon?.classList.toggle('hidden', theme === 'dark');
             }
-        }
 
-        const tabLogin = document.getElementById('tab-login');
-        const tabSignup = document.getElementById('tab-signup');
-        const authTitle = document.getElementById('auth-title');
-        const authSubtitle = document.getElementById('auth-subtitle');
-        const nameGroup = document.getElementById('name-group');
-        const btnSubmit = document.getElementById('btn-submit');
-        const authFooter = document.getElementById('auth-footer-text');
-        const curtain = document.getElementById('curtain');
-        const html = document.documentElement;
-        const themeBtn = document.getElementById('theme-btn');
-        const moonIcon = document.getElementById('moon-icon');
-        const sunIcon = document.getElementById('sun-icon');
+            themeBtn?.addEventListener('click', () => {
+                if (curtainBusy) return;
+                curtainBusy = true;
 
-        let isLogin = true;
-
-        function setMode(login) {
-            isLogin = login;
-            if (login) {
-                tabLogin.classList.add('active');
-                tabSignup.classList.remove('active');
-                authTitle.textContent = "Welcome back";
-                authSubtitle.textContent = "Pick up your projects, keep your session, and publish when you are ready.";
-                nameGroup.style.display = 'none';
-                btnSubmit.textContent = "Sign In";
-                authFooter.innerHTML = `Don't have an account? <a href="#" id="link-signup">Sign up for free</a>`;
-                document.getElementById('link-signup').addEventListener('click', (e) => { e.preventDefault(); setMode(false); });
-            } else {
-                tabLogin.classList.remove('active');
-                tabSignup.classList.add('active');
-                authTitle.textContent = "Create an account";
-                authSubtitle.textContent = "Start with a prompt, then keep every project in one connected workspace.";
-                nameGroup.style.display = 'block';
-                btnSubmit.textContent = "Create Account";
-                authFooter.innerHTML = `Already have an account? <a href="#" id="link-login">Log in</a>`;
-                document.getElementById('link-login').addEventListener('click', (e) => { e.preventDefault(); setMode(true); });
-            }
-        }
-
-        tabLogin.addEventListener('click', () => setMode(true));
-        tabSignup.addEventListener('click', () => setMode(false));
-        document.getElementById('link-signup').addEventListener('click', (e) => { e.preventDefault(); setMode(false); });
-
-        // Theme management
-        let curtainBusy = false;
-        function updateIcons(theme) {
-            if (theme === 'dark') {
-                moonIcon.classList.remove('hidden');
-                sunIcon.classList.add('hidden');
-            } else {
-                moonIcon.classList.add('hidden');
-                sunIcon.classList.remove('hidden');
-            }
-        }
-
-        themeBtn.addEventListener('click', () => {
-            if (curtainBusy) return;
-            curtainBusy = true;
-            
-            const current = html.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            
-            curtain.style.background = next === 'dark' ? '#171613' : '#fcfbf8';
-            curtain.style.transformOrigin = 'top';
-            curtain.classList.add('falling');
-
-            setTimeout(() => {
-                html.setAttribute('data-theme', next);
-                localStorage.setItem('huggy-theme', next);
-                updateIcons(next);
-                
-                curtain.classList.remove('falling');
-                requestAnimationFrame(() => {
-                    curtain.style.transformOrigin = 'bottom';
-                    curtain.classList.add('rising');
-                    setTimeout(() => {
-                        curtain.classList.remove('rising');
-                        curtainBusy = false;
-                    }, 620);
-                });
-            }, 600);
-        });
-
-        // Initialize icons
-        updateIcons(html.getAttribute('data-theme'));
-
-        // Page load
-        const liftCurtain = () => {
-            if (curtain) curtain.classList.add('rising');
-        };
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            liftCurtain();
-        } else {
-            window.addEventListener('load', liftCurtain);
-        }
-
-        // Intercept internal links
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
-                const href = link.getAttribute('href');
-                if (href && (href.startsWith('#') || href === '')) {
-                    return;
+                const current = html.getAttribute('data-theme');
+                const next = current === 'dark' ? 'light' : 'dark';
+                if (curtain) {
+                    curtain.style.background = next === 'dark' ? '#171613' : '#fcfbf8';
+                    curtain.style.transformOrigin = 'top';
+                    curtain.classList.add('falling');
                 }
-                if (link.id === 'link-signup' || link.id === 'link-login') return; // Handled by setMode
-                e.preventDefault();
-                navigate(link.href);
+
+                setTimeout(() => {
+                    html.setAttribute('data-theme', next);
+                    localStorage.setItem('huggy-theme', next);
+                    updateIcons(next);
+
+                    if (!curtain) {
+                        curtainBusy = false;
+                        return;
+                    }
+                    curtain.classList.remove('falling');
+                    requestAnimationFrame(() => {
+                        curtain.style.transformOrigin = 'bottom';
+                        curtain.classList.add('rising');
+                        setTimeout(() => {
+                            curtain.classList.remove('rising');
+                            curtainBusy = false;
+                        }, 620);
+                    });
+                }, 600);
+            });
+
+            updateIcons(html.getAttribute('data-theme'));
+            const liftCurtain = () => curtain?.classList.add('rising');
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                liftCurtain();
+            } else {
+                window.addEventListener('load', liftCurtain, { once: true });
             }
-        });
+        })();
     </script>
     <script type="module" src="/src/auth.ts"></script>
 </body>

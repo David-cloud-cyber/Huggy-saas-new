@@ -8,6 +8,7 @@ function assert(condition: unknown, message: string) {
 
 const serverSource = readFileSync('server.ts', 'utf8');
 const browserAuthSource = readFileSync('src/lib/supabase-browser.ts', 'utf8');
+const browserConfigSource = readFileSync('src/lib/supabase-config.ts', 'utf8');
 const authGuardSource = readFileSync('src/auth-guard.ts', 'utf8');
 const authPageSource = readFileSync('auth.html', 'utf8');
 
@@ -67,6 +68,17 @@ assert(
 );
 
 assert(
+  browserConfigSource.includes('allowDevFallback = !import.meta.env.PROD'),
+  'browser Supabase fallbacks must be dev-only so production env mismatches are visible',
+);
+
+assert(
+  browserConfigSource.includes('SUPABASE_BROWSER_CONFIG_STATUS') &&
+    browserConfigSource.includes('getSupabaseProjectRef'),
+  'browser Supabase config must expose a project-ref diagnostic',
+);
+
+assert(
   authGuardSource.includes('getVerifiedSession({ allowRefresh: true })'),
   'private route guard must refresh once before redirecting',
 );
@@ -74,6 +86,51 @@ assert(
 assert(
   authPageSource.includes('data-provider="google"') && authPageSource.includes('Continue with Google'),
   'auth page must include the Google sign-in control',
+);
+
+assert(
+  authPageSource.includes('id="name-field"') && !authPageSource.includes('id="name-group"'),
+  'auth page must expose #name-field for src/auth.ts and must not keep stale #name-group',
+);
+
+assert(
+  authPageSource.includes('id="auth-status"') &&
+    authPageSource.includes('role="status"') &&
+    authPageSource.includes('aria-live="polite"'),
+  'auth page must expose an accessible #auth-status region for src/auth.ts',
+);
+
+assert(
+  authPageSource.includes('type="module" src="/src/auth.ts"'),
+  'auth page must load src/auth.ts as the single auth controller',
+);
+
+const inlineScripts = Array.from(
+  authPageSource.matchAll(/<script(?![^>]*\btype=["']module["'])(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi),
+).map((match) => match[1] || '');
+const duplicateInlineAuthScripts = inlineScripts.filter((script) =>
+  /signInWithPassword|signUp\(|signInWithOAuth|getVerifiedSession|auth-form|input-email|input-password|tab-signup|name-group/.test(script),
+);
+
+assert(
+  duplicateInlineAuthScripts.length === 0,
+  'auth page must not contain inline login/signup/OAuth logic that duplicates src/auth.ts',
+);
+
+assert(
+  serverSource.includes('function getOptionalAuthState') &&
+    !/req\.auth\?\.userId\s*\|\|\s*null/.test(serverSource),
+  'optional auth reads must go through getOptionalAuthState instead of route-local req.auth reads',
+);
+
+assert(
+  serverSource.includes('project_refs_match: supabaseDiagnostics.project_refs_match'),
+  '/api/health must expose project_refs_match at top level',
+);
+
+assert(
+  serverSource.includes("diagnostic_code: 'SUPABASE_AUTH_CLIENT_UNDEFINED'"),
+  'server must classify generated-app Supabase auth client crashes explicitly',
 );
 
 console.log('auth-state guards passed');
