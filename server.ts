@@ -5719,7 +5719,7 @@ app.post('/api/billing/checkout/topup', async (req, res) => {
     const redirectUrl = await billing.createTopupCheckout(
       orgId,
       email || 'test@huggy.app',
-      productId || 'topup_pro_50',
+      productId || 'topup_credits_500',
       successUrl || `${req.protocol}://${req.get('host')}/settings?success=true`,
       cancelUrl || `${req.protocol}://${req.get('host')}/settings?cancel=true`
     );
