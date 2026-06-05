@@ -2308,6 +2308,7 @@
       }
       localStorage.removeItem('huggy-initial-prompt');
       localStorage.removeItem('huggy-current-project');
+      localStorage.removeItem('huggy-last-builder-project-id');
       navigate('/builder.html?new=1');
     }
 
@@ -2318,6 +2319,7 @@
         sessionStorage.removeItem('huggy-initial-prompt');
         sessionStorage.removeItem('huggy-requested-mode');
         localStorage.removeItem('huggy-current-project');
+        localStorage.removeItem('huggy-last-builder-project-id');
         navigate(`/builder.html?new=1&workshop=${encodeURIComponent(workshop)}`);
       });
     });
@@ -3047,6 +3049,8 @@
         sessionStorage.setItem('huggy-initial-prompt', prompt);
         sessionStorage.setItem('huggy-requested-mode', 'auto');
         localStorage.removeItem('huggy-initial-prompt');
+        localStorage.removeItem('huggy-current-project');
+        localStorage.removeItem('huggy-last-builder-project-id');
         if (typeof navigate === 'function') {
           navigate('/builder.html?new=1');
         } else {
@@ -3065,6 +3069,8 @@
           if (typeof openNewBuilder === 'function') {
             openNewBuilder();
           } else {
+            localStorage.removeItem('huggy-current-project');
+            localStorage.removeItem('huggy-last-builder-project-id');
             window.location.href = '/builder.html?new=1';
           }
         };

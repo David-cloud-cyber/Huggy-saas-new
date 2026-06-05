@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./design-system.css";
 
 :root[data-theme="dark"] {
     --bg: #171613;

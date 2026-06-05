@@ -1101,6 +1101,11 @@ function getProjectIdFromUrl() {
   return params.get('project') || '';
 }
 
+function isNewProjectRoute() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('new') === '1';
+}
+
 function isRealProjectId(value?: string | null) {
   const clean = String(value || '').trim();
   return Boolean(clean && !clean.startsWith('proj-') && /^[a-zA-Z0-9_-]{8,}$/.test(clean));
@@ -3399,7 +3404,7 @@ function activateDatabaseView() {
   void loadDatabase();
 }
 
-function emptyBuilderProjectPayload(): ProjectPayload {
+function emptyBuilderProjectPayload(workspaceState: UserWorkspaceState | null = userWorkspaceState): ProjectPayload {
   return {
     success: true,
     project: {
@@ -3414,19 +3419,18 @@ function emptyBuilderProjectPayload(): ProjectPayload {
       status: 'idle',
       html: currentPreviewHtml,
     },
-    workspace_state: userWorkspaceState ? {
-      draft_prompt: userWorkspaceState.builder_draft_prompt || '',
-      selected_mode: userWorkspaceState.builder_selected_mode || 'auto',
-      selected_model: userWorkspaceState.builder_selected_model || 'auto',
-      active_tab: userWorkspaceState.builder_active_tab || 'preview',
-      preview_device: userWorkspaceState.builder_preview_device || 'desktop',
+    workspace_state: workspaceState ? {
+      draft_prompt: workspaceState.builder_draft_prompt || '',
+      selected_mode: workspaceState.builder_selected_mode || 'auto',
+      selected_model: workspaceState.builder_selected_model || 'auto',
+      active_tab: workspaceState.builder_active_tab || 'preview',
+      preview_device: workspaceState.builder_preview_device || 'desktop',
     } : null,
   } as ProjectPayload;
 }
 
 async function ensureProject() {
-  const params = new URLSearchParams(window.location.search);
-  const wantsFreshProject = params.get('new') === '1';
+  const wantsFreshProject = isNewProjectRoute();
   const routeProjectId = getProjectIdFromUrl();
   currentProjectId = isRealProjectId(routeProjectId) ? routeProjectId : '';
 
@@ -3439,7 +3443,9 @@ async function ensureProject() {
   userWorkspaceState = userState?.state || null;
   if (wantsFreshProject) {
     currentProjectId = '';
-    return emptyBuilderProjectPayload();
+    userWorkspaceState = null;
+    forgetLastBuilderProjectId();
+    return emptyBuilderProjectPayload(null);
   }
   const stateProjectId = isRealProjectId(userWorkspaceState?.last_project_id) ? String(userWorkspaceState?.last_project_id) : '';
   const fallbackProjectId = stateProjectId || rememberedLastBuilderProjectId();

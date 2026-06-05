@@ -1,0 +1,159 @@
+/* Huggy Design System Lock
+   Shared visual language for public pages and product surfaces. */
+:root {
+  --huggy-bg: #fcfbf8;
+  --huggy-bg-warm: #f7f4ed;
+  --huggy-surface: #fffdf8;
+  --huggy-surface-raised: #fffefa;
+  --huggy-text: #1c1c1c;
+  --huggy-muted: #5f5f5d;
+  --huggy-subtle: #77736b;
+  --huggy-border: #eceae4;
+  --huggy-border-strong: #dedbd2;
+  --huggy-blue: #2f6df6;
+  --huggy-blue-deep: #173f8f;
+  --huggy-blue-ink: #132a69;
+  --huggy-focus: rgba(47, 109, 246, 0.28);
+  --huggy-radius-sm: 8px;
+  --huggy-radius-md: 14px;
+  --huggy-radius-lg: 22px;
+  --huggy-radius-xl: 30px;
+  --huggy-shadow-soft: 0 14px 40px rgba(24, 22, 17, 0.08);
+  --huggy-shadow-card: 0 20px 70px rgba(24, 22, 17, 0.10), 0 1px 0 rgba(255, 255, 255, 0.72) inset;
+  --huggy-gradient-blue: linear-gradient(135deg, #1d4ed8 0%, #173f8f 48%, #151e55 100%);
+  --huggy-motion-fast: 120ms;
+  --huggy-motion-normal: 180ms;
+  --huggy-motion-panel: 260ms;
+  --huggy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-theme="dark"] {
+  --huggy-bg: #171613;
+  --huggy-bg-warm: #201f1b;
+  --huggy-surface: #201f1b;
+  --huggy-surface-raised: #24231f;
+  --huggy-text: #f8f4eb;
+  --huggy-muted: #d8d1c3;
+  --huggy-subtle: #a79f90;
+  --huggy-border: rgba(252, 251, 248, 0.14);
+  --huggy-border-strong: rgba(252, 251, 248, 0.20);
+  --huggy-focus: rgba(147, 197, 253, 0.30);
+  --huggy-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.26);
+  --huggy-shadow-card: 0 24px 76px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+:where(button, a, input, textarea, select, summary) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--huggy-focus);
+}
+
+:where(.card, .feature-card, .pricing-card, .testimonial-card, .seo-card, .seo-panel, .project-card, .activity-list, .create-section) {
+  border-color: var(--huggy-border);
+  background: color-mix(in srgb, var(--huggy-surface) 92%, transparent);
+}
+
+:where(.feature-card, .pricing-card, .testimonial-card, .seo-card, .seo-panel, .project-card, .create-section) {
+  box-shadow: var(--huggy-shadow-soft);
+  transition:
+    transform var(--huggy-motion-normal) var(--huggy-ease),
+    box-shadow var(--huggy-motion-normal) var(--huggy-ease),
+    border-color var(--huggy-motion-normal) var(--huggy-ease),
+    background var(--huggy-motion-normal) var(--huggy-ease);
+}
+
+:where(.feature-card, .pricing-card, .testimonial-card, .seo-card, .seo-panel, .project-card):hover {
+  transform: translateY(-2px);
+  border-color: var(--huggy-border-strong);
+  box-shadow: var(--huggy-shadow-card);
+}
+
+:where(.sign-in-btn, .pricing-btn.primary, .btn-solid, .seo-button, .btn-primary, .btn-create-top, .submit-btn, .card-cta) {
+  transition:
+    transform var(--huggy-motion-fast) var(--huggy-ease),
+    filter var(--huggy-motion-fast) var(--huggy-ease),
+    box-shadow var(--huggy-motion-fast) var(--huggy-ease),
+    background var(--huggy-motion-fast) var(--huggy-ease);
+}
+
+:where(.sign-in-btn, .pricing-btn.primary, .btn-solid, .seo-button, .btn-primary, .btn-create-top, .submit-btn, .card-cta):hover {
+  transform: translateY(-1px);
+  filter: saturate(1.02);
+}
+
+:where(.sign-in-btn, .pricing-btn.primary, .btn-solid, .seo-button, .btn-primary, .btn-create-top, .submit-btn, .card-cta):active {
+  transform: scale(0.985);
+}
+
+:where(.chip, .badge, .seo-pill, .nav-link-item, .footer-links a, .seo-footer-links a) {
+  transition:
+    transform var(--huggy-motion-fast) var(--huggy-ease),
+    color var(--huggy-motion-fast) var(--huggy-ease),
+    background var(--huggy-motion-fast) var(--huggy-ease),
+    border-color var(--huggy-motion-fast) var(--huggy-ease);
+}
+
+:where(.chip, .badge, .seo-pill, .nav-link-item):hover {
+  transform: translateY(-1px);
+}
+
+.footer,
+.seo-footer {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(47, 109, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, var(--huggy-bg) 0%, var(--huggy-bg-warm) 100%);
+}
+
+.footer-grid,
+.footer-bottom,
+.seo-shell {
+  width: min(1200px, calc(100vw - 32px));
+}
+
+.footer-grid,
+.footer-bottom {
+  max-width: none;
+}
+
+.footer-brand p,
+.footer-links a,
+.footer-bottom,
+.seo-card p,
+.seo-card li,
+.seo-lead {
+  color: var(--huggy-muted);
+}
+
+.footer-col h5,
+.seo-card h3,
+.seo-section h2 {
+  color: var(--huggy-text);
+}
+
+.seo-footer-card {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(191, 219, 254, 0.28), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(125, 172, 255, 0.18), transparent 35%),
+    var(--huggy-gradient-blue);
+}
+
+.footer {
+  border-top-color: var(--huggy-border);
+}
+
+.footer a,
+.seo-footer-card a {
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
