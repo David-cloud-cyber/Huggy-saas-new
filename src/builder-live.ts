@@ -14,6 +14,7 @@ import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationA
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 
 type ChatMode = 'auto' | 'plan' | 'build';
+type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 
 type GeneratedFile = {
@@ -47,6 +48,27 @@ type ProjectPayload = {
   errors?: Array<{ message: string; file?: string }>;
 };
 
+type MediaGeneratePayload = {
+  success: boolean;
+  status: 'completed' | 'queued' | 'not_configured' | 'locked' | 'failed';
+  output: 'video' | 'image' | 'storyboard';
+  settings: MediaSettings;
+  model: {
+    id: string;
+    label: string;
+    output: string;
+    quality: string;
+    min_plan: string;
+  };
+  estimated_credits: number;
+  assets: Array<{ type: 'image' | 'video'; url: string }>;
+  text: string;
+  preview?: {
+    status: string;
+    html: string;
+  };
+};
+
 type WorkspaceState = {
   draft_prompt?: string;
   selected_mode?: ChatMode;
@@ -67,6 +89,17 @@ type UserWorkspaceState = {
 
 type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 type EmptyPreviewMode = 'idle' | 'working';
+type MediaKind = 'video_ad' | 'ugc' | 'storyboard' | 'product_image' | 'social_creative' | 'thumbnail';
+type MediaFormat = '9:16' | '1:1' | '4:5' | '16:9' | '3:4';
+type MediaDuration = '5s' | '8s' | '10s' | '15s' | '30s';
+type MediaModelPreference = 'auto' | 'best_quality' | 'fast' | 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai_image';
+
+type MediaSettings = {
+  kind: MediaKind;
+  format: MediaFormat;
+  duration: MediaDuration;
+  modelPreference: MediaModelPreference;
+};
 
 type AiModel = {
   id: string;
@@ -191,6 +224,13 @@ let activeWorkingLabel = 'Thinking';
 let activeWorkingDetails: string[] = [];
 let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
 let selectedChatMode: ChatMode = 'auto';
+let activeWorkshop: StudioWorkshop = 'chat';
+let mediaSettings: MediaSettings = {
+  kind: 'video_ad',
+  format: '9:16',
+  duration: '8s',
+  modelPreference: 'auto',
+};
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
 let currentProjectName = 'Untitled app';
@@ -203,9 +243,125 @@ let workspaceSaveTimer: number | null = null;
 let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
+let currentMediaPreviewHtml = '';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
 const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
+const ACTIVE_WORKSHOP_STORAGE_KEY = 'huggy-active-workshop';
+const MEDIA_SETTINGS_STORAGE_KEY = 'huggy-media-settings';
+
+const WORKSHOP_CONFIG: Record<StudioWorkshop, {
+  label: string;
+  shortLabel: string;
+  placeholder: string;
+  icon: string;
+  disabled?: boolean;
+  promptPrefix?: string;
+}> = {
+  chat: {
+    label: 'Chat',
+    shortLabel: 'Chat',
+    placeholder: 'Ask Huggy to answer, plan, fix or build',
+    icon: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>',
+  },
+  design: {
+    label: 'Huggy Design',
+    shortLabel: 'Design',
+    placeholder: 'Describe the interface, style, layout or design change',
+    icon: '<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16"></path><path d="M3 9h18"></path><path d="M12 13h5"></path><path d="M12 16h3"></path>',
+    promptPrefix: 'Huggy Design workspace: treat this as UI/UX, product design, visual system, prototype, or targeted interface refinement. Preserve the existing app unless the user clearly asks for a new design. Use the current design system, avoid generic AI design, and make changes as focused as possible. Favor Opus-level design reasoning for hierarchy, spacing, motion, responsive states and product taste.',
+  },
+  decks: {
+    label: 'Huggy Decks',
+    shortLabel: 'Decks',
+    placeholder: 'Describe the deck, audience, story or slide changes',
+    icon: '<rect x="4" y="5" width="16" height="12" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M8 9h8"></path><path d="M8 12h5"></path>',
+    promptPrefix: 'Huggy Decks workspace: treat this as a pitch deck, slide deck, one-pager, product narrative, investor story, or presentation request. When building, create a polished responsive web presentation in Preview with clear slides, real slide navigation, keyboard support, subtle animation, progress, speaker-friendly copy, and an honest Download HTML or Download outline action when practical. Do not claim PPTX, PDF, Canva or video export unless implemented.',
+  },
+  media: {
+    label: 'Huggy Media',
+    shortLabel: 'Media',
+    placeholder: 'Describe the video, image, UGC ad or campaign asset you want',
+    icon: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 10h5"></path><path d="M3 14h5"></path><path d="M16 14h5"></path>',
+    promptPrefix: 'Huggy Media workspace: treat this as a creative marketing media request for images, videos, UGC ads, product storytelling, thumbnails, social creatives, app teasers, or campaign assets. Do not build a web app unless the user explicitly asks to use the asset inside the app. Choose media format and model intelligently from the compact settings, keep the result in Preview, and never expose provider costs.',
+  },
+};
+
+const MEDIA_OPTIONS: {
+  modelPreference: Array<{ value: MediaModelPreference; label: string; hint: string }>;
+  format: Array<{ value: MediaFormat; label: string; hint: string }>;
+  kind: Array<{ value: MediaKind; label: string; hint: string }>;
+  duration: Array<{ value: MediaDuration; label: string; hint: string }>;
+} = {
+  modelPreference: [
+    { value: 'auto', label: 'Auto model', hint: 'Best fit' },
+    { value: 'best_quality', label: 'Best quality', hint: 'Premium' },
+    { value: 'fast', label: 'Fast', hint: 'Lower cost' },
+    { value: 'seedance', label: 'Seedance', hint: 'UGC/video' },
+    { value: 'veo', label: 'Veo', hint: 'Cinematic' },
+    { value: 'sora', label: 'Sora', hint: 'Premium' },
+    { value: 'kling', label: 'Kling', hint: 'Motion' },
+    { value: 'flux', label: 'Flux', hint: 'Image' },
+    { value: 'openai_image', label: 'OpenAI Image', hint: 'Image' },
+  ],
+  format: [
+    { value: '9:16', label: '9:16', hint: 'Reels/TikTok' },
+    { value: '1:1', label: '1:1', hint: 'Square' },
+    { value: '4:5', label: '4:5', hint: 'Ads' },
+    { value: '16:9', label: '16:9', hint: 'YouTube' },
+    { value: '3:4', label: '3:4', hint: 'Portrait' },
+  ],
+  kind: [
+    { value: 'video_ad', label: 'Video ad', hint: 'Campaign' },
+    { value: 'ugc', label: 'UGC', hint: 'Creator-style' },
+    { value: 'storyboard', label: 'Storyboard', hint: 'Plan shots' },
+    { value: 'product_image', label: 'Product image', hint: 'Still' },
+    { value: 'social_creative', label: 'Social creative', hint: 'Ad asset' },
+    { value: 'thumbnail', label: 'Thumbnail', hint: 'Cover' },
+  ],
+  duration: [
+    { value: '5s', label: '5s', hint: 'Hook' },
+    { value: '8s', label: '8s', hint: 'Default' },
+    { value: '10s', label: '10s', hint: 'Story' },
+    { value: '15s', label: '15s', hint: 'Ad' },
+    { value: '30s', label: '30s', hint: 'Long' },
+  ],
+};
+
+const MEDIA_CONTROL_ORDER: Array<keyof typeof MEDIA_OPTIONS> = ['modelPreference', 'format', 'kind', 'duration'];
+
+function mediaOptionLabel(key: keyof typeof MEDIA_OPTIONS, value: string) {
+  return MEDIA_OPTIONS[key].find(option => option.value === value)?.label || String(value);
+}
+
+function normalizeMediaSettings(value: any): MediaSettings {
+  const pick = <K extends keyof typeof MEDIA_OPTIONS>(key: K, fallback: MediaSettings[K]) => {
+    const allowed = MEDIA_OPTIONS[key].map(option => option.value);
+    return allowed.includes(value?.[key]) ? value[key] : fallback;
+  };
+  return {
+    modelPreference: pick('modelPreference', 'auto'),
+    format: pick('format', '9:16'),
+    kind: pick('kind', 'video_ad'),
+    duration: pick('duration', '8s'),
+  };
+}
+
+function loadMediaSettings() {
+  try {
+    mediaSettings = normalizeMediaSettings(JSON.parse(localStorage.getItem(MEDIA_SETTINGS_STORAGE_KEY) || '{}'));
+  } catch {
+    mediaSettings = normalizeMediaSettings({});
+  }
+}
+
+function saveMediaSettings() {
+  try {
+    localStorage.setItem(MEDIA_SETTINGS_STORAGE_KEY, JSON.stringify(mediaSettings));
+  } catch {
+    // Non-critical UI preference.
+  }
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -214,6 +370,267 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function normalizeWorkshop(value: unknown): StudioWorkshop {
+  return value === 'design' || value === 'decks' || value === 'media' ? value : 'chat';
+}
+
+function currentWorkshopConfig() {
+  return WORKSHOP_CONFIG[activeWorkshop] || WORKSHOP_CONFIG.chat;
+}
+
+function workshopIconSvg(workshop: StudioWorkshop) {
+  const config = WORKSHOP_CONFIG[workshop] || WORKSHOP_CONFIG.chat;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${config.icon}</svg>`;
+}
+
+function ensureMediaControlsStyle() {
+  if (document.getElementById('huggy-media-controls-style')) return;
+  const style = document.createElement('style');
+  style.id = 'huggy-media-controls-style';
+  style.textContent = `
+    .huggy-media-controls {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 7px 14px 0;
+      max-width: calc(100% - 28px);
+    }
+    .huggy-media-controls.visible { display: flex; }
+    .huggy-media-pill {
+      height: 23px;
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 84%, transparent);
+      color: var(--text-muted);
+      padding: 0 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font: 760 10px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+      cursor: pointer;
+      transition: border-color 140ms cubic-bezier(.22,1,.36,1), color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), transform 140ms cubic-bezier(.22,1,.36,1);
+    }
+    .huggy-media-pill:hover,
+    .huggy-media-pill[aria-expanded="true"] {
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+    .huggy-media-pill svg {
+      width: 11px;
+      height: 11px;
+      opacity: .78;
+    }
+    .huggy-media-popover {
+      position: fixed;
+      z-index: 12000;
+      min-width: 182px;
+      max-width: min(260px, calc(100vw - 24px));
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+      box-shadow: 0 18px 52px rgba(28,28,28,.16);
+      backdrop-filter: blur(18px) saturate(150%);
+      display: grid;
+      gap: 3px;
+    }
+    .huggy-media-menu-option {
+      width: 100%;
+      min-height: 34px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .huggy-media-menu-option:hover,
+    .huggy-media-menu-option.active {
+      background: var(--accent-dim);
+    }
+    .huggy-media-menu-option strong {
+      font-size: 11px;
+      font-weight: 820;
+    }
+    .huggy-media-menu-option span {
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    @media (max-width: 520px) {
+      .huggy-media-controls { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+      .huggy-media-pill { flex: 0 0 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .huggy-media-pill { transition: none; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function closeMediaSettingsMenu() {
+  document.getElementById('huggy-media-popover')?.remove();
+  document.querySelectorAll<HTMLElement>('.huggy-media-pill[aria-expanded="true"]').forEach(button => {
+    button.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function openMediaSettingsMenu(key: keyof typeof MEDIA_OPTIONS, anchor: HTMLElement) {
+  closeMediaSettingsMenu();
+  const rect = anchor.getBoundingClientRect();
+  const popover = document.createElement('div');
+  popover.id = 'huggy-media-popover';
+  popover.className = 'huggy-media-popover';
+  popover.style.left = `${Math.min(rect.left, window.innerWidth - 272)}px`;
+  popover.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 260)}px`;
+  popover.setAttribute('role', 'menu');
+  anchor.setAttribute('aria-expanded', 'true');
+  popover.innerHTML = MEDIA_OPTIONS[key].map(option => {
+    const active = mediaSettings[key] === option.value;
+    return `
+      <button class="huggy-media-menu-option${active ? ' active' : ''}" type="button" role="menuitem" data-media-value="${escapeHtml(String(option.value))}">
+        <strong>${escapeHtml(option.label)}</strong>
+        <span>${escapeHtml(option.hint)}</span>
+      </button>
+    `;
+  }).join('');
+  popover.querySelectorAll<HTMLElement>('[data-media-value]').forEach(option => {
+    option.addEventListener('click', () => {
+      (mediaSettings as any)[key] = option.dataset.mediaValue || mediaSettings[key];
+      saveMediaSettings();
+      closeMediaSettingsMenu();
+      syncMediaControls();
+      syncWorkshopPreview();
+    });
+  });
+  document.body.appendChild(popover);
+  setTimeout(() => {
+    const close = (event: MouseEvent) => {
+      if (popover.contains(event.target as Node) || anchor.contains(event.target as Node)) return;
+      closeMediaSettingsMenu();
+      document.removeEventListener('click', close, true);
+    };
+    document.addEventListener('click', close, true);
+  }, 0);
+}
+
+function ensureMediaControls() {
+  ensureMediaControlsStyle();
+  let controls = document.getElementById('huggy-media-controls') as HTMLElement | null;
+  if (controls) return controls;
+  const context = document.getElementById('huggy-workshop-context');
+  controls = document.createElement('div');
+  controls.id = 'huggy-media-controls';
+  controls.className = 'huggy-media-controls';
+  controls.setAttribute('aria-label', 'Huggy Media settings');
+  context?.insertAdjacentElement('afterend', controls);
+  return controls;
+}
+
+function syncMediaControls() {
+  const controls = ensureMediaControls();
+  controls.classList.toggle('visible', activeWorkshop === 'media');
+  controls.setAttribute('aria-hidden', activeWorkshop === 'media' ? 'false' : 'true');
+  if (activeWorkshop !== 'media') {
+    closeMediaSettingsMenu();
+    return;
+  }
+  controls.innerHTML = MEDIA_CONTROL_ORDER.map(key => `
+    <button class="huggy-media-pill" type="button" data-media-control="${key}" aria-haspopup="menu" aria-expanded="false">
+      <span>${escapeHtml(mediaOptionLabel(key as any, (mediaSettings as any)[key]))}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+  `).join('');
+  controls.querySelectorAll<HTMLElement>('[data-media-control]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openMediaSettingsMenu(button.dataset.mediaControl as keyof typeof MEDIA_OPTIONS, button);
+    });
+  });
+}
+
+function refreshWorkshopInputContext() {
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  const context = document.getElementById('huggy-workshop-context') as HTMLElement | null;
+  const label = document.getElementById('huggy-workshop-context-label') as HTMLElement | null;
+  const chatTab = document.getElementById('btn-sidebar-chat') as HTMLElement | null;
+  const studioTab = document.getElementById('btn-sidebar-studio') as HTMLElement | null;
+  const wrapper = document.getElementById('pane-studio-wrapper') as HTMLElement | null;
+  const config = currentWorkshopConfig();
+
+  document.body.dataset.huggyWorkshop = activeWorkshop;
+  chatTab?.classList.toggle('active', activeWorkshop === 'chat');
+  studioTab?.classList.toggle('active', activeWorkshop !== 'chat');
+  wrapper?.querySelectorAll<HTMLElement>('[data-studio-panel]').forEach(option => {
+    const selected = normalizeWorkshop(option.dataset.studioPanel) === activeWorkshop;
+    option.classList.toggle('active', selected);
+    if (selected) option.setAttribute('aria-current', 'true');
+    else option.removeAttribute('aria-current');
+  });
+
+  if (input && !input.value.trim()) input.placeholder = config.placeholder;
+  if (context && label) {
+    context.classList.toggle('visible', activeWorkshop !== 'chat');
+    context.setAttribute('aria-hidden', activeWorkshop === 'chat' ? 'true' : 'false');
+    context.querySelector('svg')?.remove();
+    context.insertAdjacentHTML('afterbegin', workshopIconSvg(activeWorkshop));
+    label.textContent = config.label;
+  }
+  syncMediaControls();
+}
+
+function setActiveWorkshop(workshop: StudioWorkshop, options: { focusInput?: boolean } = {}) {
+  const nextWorkshop = normalizeWorkshop(workshop);
+  if (WORKSHOP_CONFIG[nextWorkshop]?.disabled) return;
+  activeWorkshop = nextWorkshop;
+  localStorage.setItem(ACTIVE_WORKSHOP_STORAGE_KEY, activeWorkshop);
+  refreshWorkshopInputContext();
+  syncWorkshopPreview();
+  if (options.focusInput) {
+    document.getElementById('chat-textarea-box')?.focus();
+  }
+}
+
+function loadActiveWorkshop() {
+  loadMediaSettings();
+  const requested = normalizeWorkshop(new URLSearchParams(window.location.search).get('workshop'));
+  const saved = normalizeWorkshop(localStorage.getItem(ACTIVE_WORKSHOP_STORAGE_KEY));
+  activeWorkshop = requested !== 'chat' && !WORKSHOP_CONFIG[requested]?.disabled
+    ? requested
+    : WORKSHOP_CONFIG[saved]?.disabled ? 'chat' : saved;
+}
+
+function studioPromptContextPayload() {
+  const config = currentWorkshopConfig();
+  return activeWorkshop === 'chat'
+    ? undefined
+    : {
+        workshop: activeWorkshop,
+        label: config.label,
+        instruction: config.promptPrefix || '',
+        ...(activeWorkshop === 'media' ? { settings: mediaSettings } : {}),
+      };
+}
+
+function workshopPlaceholderForFollowUp(speaksFrench: boolean) {
+  if (activeWorkshop === 'design') {
+    return speaksFrench ? 'Decris le changement visuel a appliquer...' : 'Describe the visual change to apply...';
+  }
+  if (activeWorkshop === 'decks') {
+    return speaksFrench ? 'Decris la slide, le deck ou le message a ameliorer...' : 'Describe the slide, deck, or story to improve...';
+  }
+  return speaksFrench ? 'Dis-moi quoi changer dans cette version...' : 'Tell me what to change in this version...';
 }
 
 function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
@@ -392,6 +809,86 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   const address = document.querySelector('.preview-address-glow span:last-child');
   const statusSlug = resolvedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'working';
   if (address) address.textContent = mode === 'working' ? `${statusSlug}.huggy.local` : 'preview.huggy.local / waiting';
+}
+
+function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Ready for media') {
+  const kind = mediaOptionLabel('kind', mediaSettings.kind);
+  const format = mediaSettings.format;
+  const duration = mediaSettings.duration;
+  const model = mediaOptionLabel('modelPreference', mediaSettings.modelPreference);
+  const isWorking = state === 'working';
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#315fdc}
+@media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(59,130,246,.13),transparent 36%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:28px}.panel{width:min(820px,100%);border:1px solid var(--line);border-radius:28px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 28px 90px rgba(28,28,28,.09);padding:clamp(22px,4vw,42px);display:grid;gap:22px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 6px rgba(59,130,246,.11)}
+h1{margin:8px 0 8px;font-size:clamp(34px,6vw,68px);line-height:.9;letter-spacing:-.055em}.copy{margin:0;color:var(--muted);font-size:15px;line-height:1.55;max-width:580px}.orb{width:156px;height:156px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.95) 22%,rgba(49,95,220,.56) 55%,rgba(28,28,28,.12) 78%);box-shadow:0 26px 90px rgba(49,95,220,.24);animation:${isWorking ? 'pulse 2.8s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid var(--line);border-radius:999px;background:var(--soft);padding:8px 10px;font-size:12px;font-weight:820;color:var(--ink)}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card strong{display:block;font-size:13px;margin-bottom:6px}.card span{color:var(--muted);font-size:12px;line-height:1.45}@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}@media(max-width:720px){.top{display:grid}.cards{grid-template-columns:1fr}.orb{width:120px;height:120px}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="panel">
+    <div class="top">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>Huggy Media</div>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="copy">Create UGC ads, product videos, storyboards, thumbnails, hero visuals and campaign assets with one assistant. Choose options only when you need control.</p>
+      </div>
+      <div class="orb" aria-hidden="true"></div>
+    </div>
+    <div class="chips">
+      <span class="chip">${escapeHtml(model)}</span>
+      <span class="chip">${escapeHtml(format)}</span>
+      <span class="chip">${escapeHtml(kind)}</span>
+      <span class="chip">${escapeHtml(duration)}</span>
+    </div>
+    <div class="cards">
+      <div class="card"><strong>Media Lab</strong><span>Create standalone ads and visuals even without a web app.</span></div>
+      <div class="card"><strong>Project-aware</strong><span>When useful, Huggy can use the current app tone and branding.</span></div>
+      <div class="card"><strong>Auto model</strong><span>Huggy picks the best model for quality, speed, credits and format.</span></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>`;
+}
+
+function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / lab') {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  currentMediaPreviewHtml = html;
+  frame.dataset.mediaPreview = 'true';
+  frame.removeAttribute('data-empty-preview');
+  frame.srcdoc = html;
+  setPreviewDevice(selectedPreviewDevice, false);
+  const address = document.querySelector('.preview-address-glow span:last-child');
+  if (address) address.textContent = addressLabel;
+}
+
+function syncWorkshopPreview() {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  if (activeWorkshop === 'media') {
+    activateBuilderView('preview');
+    setMediaPreviewHtml(currentMediaPreviewHtml || mediaPreviewShellHtml('idle', 'Ready for media'));
+    return;
+  }
+  if (frame.dataset.mediaPreview === 'true') {
+    frame.removeAttribute('data-media-preview');
+    if (currentPreviewHtml.trim()) {
+      setPreview(currentPreviewHtml, 'ready');
+    } else {
+      frame.srcdoc = '';
+      setEmptyPreviewState('idle', 'Ready when you are');
+    }
+  }
 }
 
 function getProjectIdFromUrl() {
@@ -1252,6 +1749,7 @@ function setPreview(html: string, status = 'ready') {
   if (frame) {
     frame.dataset.emptyPreview = 'false';
     frame.dataset.emptyPreviewMode = 'ready';
+    frame.removeAttribute('data-media-preview');
     frame.srcdoc = html;
   }
   setPreviewDevice(selectedPreviewDevice, false);
@@ -2812,9 +3310,14 @@ async function loadProject() {
       setEmptyPreviewState('idle');
     }
     restoreMessages(payload);
-    const activeTab = (payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab) as WorkspaceState['active_tab'];
-    if (activeTab) activateBuilderView(activeTab);
+    const activeTab = payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab;
+    if (activeTab === 'code' || activeTab === 'database' || activeTab === 'analysis') {
+      activateBuilderView(activeTab);
+    } else if (activeTab) {
+      activateBuilderView('preview');
+    }
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
+    syncWorkshopPreview();
     removeMessage(loading);
     if (!payload.messages?.length) {
       showTransientNotice('Ready when you are.', 1600);
@@ -2872,6 +3375,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const safePrompt = redactSecrets(prompt).trim();
   const safeDisplayText = redactSecrets(displayText);
   if (isGenerating || !safePrompt) return;
+  const effectiveExtra = {
+    ...extra,
+    ...(extra.studioContext === undefined && activeWorkshop !== 'chat' ? { studioContext: studioPromptContextPayload() } : {}),
+  };
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
@@ -2989,12 +3496,54 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   try {
     await ensureProjectForPrompt(safePrompt);
+    if (activeWorkshop === 'media') {
+      generationTouchesPreview = true;
+      activeGenerationTouchesPreview = true;
+      activateBuilderView('preview');
+      setAssistantWorking('Generating media');
+      markAgentStep('media_brief', say('Brief media prepare.', 'Media brief prepared.'), 'Thinking', say('Je comprends le format, le modele et le type de contenu.', 'I am reading the format, model and content type.'));
+      setMediaPreviewHtml(mediaPreviewShellHtml('working', 'Generating media'), 'media.huggy.local / rendering');
+      const mediaPayload = await apiFetch<MediaGeneratePayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/media/generate`, {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: safePrompt,
+          settings: mediaSettings,
+          studioContext: studioPromptContextPayload(),
+        }),
+      });
+      finishAgentStep('media_brief', say('Brief media pret.', 'Media brief ready.'));
+      finishAgentStep('media_render', mediaPayload.assets?.length
+        ? say('Asset media pret.', 'Media asset ready.')
+        : mediaPayload.status === 'not_configured'
+          ? say('Brief pret, provider a connecter.', 'Brief ready, provider needs connection.')
+          : say('Resultat media pret.', 'Media result ready.'));
+      if (mediaPayload.preview?.html) {
+        setMediaPreviewHtml(mediaPayload.preview.html, `${mediaPayload.status}.media.huggy.local`);
+      }
+      const target = commitAssistantText(mediaPayload.text || 'Media ready.', 'Media ready.', say('Media pret', 'Media ready'));
+      if (mediaPayload.assets?.[0]?.url) {
+        addInlineAction(target, 'Download', () => window.open(mediaPayload.assets[0].url, '_blank', 'noopener,noreferrer'));
+      }
+      addInlineAction(target, speaksFrench ? 'Variation' : 'Variation', () => void generateFromPrompt(`${safePrompt}\n\nMake a fresh variation with the same goal.`, 'auto', false, { studioContext: studioPromptContextPayload() }, safeDisplayText));
+      addInlineAction(target, speaksFrench ? 'Utiliser dans l app' : 'Use in app', () => {
+        setActiveWorkshop('chat', { focusInput: true });
+        const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+        if (promptInput) {
+          promptInput.value = speaksFrench
+            ? 'Utilise le dernier asset Huggy Media dans la landing de cette app, sans casser le design actuel.'
+            : 'Use the latest Huggy Media asset in this app landing without breaking the current design.';
+          promptInput.dispatchEvent(new Event('input', { bubbles: true }));
+          promptInput.focus();
+        }
+      });
+      return;
+    }
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
       prompt: safePrompt,
       requestedMode,
       useLastPlan,
       modelId: selectedModel(),
-      ...extra,
+      ...effectiveExtra,
     }, (eventType, event) => {
       const payload = redactInternalModelFields(event.payload || {});
       const realLabel = (fallback: string) => {
@@ -3321,7 +3870,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           void recordAgentFeedback('modify');
           const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
           promptInput?.focus();
-          if (promptInput && !promptInput.value.trim()) promptInput.placeholder = speaksFrench ? 'Dis-moi quoi changer dans cette version...' : 'Tell me what to change in this version...';
+          if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
         });
         addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
           void recordAgentFeedback('regenerate');
@@ -3899,7 +4448,7 @@ function bindChat() {
     submit.classList.remove('active');
     syncSubmitButtonState();
     scheduleWorkspaceSave({ draft_prompt: '', selected_mode: mode }, true);
-    void generateFromPrompt(value, mode);
+    void generateFromPrompt(value, mode, false, { studioContext: studioPromptContextPayload() });
   };
 
   input.addEventListener('input', () => {
@@ -3956,6 +4505,36 @@ function bindChat() {
 
   setChatMode(selectedChatMode);
   syncSubmitButtonState();
+  refreshWorkshopInputContext();
+}
+
+function initStudioWorkshops() {
+  loadActiveWorkshop();
+  const chatTab = document.getElementById('btn-sidebar-chat');
+  const studioTab = document.getElementById('btn-sidebar-studio');
+  const studioWrapper = document.getElementById('pane-studio-wrapper');
+  const studioMenu = document.getElementById('pane-studio-menu');
+
+  chatTab?.addEventListener('click', () => {
+    setActiveWorkshop('chat', { focusInput: true });
+  });
+
+  studioTab?.addEventListener('click', () => {
+    refreshWorkshopInputContext();
+  });
+
+  studioMenu?.addEventListener('click', (event) => {
+    const option = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-studio-panel]') : null;
+    if (!option) return;
+    const workshop = normalizeWorkshop(option.dataset.studioPanel);
+    if (WORKSHOP_CONFIG[workshop]?.disabled) return;
+    setActiveWorkshop(workshop, { focusInput: true });
+    studioWrapper?.classList.remove('open');
+    studioTab?.setAttribute('aria-expanded', 'false');
+  });
+
+  refreshWorkshopInputContext();
+  syncWorkshopPreview();
 }
 
 function hydrateDashboardPrompt() {
@@ -4035,6 +4614,7 @@ function init() {
   ensureResizableSidebar();
   bindProjectMenu();
   bindPreviewDeviceToggle();
+  initStudioWorkshops();
   initPromptInputActions({
     persistForBuilder: false,
     onFiles: uploadPromptAttachments,

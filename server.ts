@@ -106,6 +106,17 @@ import {
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
 import { containsSecret, redactSecretPayload, redactSecrets } from './src/services/secret-redaction.ts';
+import {
+  MEDIA_MODEL_REGISTRY,
+  estimateMediaCredits,
+  isMediaModelAvailable,
+  mediaOutputForKind,
+  mediaSettingsSummary,
+  normalizeMediaSettings,
+  selectMediaModel,
+  type HuggyMediaSettings,
+} from './src/services/media-model-registry.ts';
+import { FalMediaGateway, type FalMediaAsset } from './src/services/fal-media-gateway.ts';
 
 dotenv.config();
 
@@ -452,6 +463,7 @@ const AGENT_V3_ENABLED = isAgentV3Enabled(process.env);
 const AGENT_V2_ENABLED = isAgentV2Enabled(process.env) || AGENT_V3_ENABLED;
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
 const webResearchGateway = new WebResearchGateway(process.env);
+const falMediaGateway = new FalMediaGateway(process.env);
 
 const modelRouter = new ModelRouter();
 const costEstimator = new CostEstimatorService();
@@ -839,6 +851,7 @@ type AgentEvent = {
 type AgentIntent = 'conversation' | 'clarification_required' | 'plan' | 'build' | 'edit' | 'debug_fix' | 'verify' | 'deploy_assist' | 'external_keys_required' | 'credits_required';
 type AgentNextAction = 'answer' | 'ask_clarification' | 'plan_only' | 'plan_then_build' | 'build' | 'edit' | 'debug_fix' | 'verify' | 'deploy_assist' | 'collect_external_keys' | 'show_upgrade';
 type AgentRequestedMode = 'auto' | 'plan' | 'build';
+type StudioContextKind = 'chat' | 'design' | 'decks' | 'media';
 
 type IntentDecision = {
   intent: AgentIntent;
@@ -920,6 +933,62 @@ function canUseFastAnswerPath(decision: IntentDecision, prompt: string) {
 
 function normalizeRequestedMode(value: any): AgentRequestedMode {
   return value === 'plan' ? 'plan' : value === 'build' ? 'build' : 'auto';
+}
+
+function normalizeStudioContext(value: any): StudioContextKind {
+  const raw = typeof value === 'string'
+    ? value
+    : typeof value?.workshop === 'string'
+      ? value.workshop
+      : '';
+  return raw === 'design' || raw === 'decks' || raw === 'media' ? raw : 'chat';
+}
+
+function studioContextInstruction(value: any) {
+  const context = normalizeStudioContext(value);
+  if (context === 'design') {
+    return [
+      'Huggy Design workspace context:',
+      '- Interpret the request as UI/UX, product design, visual system, prototype, or targeted interface refinement.',
+      '- Preserve existing app behavior unless the user clearly asks for a new app or a full redesign.',
+      '- Prefer focused changes, coherent design tokens, responsive states, accessibility, and anti-generic visual decisions.',
+      '- For applied design work, favor Opus-level visual reasoning: hierarchy, spacing, motion, states, responsive behavior, and product taste.',
+      '- Offer critique, copy, or strategy without touching files unless the user clearly asks to apply changes.',
+      '- If the user is only asking for advice or explanation, answer without modifying files.',
+    ].join('\n');
+  }
+  if (context === 'decks') {
+    return [
+      'Huggy Decks workspace context:',
+      '- Interpret the request as a pitch deck, slide deck, one-pager, product narrative, sales story, or presentation artifact.',
+      '- If building, create a polished responsive web presentation rendered in Preview with slide-like sections, concise copy, hierarchy, and speaker-friendly flow.',
+      '- Preserve the current project unless the user clearly asks to create or apply a deck.',
+      '- Include story arc, slide sequence, audience, proof, CTA/ask, and export-friendly structure.',
+      '- Add real slide navigation, progress, keyboard support, subtle HTML/CSS animations, and prefers-reduced-motion support.',
+      '- Include an honest in-preview download action for the generated deck artifact when practical, such as Download HTML or Download outline.',
+      '- Do not claim to create video files, PPTX, PDF, or Canva exports unless those exporters are actually implemented. Use animated web slides for motion.',
+      '- If the user is only asking for strategy, outline, or copy, answer without modifying files.',
+    ].join('\n');
+  }
+  if (context === 'media') {
+    const settings = normalizeMediaSettings(value?.settings || value?.mediaSettings || {});
+    return [
+      'Huggy Media workspace context:',
+      '- Interpret the request as image, video, UGC, ad creative, storytelling, thumbnail, hero visual, product mockup, or campaign asset work.',
+      '- This is a creative media request, not a request to build a web app, unless the user explicitly asks to use the generated asset inside the current app.',
+      '- Keep Huggy as one assistant with one input. Use compact media controls only as context, never a heavy editor.',
+      '- Prefer Auto model routing. The user should not need to know Seedance, Veo, Sora, Kling, Flux, or OpenAI Image.',
+      '- If a media provider is unavailable, return a useful campaign brief, storyboard, prompt and next action without pretending a real asset was rendered.',
+      '- Never expose fal.ai costs, provider invoices, raw provider payloads, or internal margins to the user.',
+      `- Current media settings: ${mediaSettingsSummary(settings)}.`,
+    ].join('\n');
+  }
+  return '';
+}
+
+function applyStudioContextToPrompt(prompt: string, studioContext: any) {
+  const instruction = studioContextInstruction(studioContext);
+  return instruction ? `${instruction}\n\nUser request:\n${prompt}` : prompt;
 }
 
 type PreviewBuildResult = {
@@ -2932,6 +3001,11 @@ function buildExistingFilesContextForGeneration(files: GeneratedFile[]) {
 }
 
 type AgentTaskComplexity = NonNullable<RoutingContext['taskComplexity']>;
+const STUDIO_OPUS_MODEL_PREFERENCE: AllowedModelId[] = [
+  'anthropic/claude-opus-4.8',
+  'anthropic/claude-opus-4.8-fast',
+  'anthropic/claude-opus-4.7',
+];
 
 function inferAgentTaskComplexity(prompt: string, decision: IntentDecision, files: GeneratedFile[] = []): AgentTaskComplexity {
   const text = String(prompt || '').toLowerCase();
@@ -2988,6 +3062,12 @@ function routingModeForPolicy(policy?: IntentDecision['selectedModelPolicy']): R
   return 'Auto';
 }
 
+function studioPreferredModelsForPrompt(prompt: string): AllowedModelId[] | undefined {
+  return /Huggy (Design|Decks|Media) workspace context:/i.test(prompt)
+    ? STUDIO_OPUS_MODEL_PREFERENCE
+    : undefined;
+}
+
 async function resolveAgentProviderModel(input: {
   modelId?: unknown;
   project: GeneratedProject;
@@ -3021,6 +3101,7 @@ async function resolveAgentProviderModel(input: {
     mode,
     userCredits: credits,
     taskComplexity: complexity,
+    preferredModels: studioPreferredModelsForPrompt(input.prompt),
     requiredCapabilities: {},
   });
   validateAllowedModel(model);
@@ -3876,37 +3957,126 @@ function projectFileRows(files: GeneratedFile[], project: GeneratedProject) {
   }));
 }
 
-async function saveProjectFilesWithSchemaFallback(client: any, project: GeneratedProject, files: GeneratedFile[]) {
-  const deleteResult = await client.from('project_files').delete().eq('project_id', project.id);
-  if (deleteResult.error && /project_files|relation .* does not exist|table .* does not exist/i.test(deleteResult.error.message || '')) {
-    console.warn('[huggy:project_files_persistence_skipped]', { message: deleteResult.error.message });
-    return;
-  }
-  if (deleteResult.error && !isSchemaShapeError(deleteResult.error)) {
-    throw new Error(`Supabase project file cleanup failed: ${deleteResult.error.message}`);
+function isProjectFilesMissingError(error: any) {
+  return /project_files|relation .* does not exist|table .* does not exist/i.test(error?.message || '');
+}
+
+function stripSchemaColumnFromProjectFileRows(rows: Record<string, any>[], error: any) {
+  const column = getSchemaColumnFromMessage(String(error?.message || ''));
+  if (!column || !rows.some(row => column in row)) return null;
+  return rows.map(row => {
+    const next = { ...row };
+    delete next[column];
+    return next;
+  });
+}
+
+async function persistProjectFileRowsIndividually(client: any, rows: Record<string, any>[]) {
+  for (const row of rows) {
+    const updateResult = await client
+      .from('project_files')
+      .update(row)
+      .eq('project_id', row.project_id)
+      .eq('path', row.path)
+      .select('path');
+
+    if (updateResult.error) return updateResult.error;
+
+    const updatedRows = Array.isArray(updateResult.data) ? updateResult.data.length : 0;
+    if (updatedRows > 0) continue;
+
+    const insertResult = await client.from('project_files').insert([row]);
+    if (insertResult.error) return insertResult.error;
   }
 
+  return null;
+}
+
+async function cleanupStaleProjectFileRows(client: any, projectId: string, nextPaths: Set<string>) {
+  if (!nextPaths.size) return;
+
+  const { data, error } = await client.from('project_files').select('path').eq('project_id', projectId);
+  if (error) {
+    if (isProjectFilesMissingError(error)) {
+      console.warn('[huggy:project_files_cleanup_skipped]', { message: error.message });
+      return;
+    }
+    console.warn('[huggy:project_files_cleanup_warning]', { message: error.message });
+    return;
+  }
+
+  const stalePaths = (data || [])
+    .map((row: any) => String(row?.path || ''))
+    .filter((filePath: string) => filePath && !nextPaths.has(filePath));
+
+  for (const filePath of stalePaths) {
+    const deleteResult = await client
+      .from('project_files')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('path', filePath);
+
+    if (deleteResult.error) {
+      console.warn('[huggy:project_files_stale_delete_warning]', {
+        path: filePath,
+        message: deleteResult.error.message,
+      });
+    }
+  }
+}
+
+async function saveProjectFilesWithSchemaFallback(client: any, project: GeneratedProject, files: GeneratedFile[]) {
   let rows = projectFileRows(files, project);
-  if (!rows.length) return;
+  if (!rows.length) {
+    console.warn('[huggy:project_files_empty_save_skipped]', {
+      project_id: project.id,
+      reason: 'Refusing to wipe project files from an empty generated file set.',
+    });
+    return;
+  }
+
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const { error } = await client.from('project_files').insert(rows);
-    if (!error) return;
-    if (/project_files|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+    const upsertResult = await client
+      .from('project_files')
+      .upsert(rows, { onConflict: 'project_id,path' });
+
+    if (!upsertResult.error) {
+      await cleanupStaleProjectFileRows(client, project.id, new Set(rows.map(row => String(row.path))));
+      return;
+    }
+
+    const error = upsertResult.error;
+    if (isProjectFilesMissingError(error)) {
       console.warn('[huggy:project_files_persistence_skipped]', { message: error.message });
       return;
     }
+
     if (isSchemaShapeError(error)) {
-      const column = getSchemaColumnFromMessage(String(error.message || ''));
-      if (column && rows.some(row => column in row)) {
-        rows = rows.map(row => {
-          const next = { ...row };
-          delete next[column];
-          return next;
-        });
+      const strippedRows = stripSchemaColumnFromProjectFileRows(rows, error);
+      if (strippedRows) {
+        rows = strippedRows;
         continue;
       }
     }
-    throw new Error(`Supabase project file persistence failed: ${error.message}`);
+
+    const fallbackError = await persistProjectFileRowsIndividually(client, rows);
+    if (!fallbackError) {
+      await cleanupStaleProjectFileRows(client, project.id, new Set(rows.map(row => String(row.path))));
+      return;
+    }
+    if (isProjectFilesMissingError(fallbackError)) {
+      console.warn('[huggy:project_files_persistence_skipped]', { message: fallbackError.message });
+      return;
+    }
+    if (isSchemaShapeError(fallbackError)) {
+      const strippedRows = stripSchemaColumnFromProjectFileRows(rows, fallbackError);
+      if (strippedRows) {
+        rows = strippedRows;
+        continue;
+      }
+    }
+
+    throw new Error(`Supabase project file persistence failed: ${fallbackError?.message || error.message}`);
   }
 }
 
@@ -6323,6 +6493,309 @@ app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
   });
 });
 
+function buildMediaPrompt(input: {
+  prompt: string;
+  settings: HuggyMediaSettings;
+  project: GeneratedProject;
+}) {
+  const output = mediaOutputForKind(input.settings.kind);
+  return [
+    `Create a ${output} concept for Huggy Media.`,
+    `Project: ${input.project.name}.`,
+    `Format: ${input.settings.format}.`,
+    `Duration: ${input.settings.duration}.`,
+    `Asset type: ${input.settings.kind.replace(/_/g, ' ')}.`,
+    'Style: clean, premium, marketing-ready, direct, modern, not generic AI design.',
+    'If this is UGC or an ad, include a strong first-second hook, clear product promise, simple visual sequence, and CTA.',
+    `User request: ${input.prompt}`,
+  ].join('\n');
+}
+
+function mediaKindLabel(kind: HuggyMediaSettings['kind']) {
+  const labels: Record<HuggyMediaSettings['kind'], string> = {
+    video_ad: 'Video ad',
+    ugc: 'UGC ad',
+    storyboard: 'Storyboard',
+    product_image: 'Product image',
+    social_creative: 'Social creative',
+    thumbnail: 'Thumbnail',
+  };
+  return labels[kind] || 'Media';
+}
+
+function renderMediaAsset(asset: FalMediaAsset) {
+  if (asset.type === 'video') {
+    return `<video class="media-preview-asset" src="${escapeHtml(asset.url)}" controls playsinline preload="metadata"></video>`;
+  }
+  return `<img class="media-preview-asset" src="${escapeHtml(asset.url)}" alt="Generated Huggy Media asset">`;
+}
+
+function renderHuggyMediaPreviewHtml(input: {
+  project: GeneratedProject;
+  prompt: string;
+  settings: HuggyMediaSettings;
+  modelLabel: string;
+  estimatedCredits: number;
+  providerStatus: 'completed' | 'queued' | 'not_configured' | 'locked' | 'failed';
+  assets: FalMediaAsset[];
+  errorMessage?: string;
+}) {
+  const kind = mediaKindLabel(input.settings.kind);
+  const output = mediaOutputForKind(input.settings.kind);
+  const statusCopy: Record<'completed' | 'queued' | 'not_configured' | 'locked' | 'failed', string> = {
+    completed: 'Asset ready',
+    queued: 'Render queued',
+    not_configured: 'Provider not connected',
+    locked: 'Plan upgrade required',
+    failed: 'Render needs retry',
+  };
+  const heroCopy = input.providerStatus === 'completed'
+    ? 'Your generated asset is ready.'
+    : input.providerStatus === 'queued'
+      ? 'The render was accepted and is being processed.'
+      : input.providerStatus === 'locked'
+        ? 'This media model is reserved for a higher plan or needs more credits.'
+        : input.providerStatus === 'failed'
+          ? 'The provider could not complete this render.'
+          : 'Huggy prepared the creative direction. Connect fal.ai to render real media.';
+  const cards = [
+    ['Hook', input.settings.kind === 'ugc' ? 'Open with a human, problem-first line that feels native to Reels/TikTok.' : 'Lead with the clearest product promise in the first second.'],
+    ['Visual rhythm', output === 'image' ? 'One strong focal point, product-first composition, clean negative space.' : '3 short beats: problem, transformation, proof or CTA.'],
+    ['Brand fit', 'Use the project tone, avoid stock-looking scenes, keep text short and readable.'],
+    ['Next action', input.assets.length ? 'Download, reuse, or ask Huggy for a variation.' : 'Render when provider access is ready, or ask for a cheaper/faster variant.'],
+  ];
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--blue:#315fdc;--soft:#f7f4ed}
+@media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(59,130,246,.13),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.media-lab{min-height:100vh;padding:clamp(22px,4vw,44px);display:grid;align-content:center;gap:18px}
+.media-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:99px;background:#3b82f6;box-shadow:0 0 0 5px rgba(59,130,246,.12)}
+h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacing:-.05em;max-width:780px}.summary{margin:0;max-width:680px;color:var(--muted);font-size:clamp(14px,1.7vw,18px);line-height:1.55}
+.status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;background:var(--panel);padding:9px 12px;font-size:12px;font-weight:800;color:var(--ink);white-space:nowrap}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,.75fr);gap:16px;align-items:stretch}.stage,.brief{border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 24px 70px rgba(28,28,28,.08);overflow:hidden}
+.stage{min-height:420px;display:grid;place-items:center;padding:18px}.asset-wrap{width:100%;height:100%;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,var(--soft),var(--panel));border:1px solid var(--line);overflow:hidden}
+.media-preview-asset{max-width:100%;max-height:68vh;border-radius:16px;display:block;object-fit:contain}.placeholder{padding:32px;text-align:center;max-width:520px}.orb{width:138px;height:138px;margin:0 auto 22px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.9) 23%,rgba(49,95,220,.55) 52%,rgba(28,28,28,.18) 76%);box-shadow:0 24px 80px rgba(49,95,220,.24);animation:pulse 4s cubic-bezier(.22,1,.36,1) infinite}
+.placeholder strong{display:block;font-size:22px;margin-bottom:8px}.placeholder span{color:var(--muted);font-size:14px;line-height:1.5}.brief{padding:18px;display:grid;gap:10px}.meta{display:flex;flex-wrap:wrap;gap:8px}.pill{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:7px 9px;font-size:12px;font-weight:800;color:var(--ink)}
+.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card span{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.card p{margin:0;color:var(--ink);font-size:13px;line-height:1.48}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.actions a,.actions button{height:34px;border-radius:999px;border:1px solid var(--line);background:var(--ink);color:var(--bg);padding:0 13px;font:800 12px Inter,system-ui;text-decoration:none;display:inline-flex;align-items:center}
+.actions button{background:transparent;color:var(--ink)}.error{color:#b42318;font-size:12px;margin-top:8px}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.04);opacity:1}}@media(max-width:820px){.grid{grid-template-columns:1fr}.media-head{display:grid}.stage{min-height:340px}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
+</style>
+</head>
+<body>
+<main class="media-lab">
+  <section class="media-head">
+    <div>
+      <div class="eyebrow"><span class="dot"></span>Huggy Media</div>
+      <h1>${escapeHtml(kind)} for ${escapeHtml(input.project.name || 'your project')}</h1>
+      <p class="summary">${escapeHtml(heroCopy)}</p>
+    </div>
+    <div class="status">${escapeHtml(statusCopy[input.providerStatus])}</div>
+  </section>
+  <section class="grid">
+    <div class="stage">
+      <div class="asset-wrap">
+        ${input.assets.length ? input.assets.map(renderMediaAsset).join('') : `<div class="placeholder"><div class="orb" aria-hidden="true"></div><strong>${escapeHtml(kind)} brief ready</strong><span>${escapeHtml(input.prompt)}</span>${input.errorMessage ? `<div class="error">${escapeHtml(input.errorMessage)}</div>` : ''}</div>`}
+      </div>
+    </div>
+    <aside class="brief">
+      <div class="meta">
+        <span class="pill">${escapeHtml(input.settings.format)}</span>
+        <span class="pill">${escapeHtml(input.settings.duration)}</span>
+        <span class="pill">${escapeHtml(input.modelLabel)}</span>
+        <span class="pill">~${input.estimatedCredits} credits</span>
+      </div>
+      ${cards.map(([title, body]) => `<div class="card"><span>${escapeHtml(title)}</span><p>${escapeHtml(body)}</p></div>`).join('')}
+      <div class="actions">
+        ${input.assets[0]?.url ? `<a href="${escapeHtml(input.assets[0].url)}" download>Download</a>` : ''}
+        <button type="button">Make variation</button>
+        <button type="button">Use in app</button>
+      </div>
+    </aside>
+  </section>
+</main>
+</body>
+</html>`;
+}
+
+async function saveMediaAssetRecords(input: {
+  project: GeneratedProject;
+  userId: string;
+  prompt: string;
+  settings: HuggyMediaSettings;
+  modelId: string;
+  assets: FalMediaAsset[];
+  estimatedCredits: number;
+}) {
+  if (!input.assets.length) return;
+  const client = getSupabase();
+  if (!client) return;
+  const rows = input.assets.map(asset => ({
+    organization_id: input.project.organization_id,
+    project_id: input.project.id,
+    user_id: input.userId,
+    asset_type: asset.type,
+    provider: 'fal.ai',
+    model_id: input.modelId,
+    prompt: input.prompt,
+    format: input.settings.format,
+    duration: input.settings.duration,
+    asset_url: asset.url,
+    thumbnail_url: asset.type === 'image' ? asset.url : null,
+    status: 'completed',
+    credits_charged: input.estimatedCredits,
+    public_metadata: {
+      kind: input.settings.kind,
+      width: asset.width || null,
+      height: asset.height || null,
+      content_type: asset.contentType || null,
+    },
+  }));
+  const { error } = await client.from('media_assets').insert(rows);
+  if (error && /media_assets|schema cache|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+    console.warn('[huggy:media_assets_skipped]', { message: error.message });
+    return;
+  }
+  if (error) console.warn('[huggy:media_assets_insert_failed]', { message: redactSecrets(error.message) });
+}
+
+app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
+  const requestId = `media_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = authUser.id;
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+
+  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+  if (isAbusivePrompt(prompt)) {
+    return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
+  }
+  if (!enforceRateLimit(`media:${userId}`, 10, 60_000)) {
+    return res.status(429).json({ success: false, error: 'Too many media requests. Please wait a moment.' });
+  }
+
+  const helpers = getDbHelpers();
+  const plan = await getOrganizationPlan(project.organization_id).catch(() => 'free');
+  const settings = normalizeMediaSettings(req.body?.settings || req.body?.mediaSettings || req.body?.studioContext?.settings || {});
+  const model = selectMediaModel(settings, plan);
+  const estimatedCredits = estimateMediaCredits(settings, model);
+  const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  const modelAvailable = isMediaModelAvailable(model, plan);
+  const output = mediaOutputForKind(settings.kind);
+
+  await saveProjectMessage({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    role: 'user',
+    content: prompt,
+    intent: 'conversation',
+    requested_mode: 'auto',
+  });
+
+  let providerStatus: 'completed' | 'queued' | 'not_configured' | 'locked' | 'failed' = 'not_configured';
+  let assets: FalMediaAsset[] = [];
+  let errorMessage = '';
+  if (!modelAvailable) {
+    providerStatus = 'locked';
+  } else if (wallet < estimatedCredits) {
+    providerStatus = 'locked';
+    errorMessage = 'Not enough credits for this media render.';
+  } else {
+    try {
+      const mediaPrompt = buildMediaPrompt({ prompt, settings, project });
+      const result = await falMediaGateway.generate({ model, settings, prompt: mediaPrompt });
+      providerStatus = result.status;
+      assets = result.assets;
+      if (assets.length) {
+        const finalBalance = await helpers.updateWallet(userId, -estimatedCredits);
+        await helpers.addLedger(userId, 'usage', -estimatedCredits, finalBalance, `Generated ${output} media with ${model.label}`, requestId);
+        await saveMediaAssetRecords({ project, userId, prompt, settings, modelId: model.id, assets, estimatedCredits });
+      }
+    } catch (error: any) {
+      providerStatus = 'failed';
+      errorMessage = diagnoseProviderError(error).message || normalizeProviderError(error);
+    }
+  }
+
+  const previewHtml = renderHuggyMediaPreviewHtml({
+    project,
+    prompt,
+    settings,
+    modelLabel: model.label,
+    estimatedCredits,
+    providerStatus,
+    assets,
+    errorMessage,
+  });
+  const isFrench = isLikelyFrenchPrompt(prompt);
+  const assistantText = isFrench
+    ? [
+      assets.length ? 'Le media est pret dans la preview.' : 'J ai prepare un brief media propre dans la preview.',
+      `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Modele: ${model.label}.`,
+      providerStatus === 'not_configured'
+        ? 'fal.ai n est pas encore configure cote serveur, donc je ne pretends pas avoir rendu une vraie video/image.'
+        : providerStatus === 'locked'
+          ? 'Ce rendu demande un plan ou des credits suffisants.'
+          : providerStatus === 'failed'
+            ? 'Le provider n a pas termine le rendu. Le brief reste disponible pour relancer ou changer de modele.'
+            : `Credits estimes: ${estimatedCredits}.`,
+    ].join('\n')
+    : [
+      assets.length ? 'The media asset is ready in Preview.' : 'I prepared a clean media brief in Preview.',
+      `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Model: ${model.label}.`,
+      providerStatus === 'not_configured'
+        ? 'fal.ai is not configured on the server yet, so I am not pretending a real image/video was rendered.'
+        : providerStatus === 'locked'
+          ? 'This render needs the right plan or enough credits.'
+          : providerStatus === 'failed'
+            ? 'The provider did not complete the render. The brief is available for retry or model change.'
+            : `Estimated credits: ${estimatedCredits}.`,
+    ].join('\n');
+
+  await saveProjectMessage({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    user_id: userId,
+    role: 'assistant',
+    content: assistantText,
+    intent: 'conversation',
+    requested_mode: 'auto',
+  });
+
+  res.json({
+    success: true,
+    request_id: requestId,
+    status: providerStatus,
+    provider_configured: falMediaGateway.isConfigured(),
+    output,
+    settings,
+    model: {
+      id: model.id,
+      label: model.label,
+      output: model.output,
+      quality: model.quality,
+      min_plan: model.minPlan,
+    },
+    estimated_credits: estimatedCredits,
+    assets,
+    text: assistantText,
+    preview: {
+      status: 'media',
+      html: previewHtml,
+    },
+  });
+});
+
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const requestId = `req_${randomUUID()}`;
   const authUser = requireAuthenticatedUser(req, res, requestId);
@@ -6333,6 +6806,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+  const studioContext = req.body?.studioContext;
+  const agentPrompt = applyStudioContextToPrompt(prompt, studioContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
@@ -6347,7 +6822,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
-    prompt,
+    prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
@@ -6365,7 +6840,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     modelRouting = await resolveAgentProviderModel({
       modelId: requestedModelSelection,
       project,
-      prompt,
+      prompt: agentPrompt,
       decision,
       files: existingFiles,
       userCredits: walletForRouting,
@@ -6417,7 +6892,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     let agentText;
     try {
-      agentText = await createAgentTextResponse({ project, prompt, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
+      agentText = await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
@@ -6486,12 +6961,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        executionPlan = (await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
+        executionPlan = (await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
       } catch {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
       }
     }
-    const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt;
+    const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
     const generation = await generateFilesWithAi({
       projectName: project.name,
       prompt: executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt,
@@ -6724,6 +7199,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
   const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
+  const studioContext = req.body?.studioContext;
+  const agentPrompt = applyStudioContextToPrompt(prompt, studioContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`stream:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
@@ -7027,7 +7504,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
-    prompt,
+    prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
@@ -7047,7 +7524,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     modelRouting = await resolveAgentProviderModel({
       modelId: requestedModelSelection,
       project,
-      prompt,
+      prompt: agentPrompt,
       decision,
       files: existingFiles,
       userCredits: walletForRouting,
@@ -7178,10 +7655,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
 
-  if (AGENT_V3_ENABLED && shouldUseWebResearch({ prompt, intent: decision.intent, requiresFileChanges: reliability.should_mutate_files })) {
+  if (AGENT_V3_ENABLED && shouldUseWebResearch({ prompt: agentPrompt, intent: decision.intent, requiresFileChanges: reliability.should_mutate_files })) {
     toolLoop.claim('web_research');
     await send('research_started', 'Researching current context.', { query: prompt.slice(0, 180), budget: toolLoop.snapshot });
-    researchResult = await webResearchGateway.search(prompt, { maxResults: 4, timeoutMs: 12_000 });
+    researchResult = await webResearchGateway.search(agentPrompt, { maxResults: 4, timeoutMs: 12_000 });
     researchContext = researchToPromptContext(researchResult);
     await saveAgentResearchResults(project, userId, agentRunId, researchResult);
     await updateAgentRunV3Meta(agentRunId, { research_used: researchResult.status === 'completed', tool_budget: toolLoop.snapshot });
@@ -7224,7 +7701,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       agentText = shouldStreamTextResponse
         ? await streamAgentTextResponse({
             project,
-            prompt,
+            prompt: agentPrompt,
             files: existingFiles,
             decision,
             modelId: effectiveModelSelection,
@@ -7241,7 +7718,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           })
         : await createAgentTextResponse({
             project,
-            prompt,
+            prompt: agentPrompt,
             files: existingFiles,
             decision,
             modelId: effectiveModelSelection,
@@ -7319,7 +7796,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
 
-  const requirements = detectExternalApiRequirements(prompt);
+  const requirements = detectExternalApiRequirements(agentPrompt);
   if (requirements.length && !req.body?.skipExternalKeys && !req.body?.externalKeysConfirmed) {
     await send('external_api_keys_required', 'This build can connect external APIs before continuing.', { requirements });
     await send('waiting_for_api_keys', 'Waiting for API keys or skip confirmation.', {});
@@ -7365,7 +7842,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        const planned = await createAgentTextResponse({ project, prompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
+        const planned = await createAgentTextResponse({ project, prompt: agentPrompt, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
         executionPlan = planned.text;
         await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true });
       } catch (error) {
@@ -7390,7 +7867,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_label: streamCopy('Generation des fichiers.', 'Generating files.'),
         step_detail: streamCopy('Je demande une app moderne avec structure React/Vite, interactions et etats UI.', 'I am asking for a modern app with React/Vite structure, interactions, and UI states.'),
       });
-      const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${prompt}` : prompt;
+      const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
       const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext });
 

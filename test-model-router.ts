@@ -47,4 +47,28 @@ assert.equal(
   'Auto extreme tasks should use the premium fast model when available.',
 );
 
+assert.equal(
+  await router.selectModel({
+    plan: 'scale',
+    mode: 'Auto',
+    userCredits: 100,
+    taskComplexity: 'medium',
+    preferredModels: ['anthropic/claude-opus-4.8', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.7'],
+  }),
+  'anthropic/claude-opus-4.8',
+  'Studio Design/Decks auto routing should prioritize Opus when plan and credits allow it.',
+);
+
+assert.equal(
+  await router.selectModel({
+    plan: 'free',
+    mode: 'Auto',
+    userCredits: 10,
+    taskComplexity: 'medium',
+    preferredModels: ['anthropic/claude-opus-4.8', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.7'],
+  }),
+  'google/gemini-3.5-flash',
+  'Studio Opus preference should fall back to the normal safe router when Opus is not available.',
+);
+
 console.log('model-router tests passed');

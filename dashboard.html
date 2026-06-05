@@ -911,6 +911,65 @@
     .chip:hover { border-color: var(--border-mid); color: var(--text-muted); background: var(--accent-dim); }
     .chip:active { transform: scale(0.97); }
 
+    .workspace-hubs {
+      width: 100%;
+      max-width: 920px;
+      margin: 18px auto 0;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .workspace-hub-card {
+      min-height: 86px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+      color: var(--text);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      text-align: left;
+      transition: border-color 150ms cubic-bezier(.22,1,.36,1), background 150ms cubic-bezier(.22,1,.36,1), transform 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .workspace-hub-card:hover {
+      border-color: var(--border-focus);
+      background: var(--bg-surface);
+      transform: translateY(-1px);
+    }
+
+    .workspace-hub-icon {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-elevated);
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+
+    .workspace-hub-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .workspace-hub-title {
+      font-size: 12px;
+      font-weight: 780;
+      letter-spacing: -0.01em;
+    }
+
+    .workspace-hub-desc {
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--text-muted);
+      font-weight: 420;
+    }
+
     /* PROJECTS GRID */
     .grid-header {
       display: flex; align-items: center;
@@ -1400,6 +1459,7 @@
       .content-area { padding: 20px; }
       .create-input-row { flex-direction: column; align-items: stretch; }
       .btn-submit { height: 40px; }
+      .workspace-hubs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     /* Codex-like dashboard refinement */
@@ -1842,6 +1902,45 @@
             <button class="chip" data-prompt="Create a 3D portfolio">3D Portfolio</button>
             <button class="chip" data-prompt="Create a SaaS manager">SaaS Manager</button>
           </div>
+
+          <div class="workspace-hubs" aria-label="Huggy workshops">
+            <button class="workspace-hub-card" type="button" data-workshop-open="chat">
+              <span class="workspace-hub-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+                </svg>
+              </span>
+              <span class="workspace-hub-title">Sites</span>
+              <span class="workspace-hub-desc">Build, edit and publish web apps.</span>
+            </button>
+            <button class="workspace-hub-card" type="button" data-workshop-open="design">
+              <span class="workspace-hub-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16"></path><path d="M3 9h18"></path>
+                </svg>
+              </span>
+              <span class="workspace-hub-title">Huggy Design</span>
+              <span class="workspace-hub-desc">UI direction, prototypes and polish.</span>
+            </button>
+            <button class="workspace-hub-card" type="button" data-workshop-open="decks">
+              <span class="workspace-hub-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4" y="5" width="16" height="12" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path>
+                </svg>
+              </span>
+              <span class="workspace-hub-title">Pitch decks</span>
+              <span class="workspace-hub-desc">Slides, story and one-pagers.</span>
+            </button>
+            <button class="workspace-hub-card" type="button" data-workshop-open="media">
+              <span class="workspace-hub-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 14h5"></path>
+                </svg>
+              </span>
+              <span class="workspace-hub-title">Huggy Media</span>
+              <span class="workspace-hub-desc">UGC ads, product visuals and promos.</span>
+            </button>
+          </div>
         </section>
 
         <section>
@@ -2134,6 +2233,17 @@
       localStorage.removeItem('huggy-current-project');
       navigate('/builder.html?new=1');
     }
+
+    document.querySelectorAll('[data-workshop-open]').forEach(button => {
+      button.addEventListener('click', () => {
+        const workshop = button.dataset.workshopOpen || 'chat';
+        localStorage.setItem('huggy-active-workshop', workshop);
+        sessionStorage.removeItem('huggy-initial-prompt');
+        sessionStorage.removeItem('huggy-requested-mode');
+        localStorage.removeItem('huggy-current-project');
+        navigate(`/builder.html?new=1&workshop=${encodeURIComponent(workshop)}`);
+      });
+    });
 
     let projects = [];
     localStorage.removeItem('huggy-projects');

@@ -1,0 +1,240 @@
+export type HuggyMediaKind =
+  | 'video_ad'
+  | 'ugc'
+  | 'storyboard'
+  | 'product_image'
+  | 'social_creative'
+  | 'thumbnail';
+
+export type HuggyMediaFormat = '9:16' | '1:1' | '4:5' | '16:9' | '3:4';
+export type HuggyMediaDuration = '5s' | '8s' | '10s' | '15s' | '30s';
+export type HuggyMediaModelPreference =
+  | 'auto'
+  | 'best_quality'
+  | 'fast'
+  | 'seedance'
+  | 'veo'
+  | 'sora'
+  | 'kling'
+  | 'flux'
+  | 'openai_image';
+
+export type HuggyMediaModelId =
+  | 'bytedance/seedance-2.0/fast/text-to-video'
+  | 'bytedance/seedance-2.0/text-to-video'
+  | 'fal-ai/veo3.1'
+  | 'fal-ai/sora-2/text-to-video/pro'
+  | 'fal-ai/kling-video/v3/pro/text-to-video'
+  | 'fal-ai/flux-2-pro'
+  | 'fal-ai/gpt-image-2';
+
+export type HuggyMediaSettings = {
+  kind: HuggyMediaKind;
+  format: HuggyMediaFormat;
+  duration: HuggyMediaDuration;
+  modelPreference: HuggyMediaModelPreference;
+};
+
+export type HuggyMediaModelDefinition = {
+  id: HuggyMediaModelId;
+  label: string;
+  family: 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai';
+  output: 'video' | 'image';
+  quality: 'fast' | 'balanced' | 'premium';
+  endpointId: string;
+  recommendedFor: HuggyMediaKind[];
+  creditBase: number;
+  creditPerSecond?: number;
+  minPlan: 'free' | 'pro' | 'scale' | 'enterprise';
+};
+
+export const MEDIA_MODEL_REGISTRY: HuggyMediaModelDefinition[] = [
+  {
+    id: 'bytedance/seedance-2.0/fast/text-to-video',
+    label: 'Seedance 2.0 Fast',
+    family: 'seedance',
+    output: 'video',
+    quality: 'fast',
+    endpointId: 'bytedance/seedance-2.0/fast/text-to-video',
+    recommendedFor: ['video_ad', 'ugc', 'storyboard', 'social_creative'],
+    creditBase: 8,
+    creditPerSecond: 2,
+    minPlan: 'pro',
+  },
+  {
+    id: 'bytedance/seedance-2.0/text-to-video',
+    label: 'Seedance 2.0',
+    family: 'seedance',
+    output: 'video',
+    quality: 'balanced',
+    endpointId: 'bytedance/seedance-2.0/text-to-video',
+    recommendedFor: ['video_ad', 'ugc', 'storyboard', 'social_creative'],
+    creditBase: 10,
+    creditPerSecond: 3,
+    minPlan: 'pro',
+  },
+  {
+    id: 'fal-ai/veo3.1',
+    label: 'Veo 3.1',
+    family: 'veo',
+    output: 'video',
+    quality: 'premium',
+    endpointId: 'fal-ai/veo3.1',
+    recommendedFor: ['video_ad', 'storyboard', 'social_creative'],
+    creditBase: 18,
+    creditPerSecond: 5,
+    minPlan: 'scale',
+  },
+  {
+    id: 'fal-ai/sora-2/text-to-video/pro',
+    label: 'Sora 2 Pro',
+    family: 'sora',
+    output: 'video',
+    quality: 'premium',
+    endpointId: 'fal-ai/sora-2/text-to-video/pro',
+    recommendedFor: ['video_ad', 'storyboard', 'social_creative'],
+    creditBase: 18,
+    creditPerSecond: 5,
+    minPlan: 'scale',
+  },
+  {
+    id: 'fal-ai/kling-video/v3/pro/text-to-video',
+    label: 'Kling 3.0 Pro',
+    family: 'kling',
+    output: 'video',
+    quality: 'premium',
+    endpointId: 'fal-ai/kling-video/v3/pro/text-to-video',
+    recommendedFor: ['video_ad', 'ugc', 'storyboard'],
+    creditBase: 16,
+    creditPerSecond: 4,
+    minPlan: 'scale',
+  },
+  {
+    id: 'fal-ai/flux-2-pro',
+    label: 'FLUX.2 Pro',
+    family: 'flux',
+    output: 'image',
+    quality: 'premium',
+    endpointId: 'fal-ai/flux-2-pro',
+    recommendedFor: ['product_image', 'social_creative', 'thumbnail'],
+    creditBase: 6,
+    minPlan: 'pro',
+  },
+  {
+    id: 'fal-ai/gpt-image-2',
+    label: 'OpenAI Image',
+    family: 'openai',
+    output: 'image',
+    quality: 'balanced',
+    endpointId: 'fal-ai/gpt-image-2',
+    recommendedFor: ['product_image', 'social_creative', 'thumbnail'],
+    creditBase: 5,
+    minPlan: 'pro',
+  },
+];
+
+const MEDIA_KINDS = new Set<HuggyMediaKind>([
+  'video_ad',
+  'ugc',
+  'storyboard',
+  'product_image',
+  'social_creative',
+  'thumbnail',
+]);
+
+const MEDIA_FORMATS = new Set<HuggyMediaFormat>(['9:16', '1:1', '4:5', '16:9', '3:4']);
+const MEDIA_DURATIONS = new Set<HuggyMediaDuration>(['5s', '8s', '10s', '15s', '30s']);
+const MEDIA_MODEL_PREFERENCES = new Set<HuggyMediaModelPreference>([
+  'auto',
+  'best_quality',
+  'fast',
+  'seedance',
+  'veo',
+  'sora',
+  'kling',
+  'flux',
+  'openai_image',
+]);
+
+export function normalizeMediaSettings(value: any): HuggyMediaSettings {
+  const kind = MEDIA_KINDS.has(value?.kind) ? value.kind : 'video_ad';
+  const format = MEDIA_FORMATS.has(value?.format) ? value.format : '9:16';
+  const duration = MEDIA_DURATIONS.has(value?.duration) ? value.duration : '8s';
+  const modelPreference = MEDIA_MODEL_PREFERENCES.has(value?.modelPreference)
+    ? value.modelPreference
+    : 'auto';
+
+  return { kind, format, duration, modelPreference };
+}
+
+export function mediaDurationSeconds(duration: HuggyMediaDuration): number {
+  return Number(duration.replace('s', '')) || 8;
+}
+
+export function mediaOutputForKind(kind: HuggyMediaKind): 'video' | 'image' | 'storyboard' {
+  if (kind === 'product_image' || kind === 'thumbnail') return 'image';
+  if (kind === 'storyboard') return 'storyboard';
+  return 'video';
+}
+
+function planRank(plan: string) {
+  const normalized = String(plan || 'free').toLowerCase();
+  if (normalized === 'enterprise') return 3;
+  if (normalized === 'scale') return 2;
+  if (normalized === 'pro') return 1;
+  return 0;
+}
+
+export function isMediaModelAvailable(model: HuggyMediaModelDefinition, plan: string) {
+  return planRank(plan) >= planRank(model.minPlan);
+}
+
+export function selectMediaModel(settings: HuggyMediaSettings, plan = 'free'): HuggyMediaModelDefinition {
+  const desiredOutput = mediaOutputForKind(settings.kind) === 'image' ? 'image' : 'video';
+  const available = MEDIA_MODEL_REGISTRY.filter(model => (
+    model.output === desiredOutput
+    && model.recommendedFor.includes(settings.kind)
+    && isMediaModelAvailable(model, plan)
+  ));
+  const candidates = available.length
+    ? available
+    : MEDIA_MODEL_REGISTRY.filter(model => model.output === desiredOutput && model.recommendedFor.includes(settings.kind));
+
+  const byFamily = (family: HuggyMediaModelDefinition['family']) => candidates.find(model => model.family === family) || candidates[0];
+
+  if (settings.modelPreference === 'fast') {
+    return candidates.find(model => model.quality === 'fast') || candidates[0];
+  }
+  if (settings.modelPreference === 'best_quality') {
+    return [...candidates].reverse().find(model => model.quality === 'premium') || candidates[0];
+  }
+  if (settings.modelPreference === 'seedance') return byFamily('seedance');
+  if (settings.modelPreference === 'veo') return byFamily('veo');
+  if (settings.modelPreference === 'sora') return byFamily('sora');
+  if (settings.modelPreference === 'kling') return byFamily('kling');
+  if (settings.modelPreference === 'flux') return byFamily('flux');
+  if (settings.modelPreference === 'openai_image') return byFamily('openai');
+
+  if (desiredOutput === 'image') {
+    return candidates.find(model => model.family === 'flux') || candidates[0];
+  }
+  return candidates.find(model => model.quality === 'fast') || candidates[0];
+}
+
+export function estimateMediaCredits(settings: HuggyMediaSettings, model: HuggyMediaModelDefinition): number {
+  if (model.output === 'image') return model.creditBase;
+  const duration = mediaDurationSeconds(settings.duration);
+  return Math.max(model.creditBase, model.creditBase + Math.ceil(duration * (model.creditPerSecond || 2)));
+}
+
+export function mediaSettingsSummary(settings: HuggyMediaSettings) {
+  const kindLabels: Record<HuggyMediaKind, string> = {
+    video_ad: 'Video ad',
+    ugc: 'UGC',
+    storyboard: 'Storyboard',
+    product_image: 'Product image',
+    social_creative: 'Social creative',
+    thumbnail: 'Thumbnail',
+  };
+  return `${kindLabels[settings.kind]} · ${settings.format} · ${settings.duration} · ${settings.modelPreference.replace(/_/g, ' ')}`;
+}
