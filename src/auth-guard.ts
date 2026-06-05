@@ -1,15 +1,15 @@
-import { getVerifiedSession, supabase } from './lib/supabase-browser';
-
-const currentPath = `${window.location.pathname}${window.location.search}`;
+import { getCurrentPrivatePath, getVerifiedSession, signOutCurrentDevice } from './lib/supabase-browser';
 
 function redirectToAuth() {
-  const redirect = encodeURIComponent(currentPath || '/dashboard.html');
+  const redirect = encodeURIComponent(getCurrentPrivatePath());
   window.location.href = `/auth.html?redirect=${redirect}`;
 }
 
 async function guardPage() {
-  const verified = await getVerifiedSession();
-  if (!verified) {
+  document.documentElement.dataset.authReady = 'checking';
+  const verified = await getVerifiedSession({ allowRefresh: true });
+  if (!verified?.user?.id || !verified.session?.access_token) {
+    document.documentElement.dataset.authReady = 'false';
     redirectToAuth();
     return;
   }
@@ -23,7 +23,7 @@ document.addEventListener('click', (event) => {
   const logoutButton = (event.target as Element | null)?.closest('[data-auth-logout]');
   if (!logoutButton) return;
   event.preventDefault();
-  void supabase.auth.signOut().then(() => {
+  void signOutCurrentDevice().then(() => {
     window.location.href = '/auth.html';
   });
 });

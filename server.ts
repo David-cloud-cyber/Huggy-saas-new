@@ -490,18 +490,6 @@ function diagnoseProviderError(error: any) {
     };
   }
   if (error?.diagnosticCode) {
-    if (String(error.diagnosticCode) === 'AUTH_USER_UNDEFINED_BUG') {
-      console.error('[huggy:server_auth_state_invariant]', {
-        invariant: 'SERVER_AUTH_STATE_INVARIANT',
-        message,
-      });
-      return {
-        message: AUTH_SESSION_UNAVAILABLE_MESSAGE,
-        diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
-        suggested_action: 'sign_in_again',
-        status: 401,
-      };
-    }
     const suggestedByCode: Record<string, string> = {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
@@ -974,8 +962,14 @@ function getUserOrgId(req: any): string {
 }
 
 function getOrganizationFallbackValue(column: string, req: any, organizationId: string, now: string) {
-  const userId = req.user?.id || organizationId;
-  const email = String(req.user?.email || '').trim();
+  let auth: ReturnType<typeof getRequiredAuth> | null = null;
+  try {
+    auth = getRequiredAuth(req);
+  } catch {
+    auth = null;
+  }
+  const userId = auth?.userId || organizationId;
+  const email = String(auth?.email || '').trim();
   const name = email ? `${email.split('@')[0]}'s workspace` : 'Personal workspace';
   const slug = `personal-${organizationId.slice(0, 8)}`;
   const normalized = column.toLowerCase();
@@ -1005,8 +999,9 @@ async function ensurePersonalOrganization(req: any, organizationId: string) {
   if (!client) return organizationId;
 
   const now = new Date().toISOString();
-  const userId = req.user?.id || organizationId;
-  const email = String(req.user?.email || '').trim();
+  const auth = getRequiredAuth(req);
+  const userId = auth.userId || organizationId;
+  const email = String(auth.email || '').trim();
   const row: Record<string, any> = {
     id: organizationId,
     owner_id: userId,
@@ -1107,13 +1102,18 @@ function getUserProjectRole(req: any, project?: GeneratedProject): ProjectRole {
   const attachedRole = normalizeProjectRole((project as any)?.__huggy_project_role);
   if (attachedRole) return attachedRole;
   if (isPlatformAdmin(req)) return 'admin';
-  const userId = String(req.user?.id || '').trim();
+  let userId = '';
+  try {
+    userId = getRequiredAuth(req).userId;
+  } catch {
+    userId = '';
+  }
   if (project && userId && (project.owner_id === userId || project.created_by === userId || (project as any).user_id === userId)) return 'owner';
   return 'viewer';
 }
 
 function isPlatformAdmin(req: any) {
-  const metadata = req.user?.app_metadata || {};
+  const metadata = (req.auth?.user || req.user)?.app_metadata || {};
   const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
   return metadata.role === 'platform_admin' || roles.includes('platform_admin');
 }
@@ -7731,7 +7731,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     console.error('[huggy:generate_stream_preflight_failed]', {
       request_id: requestId,
       project_id: req.params?.id,
-      user_id: req.user?.id,
+      user_id: req.auth?.userId || null,
       diagnostic_code: diagnostic.diagnostic_code,
       message: redactSecrets(error?.message || String(error), '[redacted]'),
     });
