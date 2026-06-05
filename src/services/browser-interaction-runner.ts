@@ -1,4 +1,5 @@
 import type { AgentGeneratedFile, AgentVerificationCheck } from './agent-v2.ts';
+import { redactSecrets } from './secret-redaction.ts';
 
 export type BrowserInteractionAuditInput = {
   files: AgentGeneratedFile[];
@@ -136,8 +137,5 @@ function fail(key: string, message: string): AgentVerificationCheck {
 }
 
 function redactError(value: string) {
-  return String(value || '')
-    .replace(/\b(sk-(?:live|test|proj)-[A-Za-z0-9_-]+|ghp_[A-Za-z0-9_]+|sbp_[A-Za-z0-9_]+)\b/g, '[redacted]')
-    .replace(/\b(api[_-]?key|secret|password|token)\s*[:=]\s*['"][^'"]+['"]/gi, '$1=[redacted]')
-    .slice(0, 600);
+  return redactSecrets(value, '[redacted]').slice(0, 600);
 }

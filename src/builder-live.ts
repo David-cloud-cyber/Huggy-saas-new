@@ -11,6 +11,7 @@ import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
+import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 
 type ChatMode = 'auto' | 'plan' | 'build';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
@@ -829,9 +830,10 @@ function clearInlineBlocks() {
 
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, options: { working?: boolean } = {}) {
   ensureChatShimmerStyle();
+  const safeBody = redactSecrets(body);
   const api = ensureConversationApi();
   if (api) {
-    const id = api.addMessage({ role: kind, content: body, working: Boolean(options.working) });
+    const id = api.addMessage({ role: kind, content: safeBody, working: Boolean(options.working) });
     return createMessageHandle(id);
   }
 
@@ -844,7 +846,7 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, opti
     <p class="msg-body-paragraph" style="white-space:pre-wrap;"></p>
   `;
   const paragraph = card.querySelector('.msg-body-paragraph');
-  if (paragraph) paragraph.textContent = body;
+  if (paragraph) paragraph.textContent = safeBody;
   if (options.working) {
     card.classList.add('message-card-shimmer');
     card.setAttribute('aria-busy', 'true');
@@ -909,13 +911,14 @@ function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
 }
 
 function updateMessage(card: HTMLElement | null, body: string) {
+  const safeBody = redactSecrets(body);
   const id = messageHandleId(card);
   if (id && conversationApi) {
-    conversationApi.updateMessage(id, body);
+    conversationApi.updateMessage(id, safeBody);
     return;
   }
   const paragraph = card?.querySelector('.msg-body-paragraph');
-  if (paragraph) paragraph.textContent = body;
+  if (paragraph) paragraph.textContent = safeBody;
 }
 
 function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock | null) {
@@ -940,9 +943,7 @@ function buildPlanBlock(content: string, prompt: string, open = false): HuggyCon
 }
 
 function redactStreamingCodeSnippet(value: unknown) {
-  const text = String(value || '')
-    .replace(/(api[_-]?key|secret|token|password|service[_-]?role)(\s*[:=]\s*)(["']?)[^"'\s]+/gi, '$1$2$3[masked]')
-    .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|sbp_[A-Za-z0-9_]+/g, '[masked-secret]');
+  const text = redactSecrets(value);
   const lines = text.split('\n').slice(0, 22);
   const clipped = lines.join('\n').slice(0, 1800);
   return clipped || '// No public snippet available for this step.';
@@ -2858,9 +2859,9 @@ const STREAM_INTERNAL_MODEL_KEYS = [
   'provider',
 ];
 
-function redactInternalModelFields(payload: any) {
+function redactInternalModelFields(payload: any): any {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
-  const redacted = { ...payload };
+  const redacted: any = redactSecretPayload({ ...payload });
   STREAM_INTERNAL_MODEL_KEYS.forEach(key => {
     if (key in redacted) delete redacted[key];
   });
@@ -2868,15 +2869,17 @@ function redactInternalModelFields(payload: any) {
 }
 
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
-  if (isGenerating || !prompt.trim()) return;
+  const safePrompt = redactSecrets(prompt).trim();
+  const safeDisplayText = redactSecrets(displayText);
+  if (isGenerating || !safePrompt) return;
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
   clearInlineBlocks();
 
-  appendMessage('user', displayText);
-  const speaksFrench = isLikelyFrenchText(prompt);
-  const quickConversation = isQuickConversationPrompt(prompt, requestedMode);
+  appendMessage('user', safeDisplayText);
+  const speaksFrench = isLikelyFrenchText(safePrompt);
+  const quickConversation = isQuickConversationPrompt(safePrompt, requestedMode);
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
   const firstWorkingLabel = quickConversation
     ? (speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...')
@@ -2985,9 +2988,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     return target;
   };
   try {
-    await ensureProjectForPrompt(prompt);
+    await ensureProjectForPrompt(safePrompt);
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
-      prompt,
+      prompt: safePrompt,
       requestedMode,
       useLastPlan,
       modelId: selectedModel(),
@@ -3166,7 +3169,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         } else {
           const target = commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
           if (eventType === 'plan_ready') {
-            setMessageBlock(target, buildPlanBlock(String(text || ''), prompt, true));
+            setMessageBlock(target, buildPlanBlock(String(text || ''), safePrompt, true));
           }
         }
         if (eventType === 'plan_ready' && !payload.auto_plan_required) {
@@ -3178,8 +3181,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
       if (eventType === 'clarification_required') {
         const target = commitAssistantText(payload.text || event.message, say('J’ai besoin d’un détail avant d’agir.', 'I need one detail before acting.'));
-        if (!showClarificationActions(target, payload, prompt, requestedMode)) {
-          showClarificationBlock(payload, prompt, requestedMode);
+        if (!showClarificationActions(target, payload, safePrompt, requestedMode)) {
+          showClarificationBlock(payload, safePrompt, requestedMode);
         }
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for details');
         return;
@@ -3204,7 +3207,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         });
         addInlineAction(target, speaksFrench ? 'Ajouter les clés' : 'Add keys', () => showApiKeyModal(payload.requirements || []));
         addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => {
-          void generateFromPrompt(prompt, requestedMode, useLastPlan, { ...extra, skipExternalKeys: true }, displayText);
+          void generateFromPrompt(safePrompt, requestedMode, useLastPlan, { ...extra, skipExternalKeys: true }, safeDisplayText);
         });
         showApiKeyModal(payload.requirements || []);
         if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for keys');
@@ -3322,7 +3325,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         });
         addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
           void recordAgentFeedback('regenerate');
-          void generateFromPrompt(prompt, 'build', false, { regenerate: true }, displayText);
+          void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
         });
         addInlineAction(target, 'Publish', () => {
           void recordAgentFeedback('publish');
@@ -3765,13 +3768,15 @@ function showClarificationActions(card: HTMLElement | null, payload: any, origin
 }
 
 async function resumeFromClarification(answer: string, originalPrompt: string, requestedMode: ChatMode) {
-  if (!answer.trim()) return;
+  const safeAnswer = redactSecrets(answer).trim();
+  const safeOriginalPrompt = redactSecrets(originalPrompt).trim();
+  if (!safeAnswer) return;
   clearInlineBlocks();
   const response = await apiFetch<{ prompt: string; requestedMode?: ChatMode }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/answer`, {
     method: 'POST',
-    body: JSON.stringify({ answer, originalPrompt, requestedMode, recommendation: answer }),
+    body: JSON.stringify({ answer: safeAnswer, originalPrompt: safeOriginalPrompt, requestedMode, recommendation: safeAnswer }),
   });
-  await generateFromPrompt(response.prompt || `${originalPrompt}\n\nClarification answer: ${answer}`, response.requestedMode || requestedMode, false, {}, answer);
+  await generateFromPrompt(response.prompt || `${safeOriginalPrompt}\n\nClarification answer: ${safeAnswer}`, response.requestedMode || requestedMode, false, {}, safeAnswer);
 }
 
 function showCreditsModal() {

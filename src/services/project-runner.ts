@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runBrowserInteractionAudit } from './browser-interaction-runner.ts';
 import type { AgentVerificationCheck } from './agent-v2.ts';
+import { containsSecret, redactSecrets } from './secret-redaction.ts';
 
 export type RunnerStatus = 'passed' | 'failed' | 'skipped';
 export type RunnerSeverity = 'info' | 'low' | 'medium' | 'high';
@@ -43,7 +44,6 @@ export interface RunnerAdapter {
   }): Promise<RunnerResult>;
 }
 
-const SECRET_RE = /\b(sk-(?:live|test|proj)-[A-Za-z0-9_-]+|ghp_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)\b|(?:api[_-]?key|secret|password|token)\s*[:=]\s*['"][^'"]+['"]/i;
 const DANGEROUS_SCRIPT_RE = /\b(rm\s+-rf|del\s+\/|format\b|curl\b|wget\b|powershell\b|pwsh\b|bash\b|sh\b|chmod\b|sudo\b|scp\b|ssh\b|node\s+-e|python\b|python3\b|eval\b)\b/i;
 const SAFE_SCRIPT_RE = /^(vite\s+build|tsc(?:\s|$)|eslint(?:\s|$)|biome\s+check(?:\s|$)|node\s+--experimental-strip-types\s+[\w./-]+|npm\s+run\s+(?:build|test|lint)(?:\s|$))/i;
 const SCRIPT_NAMES = ['lint', 'test', 'build'];
@@ -121,7 +121,7 @@ export class HybridProjectRunner implements RunnerAdapter {
       if (/^\.env(?:\.|$)|\/\.env(?:\.|$)/i.test(safePath)) {
         checks.push(fail('no_env_files', 'high', 'Runner blocked generated .env files.', file.path));
       }
-      if (SECRET_RE.test(file.content || '')) {
+      if (containsSecret(file.content || '')) {
         checks.push(fail('no_secrets', 'high', 'Potential secret or credential detected.', file.path));
       }
       if (safePath.endsWith('.json')) {
@@ -432,7 +432,7 @@ function safeRunnerEnv() {
 }
 
 function redactOutput(value: string) {
-  return String(value || '').replace(SECRET_RE, '[redacted]').slice(-4000);
+  return redactSecrets(value, '[redacted]').slice(-4000);
 }
 
 function pass(check_type: string, message: string, file_path?: string): RunnerCheck {

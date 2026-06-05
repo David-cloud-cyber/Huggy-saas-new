@@ -1,5 +1,6 @@
 import type { ResearchResult } from './web-research-gateway.ts';
 import type { RunnerResult } from './project-runner.ts';
+import { redactSecrets } from './secret-redaction.ts';
 
 export type ToolLoopBudget = {
   maxToolSteps: number;
@@ -95,5 +96,5 @@ function redactPublic(value: any): any {
 }
 
 function redactString(value: string) {
-  return value.replace(/\b(sk-(?:live|test|proj)-[A-Za-z0-9_-]+|ghp_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)\b/g, '[redacted]');
+  return redactSecrets(value, '[redacted]');
 }

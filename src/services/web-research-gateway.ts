@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { redactSecrets } from './secret-redaction.ts';
 
 export type ResearchStatus = 'completed' | 'skipped' | 'failed';
 
@@ -18,8 +19,6 @@ export type ResearchResult = {
   message: string;
   results: ResearchResultItem[];
 };
-
-const SECRET_RE = /\b(sk-(?:live|test|proj)-[A-Za-z0-9_-]+|ghp_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)\b/g;
 
 export class WebResearchGateway {
   private tavilyKey: string;
@@ -156,7 +155,7 @@ function skipped(query: string, diagnostic_code: string, message: string): Resea
 }
 
 function failed(query: string, provider: 'tavily' | 'brave', error: any): ResearchResult {
-  const message = String(error?.message || error || 'Web research failed.').replace(SECRET_RE, '[redacted]');
+  const message = redactSecrets(error?.message || error || 'Web research failed.', '[redacted]');
   return { status: 'failed', query, provider, diagnostic_code: 'WEB_RESEARCH_FAILED', message, results: [] };
 }
 
@@ -165,7 +164,7 @@ function clean(value: unknown) {
 }
 
 function sanitizeQuery(value: string) {
-  return clean(value).replace(SECRET_RE, '[redacted]').slice(0, 240);
+  return redactSecrets(clean(value), '[redacted]').slice(0, 240);
 }
 
 function truncate(value: unknown, limit: number) {

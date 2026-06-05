@@ -105,6 +105,7 @@ import {
   summarizeHuggyCloudRequirements,
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
+import { containsSecret, redactSecretPayload, redactSecrets } from './src/services/secret-redaction.ts';
 
 dotenv.config();
 
@@ -311,7 +312,7 @@ async function requireAuth(req: any, res: any, next: any) {
   } catch (error: any) {
     console.warn('[huggy:auth_session_unavailable]', {
       reason: 'supabase_get_user_threw',
-      message: error?.message || String(error),
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
     });
     return res.status(401).json(authSessionUnavailablePayload(undefined, 'Invalid or expired session'));
   }
@@ -322,7 +323,7 @@ async function requireAuth(req: any, res: any, next: any) {
   if (error || !user) {
     console.warn('[huggy:auth_session_unavailable]', {
       reason: error ? 'supabase_get_user_error' : 'missing_user',
-      message: error?.message || null,
+      message: error?.message ? redactSecrets(error.message, '[redacted]') : null,
       status: error?.status || null,
     });
     return res.status(401).json(authSessionUnavailablePayload(undefined, 'Invalid or expired session'));
@@ -345,9 +346,9 @@ function requireAuthenticatedUser(req: any, res: any, requestId?: string) {
       request_id: requestId || null,
       path: req.path,
       has_authorization: Boolean(req.headers?.authorization),
-      message: error?.message || String(error),
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
     });
-    res.status(401).json(authSessionUnavailablePayload(requestId, error?.message || AUTH_SESSION_UNAVAILABLE_MESSAGE));
+    res.status(401).json(authSessionUnavailablePayload(requestId, redactSecrets(error?.message || AUTH_SESSION_UNAVAILABLE_MESSAGE, '[redacted]')));
     return null;
   }
 }
@@ -466,8 +467,9 @@ function requireSupabase(feature: string) {
 }
 
 function diagnoseProviderError(error: any) {
-  const message = String(error?.message || error || 'Generation failed.');
-  if (/Cannot read properties of undefined \(reading ['"]user['"]\)/i.test(message)) {
+  const rawMessage = String(error?.message || error || 'Generation failed.');
+  const message = redactSecrets(rawMessage, '[redacted]');
+  if (/Cannot read properties of undefined \(reading ['"]user['"]\)/i.test(rawMessage)) {
     console.error('[huggy:server_auth_state_invariant]', {
       invariant: 'SERVER_AUTH_STATE_INVARIANT',
       message,
@@ -479,7 +481,7 @@ function diagnoseProviderError(error: any) {
       status: 401,
     };
   }
-  if (/auth session|invalid or expired session|session could not be read|AUTH_SESSION_UNAVAILABLE/i.test(message)) {
+  if (/auth session|invalid or expired session|session could not be read|AUTH_SESSION_UNAVAILABLE/i.test(rawMessage)) {
     return {
       message: 'Your session could not be read. Please refresh the page and sign in again.',
       diagnostic_code: 'AUTH_SESSION_UNAVAILABLE',
@@ -525,7 +527,7 @@ function diagnoseProviderError(error: any) {
       status: Number(error.statusCode || 502),
     };
   }
-  if (/insufficient.*credit|quota|billing|payment required|OpenRouter HTTP 402/i.test(message)) {
+  if (/insufficient.*credit|quota|billing|payment required|OpenRouter HTTP 402/i.test(rawMessage)) {
     return {
       message: 'The AI provider rejected the request because the provider account has insufficient credits or quota. Check OpenRouter billing, then retry.',
       diagnostic_code: 'PROVIDER_QUOTA_OR_BILLING',
@@ -533,7 +535,7 @@ function diagnoseProviderError(error: any) {
       status: 503,
     };
   }
-  if (/not configured|OPENROUTER_API_KEY/i.test(message)) {
+  if (/not configured|OPENROUTER_API_KEY/i.test(rawMessage)) {
     return {
       message: 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy. The backend also accepts OPEN_ROUTER_API_KEY, OPENROUTER_KEY, or OPENROUTER_TOKEN.',
       diagnostic_code: 'OPENROUTER_NOT_CONFIGURED',
@@ -541,7 +543,7 @@ function diagnoseProviderError(error: any) {
       status: 503,
     };
   }
-  if (/OpenRouter HTTP 401|OpenRouter HTTP 403|invalid api key|unauthorized/i.test(message)) {
+  if (/OpenRouter HTTP 401|OpenRouter HTTP 403|invalid api key|unauthorized/i.test(rawMessage)) {
     return {
       message: 'OpenRouter key invalid or unauthorized. Update OPENROUTER_API_KEY on Railway and redeploy.',
       diagnostic_code: 'OPENROUTER_KEY_INVALID',
@@ -549,7 +551,7 @@ function diagnoseProviderError(error: any) {
       status: 503,
     };
   }
-  if (/OpenRouter HTTP 404|model.*not.*found|not found/i.test(message)) {
+  if (/OpenRouter HTTP 404|model.*not.*found|not found/i.test(rawMessage)) {
     return {
       message: 'The selected AI model is unavailable on OpenRouter. Choose Auto or another allowed model.',
       diagnostic_code: 'MODEL_UNAVAILABLE',
@@ -557,7 +559,7 @@ function diagnoseProviderError(error: any) {
       status: 502,
     };
   }
-  if (/OpenRouter HTTP 400|bad request|invalid request|unsupported parameter|provider rejected/i.test(message)) {
+  if (/OpenRouter HTTP 400|bad request|invalid request|unsupported parameter|provider rejected/i.test(rawMessage)) {
     return {
       message: 'OpenRouter rejected the AI request format. Retry with Auto; if it keeps happening, check the selected model and Railway logs.',
       diagnostic_code: 'PROVIDER_BAD_REQUEST',
@@ -565,7 +567,7 @@ function diagnoseProviderError(error: any) {
       status: 502,
     };
   }
-  if (/OpenRouter HTTP 429|rate limit|too many requests/i.test(message)) {
+  if (/OpenRouter HTTP 429|rate limit|too many requests/i.test(rawMessage)) {
     return {
       message: 'OpenRouter rate limit reached. Please wait a moment and try again.',
       diagnostic_code: 'PROVIDER_RATE_LIMITED',
@@ -573,7 +575,7 @@ function diagnoseProviderError(error: any) {
       status: 429,
     };
   }
-  if (/timeout|AbortError|aborted/i.test(message)) {
+  if (/timeout|AbortError|aborted/i.test(rawMessage)) {
     return {
       message: 'The AI provider took too long to respond. Please retry or choose Auto.',
       diagnostic_code: 'PROVIDER_TIMEOUT',
@@ -581,7 +583,7 @@ function diagnoseProviderError(error: any) {
       status: 504,
     };
   }
-  if (/OpenRouter HTTP 5|OpenRouter API Error|provider|upstream|ECONNRESET|ENOTFOUND|fetch failed|network/i.test(message)) {
+  if (/OpenRouter HTTP 5|OpenRouter API Error|provider|upstream|ECONNRESET|ENOTFOUND|fetch failed|network/i.test(rawMessage)) {
     return {
       message: 'The AI provider is temporarily unavailable. Please retry or choose another allowed model.',
       diagnostic_code: 'PROVIDER_UNAVAILABLE',
@@ -589,7 +591,7 @@ function diagnoseProviderError(error: any) {
       status: 502,
     };
   }
-  if (/Permission denied/i.test(message)) {
+  if (/Permission denied/i.test(rawMessage)) {
     return {
       message: 'Action unavailable with your current project role.',
       diagnostic_code: 'PERMISSION_DENIED',
@@ -597,7 +599,7 @@ function diagnoseProviderError(error: any) {
       status: 403,
     };
   }
-  if (error?.statusCode >= 500 || /server error|internal/i.test(message)) {
+  if (error?.statusCode >= 500 || /server error|internal/i.test(rawMessage)) {
     return {
       message: 'Huggy hit an internal server error while handling this request. Please retry in a moment.',
       diagnostic_code: 'SERVER_ERROR',
@@ -3458,9 +3460,7 @@ function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
 }
 
 function publicFileStreamSnippet(file: GeneratedFile) {
-  const redacted = String(file.content || '')
-    .replace(/(api[_-]?key|secret|token|password|service[_-]?role)(\s*[:=]\s*)(["']?)[^"'\s]+/gi, '$1$2$3[masked]')
-    .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+|ghp_[A-Za-z0-9_]+|sbp_[A-Za-z0-9_]+/g, '[masked-secret]');
+  const redacted = redactSecrets(file.content || '');
   return redacted.split('\n').slice(0, 26).join('\n').slice(0, 2400);
 }
 
@@ -3470,7 +3470,7 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
     if (!isSafeProjectFilePath(file.path)) {
       errors.push({ file: file.path, message: 'Unsafe file path blocked.', severity: 'high' });
     }
-    if (/process\.env\.[A-Z0-9_]*SECRET|sk_live_|sk_test_|api[_-]?key\s*[:=]/i.test(file.content)) {
+    if (/process\.env\.[A-Z0-9_]*SECRET/i.test(file.content) || containsSecret(file.content)) {
       errors.push({ file: file.path, message: 'Potential secret exposure detected in generated code.', severity: 'high' });
     }
     if (/from\s+['"][^'"]+['"]/.test(file.content) && /__missing_import__|missing-module/i.test(file.content)) {
@@ -3765,7 +3765,7 @@ async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
       organization_id: project.organization_id,
       project_id: project.id,
       path: file.path,
-      content: file.content,
+      content: redactSecrets(file.content || ''),
       language: file.language || null,
       updated_at: new Date().toISOString(),
     }));
@@ -3810,7 +3810,10 @@ async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
   const client = requireSupabase('Project file loading');
   const { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
   if (error) throw new Error(`Supabase project files load failed: ${error.message}`);
-  return (data || []) as GeneratedFile[];
+  return (data || []).map((file: GeneratedFile) => ({
+    ...file,
+    content: redactSecrets(file.content || ''),
+  })) as GeneratedFile[];
 }
 
 function withoutUndefinedValues(row: Record<string, any>) {
@@ -3904,14 +3907,15 @@ async function saveAgentEvent(event: AgentEvent) {
   const row = {
     ...event,
     id: event.id || randomUUID(),
-    payload: event.payload || {},
+    message: redactSecrets(event.message || ''),
+    payload: redactSecretPayload(event.payload || {}),
     created_at: event.created_at || new Date().toISOString(),
   };
 
   const client = requireSupabase('Agent event persistence');
   const { error } = await client.from('agent_events').insert([row]);
   if (error) {
-    console.warn('[huggy:agent_event_persistence_skipped]', { message: error.message });
+    console.warn('[huggy:agent_event_persistence_skipped]', { message: redactSecrets(error.message, '[redacted]') });
   }
   return row;
 }
@@ -4126,14 +4130,14 @@ async function saveAgentRunStep(input: {
     sequence_number: input.sequence_number,
     event_type: input.event_type,
     status: input.status || (input.event_type === 'error' ? 'failed' : 'completed'),
-    message: input.message,
-    public_payload: redactPublicAgentPayload(input.payload || {}),
+    message: redactSecrets(input.message || ''),
+    public_payload: redactSecretPayload(redactPublicAgentPayload(input.payload || {})),
     created_at: new Date().toISOString(),
   };
   const client = requireSupabase('Agent run step persistence');
   const { error } = await client.from('agent_run_steps').insert([row]);
   if (error && isMissingAgentV2TableError(error)) return row;
-  if (error) console.warn('[huggy:agent_run_step_persistence_skipped]', { message: error.message });
+  if (error) console.warn('[huggy:agent_run_step_persistence_skipped]', { message: redactSecrets(error.message, '[redacted]') });
   return row;
 }
 
@@ -4422,7 +4426,7 @@ async function listAgentRunnerResults(projectId: string, runId?: string, limitVa
   const { data, error } = await query;
   if (error && isMissingAgentV2TableError(error)) return [];
   if (error) throw new Error(`Supabase agent runner result listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(redactSecretPayload);
 }
 
 async function saveAgentResearchResults(project: GeneratedProject, userId: string, runId: string, result: ResearchResult | null) {
@@ -4463,11 +4467,16 @@ async function listAgentResearchResults(projectId: string, limitValue = 40) {
     .limit(limit);
   if (error && isMissingAgentV2TableError(error)) return [];
   if (error) throw new Error(`Supabase agent research result listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(redactSecretPayload);
 }
 
 async function saveProjectMessage(data: any) {
-  const row = { id: data.id || randomUUID(), ...data, created_at: data.created_at || new Date().toISOString() };
+  const row = {
+    id: data.id || randomUUID(),
+    ...data,
+    content: redactSecrets(data.content || ''),
+    created_at: data.created_at || new Date().toISOString(),
+  };
   const client = requireSupabase('Project message persistence');
   let { error } = await client.from('project_messages').insert([row]);
   if (error && /intent|requested_mode|organization_id|schema cache|column .* does not exist/i.test(error.message || '')) {
@@ -4492,12 +4501,19 @@ async function saveProjectMessage(data: any) {
   return row;
 }
 
+function sanitizeProjectMessageForUser(row: any) {
+  return {
+    ...row,
+    content: redactSecrets(row?.content || ''),
+  };
+}
+
 async function listProjectMessages(projectId: string) {
   const client = requireSupabase('Project message listing');
   const { data, error } = await client.from('project_messages').select('*').eq('project_id', projectId).order('created_at');
   if (error && /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase project message listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(sanitizeProjectMessageForUser);
 }
 
 async function listProjectMessagesPage(projectId: string, limitValue: any, beforeValue: any) {
@@ -4508,7 +4524,7 @@ async function listProjectMessagesPage(projectId: string, limitValue: any, befor
   const { data, error } = await query;
   if (error && /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase project message page failed: ${error.message}`);
-  return (data || []).reverse();
+  return (data || []).reverse().map(sanitizeProjectMessageForUser);
 }
 
 async function saveAnalyticsEvent(project: GeneratedProject, record: any) {
@@ -4687,7 +4703,7 @@ async function listAgentEvents(projectId: string) {
   const { data, error } = await client.from('agent_events').select('*').eq('project_id', projectId).order('sequence_number');
   if (error && /agent_events|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase agent event listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(redactSecretPayload);
 }
 
 async function listAgentEventsPage(projectId: string, limitValue: any, beforeValue: any) {
@@ -4698,7 +4714,7 @@ async function listAgentEventsPage(projectId: string, limitValue: any, beforeVal
   const { data, error } = await query;
   if (error && /agent_events|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase agent event page failed: ${error.message}`);
-  return (data || []).reverse();
+  return (data || []).reverse().map(redactSecretPayload);
 }
 
 function normalizeWorkspaceMode(value: any): AgentRequestedMode {
@@ -4714,7 +4730,7 @@ function normalizeWorkspacePreviewDevice(value: any): 'desktop' | 'tablet' | 'mo
 }
 
 function sanitizeWorkspaceText(value: any, max = 8000) {
-  return String(value || '').replace(/\u0000/g, '').slice(0, max);
+  return redactSecrets(String(value || '').replace(/\u0000/g, ''), '[masked-secret]').slice(0, max);
 }
 
 function isMissingWorkspaceTableError(error: any) {
@@ -4843,7 +4859,7 @@ async function listProjectVersions(projectId: string) {
     return [];
   }
   if (error) throw new Error(`Supabase project version listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(redactSecretPayload);
 }
 
 async function saveBuildError(project: GeneratedProject, error: any) {
@@ -4858,7 +4874,7 @@ async function listBuildErrors(projectId: string) {
   const client = requireSupabase('Build error listing');
   const { data, error } = await client.from('build_errors').select('*').eq('project_id', projectId).order('created_at', { ascending: false });
   if (error) throw new Error(`Supabase build error listing failed: ${error.message}`);
-  return data || [];
+  return (data || []).map(redactSecretPayload);
 }
 
 async function createBuildSession(project: GeneratedProject, userId: string) {
@@ -5894,7 +5910,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     const userId = authUser.id;
     const organizationId = await ensurePersonalOrganization(req, userId);
     const name = sanitizeProjectName(req.body?.name);
-    const prompt = String(req.body?.prompt || req.body?.description || '').trim();
+    const prompt = redactSecrets(req.body?.prompt || req.body?.description || '').trim();
 
     if (!name) {
       return res.status(400).json({ success: false, error: 'Project name is required.' });
@@ -5964,8 +5980,8 @@ app.post('/api/projects', async (req: any, res: any) => {
   } catch (error: any) {
     const message = error?.statusCode === 503
       ? 'Project storage is not configured.'
-      : error?.message || 'Project could not be created.';
-    console.error('[huggy:project_create_failed]', { message: error?.message || String(error) });
+      : redactSecrets(error?.message || 'Project could not be created.', '[redacted]');
+    console.error('[huggy:project_create_failed]', { message: redactSecrets(error?.message || String(error), '[redacted]') });
     res.status(error?.statusCode || 500).json({ success: false, error: message, message });
   }
 });
@@ -6084,7 +6100,7 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
-    prompt: String(req.body?.prompt || ''),
+    prompt: redactSecrets(req.body?.prompt || ''),
     requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: files.length > 0,
     lastPlan,
@@ -6102,9 +6118,9 @@ app.post('/api/projects/:id/agent/answer', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const originalPrompt = String(req.body?.originalPrompt || '').trim();
-  const answer = String(req.body?.answer || '').trim();
-  const recommendation = String(req.body?.recommendation || '').trim();
+  const originalPrompt = redactSecrets(req.body?.originalPrompt || '').trim();
+  const answer = redactSecrets(req.body?.answer || '').trim();
+  const recommendation = redactSecrets(req.body?.recommendation || '').trim();
   const finalAnswer = answer || recommendation;
 
   if (!finalAnswer) {
@@ -6142,7 +6158,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const prompt = String(req.body?.prompt || '').trim();
+  const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
@@ -6533,7 +6549,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const prompt = String(req.body?.prompt || '').trim();
+  const prompt = redactSecrets(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`stream:${userId}`, 12, 60_000)) {
@@ -6664,7 +6680,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     if (streamClosed || res.destroyed || res.writableEnded) return;
     if (event_type !== 'working_tick') latestVisibleStreamEvent = event_type;
     sequence += 1;
-    const publicPayload = redactPublicAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload });
+    const publicMessage = redactSecrets(message);
+    const publicPayload = redactSecretPayload(redactPublicAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload }));
     let event: any = {
       id: `${requestId}_${sequence}`,
       organization_id: project.organization_id,
@@ -6672,7 +6689,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       user_id: userId,
       sequence_number: sequence,
       event_type,
-      message,
+      message: publicMessage,
       payload: publicPayload,
       created_at: new Date().toISOString(),
     };
@@ -6683,7 +6700,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         user_id: userId,
         sequence_number: sequence,
         event_type,
-        message,
+        message: publicMessage,
         payload: publicPayload,
       });
       if (agentRunId) {
@@ -6693,7 +6710,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           user_id: userId,
           sequence_number: sequence,
           event_type,
-          message,
+          message: publicMessage,
           payload: publicPayload,
         });
       }
@@ -7692,7 +7709,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       user_id: userId,
       model: requestedModelSelection,
       diagnostic_code: diagnostic.diagnostic_code,
-      message: error.message,
+      message: redactSecrets(error.message, '[redacted]'),
     });
     await send('error', diagnostic.message, {
       code: 'GenerationFailed',
@@ -7716,7 +7733,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       project_id: req.params?.id,
       user_id: req.user?.id,
       diagnostic_code: diagnostic.diagnostic_code,
-      message: error?.message || String(error),
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
     });
     if (!res.headersSent) {
       const status = error?.statusCode || (String(error?.message || '').includes('requires SUPABASE_SERVICE_ROLE_KEY') ? 503 : diagnostic.status);
@@ -7732,7 +7749,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     res.write('event: error\n');
     res.write(`data: ${JSON.stringify({
       event_type: 'error',
-      message,
+      message: redactSecrets(message, '[redacted]'),
       payload: {
         code: 'GenerationFailed',
         diagnostic_code: diagnostic.diagnostic_code,
@@ -7840,13 +7857,13 @@ app.post('/api/projects/:id/agent/feedback', async (req: any, res: any) => {
   const reasons = Array.isArray(req.body?.reasons)
     ? req.body.reasons.map((item: any) => String(item || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80)).filter(Boolean).slice(0, 8)
     : [];
-  const comment = String(req.body?.comment || '').trim().slice(0, 2000);
+  const comment = redactSecrets(req.body?.comment || '').trim().slice(0, 2000);
   const messageId = String(req.body?.messageId || '').trim().slice(0, 120);
   const role = ['user', 'assistant', 'system'].includes(String(req.body?.role || ''))
     ? String(req.body.role)
     : null;
   const rating = req.body?.rating === 'positive' ? 'positive' : req.body?.rating === 'negative' ? 'negative' : null;
-  const messageExcerpt = String(req.body?.content || '').trim().slice(0, 1000);
+  const messageExcerpt = redactSecrets(req.body?.content || '').trim().slice(0, 1000);
   await saveAgentEvent({
     organization_id: project.organization_id || userId,
     project_id: project.id,
@@ -8558,7 +8575,7 @@ app.use('/p/:slug', async (req: any, res: any, next: any) => {
     const deployment = await getLatestDeployment(project.id);
     return proxyPublishedDeployment(project, deployment, req, res, `/p/${encodeURIComponent(req.params.slug)}`);
   } catch (error: any) {
-    res.status(500).send(escapeHtml(error?.message || 'Unable to load published app.'));
+    res.status(500).send(escapeHtml(redactSecrets(error?.message || 'Unable to load published app.')));
   }
 });
 
@@ -8611,7 +8628,7 @@ app.use(async (req, res, next) => {
     const deployment = await getLatestDeployment(project.id);
     return proxyPublishedDeployment(project, deployment, req, res);
   } catch (error: any) {
-    return res.status(500).send(escapeHtml(error?.message || 'Unable to load custom domain app.'));
+    return res.status(500).send(escapeHtml(redactSecrets(error?.message || 'Unable to load custom domain app.')));
   }
 });
 

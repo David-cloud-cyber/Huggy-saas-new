@@ -1,3 +1,5 @@
+import { redactSecrets } from './secret-redaction.ts';
+
 export type AgentV2Intent =
   | 'conversation'
   | 'clarification_required'
@@ -41,7 +43,6 @@ export type AgentContextPackInput = {
 };
 
 const SENSITIVE_FIELD_RE = /(?:^|_)(real_cost_usd|provider_cost_usd|platform_cost_usd|margin_percent|stripe_fee|openrouter_raw|supplier_invoice_id|encrypted_value|api_key|apikey|secret|token|password|authorization|raw_provider_payload|prompt_tokens|completion_tokens|total_tokens)(?:$|_)/i;
-const SECRET_VALUE_RE = /\b(sk-(?:live|test|proj)-[A-Za-z0-9_-]+|ghp_[A-Za-z0-9_]+|xox[baprs]-[A-Za-z0-9-]+)\b/g;
 const FORBIDDEN_PUBLIC_PAGE_RE = /(?:^|\/)(seo-aeo|templates\/restaurant-app)(?:\/|$)/i;
 
 export function isAgentV2Enabled(env: Record<string, any> = {}): boolean {
@@ -54,7 +55,7 @@ export function redactAgentPayload<T>(value: T): T {
     return value.map(item => redactAgentPayload(item)) as T;
   }
   if (!value || typeof value !== 'object') {
-    if (typeof value === 'string') return value.replace(SECRET_VALUE_RE, '[redacted]') as T;
+    if (typeof value === 'string') return redactSecrets(value, '[redacted]') as T;
     return value;
   }
 
