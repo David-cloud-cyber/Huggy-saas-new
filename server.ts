@@ -1256,11 +1256,23 @@ function isSimpleLocalConversationPrompt(value: string) {
 async function uniqueSlug(base: string, ownerId: string, excludeProjectId = ''): Promise<string> {
   const candidate = slugify(base);
   const client = requireSupabase('Project slug generation');
-  const { data, error } = await client
+  let { data, error } = await client
     .from('projects')
     .select('id, slug')
     .eq('owner_id', ownerId)
     .ilike('slug', `${candidate}%`);
+  if (error && /owner_id|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    const retry = await client
+      .from('projects')
+      .select('id, slug')
+      .eq('organization_id', ownerId)
+      .ilike('slug', `${candidate}%`);
+    data = retry.data;
+    error = retry.error;
+  }
+  if (error && /slug|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    return `${candidate}-${randomUUID().slice(0, 8)}`;
+  }
   if (error) throw new Error(`Project slug lookup failed: ${error.message}`);
   const existing = new Set((data || []).filter((row: any) => row.id !== excludeProjectId).map((row: any) => row.slug));
   if (!existing.has(candidate)) return candidate;
@@ -3743,39 +3755,172 @@ function parseGeneratedOutput(
   };
 }
 
+function getInvalidEnumValueFromMessage(message: string) {
+  return message.match(/invalid input value for enum [^:]+:\s*"([^"]+)"/i)?.[1] || '';
+}
+
+function isInvalidEnumValueError(error: any) {
+  return /invalid input value for enum/i.test(error?.message || '');
+}
+
+function removeSchemaMissingColumn(row: Record<string, any>, error: any) {
+  const column = getSchemaColumnFromMessage(String(error?.message || ''));
+  if (column && column in row) {
+    delete row[column];
+    return true;
+  }
+  return false;
+}
+
+function projectRowCandidates(projectRow: Record<string, any>) {
+  const base = withoutUndefinedValues({ ...projectRow });
+  const { created_by: _createdBy, ...withoutCreatedByBase } = base;
+  const compact = withoutUndefinedValues({
+    id: base.id,
+    owner_id: base.owner_id || base.organization_id,
+    organization_id: base.organization_id || base.owner_id,
+    name: base.name || 'Untitled app',
+    slug: base.slug,
+    prompt: base.prompt || '',
+    template: base.template || 'custom',
+    theme: base.theme || 'light',
+    model_id: base.model_id || 'auto',
+    status: base.status || 'draft',
+    preview_status: base.preview_status || 'idle',
+    preview_html: base.preview_html || '',
+    created_at: base.created_at,
+    updated_at: base.updated_at,
+  });
+  const noStatus = withoutUndefinedValues({
+    ...compact,
+    status: undefined,
+    preview_status: undefined,
+  });
+  const activeStatus = withoutUndefinedValues({
+    ...compact,
+    status: 'active',
+    preview_status: 'ready',
+  });
+  const minimal = withoutUndefinedValues({
+    id: base.id,
+    owner_id: base.owner_id || base.organization_id,
+    organization_id: base.organization_id || base.owner_id,
+    name: base.name || 'Untitled app',
+    slug: base.slug,
+    prompt: base.prompt || '',
+    preview_html: base.preview_html || '',
+    updated_at: base.updated_at,
+  });
+
+  return [base, withoutUndefinedValues(withoutCreatedByBase), compact, activeStatus, noStatus, minimal];
+}
+
+async function upsertProjectWithSchemaFallback(client: any, projectRow: Record<string, any>) {
+  const triedShapes = new Set<string>();
+  let lastError: any = null;
+
+  for (const candidate of projectRowCandidates(projectRow)) {
+    const row = { ...candidate };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const shapeKey = [
+        Object.keys(row).sort().join(','),
+        `status=${row.status ?? ''}`,
+        `preview=${row.preview_status ?? ''}`,
+      ].join('|');
+      if (!shapeKey || triedShapes.has(shapeKey)) break;
+      triedShapes.add(shapeKey);
+
+      const { error } = await client.from('projects').upsert([row]);
+      if (!error) return row;
+      lastError = error;
+
+      if (isInvalidEnumValueError(error)) {
+        const invalidValue = getInvalidEnumValueFromMessage(error.message || '');
+        if (row.status === invalidValue && row.status !== 'active') {
+          row.status = 'active';
+          continue;
+        }
+        if (row.preview_status === invalidValue && row.preview_status !== 'ready') {
+          row.preview_status = 'ready';
+          continue;
+        }
+        if ('status' in row) {
+          delete row.status;
+          continue;
+        }
+        if ('preview_status' in row) {
+          delete row.preview_status;
+          continue;
+        }
+      }
+
+      if (isSchemaShapeError(error) && removeSchemaMissingColumn(row, error)) {
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  throw new Error(`Supabase project persistence failed: ${lastError?.message || 'unknown schema mismatch'}`);
+}
+
+function projectFileRows(files: GeneratedFile[], project: GeneratedProject) {
+  return files.map(file => withoutUndefinedValues({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    path: file.path,
+    content: redactSecrets(file.content || ''),
+    language: file.language || null,
+    updated_at: new Date().toISOString(),
+  }));
+}
+
+async function saveProjectFilesWithSchemaFallback(client: any, project: GeneratedProject, files: GeneratedFile[]) {
+  const deleteResult = await client.from('project_files').delete().eq('project_id', project.id);
+  if (deleteResult.error && /project_files|relation .* does not exist|table .* does not exist/i.test(deleteResult.error.message || '')) {
+    console.warn('[huggy:project_files_persistence_skipped]', { message: deleteResult.error.message });
+    return;
+  }
+  if (deleteResult.error && !isSchemaShapeError(deleteResult.error)) {
+    throw new Error(`Supabase project file cleanup failed: ${deleteResult.error.message}`);
+  }
+
+  let rows = projectFileRows(files, project);
+  if (!rows.length) return;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { error } = await client.from('project_files').insert(rows);
+    if (!error) return;
+    if (/project_files|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+      console.warn('[huggy:project_files_persistence_skipped]', { message: error.message });
+      return;
+    }
+    if (isSchemaShapeError(error)) {
+      const column = getSchemaColumnFromMessage(String(error.message || ''));
+      if (column && rows.some(row => column in row)) {
+        rows = rows.map(row => {
+          const next = { ...row };
+          delete next[column];
+          return next;
+        });
+        continue;
+      }
+    }
+    throw new Error(`Supabase project file persistence failed: ${error.message}`);
+  }
+}
+
 async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
   const client = requireSupabase('Project persistence');
-  const projectRow = {
+  const projectRow: Record<string, any> = {
     ...project,
     created_by: project.created_by || project.owner_id || project.organization_id || DEFAULT_ORG_ID,
   };
-  let { error } = await client.from('projects').upsert([projectRow]);
-  if (error && /created_by|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
-    const { created_by, ...legacyProjectRow } = projectRow;
-    const retry = await client.from('projects').upsert([legacyProjectRow]);
-    error = retry.error;
-  }
-  if (error) {
-    throw new Error(`Supabase project persistence failed: ${error.message}`);
-  }
+
+  await upsertProjectWithSchemaFallback(client, projectRow);
 
   if (files) {
-    await client.from('project_files').delete().eq('project_id', project.id);
-    const rows = files.map(file => ({
-      organization_id: project.organization_id,
-      project_id: project.id,
-      path: file.path,
-      content: redactSecrets(file.content || ''),
-      language: file.language || null,
-      updated_at: new Date().toISOString(),
-    }));
-    let { error: fileError } = await client.from('project_files').insert(rows);
-    if (fileError && /organization_id|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(fileError.message || '')) {
-      const legacyRows = rows.map(({ organization_id, ...row }) => row);
-      const retry = await client.from('project_files').insert(legacyRows);
-      fileError = retry.error;
-    }
-    if (fileError) throw new Error(`Supabase project file persistence failed: ${fileError.message}`);
+    await saveProjectFilesWithSchemaFallback(client, project, files);
   }
 
   return project;
@@ -3801,14 +3946,28 @@ async function loadProjectForAnalytics(projectId: string): Promise<GeneratedProj
 
 async function listProjectsForUser(userId: string): Promise<GeneratedProject[]> {
   const client = requireSupabase('Project listing');
-  const { data, error } = await client.from('projects').select('*').eq('owner_id', userId).order('updated_at', { ascending: false });
+  let { data, error } = await client.from('projects').select('*').eq('owner_id', userId).order('updated_at', { ascending: false });
+  if (error && /owner_id|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    const retry = await client.from('projects').select('*').eq('organization_id', userId).order('updated_at', { ascending: false });
+    data = retry.data;
+    error = retry.error;
+  }
   if (error) throw new Error(`Supabase project listing failed: ${error.message}`);
   return (data || []) as GeneratedProject[];
 }
 
 async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
   const client = requireSupabase('Project file loading');
-  const { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
+  let { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
+  if (error && /language|updated_at|schema cache|column .*does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    const retry = await client.from('project_files').select('path, content').eq('project_id', projectId).order('path');
+    data = retry.data;
+    error = retry.error;
+  }
+  if (error && /project_files|relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+    console.warn('[huggy:project_files_load_skipped]', { project_id: projectId, message: error.message });
+    return [];
+  }
   if (error) throw new Error(`Supabase project files load failed: ${error.message}`);
   return (data || []).map((file: GeneratedFile) => ({
     ...file,
@@ -5904,6 +6063,7 @@ app.get('/api/projects', async (req: any, res: any) => {
 });
 
 app.post('/api/projects', async (req: any, res: any) => {
+  const requestId = `req_${randomUUID()}`;
   try {
     const authUser = requireAuthenticatedUser(req, res);
     if (!authUser) return;
@@ -5978,11 +6138,24 @@ app.post('/api/projects', async (req: any, res: any) => {
         : undefined,
     });
   } catch (error: any) {
-    const message = error?.statusCode === 503
+    const status = error?.statusCode || 500;
+    const diagnosticCode = status === 503 ? 'PROJECT_STORAGE_NOT_CONFIGURED' : 'PROJECT_CREATE_FAILED';
+    const message = status === 503
       ? 'Project storage is not configured.'
-      : redactSecrets(error?.message || 'Project could not be created.', '[redacted]');
-    console.error('[huggy:project_create_failed]', { message: redactSecrets(error?.message || String(error), '[redacted]') });
-    res.status(error?.statusCode || 500).json({ success: false, error: message, message });
+      : 'Huggy could not create the project workspace. Please retry in a moment.';
+    console.error('[huggy:project_create_failed]', {
+      request_id: requestId,
+      diagnostic_code: diagnosticCode,
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
+    });
+    res.status(status).json({
+      success: false,
+      error: message,
+      message,
+      diagnostic_code: diagnosticCode,
+      request_id: requestId,
+      suggested_action: status === 503 ? 'check_supabase_configuration' : 'retry',
+    });
   }
 });
 
