@@ -152,7 +152,8 @@ export class HybridProjectRunner implements RunnerAdapter {
       }
     }
 
-    const html = previewHtml || files.find(file => normalizePath(file.path).endsWith('.html'))?.content || '';
+    const indexHtml = files.find(file => normalizePath(file.path).toLowerCase() === 'index.html')?.content || '';
+    const html = indexHtml || previewHtml || files.find(file => normalizePath(file.path).endsWith('.html'))?.content || '';
     if (!html.trim()) {
       checks.push(fail('preview_non_empty', 'high', 'Preview HTML is empty.'));
     } else {

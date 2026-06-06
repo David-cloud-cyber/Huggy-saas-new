@@ -164,10 +164,11 @@ export function auditGeneratedDesign(input: GeneratedQualityAuditInput): AgentVe
     'Generated UI still contains generic placeholder copy.',
   ));
 
-  const platformKeywordHits = countKeywordHits(bundle.all, appRequiredComponentKeywords[platform] || []);
+  const requiredPlatformKeywords = appRequiredComponentKeywords[platform] || [];
+  const platformKeywordHits = countKeywordHits(bundle.all, requiredPlatformKeywords);
   checks.push(result(
     'design_platform_fit',
-    platformKeywordHits >= Math.min(3, (appRequiredComponentKeywords[platform] || []).length || 3),
+    !requiredPlatformKeywords.length || platformKeywordHits >= Math.min(3, requiredPlatformKeywords.length),
     'high',
     `${platform} platform components are represented.`,
     `${platform} generation is missing expected product-specific components: ${intelligence.requiredComponents.join(', ')}.`,
@@ -314,7 +315,7 @@ function countKeywordHits(source: string, keywords: string[]) {
 }
 
 function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppType): AgentVerificationCheck[] {
-  const source = bundle.all;
+  const source = [bundle.tsx, bundle.html].join('\n\n');
   const code = bundle.tsx;
   const checks: AgentVerificationCheck[] = [];
 
@@ -356,7 +357,9 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     ));
   }
 
-  if (platform === 'ecommerce' || ECOMMERCE_APP_RE.test(source)) {
+  const isExplicitCommerce = platform === 'ecommerce'
+    || (platform === 'generic_web_app' && /\b(ecommerce|e-commerce|shop|storefront|cart|checkout|panier|boutique)\b/i.test(source));
+  if (isExplicitCommerce) {
     const hasCart = /\b(cart|basket|panier|addToCart|setCart|checkoutItems)\b/i.test(code);
     const hasQuantity = /\b(quantity|qty|increment|decrement|setQuantity|stock|variant)\b/i.test(code);
     const hasCheckoutFeedback = /\b(checkout|payment|order|commande|receipt|success|confirmation|setStatus|toast)\b/i.test(code);
@@ -369,7 +372,9 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     ));
   }
 
-  if (platform === 'restaurant' || RESTAURANT_APP_RE.test(source)) {
+  const isExplicitRestaurant = platform === 'restaurant'
+    || (platform === 'generic_web_app' && /\b(restaurant|reservation|réservation|booking|menu)\b/i.test(source));
+  if (isExplicitRestaurant) {
     const hasMenu = /\b(menu|dish|plat|price|prix|category|special)\b/i.test(source);
     const hasReservation = /\b(reservation|booking|table|date|time|party|guest|setReservation|onSubmit)\b/i.test(code);
     const hasValidation = FORM_VALIDATION_RE.test(source);
@@ -382,7 +387,11 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     ));
   }
 
-  if (platform === 'auth_flow' || AUTH_APP_RE.test(source)) {
+  const isExplicitAuth = platform === 'auth_flow'
+    || (platform === 'generic_web_app'
+      && /\b(login|signup|sign in|sign up|auth flow|password|forgot|register|connexion|inscription)\b/i.test(source)
+      && /\b(password|email|showPassword|confirmPassword|forgot|reset)\b/i.test(code));
+  if (isExplicitAuth) {
     const hasModes = /\b(login|signup|sign in|sign up|register|forgot|reset|connexion|inscription)\b/i.test(source);
     const hasPassword = /\b(password|showPassword|confirmPassword|forgot|reset)\b/i.test(code);
     const hasAuthFeedback = /\b(error|invalid|required|success|loading|disabled|aria-invalid|setError|setStatus)\b/i.test(code);
