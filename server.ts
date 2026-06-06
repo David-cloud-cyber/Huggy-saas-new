@@ -5762,8 +5762,47 @@ function normalizeWorkspacePreviewDevice(value: any): 'desktop' | 'tablet' | 'mo
   return ['desktop', 'tablet', 'mobile'].includes(String(value)) ? String(value) as any : 'desktop';
 }
 
+function repairTextEncoding(value: any) {
+  let text = String(value || '');
+  const replacements: Array<[RegExp, string | ((match: string) => string)]> = [
+    [/Ã©/g, 'é'],
+    [/Ã¨/g, 'è'],
+    [/Ãª/g, 'ê'],
+    [/Ã«/g, 'ë'],
+    [/Ã /g, 'à'],
+    [/Ã¢/g, 'â'],
+    [/Ã§/g, 'ç'],
+    [/Ã®/g, 'î'],
+    [/Ã¯/g, 'ï'],
+    [/Ã´/g, 'ô'],
+    [/Ã¹/g, 'ù'],
+    [/Ã»/g, 'û'],
+    [/Ã¼/g, 'ü'],
+    [/Ã‰/g, 'É'],
+    [/â€™/g, "'"],
+    [/â€œ|â€/g, '"'],
+    [/â€"/g, '-'],
+    [/Â/g, ''],
+    [/ï¿½/g, 'é'],
+    [/cr�e/gi, match => match[0] === 'C' ? 'Crée' : 'crée'],
+    [/cr�er/gi, match => match[0] === 'C' ? 'Créer' : 'créer'],
+    [/g�n�re/gi, match => match[0] === 'G' ? 'Génère' : 'génère'],
+    [/g�n�rer/gi, match => match[0] === 'G' ? 'Générer' : 'générer'],
+    [/compl�te/gi, match => match[0] === 'C' ? 'Complète' : 'complète'],
+    [/t�che/gi, match => match[0] === 'T' ? 'Tâche' : 'tâche'],
+    [/t�ches/gi, match => match[0] === 'T' ? 'Tâches' : 'tâches'],
+    [/�tat/gi, 'état'],
+    [/�tats/gi, 'états'],
+    [/�/g, 'é'],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    text = text.replace(pattern, replacement as any);
+  }
+  return text;
+}
+
 function sanitizeWorkspaceText(value: any, max = 8000) {
-  return redactSecrets(String(value || '').replace(/\u0000/g, ''), '[masked-secret]').slice(0, max);
+  return redactSecrets(repairTextEncoding(value).replace(/\u0000/g, ''), '[masked-secret]').slice(0, max);
 }
 
 function isMissingWorkspaceTableError(error: any) {
@@ -6547,7 +6586,7 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
   const userId = String(authUser.id);
-  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
   if (!prompt) {
     return res.status(400).json({
       success: false,
@@ -6695,7 +6734,7 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
   const userId = String(authUser.id);
-  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
   if (!prompt) {
     return res.status(400).json({
       success: false,
@@ -7339,7 +7378,7 @@ app.post('/api/projects', async (req: any, res: any) => {
     const userId = authUser.id;
     const organizationId = await ensurePersonalOrganization(req, userId);
     const name = sanitizeProjectName(req.body?.name);
-    const prompt = redactSecrets(req.body?.prompt || req.body?.description || '').trim();
+    const prompt = sanitizeWorkspaceText(req.body?.prompt || req.body?.description || '').trim();
 
     if (!name) {
       return res.status(400).json({ success: false, error: 'Project name is required.' });
@@ -7542,7 +7581,7 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const decision = await resolveAgentDecision({
-    prompt: redactSecrets(req.body?.prompt || ''),
+    prompt: sanitizeWorkspaceText(req.body?.prompt || ''),
     requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: files.length > 0,
     lastPlan,
@@ -7867,7 +7906,7 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   if (!requireProjectCapability(req, res, 'view', project)) return;
 
-  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   if (isAbusivePrompt(prompt)) {
     return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
@@ -8046,7 +8085,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   const studioContext = req.body?.studioContext;
   const importContext = req.body?.importContext;
@@ -8471,7 +8510,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
   if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.' });
   const studioContext = req.body?.studioContext;
   const importContext = req.body?.importContext;
