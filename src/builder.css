@@ -14,6 +14,11 @@ svg { display: block; flex-shrink: 0; }
   --bg-panel:     #0A0A0A;
 
   --accent:       #F4F4F5;
+  --accent-blue:  #93C5FD;
+  --accent-blue-deep:#BFDBFE;
+  --accent-blue-soft:rgba(147,197,253,0.12);
+  --accent-blue-hover:rgba(147,197,253,0.16);
+  --accent-blue-active:rgba(147,197,253,0.22);
   --accent-dim:   rgba(244,244,245,0.07);
   --accent-hover: rgba(244,244,245,0.11);
   --accent-active:rgba(244,244,245,0.16);
@@ -25,6 +30,8 @@ svg { display: block; flex-shrink: 0; }
   --border:       rgba(255,255,255,0.12);
   --border-mid:   rgba(255,255,255,0.18);
   --border-focus: rgba(244,244,245,0.34);
+  --blue:         var(--accent-blue);
+  --blue-dim:     var(--accent-blue-soft);
 
   --success:      #4ADE80;
   --success-dim:  rgba(74,222,128,0.10);
@@ -43,10 +50,15 @@ svg { display: block; flex-shrink: 0; }
   --bg-input:     #fffefa;
   --bg-panel:     #f7f4ed;
 
-  --accent:       #09090B;
-  --accent-dim:   rgba(9,9,11,0.08);
-  --accent-hover: rgba(9,9,11,0.12);
-  --accent-active:rgba(9,9,11,0.15);
+  --accent:       #2F6DF6;
+  --accent-blue:  #2F6DF6;
+  --accent-blue-deep:#173F8F;
+  --accent-blue-soft:rgba(47,109,246,0.10);
+  --accent-blue-hover:rgba(47,109,246,0.14);
+  --accent-blue-active:rgba(47,109,246,0.18);
+  --accent-dim:   rgba(47,109,246,0.10);
+  --accent-hover: rgba(47,109,246,0.14);
+  --accent-active:rgba(47,109,246,0.18);
 
   --text:         #09090B;
   --text-muted:   #3F3F46;
@@ -54,7 +66,9 @@ svg { display: block; flex-shrink: 0; }
 
   --border:       rgba(9,9,11,0.16);
   --border-mid:   rgba(9,9,11,0.20);
-  --border-focus: rgba(9,9,11,0.42);
+  --border-focus: rgba(47,109,246,0.38);
+  --blue:         var(--accent-blue);
+  --blue-dim:     var(--accent-blue-soft);
 
   --success:      #16A34A;
   --success-dim:  rgba(22,163,74,0.10);
@@ -454,7 +468,13 @@ body {
   content: "";
   position: absolute;
   inset: -1.5px;
-  background: conic-gradient(from 0deg, #4285F4, #34A853, #FBBC05, #EA4335, #4285F4);
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent),
+    color-mix(in srgb, var(--accent-blue, #2f6df6) 72%, #bfdbfe),
+    color-mix(in srgb, var(--accent-blue-deep, #173f8f) 62%, #fffdf8),
+    color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent)
+  );
   animation: rotateGlow 4s linear infinite;
   z-index: -1;
   opacity: 0.12;
@@ -465,7 +485,7 @@ body {
 @keyframes rotateGlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .input-wrapper:focus-within::before { opacity: 1; }
-.input-wrapper:focus-within { border-color: transparent; box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.14), 0 10px 30px rgba(9,9,11,0.12); }
+.input-wrapper:focus-within { border-color: transparent; box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,0.10)), 0 10px 30px rgba(9,9,11,0.12); }
 
 #ai-textarea {
   width: 100%;

@@ -11,7 +11,7 @@ import { WebPreview, WebPreviewActions, WebPreviewSkeleton } from "../ai-element
 import type { AgentStreamUiState } from "../../streaming/agent-stream-reducer";
 
 const PHASE_LABELS: Record<string, string> = {
-  understanding: "Comprendre",
+  understanding: "Compréhension",
   context: "Contexte",
   planning: "Plan",
   research: "Recherche",
@@ -25,11 +25,11 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 function statusLabel(status?: string) {
-  if (status === "done" || status === "passed" || status === "succeeded") return "ok";
-  if (status === "failed") return "issue";
-  if (status === "active" || status === "running" || status === "building") return "now";
-  if (status === "cancelled") return "stop";
-  return "wait";
+  if (status === "done" || status === "passed" || status === "succeeded") return "Livré";
+  if (status === "failed") return "À corriger";
+  if (status === "active" || status === "running" || status === "building") return "En cours";
+  if (status === "cancelled") return "Arrêté";
+  return "Préparation";
 }
 
 function agentItemStatus(status?: string): "pending" | "active" | "done" | "warning" | "failed" | "skipped" {
@@ -45,9 +45,18 @@ function firstUseful<T>(items: T[], count: number) {
   return items.slice(0, count);
 }
 
+function compactText(value: string, max = 82) {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1).trim()}…`;
+}
+
 export function MissionStream({ state }: { state: AgentStreamUiState }) {
   const header = state.runHeader;
-  const visiblePhases = firstUseful(state.phases, 6);
+  const visiblePhases = firstUseful(
+    state.phases.filter(phase => phase.status !== "pending" || phase.detail),
+    6
+  );
   const files = state.files || [];
   const checks = state.checkItems || [];
   const agents = state.agents || [];
@@ -57,6 +66,7 @@ export function MissionStream({ state }: { state: AgentStreamUiState }) {
   const hasPreview = state.preview.hasPreviewEvent;
   const hasSummary = Boolean(state.finalSummary);
   const hasError = state.status === "failed";
+  const hasProgress = visiblePhases.length > 0;
 
   return (
     <article className="huggy-stream huggy-mission-stream" data-status={state.status}>
@@ -64,39 +74,52 @@ export function MissionStream({ state }: { state: AgentStreamUiState }) {
         <AgentHeader>
           <span className="huggy-mission-orb" aria-hidden="true" />
           <div>
-            <AgentTitle>Huggy Mission</AgentTitle>
+            <AgentTitle>Huggy Mission Control</AgentTitle>
             <AgentDescription>{state.headline || "Je comprends la mission."}</AgentDescription>
           </div>
           {state.elapsed ? <span className="huggy-mission-elapsed">{state.elapsed}</span> : null}
         </AgentHeader>
 
+        {header?.objective ? (
+          <p className="huggy-mission-objective">
+            {compactText(header.objective)}
+          </p>
+        ) : null}
+
         <div className="huggy-mission-meta">
           {header?.workflow ? <span>{header.workflow}</span> : null}
-          {header?.objective ? <span title={header.objective}>{header.objective}</span> : null}
+          {header?.risk ? <span>Risque {header.risk.toLowerCase()}</span> : null}
           {header?.rollbackAvailable ? <span>Rollback pret</span> : null}
-          <span>{statusLabel(state.status)}</span>
+          <span className="huggy-mission-status">{statusLabel(state.status)}</span>
         </div>
 
-        <Queue>
-          <QueueSection>
-            <QueueSectionTrigger>
-              <QueueSectionLabel count={visiblePhases.length} label="Progression" />
-            </QueueSectionTrigger>
-            <QueueSectionContent>
-              <QueueList>
-                {visiblePhases.map(phase => (
-                  <QueueItem key={phase.id}>
-                    <QueueItemIndicator completed={phase.status === "done"} />
-                    <QueueItemContent>
-                      <strong>{PHASE_LABELS[phase.id] || phase.label}</strong>
-                      <small>{phase.detail || phase.label}</small>
-                    </QueueItemContent>
-                  </QueueItem>
-                ))}
-              </QueueList>
-            </QueueSectionContent>
-          </QueueSection>
-        </Queue>
+        {hasProgress ? (
+          <Queue>
+            <QueueSection>
+              <QueueSectionTrigger>
+                <QueueSectionLabel count={visiblePhases.length} label="Étapes réelles" />
+              </QueueSectionTrigger>
+              <QueueSectionContent>
+                <QueueList>
+                  {visiblePhases.map(phase => (
+                    <QueueItem key={phase.id}>
+                      <QueueItemIndicator completed={phase.status === "done"} />
+                      <QueueItemContent>
+                        <strong>{PHASE_LABELS[phase.id] || phase.label}</strong>
+                        <small>{phase.detail || phase.label}</small>
+                      </QueueItemContent>
+                    </QueueItem>
+                  ))}
+                </QueueList>
+              </QueueSectionContent>
+            </QueueSection>
+          </Queue>
+        ) : (
+          <div className="huggy-mission-waiting">
+            <span className="huggy-stream-dot" aria-hidden="true" />
+            <span>Connexion au flux réel de la mission…</span>
+          </div>
+        )}
 
         {agents.length ? (
           <AgentList>

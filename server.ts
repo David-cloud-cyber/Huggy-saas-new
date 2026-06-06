@@ -3132,6 +3132,31 @@ function studioPreferredModelsForPrompt(prompt: string): AllowedModelId[] | unde
     : undefined;
 }
 
+function requiredModelCapabilitiesForTask(
+  prompt: string,
+  decision: IntentDecision,
+  complexity: AgentTaskComplexity,
+  files: GeneratedFile[] = []
+): RoutingContext['requiredCapabilities'] {
+  const text = normalizePromptIntentText(prompt);
+  const mutatesCode = ['build', 'edit', 'debug_fix'].includes(decision.intent);
+  const touchesDesign = /\b(ui|ux|design|style|layout|landing|hero|component|composant|dashboard|animation|responsive|mobile)\b/i.test(text);
+  const touchesBackend = /\b(api|backend|server|database|supabase|postgres|auth|login|stripe|billing|webhook|rls|storage|realtime)\b/i.test(text);
+  const touchesSecurity = /\b(security|securite|sécurité|auth|rls|policy|policies|stripe|webhook|secret|service role|permission|role)\b/i.test(text);
+  const needsVision = /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel|photo|screen)\b/i.test(text);
+  return {
+    reasoning: decision.intent !== 'conversation' || complexity !== 'simple',
+    code: mutatesCode,
+    agentic: mutatesCode || decision.autoPlanRequired || complexity === 'extreme',
+    design: touchesDesign,
+    security: touchesSecurity || touchesBackend,
+    structuredOutput: decision.intent !== 'conversation',
+    longContext: files.length > 12 || text.length > 1800 || complexity === 'extreme',
+    vision: needsVision,
+    tools: mutatesCode || decision.intent === 'verify',
+  };
+}
+
 async function resolveAgentProviderModel(input: {
   modelId?: unknown;
   project: GeneratedProject;
@@ -3166,7 +3191,7 @@ async function resolveAgentProviderModel(input: {
     userCredits: credits,
     taskComplexity: complexity,
     preferredModels: studioPreferredModelsForPrompt(input.prompt),
-    requiredCapabilities: {},
+    requiredCapabilities: requiredModelCapabilitiesForTask(input.prompt, input.decision, complexity, input.files || []),
   });
   validateAllowedModel(model);
   return { model, autoRouted: true, complexity, mode, plan, credits };

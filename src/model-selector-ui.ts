@@ -39,7 +39,7 @@ function injectProviderSelectorStyle() {
     .huggy-provider-model-select .provider-dot {
       width: 14px;
       height: 14px;
-      color: var(--accent);
+      color: var(--accent-blue, var(--accent));
       flex: 0 0 auto;
       display: inline-flex;
       align-items: center;
@@ -106,11 +106,11 @@ function injectProviderSelectorStyle() {
     .huggy-auto-model-option.active,
     .huggy-provider-card:hover,
     .huggy-provider-card.active {
-      background: var(--accent-hover, rgba(9,9,11,.08));
+      background: var(--accent-blue-soft, var(--accent-hover, rgba(9,9,11,.08)));
       border-color: var(--border-focus, var(--border));
     }
     .huggy-provider-card.open {
-      background: var(--accent-hover, rgba(9,9,11,.10));
+      background: var(--accent-blue-hover, var(--accent-hover, rgba(9,9,11,.10)));
       border-color: var(--border-focus, var(--border));
       transform: translateX(2px);
     }

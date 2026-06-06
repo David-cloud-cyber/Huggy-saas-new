@@ -13,7 +13,17 @@
   --huggy-blue: #2f6df6;
   --huggy-blue-deep: #173f8f;
   --huggy-blue-ink: #132a69;
+  --huggy-blue-soft: rgba(47, 109, 246, 0.10);
+  --huggy-blue-hover: rgba(47, 109, 246, 0.14);
+  --huggy-blue-active: rgba(47, 109, 246, 0.18);
   --huggy-focus: rgba(47, 109, 246, 0.28);
+  --accent-blue: var(--huggy-blue);
+  --accent-blue-deep: var(--huggy-blue-deep);
+  --accent-blue-soft: var(--huggy-blue-soft);
+  --accent-blue-hover: var(--huggy-blue-hover);
+  --accent-blue-active: var(--huggy-blue-active);
+  --blue: var(--huggy-blue);
+  --blue-dim: var(--huggy-blue-soft);
   --huggy-radius-sm: 8px;
   --huggy-radius-md: 14px;
   --huggy-radius-lg: 22px;
@@ -37,6 +47,9 @@
   --huggy-subtle: #a79f90;
   --huggy-border: rgba(252, 251, 248, 0.14);
   --huggy-border-strong: rgba(252, 251, 248, 0.20);
+  --huggy-blue-soft: rgba(147, 197, 253, 0.12);
+  --huggy-blue-hover: rgba(147, 197, 253, 0.16);
+  --huggy-blue-active: rgba(147, 197, 253, 0.22);
   --huggy-focus: rgba(147, 197, 253, 0.30);
   --huggy-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.26);
   --huggy-shadow-card: 0 24px 76px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.08) inset;

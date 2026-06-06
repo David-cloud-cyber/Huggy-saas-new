@@ -8,6 +8,10 @@
     --bg-input: #201f1b;
     --accent: #f8f4eb;
     --accent-blue: #93c5fd;
+    --accent-blue-deep: #bfdbfe;
+    --accent-blue-soft: rgba(147, 197, 253, 0.12);
+    --accent-blue-hover: rgba(147, 197, 253, 0.16);
+    --accent-blue-active: rgba(147, 197, 253, 0.22);
     --accent-dim: rgba(248, 244, 235, 0.08);
     --accent-hover: rgba(248, 244, 235, 0.12);
     --text: #f8f4eb;
@@ -16,6 +20,8 @@
     --border: rgba(252, 251, 248, 0.14);
     --border-focus: rgba(191, 219, 254, 0.42);
     --caret: #f8f4eb;
+    --blue: var(--accent-blue);
+    --blue-dim: var(--accent-blue-soft);
     --nav-bg: rgba(23, 22, 19, 0.82);
     --nav-line: rgba(252, 251, 248, 0.13);
 }
@@ -26,15 +32,21 @@
     --bg-elevated: #f7f4ed;
     --bg-input: #fffefa;
     --accent: #1c1c1c;
-    --accent-blue: #3b82f6;
+    --accent-blue: #2f6df6;
+    --accent-blue-deep: #173f8f;
+    --accent-blue-soft: rgba(47, 109, 246, 0.10);
+    --accent-blue-hover: rgba(47, 109, 246, 0.14);
+    --accent-blue-active: rgba(47, 109, 246, 0.18);
     --accent-dim: rgba(28, 28, 28, 0.06);
     --accent-hover: rgba(28, 28, 28, 0.10);
     --text: #1c1c1c;
     --text-muted: #5f5f5d;
     --text-sub: #77736b;
     --border: #eceae4;
-    --border-focus: rgba(28, 28, 28, 0.34);
-    --caret: #1c1c1c;
+    --border-focus: rgba(47, 109, 246, 0.34);
+    --caret: var(--accent-blue);
+    --blue: var(--accent-blue);
+    --blue-dim: var(--accent-blue-soft);
     --nav-bg: rgba(252, 251, 248, 0.88);
     --nav-line: #eceae4;
 }
@@ -169,7 +181,8 @@ svg {
 
 .theme-toggle:hover {
     border-color: var(--border-focus);
-    color: var(--text);
+    color: var(--accent-blue);
+    background: var(--accent-blue-soft, rgba(47, 109, 246, 0.10));
 }
 
 .sign-in-btn {

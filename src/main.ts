@@ -598,7 +598,7 @@ function init() {
         return `
             <div style="display:grid;gap:18px;padding:4px 0 2px;">
                 <div style="display:grid;gap:8px;">
-                    <div style="width:34px;height:34px;border-radius:11px;background:color-mix(in srgb,var(--accent,#315fdc) 14%,transparent);display:grid;place-items:center;color:var(--accent,#315fdc);">
+                    <div style="width:34px;height:34px;border-radius:11px;background:color-mix(in srgb,var(--accent-blue,#2f6df6) 14%,transparent);display:grid;place-items:center;color:var(--accent-blue,#2f6df6);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                     </div>
                     <h2 style="margin:0;font-size:22px;letter-spacing:-.02em;">${titles[source]}</h2>

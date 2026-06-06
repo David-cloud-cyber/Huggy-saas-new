@@ -329,8 +329,8 @@ function ensureConversationStyles() {
 
     .huggy-agent-trace[data-status="done"] .huggy-agent-trace-dot,
     .huggy-agent-step[data-status="done"] .huggy-agent-step-mark {
-      background: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37,99,235,.10);
+      background: var(--accent-blue, #2f6df6);
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,.10));
     }
 
     .huggy-agent-trace[data-status="failed"] .huggy-agent-trace-dot,
@@ -967,9 +967,9 @@ function ensureConversationStyles() {
     }
 
     .huggy-code-preview[data-status="writing"] .huggy-code-preview-badge {
-      color: #1d4ed8;
-      border-color: rgba(37,99,235,.20);
-      background: rgba(37,99,235,.07);
+      color: var(--accent-blue-deep, #173f8f);
+      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 20%, var(--border, #eceae4));
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
     }
 
     .huggy-code-preview[data-status="failed"] .huggy-code-preview-badge {

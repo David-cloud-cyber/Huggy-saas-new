@@ -175,9 +175,9 @@ function installSettingsStyle() {
     }
 
     .settings-tab.active {
-      border-color: var(--border, #eceae4);
-      background: var(--bg-elevated, #f7f4ed);
-      color: var(--text, #1c1c1c);
+      border-color: var(--border-focus, var(--border, #eceae4));
+      background: var(--accent-blue-soft, var(--bg-elevated, #f7f4ed));
+      color: var(--accent-blue, var(--text, #1c1c1c));
     }
 
     .settings-content {
@@ -246,6 +246,7 @@ function installSettingsStyle() {
 
     .usage-summary-value,
     .cloud-summary-value {
+      color: var(--accent-blue, var(--text, #1c1c1c));
       font-size: 18px;
       font-weight: 850;
       letter-spacing: -.03em;

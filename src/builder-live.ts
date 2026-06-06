@@ -886,12 +886,12 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
   --loader-bg-c: #fffdf8;
   --ring-a: #dbeafe;
   --ring-b: #93c5fd;
-  --ring-c: #3b82f6;
+  --ring-c: #2f6df6;
   --ring-mid-a: #bfdbfe;
   --ring-mid-b: #60a5fa;
-  --ring-mid-c: #2563eb;
+  --ring-mid-c: #173f8f;
   --ring-glow-a: rgba(96,165,250,.22);
-  --ring-glow-b: rgba(59,130,246,.14);
+  --ring-glow-b: rgba(47,109,246,.14);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -901,7 +901,7 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
     --loader-bg-c: #2a2822;
     --ring-a: #d8d1c3;
     --ring-b: #93c5fd;
-    --ring-c: #3b82f6;
+    --ring-c: #93c5fd;
     --ring-mid-a: #f8f4eb;
     --ring-mid-b: #bfdbfe;
     --ring-mid-c: #60a5fa;
@@ -1045,13 +1045,13 @@ function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Medi
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#315fdc}
+:root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
 .wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
 .empty{display:grid;justify-items:center;gap:10px;text-align:center;max-width:360px;color:var(--muted)}
 .status{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--panel) 88%,transparent);padding:9px 13px;color:var(--ink);font-size:13px;font-weight:750;box-shadow:0 8px 28px rgba(28,28,28,.06)}
-.dot{width:8px;height:8px;border-radius:999px;background:#3b82f6;box-shadow:0 0 0 5px rgba(59,130,246,.10);animation:${isWorking ? 'pulse 1.6s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+.dot{width:8px;height:8px;border-radius:999px;background:#2f6df6;box-shadow:0 0 0 5px rgba(47,109,246,.10);animation:${isWorking ? 'pulse 1.6s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
 .helper{margin:0;font-size:12px;line-height:1.45;color:var(--muted)}
 @keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
 @media(prefers-reduced-motion:reduce){.dot{animation:none}}
@@ -1908,7 +1908,7 @@ function isQuickConversationPrompt(value: string, mode: ChatMode) {
     'let s chat',
   ]);
   if (direct.has(normalized)) return true;
-  if (/\b(dis moi|dit moi|c est quoi|c'est quoi|qu est ce que|qu'est ce que|qu'est-ce que|explique|pourquoi|comment|conseil|avis|compare|resume|reformule|corrige ce texte|que penses tu|peux tu me dire|est ce que|what is|what are|why|how|should|can you explain|tell me about)\b/i.test(normalized)) {
+  if (/\b(dis moi|dit moi|c est quoi|c'est quoi|qu est ce que|qu'est ce que|qu'est-ce que|explique|pourquoi|comment|conseil|avis|compare|resume|reformule|corrige ce texte|que penses tu|note mon|peux tu me dire|est ce que|what is|what are|why|how|should|can you explain|tell me about)\b/i.test(normalized)) {
     return true;
   }
   return /^(qui es tu|qui es-tu|tu es qui|what are you|what is huggy|c est quoi huggy|c'est quoi huggy|comment tu peux m aider|comment tu peux m'aider)/i.test(normalized);
@@ -1926,10 +1926,16 @@ function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext
 
   if (isQuickConversationPrompt(value, mode)) return 'chat_simple';
 
+  const adviceOrExplanation = /\b(dis moi|dit moi|explique|comment peut on|comment peut-on|comment peux tu|comment peux-tu|comment faire|pourquoi|que faut il|que faut-il|conseille|recommande|compare|analyse|audit|note mon|qu est ce que|qu'est-ce que|what is|how can|how should|why)\b/i;
+  const explicitApplySignal = /\b(applique|implemente|impl[ée]mente|corrige dans|modifie dans|change dans|remplace dans|mets a jour|mets à jour|ajoute a|ajoute à|pousse|push|commit)\b/i;
   const planningOnly = /\b(plan|roadmap|strategie|strat[ée]gie|architecture|audit|analyse|compare|conseil|recommandation|prompt|design direction|direction creative|explique)\b/i;
   const explicitMutation = /\b(create|build|generate|make|add|edit|change|modify|fix|debug|deploy|publish|implement|cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|d[ée]ploie|deploie|publie|supprime|remplace|impl[ée]mente|applique|refais|ameliore|am[ée]liore)\b[\s\S]{0,120}\b(app|application|site|page|component|composant|api|database|base de donnees|interface|dashboard|builder|projet|code|bug|auth|login|supabase|vercel|railway|button|bouton|couleur|color|texte|text|footer|header|pricing|settings|publish|fichier|file|design|ui|ux|saas|agent)\b/i;
+  if (adviceOrExplanation.test(normalized) && !explicitApplySignal.test(normalized)) return planningOnly.test(normalized) ? 'planning_only' : 'chat_simple';
   if (planningOnly.test(normalized) && !explicitMutation.test(normalized)) return 'planning_only';
   if (explicitMutation.test(normalized)) return 'project_mission';
+
+  const bareAction = /^(cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|ameliore|am[ée]liore|refais|implemente|impl[ée]mente|applique|fais)\b.{0,90}$/i;
+  if (bareAction.test(normalized)) return 'planning_only';
 
   const projectContext = /\b(ce projet|cette app|mon app|mon application|preview|fichiers|code|bug|erreur|error|dashboard|builder|settings|publish|supabase|auth|database|api)\b/i;
   return projectContext.test(normalized) ? 'project_mission' : 'chat_simple';
@@ -2429,7 +2435,7 @@ function ensurePublishPanel() {
   if (root) return root;
   root = document.createElement('div');
   root.id = 'huggy-publish-panel';
-  root.style.cssText = 'position:fixed;inset:0;background:rgba(9,9,11,.58);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);';
+  root.style.cssText = 'position:fixed;inset:0;background:rgba(28,28,28,.28);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);';
   document.body.appendChild(root);
   root.addEventListener('click', event => {
     if (event.target === root) closePublishPanel();
@@ -2460,7 +2466,10 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
   const visitorLabel = `${formatCompactNumber(visitorCount)} Visitor${visitorCount === 1 ? '' : 's'}`;
   const title = publishPanelTitle(status);
   const primaryLabel = isPublishing ? 'Publishing...' : publishPrimaryLabel(status);
-  const checkCount = Math.max(1, checks.length);
+  const checkCount = checks.length;
+  const passCount = checks.filter(check => check.status === 'pass').length;
+  const warnCount = checks.filter(check => check.status === 'warn').length;
+  const failCount = checks.filter(check => check.status === 'fail').length;
   const statusDetail = status?.state === 'changes_unpublished'
     ? 'Live is stable. Update publishes the latest preview.'
     : status?.state === 'published'
@@ -2469,107 +2478,107 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
         ? 'Publish creates the live URL.'
         : 'Build a ready preview first.';
   const securityRows = checks.map(check => {
-    const tone = check.status === 'pass' ? '#7ddf8a' : check.status === 'warn' ? '#fb923c' : '#f87171';
+    const tone = check.status === 'pass' ? '#2fbf71' : check.status === 'warn' ? '#d97706' : '#dc2626';
     const iconName = check.status === 'pass' ? 'check' : check.status === 'warn' ? 'warning' : 'fail';
     return `
-      <div style="display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.035);">
-        <span style="display:grid;place-items:center;width:26px;height:26px;border-radius:9px;color:${tone};background:rgba(255,255,255,.06);">${publishIcon(iconName as 'check' | 'warning' | 'fail')}</span>
+      <div style="display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input);">
+        <span style="display:grid;place-items:center;width:26px;height:26px;border-radius:9px;color:${tone};background:color-mix(in srgb, ${tone} 10%, var(--bg-surface));">${publishIcon(iconName as 'check' | 'warning' | 'fail')}</span>
         <span>
-          <strong style="display:block;color:#f7f7f4;font-size:12px;line-height:1.2;">${escapeHtml(check.label)}</strong>
-          <small style="display:block;margin-top:4px;color:#bbb8ae;font-size:11px;line-height:1.4;">${escapeHtml(check.detail)}</small>
+          <strong style="display:block;color:var(--text);font-size:12px;line-height:1.2;">${escapeHtml(check.label)}</strong>
+          <small style="display:block;margin-top:4px;color:var(--text-muted);font-size:11px;line-height:1.4;">${escapeHtml(check.detail)}</small>
         </span>
       </div>
     `;
   }).join('');
   const detailPanel = publishPanelMode === 'security'
     ? `
-      <div style="display:grid;gap:9px;padding:0 24px 16px;">
+      <div style="display:grid;gap:9px;padding:0 18px 14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <strong style="color:#f7f7f4;font-size:13px;">Security review</strong>
-          <button type="button" data-publish-action="main" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#e8e5dc;height:28px;border-radius:9px;padding:0 10px;font-size:12px;font-weight:750;cursor:pointer;">Back</button>
+          <strong style="color:var(--text);font-size:13px;">Security review</strong>
+          <button type="button" data-publish-action="main" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);height:28px;border-radius:9px;padding:0 10px;font-size:12px;font-weight:750;cursor:pointer;">Back</button>
         </div>
-        ${securityRows || '<p style="margin:0;color:#bbb8ae;font-size:13px;">No publish checks are available yet.</p>'}
+        ${securityRows || '<p style="margin:0;color:var(--text-muted);font-size:13px;">No publish checks are available yet.</p>'}
       </div>
     `
     : publishPanelMode === 'domain'
       ? `
-        <div style="display:grid;gap:10px;padding:0 24px 16px;">
+        <div style="display:grid;gap:10px;padding:0 18px 14px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-            <strong style="color:#f7f7f4;font-size:13px;">Custom domain</strong>
-            <button type="button" data-publish-action="main" style="border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#e8e5dc;height:28px;border-radius:9px;padding:0 10px;font-size:12px;font-weight:750;cursor:pointer;">Back</button>
+            <strong style="color:var(--text);font-size:13px;">Custom domain</strong>
+            <button type="button" data-publish-action="main" style="border:1px solid var(--border);background:var(--bg-input);color:var(--text);height:28px;border-radius:9px;padding:0 10px;font-size:12px;font-weight:750;cursor:pointer;">Back</button>
           </div>
-          <div style="border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:13px;padding:12px;color:#c9c6bc;font-size:12px;line-height:1.5;">
+          <div style="border:1px solid var(--border);background:var(--bg-input);border-radius:13px;padding:12px;color:var(--text-muted);font-size:12px;line-height:1.5;">
             ${status?.custom_domain
-              ? `This app is configured for <strong style="color:#fffefa;">${escapeHtml(status.custom_domain)}</strong>. Click Update after DNS changes are verified.`
+              ? `This app is configured for <strong style="color:var(--text);">${escapeHtml(status.custom_domain)}</strong>. Click Update after DNS changes are verified.`
               : 'Connect a custom domain from project settings, verify DNS, then click Update. Until then, Huggy serves the app under your Huggy URL.'}
           </div>
-          <button type="button" data-publish-action="settings" style="height:36px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.07));color:#fffefa;border-radius:11px;font-size:12px;font-weight:850;cursor:pointer;">Open settings</button>
+          <button type="button" data-publish-action="settings" style="height:34px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:11px;font-size:12px;font-weight:850;cursor:pointer;">Open settings</button>
         </div>
       `
       : '';
   root.innerHTML = `
-    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(390px,100%);border:1px solid rgba(255,255,255,.12);background:#151513;color:#fffefa;border-radius:18px;box-shadow:0 24px 64px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.04) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08);">
+    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(430px,100%);border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:18px;box-shadow:0 24px 64px rgba(25,22,16,.18),0 0 0 1px rgba(255,255,255,.55) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 13px;border-bottom:1px solid var(--border);">
         <div style="min-width:0;">
-          <h3 style="margin:0;color:#fffefa;font-size:18px;line-height:1.1;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
-          <p style="margin:5px 0 0;color:#bbb8ae;font-size:11px;line-height:1.35;">${escapeHtml(statusDetail)}</p>
+          <h3 style="margin:0;color:var(--text);font-size:18px;line-height:1.1;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
+          <p style="margin:5px 0 0;color:var(--text-muted);font-size:12px;line-height:1.4;">${escapeHtml(statusDetail)}</p>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;color:#fffefa;font-size:12px;font-weight:850;white-space:nowrap;">
-          <span style="color:#f3f2eb;display:grid;place-items:center;width:17px;height:17px;">${publishIcon('visitors')}</span>
-          <span>${escapeHtml(visitorLabel)}</span>
+        <div style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;font-weight:850;white-space:nowrap;border:1px solid var(--border);background:var(--bg-input);border-radius:999px;padding:6px 9px;">
+          <span style="color:var(--accent-blue);display:grid;place-items:center;width:17px;height:17px;">${publishIcon('visitors')}</span>
+          <span>${hasPublishedDeployment ? escapeHtml(visitorLabel) : 'Draft'}</span>
         </div>
       </div>
-      <div style="display:grid;gap:14px;padding:16px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);">
-        ${error ? `<div style="border:1px solid rgba(248,113,113,.28);background:rgba(127,29,29,.30);color:#fecaca;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;">${escapeHtml(error)}</div>` : ''}
+      <div style="display:grid;gap:13px;padding:15px 18px;border-bottom:1px solid var(--border);">
+        ${error ? `<div style="border:1px solid rgba(220,38,38,.22);background:rgba(220,38,38,.08);color:#991b1b;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;">${escapeHtml(error)}</div>` : ''}
         ${status ? `
           <div style="display:grid;gap:9px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <strong style="color:#fffefa;font-size:13px;letter-spacing:-.02em;">Website URL</strong>
-              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#fffefa;font-size:11px;font-weight:760;cursor:pointer;padding:0;white-space:nowrap;">
+              <strong style="color:var(--text);font-size:13px;letter-spacing:-.02em;">Website URL</strong>
+              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--accent-blue-deep);font-size:11px;font-weight:800;cursor:pointer;padding:0;white-space:nowrap;">
                 <span style="display:grid;place-items:center;width:16px;height:16px;">${publishIcon('link')}</span>
                 <span>Add custom domain</span>
               </button>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;min-width:0;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.035);border-radius:13px;padding:10px 11px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset;">
-              <span title="${escapeHtml(publicUrl || publicUrlLabel)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${publicUrl ? '#fffefa' : '#8f8b82'};font-size:13px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
-              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:24px;height:24px;border:0;background:transparent;color:${publicUrl ? '#d8d5cc' : '#6f6c64'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--border);background:var(--bg-input);border-radius:13px;padding:10px 11px;box-shadow:0 1px 0 rgba(255,255,255,.55) inset;">
+              <span title="${escapeHtml(publicUrl || publicUrlLabel)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${publicUrl ? 'var(--text)' : 'var(--text-muted)'};font-size:13px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
+              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:24px;height:24px;border:0;background:transparent;color:${publicUrl ? 'var(--text-muted)' : 'color-mix(in srgb, var(--text-muted) 45%, transparent)'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
             </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;color:#928f86;font-size:11px;line-height:1.35;">
+            <div style="display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:11px;line-height:1.35;">
               <span>${hasPublishedDeployment ? `Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}` : 'URL appears after first publish'}</span>
               <span>${status.badge_required ? 'Badge active' : 'No badge'}</span>
             </div>
           </div>
         ` : `
           <div style="display:grid;gap:10px;">
-            <div class="skeleton" style="height:62px;border-radius:16px;background:rgba(255,255,255,.07);"></div>
-            <div class="skeleton" style="height:72px;border-radius:14px;background:rgba(255,255,255,.05);"></div>
+            <div class="skeleton" style="height:58px;border-radius:14px;background:var(--bg-input);"></div>
+            <div class="skeleton" style="height:68px;border-radius:14px;background:var(--bg-input);"></div>
           </div>
         `}
         ${status ? `
           <div style="display:grid;gap:9px;">
-            <strong style="color:#fffefa;font-size:13px;letter-spacing:-.02em;">Who can see this website</strong>
+            <strong style="color:var(--text);font-size:13px;letter-spacing:-.02em;">Who can see this website</strong>
             <div style="display:flex;align-items:center;gap:10px;">
-              <div style="display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.08);color:#d8d5cc;">${publishIcon('globe')}</div>
+              <div style="display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--accent-blue-soft);color:var(--accent-blue-deep);">${publishIcon('globe')}</div>
               <div>
-                <div style="color:#fffefa;font-size:13px;font-weight:850;letter-spacing:-.02em;">Public</div>
-                <div style="margin-top:2px;color:#c8c4bb;font-size:12px;font-weight:620;">Anyone with the URL</div>
+                <div style="color:var(--text);font-size:13px;font-weight:850;letter-spacing:-.02em;">Public</div>
+                <div style="margin-top:2px;color:var(--text-muted);font-size:12px;font-weight:620;">Anyone with the URL after publish</div>
               </div>
             </div>
           </div>
         ` : ''}
       </div>
       ${detailPanel}
-      <div style="display:grid;gap:11px;padding:13px 18px 16px;">
+      <div style="display:grid;gap:10px;padding:13px 18px 16px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
-          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:32px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">
-            Security <span style="display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;border-radius:999px;background:#f97316;color:#fff;font-size:10px;font-weight:900;">${checkCount}</span>
+          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.55) inset;opacity:${status ? '1' : '.5'};">
+            Checks <span style="display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;border-radius:999px;background:${failCount ? '#dc2626' : warnCount ? '#d97706' : 'var(--accent-blue)'};color:#fff;font-size:10px;font-weight:900;">${checkCount || passCount}</span>
           </button>
-          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:32px;border:1px solid rgba(255,255,255,.15);background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.07));color:#fffefa;border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.08) inset;opacity:${status ? '1' : '.5'};">Settings</button>
+          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.55) inset;opacity:${status ? '1' : '.5'};">Settings</button>
         </div>
-        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:36px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.26), transparent 34%),linear-gradient(135deg,#3768ff 0%,#2456f3 48%,#173fbd 100%);color:#fffefa;border-radius:10px;font-size:13px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 10px 22px rgba(28,83,255,.22),inset 0 1px 0 rgba(255,255,255,.20);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#8f8c84;font-size:11px;">
-          <button type="button" data-publish-action="close" style="border:0;background:transparent;color:#aaa69d;font-weight:800;cursor:pointer;padding:0;">Close</button>
-          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? '#d8d5cc' : '#69665f'};font-weight:800;cursor:${canOpen ? 'pointer' : 'default'};padding:0;">Open live app</button>
+        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:38px;border:1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.28), transparent 34%),linear-gradient(135deg,var(--accent-blue) 0%,var(--accent-blue-deep) 100%);color:#fff;border-radius:11px;font-size:13px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 10px 22px rgba(47,109,246,.22),inset 0 1px 0 rgba(255,255,255,.24);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-muted);font-size:11px;">
+          <button type="button" data-publish-action="close" style="border:0;background:transparent;color:var(--text-muted);font-weight:800;cursor:pointer;padding:0;">Close</button>
+          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? 'var(--accent-blue-deep)' : 'var(--text-muted)'};font-weight:800;cursor:${canOpen ? 'pointer' : 'default'};padding:0;opacity:${canOpen ? '1' : '.55'};">Open live app</button>
         </div>
       </div>
     </section>
@@ -4048,11 +4057,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     });
     if (!agentActivityFrame) agentActivityFrame = window.requestAnimationFrame(flushAgentActivity);
   };
-  if (!quickConversation) {
-    ensureAgentActivity(initialLabel === 'Planning'
-      ? (speaksFrench ? 'Huggy prepare le plan' : 'Huggy is preparing the plan')
-      : (speaksFrench ? 'Huggy prepare le travail' : 'Huggy is preparing the work'));
-  }
+  // Wait for real server events before rendering Mission Control. Until then the
+  // assistant bubble keeps a lightweight shimmer, which avoids fake "Progression 0" cards.
   const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
     if (quickConversation && !generationTouchesPreview) return;
     if (shownStreamBlocks.has(key)) return;

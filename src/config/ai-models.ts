@@ -17,12 +17,26 @@ export const AIModelTier = {
 export type AIModelTier = (typeof AIModelTier)[keyof typeof AIModelTier];
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'deepseek';
+export type ModelStrength = 'low' | 'medium' | 'high' | 'frontier';
+export type ModelSpeed = 'fast' | 'balanced' | 'deliberate';
+export type ModelReliability = 'standard' | 'high' | 'experimental';
 
 export interface ModelCapabilities {
   supportsStreaming: boolean;
   supportsTools: boolean;
   supportsVision: boolean;
   supportsJsonMode: boolean;
+  supportsStructuredOutput: boolean;
+  supportsToolCalling: boolean;
+  supportsLongContext: boolean;
+  reasoningLevel: ModelStrength;
+  codeLevel: ModelStrength;
+  agenticLevel: ModelStrength;
+  designLevel: ModelStrength;
+  securityLevel: ModelStrength;
+  speed: ModelSpeed;
+  reliability: ModelReliability;
+  bestFor: string[];
   maxContextTokens: number;
 }
 
@@ -257,6 +271,39 @@ const buildRecord = <T>(mapper: (model: ModelDefinition) => T) => (
   Object.fromEntries(MODEL_REGISTRY.map(model => [model.id, mapper(model)])) as Record<AllowedModelId, T>
 );
 
+function strengthForModel(model: ModelDefinition, kind: 'reasoning' | 'code' | 'agentic' | 'design' | 'security'): ModelStrength {
+  const id = model.id.toLowerCase();
+  if (id.includes('opus') || id.includes('gpt-5.5-pro')) return 'frontier';
+  if (id.includes('sonnet') || id.includes('gpt-5.5') || id.includes('gemini-3-pro')) return 'high';
+  if (id.includes('deepseek-v4-pro')) return kind === 'code' ? 'high' : 'medium';
+  if (model.tier === AIModelTier.STANDARD || model.tier === AIModelTier.PRO) return 'medium';
+  return 'low';
+}
+
+function speedForModel(model: ModelDefinition): ModelSpeed {
+  if (model.isFast || model.id.includes('flash') || model.id.includes('mini')) return 'fast';
+  if (model.isPremium || model.id.includes('pro')) return 'deliberate';
+  return 'balanced';
+}
+
+function reliabilityForModel(model: ModelDefinition): ModelReliability {
+  if (model.id.includes('preview') || model.id.includes('4.8')) return 'experimental';
+  if (model.provider === 'anthropic' || model.provider === 'openai') return 'high';
+  return 'standard';
+}
+
+function bestUsesForModel(model: ModelDefinition): string[] {
+  const id = model.id.toLowerCase();
+  if (id.includes('opus')) return ['architecture', 'complex_reasoning', 'design_critique', 'full_stack_generation', 'debug'];
+  if (id.includes('sonnet')) return ['code_generation', 'refactor', 'debug', 'product_reasoning'];
+  if (id.includes('gpt-5.5-pro')) return ['full_stack_generation', 'security', 'structured_planning', 'debug'];
+  if (id.includes('gpt-5.5')) return ['frontend_backend', 'code_generation', 'agentic_workflow'];
+  if (id.includes('gemini-3-pro')) return ['long_context', 'vision', 'product_reasoning', 'analysis'];
+  if (id.includes('gemini')) return ['fast_classification', 'long_context', 'vision', 'simple_streaming'];
+  if (id.includes('deepseek-v4-pro')) return ['code_generation', 'multi_file_edits', 'debug'];
+  return ['simple_chat', 'small_edits', 'classification'];
+}
+
 export const AI_MODEL_DISPLAY_NAMES = buildRecord(model => model.label);
 
 export const AI_MODEL_TIERS = buildRecord(model => model.tier);
@@ -267,9 +314,20 @@ export const MODEL_ACTION_CREDIT_FLOORS = buildRecord(model => model.creditFloor
 
 export const AI_MODEL_CAPABILITIES = buildRecord<ModelCapabilities>(model => ({
   supportsStreaming: model.capabilities?.supportsStreaming ?? true,
-  supportsTools: model.capabilities?.supportsTools ?? true,
+  supportsTools: model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google'].includes(model.provider),
   supportsVision: model.capabilities?.supportsVision ?? false,
-  supportsJsonMode: model.capabilities?.supportsJsonMode ?? true,
+  supportsJsonMode: model.capabilities?.supportsJsonMode ?? model.provider !== 'deepseek',
+  supportsStructuredOutput: model.capabilities?.supportsStructuredOutput ?? model.capabilities?.supportsJsonMode ?? model.provider !== 'deepseek',
+  supportsToolCalling: model.capabilities?.supportsToolCalling ?? model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google'].includes(model.provider),
+  supportsLongContext: model.capabilities?.supportsLongContext ?? model.contextWindow >= 200000,
+  reasoningLevel: model.capabilities?.reasoningLevel ?? strengthForModel(model, 'reasoning'),
+  codeLevel: model.capabilities?.codeLevel ?? strengthForModel(model, 'code'),
+  agenticLevel: model.capabilities?.agenticLevel ?? strengthForModel(model, 'agentic'),
+  designLevel: model.capabilities?.designLevel ?? strengthForModel(model, 'design'),
+  securityLevel: model.capabilities?.securityLevel ?? strengthForModel(model, 'security'),
+  speed: model.capabilities?.speed ?? speedForModel(model),
+  reliability: model.capabilities?.reliability ?? reliabilityForModel(model),
+  bestFor: model.capabilities?.bestFor ?? bestUsesForModel(model),
   maxContextTokens: model.contextWindow,
 }));
 

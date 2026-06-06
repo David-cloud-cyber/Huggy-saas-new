@@ -22,6 +22,13 @@ export interface RoutingContext {
   requiredCapabilities?: {
     vision?: boolean;
     tools?: boolean;
+    structuredOutput?: boolean;
+    longContext?: boolean;
+    reasoning?: boolean;
+    code?: boolean;
+    agentic?: boolean;
+    design?: boolean;
+    security?: boolean;
   };
 }
 
@@ -55,6 +62,8 @@ export class ModelRouter {
       const caps = AI_MODEL_CAPABILITIES[modelId];
       if (context.requiredCapabilities?.vision && !caps.supportsVision) return false;
       if (context.requiredCapabilities?.tools && !caps.supportsTools) return false;
+      if (context.requiredCapabilities?.structuredOutput && !caps.supportsStructuredOutput) return false;
+      if (context.requiredCapabilities?.longContext && !caps.supportsLongContext) return false;
       return true;
     });
 
@@ -72,7 +81,7 @@ export class ModelRouter {
     }
 
     const firstAffordable = (preferred: AllowedModelId[]) => (
-      preferred.find(modelId => affordableModels.includes(modelId)) || affordableModels[0]
+      preferred.find(modelId => affordableModels.includes(modelId)) || this.selectBestAutoModel(affordableModels, context)
     );
 
     // 4. Smart Router Mode Selection logic
@@ -103,23 +112,7 @@ export class ModelRouter {
 
         case 'Auto':
         default: {
-          // AI Model selection optimizing for Quality, Speed and Cost:
-          // Adjust model selection depending on task complexity and user balance
-          const complexity = context.taskComplexity || 'medium';
-
-          if (complexity === 'simple') {
-            // Simple Chat / small modification: Economy Model
-            selectedModel = firstAffordable(['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
-          } else if (complexity === 'complex') {
-            // High complexity multi-file modification
-            selectedModel = firstAffordable(['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'openai/gpt-5.5']);
-          } else if (complexity === 'extreme' && context.userCredits > 50) {
-            // Power task: Standard default to sonnet or premium on higher tiers.
-            selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
-          } else {
-            // Medium/Default Task: Balanced Standard or high-tier fallback
-            selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
-          }
+          selectedModel = this.selectBestAutoModel(affordableModels, context);
           break;
         }
       }
@@ -135,6 +128,82 @@ export class ModelRouter {
     validateAllowedModel(selectedModel);
 
     return selectedModel;
+  }
+
+  private selectBestAutoModel(models: AllowedModelId[], context: RoutingContext): AllowedModelId {
+    if (!models.length) return DEFAULT_PROVIDER_MODEL_ID;
+    const complexity = context.taskComplexity || 'medium';
+    if (!this.hasSpecificCapabilityNeeds(context)) {
+      if (complexity === 'simple') {
+        return this.firstAvailable(models, ['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
+      }
+      if (complexity === 'complex') {
+        return this.firstAvailable(models, ['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'openai/gpt-5.5']);
+      }
+      if (complexity === 'extreme') {
+        return this.firstAvailable(models, ['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
+      }
+      return this.firstAvailable(models, ['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
+    }
+    const scored = models.map(modelId => ({
+      modelId,
+      score: this.scoreModel(modelId, context, complexity),
+    })).sort((a, b) => b.score - a.score);
+    return scored[0]?.modelId || models[0];
+  }
+
+  private firstAvailable(models: AllowedModelId[], preferred: AllowedModelId[]) {
+    return preferred.find(modelId => models.includes(modelId)) || models[0];
+  }
+
+  private hasSpecificCapabilityNeeds(context: RoutingContext) {
+    const required = context.requiredCapabilities || {};
+    return Object.values(required).some(Boolean);
+  }
+
+  private scoreModel(modelId: AllowedModelId, context: RoutingContext, complexity: RoutingContext['taskComplexity']) {
+    const caps = AI_MODEL_CAPABILITIES[modelId];
+    const creditCost = MODEL_ACTION_CREDIT_FLOORS[modelId] || 1;
+    let score = 0;
+
+    score += this.strengthScore(caps.reasoningLevel) * (context.requiredCapabilities?.reasoning ? 3 : complexity === 'simple' ? 0.6 : 1.4);
+    score += this.strengthScore(caps.codeLevel) * (context.requiredCapabilities?.code ? 3 : complexity === 'simple' ? 0.6 : 1.6);
+    score += this.strengthScore(caps.agenticLevel) * (context.requiredCapabilities?.agentic ? 2.6 : complexity === 'extreme' ? 1.7 : 0.9);
+    score += this.strengthScore(caps.designLevel) * (context.requiredCapabilities?.design ? 2.2 : 0.7);
+    score += this.strengthScore(caps.securityLevel) * (context.requiredCapabilities?.security ? 2.2 : 0.6);
+
+    if (context.requiredCapabilities?.vision && caps.supportsVision) score += 14;
+    if (context.requiredCapabilities?.tools && caps.supportsToolCalling) score += 10;
+    if (context.requiredCapabilities?.structuredOutput && caps.supportsStructuredOutput) score += 8;
+    if (context.requiredCapabilities?.longContext && caps.supportsLongContext) score += 8;
+
+    if (complexity === 'simple') {
+      score += caps.speed === 'fast' ? 12 : caps.speed === 'balanced' ? 6 : 0;
+      score -= creditCost * 1.4;
+    } else if (complexity === 'extreme') {
+      score += caps.reasoningLevel === 'frontier' ? 18 : caps.reasoningLevel === 'high' ? 10 : 0;
+      score += caps.codeLevel === 'frontier' ? 14 : caps.codeLevel === 'high' ? 9 : 0;
+      score -= creditCost * 0.15;
+    } else if (complexity === 'complex') {
+      score += caps.codeLevel === 'frontier' ? 10 : caps.codeLevel === 'high' ? 8 : 0;
+      score += caps.reasoningLevel === 'frontier' ? 8 : caps.reasoningLevel === 'high' ? 6 : 0;
+      score -= creditCost * 0.35;
+    } else {
+      score += caps.speed === 'fast' ? 5 : 2;
+      score += caps.reliability === 'high' ? 4 : caps.reliability === 'standard' ? 2 : 0;
+      score -= creditCost * 0.7;
+    }
+
+    if (caps.reliability === 'experimental') score -= complexity === 'simple' ? 2 : 0.5;
+    if (context.userCredits < creditCost * 4) score -= creditCost;
+    return score;
+  }
+
+  private strengthScore(value: string) {
+    if (value === 'frontier') return 10;
+    if (value === 'high') return 7;
+    if (value === 'medium') return 4;
+    return 1;
   }
 
   private isPlanSufficient(userPlan: string, requiredPlan: string): boolean {
