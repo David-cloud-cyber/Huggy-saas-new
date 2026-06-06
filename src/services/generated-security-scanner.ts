@@ -29,11 +29,28 @@ function fileByPath(files: AgentGeneratedFile[], target: string) {
   return files.find(file => normalizePath(file.path).toLowerCase() === normalized);
 }
 
+function isFrontendFile(file: AgentGeneratedFile) {
+  const path = normalizePath(file.path).toLowerCase();
+  return (
+    path.startsWith('src/') &&
+    !path.includes('.test.') &&
+    !path.startsWith('src/server') &&
+    !path.startsWith('src/api/')
+  );
+}
+
+function isEdgeFunctionFile(file: AgentGeneratedFile) {
+  const path = normalizePath(file.path).toLowerCase();
+  return path.startsWith('supabase/functions/') || path.startsWith('functions/');
+}
+
 export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScanResult {
   const findings: SecurityFinding[] = [];
   const source = sourceBundle(files);
   const schema = fileByPath(files, 'supabase/schema.sql')?.content || '';
   const paths = files.map(file => normalizePath(file.path));
+  const frontendSource = files.filter(isFrontendFile).map(file => `--- ${normalizePath(file.path)} ---\n${file.content || ''}`).join('\n\n');
+  const edgeSource = files.filter(isEdgeFunctionFile).map(file => `--- ${normalizePath(file.path)} ---\n${file.content || ''}`).join('\n\n');
 
   if (containsSecret(source) || /service[_-]?role|SUPABASE_SERVICE_ROLE|sbp_[a-z0-9]|secret\s+eyJ/i.test(source)) {
     findings.push(fail('security_no_frontend_secrets', 'Potential secret, service role key, or provider credential found in generated files.'));
@@ -87,6 +104,37 @@ export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScan
     findings.push(/\b(confirm\(|confirmation|undo|toast|modal|dialog|cancel|rollback|feedback)\b/i.test(source)
       ? pass('security_destructive_feedback', 'Destructive actions include confirmation, undo or visible feedback.')
       : warn('security_destructive_feedback', 'Destructive actions need confirmation, undo or clear feedback.'));
+  }
+
+  const referencesAiFeature = /\b(ai tool|chatbot|assistant|llm|prompt workspace|summari[sz]e|resume|streaming ai|ai[-_ ]?stream|streamAiResponse|app_generations|app_prompts|generated outputs)\b/i.test(source);
+  const hasAiEdgeConnector = paths.some(path => /^supabase\/functions\/ai-stream\/index\.ts$/i.test(path)) || /text\/event-stream|ReadableStream/i.test(edgeSource);
+  const frontendProviderCall = /(from\s+['"]openai['"]|new\s+OpenAI\s*\(|@anthropic-ai\/sdk|new\s+Anthropic\s*\(|GoogleGenerativeAI|@google\/generative-ai|createOpenAI\s*\(|createAnthropic\s*\(|streamText\s*\(|generateText\s*\()/i.test(frontendSource);
+  const frontendProviderKey = /import\.meta\.env\.VITE_(OPENAI|ANTHROPIC|GEMINI|GOOGLE|DEEPSEEK|FAL|AI_PROVIDER)[A-Z0-9_]*KEY|Authorization["']?\s*:\s*["']?Bearer\s+\$\{?\s*import\.meta\.env/i.test(frontendSource);
+  const frontendOwnStreamClient = /\/functions\/v1\/ai-stream|streamAiResponse|EventSource|ReadableStream|getReader\(/i.test(frontendSource);
+
+  if (referencesAiFeature || frontendProviderCall || frontendProviderKey || hasAiEdgeConnector || frontendOwnStreamClient) {
+    findings.push(hasAiEdgeConnector
+      ? pass('security_ai_connector_server_side', 'AI streaming uses a server-side connector.')
+      : fail('security_ai_connector_server_side', 'AI streaming features need a server-side connector such as supabase/functions/ai-stream/index.ts.'));
+
+    findings.push(!frontendProviderCall && !frontendProviderKey
+      ? pass('security_ai_no_frontend_provider_call', 'No direct AI provider SDK call or provider key is present in frontend files.')
+      : fail('security_ai_no_frontend_provider_call', 'AI provider SDK calls and provider keys must stay out of frontend files.'));
+
+    findings.push(/Deno\.env\.get|process\.env/i.test(edgeSource) || !hasAiEdgeConnector
+      ? (hasAiEdgeConnector
+          ? pass('security_ai_secrets_server_env', 'AI provider secrets are read from server environment only.')
+          : warn('security_ai_secrets_server_env', 'AI provider secrets should be read only from the server connector.'))
+      : fail('security_ai_secrets_server_env', 'AI connector must read provider secrets from server environment variables.'));
+
+    if (frontendOwnStreamClient) {
+      findings.push(/AbortController|signal|abort\(/i.test(frontendSource)
+        ? pass('security_ai_stream_cancel', 'AI stream UI supports cancellation.')
+        : warn('security_ai_stream_cancel', 'AI stream UI should support AbortController cancellation.'));
+      findings.push(/\berror\b|try\s*\{|catch\s*\(|onError|retry/i.test(frontendSource)
+        ? pass('security_ai_stream_error_state', 'AI stream UI includes error or retry handling.')
+        : warn('security_ai_stream_error_state', 'AI stream UI should include error and retry handling.'));
+    }
   }
 
   const status = findings.some(item => item.status === 'fail')

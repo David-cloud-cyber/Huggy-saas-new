@@ -226,6 +226,18 @@ const HUGGY_PRODUCTION_READINESS_POLICY = [
   'Warnings can be delivered as recommendations. High-severity failures block readiness until auto-fix succeeds or a clear blocker is reported.',
 ].join('\n');
 
+const HUGGY_AI_CONNECTOR_POLICY = [
+  'Built-in AI Connector policy:',
+  'Separate two concepts: Huggy editor progress is a Codex-like execution journal, while generated-app AI streaming is product code inside the user app.',
+  'When a generated app needs an AI assistant, chatbot, summarizer, prompt workspace, agent output, or token-by-token response, create a server-side AI connector. Do not call OpenAI, Anthropic, Gemini, DeepSeek, fal.ai, or other provider APIs directly from frontend files.',
+  'Default connector shape: Supabase Edge Function at `supabase/functions/ai-stream/index.ts`, browser-safe client at `src/lib/aiStream.ts`, frontend UI consuming Server-Sent Events or a ReadableStream, and all provider keys read only from server environment variables.',
+  'The frontend may call Huggy Cloud or `/functions/v1/ai-stream`, pass the user prompt/messages, consume streamed chunks, and expose cancel/retry/error states with AbortController. It must never contain provider API keys, service role keys, raw Authorization bearer secrets, or provider SDK initialization.',
+  'The Edge Function must validate input, rate-limit sensitive calls, use `text/event-stream`, stream chunks progressively, send useful error events, and avoid leaking provider payloads or secrets to the browser.',
+  'If provider keys are not configured, the generated app should show a clear setup-required state and still render a usable preview. Never fake a completed AI response.',
+  'For generated live/video streaming features, prefer standards such as HLS/DASH/native video players, buffering/offline/reconnect states, and independent async chat/widgets so media playback never blocks the rest of the app.',
+  'Streaming UI inside generated apps must be stable: no layout jumping, no giant loaders, no fake progress. Use compact loading dots or shimmer only while a real request is pending, respect reduced motion, and keep the transcript/results persistent when useful.',
+].join('\n');
+
 const HUGGY_PREMIUM_UI_ESCALATION_POLICY = [
   'Premium UI escalation gate:',
   'Before coding, answer internally: real problem, end user, primary action, critical journey, visual direction, required screens/components, and required states.',
@@ -419,6 +431,7 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_FUNCTIONAL_QUALITY_POLICY,
     HUGGY_CLOUD_POLICY,
     HUGGY_PRODUCTION_READINESS_POLICY,
+    HUGGY_AI_CONNECTOR_POLICY,
     buildProductionBlueprintPromptContext(productionBlueprint),
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,

@@ -32,6 +32,8 @@ export type FullstackValidationCheck = {
 };
 
 const FULLSTACK_MARKER = 'HUGGY_FULLSTACK_READY';
+const AI_STREAM_FUNCTION_PATH = 'supabase/functions/ai-stream/index.ts';
+const AI_STREAM_CLIENT_PATH = 'src/lib/aiStream.ts';
 
 function normalizePath(value: string) {
   return String(value || '').replace(/\\/g, '/').replace(/^\.\/+/, '');
@@ -591,6 +593,12 @@ function buildSchema(requirement: HuggyCloudRequirement, blueprint: ProductionBl
 
 function buildFullstackReadme(requirement: HuggyCloudRequirement, blueprint: ProductionBlueprint) {
   const parts = requirement.detected_from_prompt.length ? requirement.detected_from_prompt.join(', ') : 'database/auth readiness';
+  const aiConnectorNotes = blueprint.type === 'ai_tool'
+    ? [
+        '- `src/lib/aiStream.ts`: browser-safe streaming client with AbortController support.',
+        '- `supabase/functions/ai-stream/index.ts`: server-side SSE AI connector for provider calls and secrets.',
+      ]
+    : [];
   return [
     '# Huggy Fullstack Notes',
     '',
@@ -603,6 +611,7 @@ function buildFullstackReadme(requirement: HuggyCloudRequirement, blueprint: Pro
     '- `src/lib/appData.ts`: CRUD data layer with local demo fallback.',
     '- `src/lib/validation.ts`: Zod validation schemas for user input.',
     '- `supabase/functions/_shared/security.ts`: Edge Function security helpers for auth, rate limits and webhooks.',
+    ...aiConnectorNotes,
     '- `supabase/schema.sql`: RLS-enabled schema with explicit Data API grants.',
     '- `src/fullstack.test.ts`: static safety check for generated backend integration.',
     '',
@@ -616,6 +625,9 @@ function buildFullstackReadme(requirement: HuggyCloudRequirement, blueprint: Pro
     'The preview may run with local demo data only in preview/local runtime until Huggy Cloud runtime config is available.',
     'Production runtime must connect Huggy Cloud before writing or reading private app data.',
     'Live auth, database, storage, webhooks and secrets must be provisioned by Huggy Cloud on the backend.',
+    blueprint.type === 'ai_tool'
+      ? 'AI streaming uses a server-side connector. Frontend files must call the Huggy/Supabase function and must never initialize provider SDKs or read provider API keys.'
+      : '',
     '',
     'Never place service role keys or provider secrets in frontend files.',
     '',
@@ -643,6 +655,216 @@ function buildFullstackTest() {
   ].join('\n');
 }
 
+function buildAiStreamClient() {
+  return [
+    'export type AiStreamMessage = {',
+    '  role: "user" | "assistant" | "system";',
+    '  content: string;',
+    '};',
+    '',
+    'export type AiStreamEvent =',
+    '  | { type: "token"; text: string }',
+    '  | { type: "status"; message: string }',
+    '  | { type: "error"; message: string }',
+    '  | { type: "done" };',
+    '',
+    'export type AiStreamOptions = {',
+    '  prompt?: string;',
+    '  messages?: AiStreamMessage[];',
+    '  accessToken?: string;',
+    '  signal?: AbortSignal;',
+    '  onEvent?: (event: AiStreamEvent) => void;',
+    '  onToken?: (text: string) => void;',
+    '};',
+    '',
+    "const DEFAULT_FUNCTION_PATH = '/functions/v1/ai-stream';",
+    '',
+    'function parseSseLine(line: string): AiStreamEvent | null {',
+    '  if (!line.startsWith("data:")) return null;',
+    '  const payload = line.slice(5).trim();',
+    '  if (!payload || payload === "[DONE]") return { type: "done" };',
+    '  try {',
+    '    return JSON.parse(payload) as AiStreamEvent;',
+    '  } catch {',
+    '    return { type: "token", text: payload };',
+    '  }',
+    '}',
+    '',
+    'export async function streamAiResponse(options: AiStreamOptions) {',
+    '  const controller = new AbortController();',
+    '  const abort = () => controller.abort();',
+    '  if (options.signal) options.signal.addEventListener("abort", abort, { once: true });',
+    '',
+    '  const response = await fetch(DEFAULT_FUNCTION_PATH, {',
+    '    method: "POST",',
+    '    headers: {',
+    '      "content-type": "application/json",',
+    '      ...(options.accessToken ? { authorization: `Bearer ${options.accessToken}` } : {}),',
+    '    },',
+    '    body: JSON.stringify({ prompt: options.prompt, messages: options.messages || [] }),',
+    '    signal: controller.signal,',
+    '  });',
+    '',
+    '  if (!response.ok || !response.body) {',
+    '    throw new Error("AI_STREAM_UNAVAILABLE");',
+    '  }',
+    '',
+    '  const reader = response.body.getReader();',
+    '  const decoder = new TextDecoder();',
+    '  let buffer = "";',
+    '',
+    '  while (true) {',
+    '    const { value, done } = await reader.read();',
+    '    if (done) break;',
+    '    buffer += decoder.decode(value, { stream: true });',
+    '    const lines = buffer.split("\\n");',
+    '    buffer = lines.pop() || "";',
+    '    for (const line of lines) {',
+    '      const event = parseSseLine(line.trim());',
+    '      if (!event) continue;',
+    '      options.onEvent?.(event);',
+    '      if (event.type === "token") options.onToken?.(event.text);',
+    '    }',
+    '  }',
+    '',
+    '  options.onEvent?.({ type: "done" });',
+    '  return { abort };',
+    '}',
+    '',
+    'export function createAiStreamAbortController() {',
+    '  return new AbortController();',
+    '}',
+    '',
+  ].join('\n');
+}
+
+function buildAiStreamEdgeFunction() {
+  return [
+    "import { assertRateLimit } from '../_shared/security.ts';",
+    '',
+    'const corsHeaders = {',
+    '  "access-control-allow-origin": "*",',
+    '  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",',
+    '  "access-control-allow-methods": "POST, OPTIONS",',
+    '};',
+    '',
+    'const encoder = new TextEncoder();',
+    '',
+    'function sse(event: unknown) {',
+    '  return encoder.encode(`data: ${JSON.stringify(event)}\\n\\n`);',
+    '}',
+    '',
+    'type IncomingMessage = { role: "user" | "assistant" | "system"; content: string };',
+    '',
+    'function normalizeMessages(body: any): IncomingMessage[] {',
+    '  const messages = Array.isArray(body?.messages) ? body.messages : [];',
+    '  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";',
+    '  const cleanMessages = messages',
+    '    .filter((item: any) => ["user", "assistant", "system"].includes(item?.role) && typeof item?.content === "string")',
+    '    .map((item: any) => ({ role: item.role, content: item.content.slice(0, 8000) }));',
+    '  if (prompt) cleanMessages.push({ role: "user", content: prompt.slice(0, 8000) });',
+    '  return cleanMessages.length ? cleanMessages : [{ role: "user", content: "Hello" }];',
+    '}',
+    '',
+    'Deno.serve(async (request) => {',
+    '  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });',
+    '  if (request.method !== "POST") {',
+    '    return new Response(JSON.stringify({ error: "METHOD_NOT_ALLOWED" }), { status: 405, headers: { ...corsHeaders, "content-type": "application/json" } });',
+    '  }',
+    '',
+    '  const stream = new ReadableStream({',
+    '    async start(controller) {',
+    '      try {',
+    '        assertRateLimit(request.headers.get("x-forwarded-for") || "anonymous-ai-stream", 30, 60_000);',
+    '        const apiKey = Deno.env.get("HUGGY_AI_PROVIDER_API_KEY") || Deno.env.get("OPENAI_API_KEY");',
+    '        const providerUrl = Deno.env.get("HUGGY_AI_PROVIDER_URL") || "https://api.openai.com/v1/chat/completions";',
+    '        const model = Deno.env.get("HUGGY_AI_MODEL") || "gpt-4o-mini";',
+    '',
+    '        if (!apiKey) {',
+    '          controller.enqueue(sse({ type: "error", message: "AI provider key is not configured on the server." }));',
+    '          controller.close();',
+    '          return;',
+    '        }',
+    '',
+    '        const body = await request.json().catch(() => ({}));',
+    '        const messages = normalizeMessages(body);',
+    '        controller.enqueue(sse({ type: "status", message: "Starting secure AI stream." }));',
+    '',
+    '        const providerResponse = await fetch(providerUrl, {',
+    '          method: "POST",',
+    '          headers: {',
+    '            "authorization": `Bearer ${apiKey}`,',
+    '            "content-type": "application/json",',
+    '          },',
+    '          body: JSON.stringify({ model, messages, stream: true }),',
+    '        });',
+    '',
+    '        if (!providerResponse.ok || !providerResponse.body) {',
+    '          controller.enqueue(sse({ type: "error", message: "AI provider is temporarily unavailable." }));',
+    '          controller.close();',
+    '          return;',
+    '        }',
+    '',
+    '        const reader = providerResponse.body.getReader();',
+    '        const decoder = new TextDecoder();',
+    '        let buffer = "";',
+    '        while (true) {',
+    '          const { value, done } = await reader.read();',
+    '          if (done) break;',
+    '          buffer += decoder.decode(value, { stream: true });',
+    '          const lines = buffer.split("\\n");',
+    '          buffer = lines.pop() || "";',
+    '          for (const line of lines) {',
+    '            const clean = line.trim();',
+    '            if (!clean.startsWith("data:")) continue;',
+    '            const payload = clean.slice(5).trim();',
+    '            if (!payload || payload === "[DONE]") continue;',
+    '            try {',
+    '              const json = JSON.parse(payload);',
+    '              const token = json?.choices?.[0]?.delta?.content || json?.choices?.[0]?.text || "";',
+    '              if (token) controller.enqueue(sse({ type: "token", text: token }));',
+    '            } catch {',
+    '              controller.enqueue(sse({ type: "token", text: payload }));',
+    '            }',
+    '          }',
+    '        }',
+    '        controller.enqueue(sse({ type: "done" }));',
+    '      } catch (_error) {',
+    '        controller.enqueue(sse({ type: "error", message: "AI stream failed safely." }));',
+    '      } finally {',
+    '        controller.close();',
+    '      }',
+    '    },',
+    '  });',
+    '',
+    '  return new Response(stream, {',
+    '    headers: {',
+    '      ...corsHeaders,',
+    '      "content-type": "text/event-stream; charset=utf-8",',
+    '      "cache-control": "no-cache, no-transform",',
+    '      "x-accel-buffering": "no",',
+    '    },',
+    '  });',
+    '});',
+    '',
+  ].join('\n');
+}
+
+function buildAiStreamTest() {
+  return [
+    "import { readFileSync } from 'node:fs';",
+    '',
+    "const client = readFileSync(new URL('./lib/aiStream.ts', import.meta.url), 'utf8');",
+    "const forbidden = /VITE_(OPENAI|ANTHROPIC|GEMINI|GOOGLE|DEEPSEEK|FAL).*KEY|new\\s+OpenAI|Anthropic\\(|GoogleGenerativeAI/i;",
+    "if (forbidden.test(client)) throw new Error('AI provider calls and provider keys must stay out of frontend files.');",
+    "if (!/AbortController/.test(client)) throw new Error('AI stream client needs AbortController support.');",
+    "if (!/\\/functions\\/v1\\/ai-stream/.test(client)) throw new Error('AI stream client must call the server connector.');",
+    '',
+    "console.log('Generated AI connector smoke test passed.');",
+    '',
+  ].join('\n');
+}
+
 export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGeneratedFile[] {
   if (!shouldApplyHuggyFullstackKit(input)) return input.files;
   const blueprint = inferProductionBlueprint(input.prompt);
@@ -654,6 +876,25 @@ export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGener
   upsertFile(byPath, 'src/lib/appData.ts', buildAppDataLayer(input.requirement), 'ts');
   upsertFile(byPath, 'src/lib/validation.ts', buildValidationLayer(blueprint), 'ts');
   upsertFile(byPath, 'supabase/functions/_shared/security.ts', buildEdgeSecurityHelpers(blueprint), 'ts');
+  if (blueprint.type === 'ai_tool') {
+    upsertFile(byPath, AI_STREAM_CLIENT_PATH, buildAiStreamClient(), 'ts');
+    upsertFile(byPath, AI_STREAM_FUNCTION_PATH, buildAiStreamEdgeFunction(), 'ts');
+    upsertFile(byPath, 'src/ai-stream.test.ts', buildAiStreamTest(), 'ts');
+    const packageForAi = byPath.get('package.json');
+    if (packageForAi && !/ai-stream\.test\.ts/i.test(packageForAi.content)) {
+      try {
+        const pkg = JSON.parse(packageForAi.content || '{}');
+        const currentTest = String(pkg.scripts?.test || 'node --experimental-strip-types src/app.test.ts && node --experimental-strip-types src/fullstack.test.ts').trim();
+        pkg.scripts = {
+          ...(pkg.scripts || {}),
+          test: `${currentTest} && node --experimental-strip-types src/ai-stream.test.ts`,
+        };
+        upsertFile(byPath, 'package.json', JSON.stringify(pkg, null, 2), 'json');
+      } catch {
+        // Keep the generated package unchanged if it was not parseable.
+      }
+    }
+  }
 
   const existingSchema = fileByPath(input.files, 'supabase/schema.sql')?.content || '';
   const generatedSchema = buildSchema(input.requirement, blueprint);
@@ -678,10 +919,13 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   const data = fileByPath(files, 'src/lib/appData.ts');
   const validation = fileByPath(files, 'src/lib/validation.ts');
   const edgeSecurity = fileByPath(files, 'supabase/functions/_shared/security.ts');
+  const aiStreamClient = fileByPath(files, AI_STREAM_CLIENT_PATH);
+  const aiStreamFunction = fileByPath(files, AI_STREAM_FUNCTION_PATH);
   const schema = fileByPath(files, 'supabase/schema.sql');
   const packageFile = fileByPath(files, 'package.json');
   const allSource = files.map(file => `${file.path}\n${file.content || ''}`).join('\n\n');
   const blueprint = inferProductionBlueprint(allSource);
+  const isAiToolProject = blueprint.type === 'ai_tool' || Boolean(aiStreamClient || aiStreamFunction) || /app_prompts|app_generations|ai-stream|streamAiResponse|prompt workspace/i.test(allSource);
 
   checks.push(client ? pass('fullstack_client_present', 'Generated app includes a browser-safe Huggy Cloud client.', 'src/lib/huggyCloud.ts') : fail('fullstack_client_present', 'Missing src/lib/huggyCloud.ts browser-safe backend client.', 'src/lib/huggyCloud.ts'));
   checks.push(data ? pass('fullstack_data_layer_present', 'Generated app includes a CRUD data layer.', 'src/lib/appData.ts') : fail('fullstack_data_layer_present', 'Missing src/lib/appData.ts CRUD data layer.', 'src/lib/appData.ts'));
@@ -721,6 +965,24 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   if (edgeSecurity) {
     checks.push(/assertRateLimit/i.test(edgeSecurity.content) ? pass('fullstack_rate_limit_helper', 'Edge security layer includes a rate limit helper.', edgeSecurity.path) : fail('fullstack_rate_limit_helper', 'Sensitive actions need rate limit helper.', edgeSecurity.path));
     checks.push(/assertWebhookSignature/i.test(edgeSecurity.content) ? pass('fullstack_webhook_signature_helper', 'Edge security layer includes webhook signature guard.', edgeSecurity.path) : warn('fullstack_webhook_signature_helper', 'Payment-capable apps should include webhook signature verification.', edgeSecurity.path));
+  }
+
+  if (isAiToolProject) {
+    checks.push(aiStreamClient
+      ? pass('fullstack_ai_stream_client_present', 'Generated AI app includes a browser-safe AI stream client.', AI_STREAM_CLIENT_PATH)
+      : fail('fullstack_ai_stream_client_present', 'AI apps need src/lib/aiStream.ts to call the server connector.', AI_STREAM_CLIENT_PATH));
+    checks.push(aiStreamFunction
+      ? pass('fullstack_ai_stream_function_present', 'Generated AI app includes a server-side AI stream function.', AI_STREAM_FUNCTION_PATH)
+      : fail('fullstack_ai_stream_function_present', 'AI apps need a server-side Supabase function for provider streaming.', AI_STREAM_FUNCTION_PATH));
+    checks.push(/text\/event-stream|ReadableStream|Server-Sent/i.test(aiStreamFunction?.content || '')
+      ? pass('fullstack_ai_stream_sse', 'AI connector streams with SSE or a ReadableStream.', aiStreamFunction?.path || AI_STREAM_FUNCTION_PATH)
+      : fail('fullstack_ai_stream_sse', 'AI connector must stream responses with SSE or ReadableStream.', AI_STREAM_FUNCTION_PATH));
+    checks.push(/Deno\.env\.get|process\.env/i.test(aiStreamFunction?.content || '')
+      ? pass('fullstack_ai_secrets_server_side', 'AI provider key is read only in server-side function code.', aiStreamFunction?.path || AI_STREAM_FUNCTION_PATH)
+      : fail('fullstack_ai_secrets_server_side', 'AI provider keys must be read in the server connector, not frontend files.', AI_STREAM_FUNCTION_PATH));
+    checks.push(/AbortController|signal/i.test(aiStreamClient?.content || '')
+      ? pass('fullstack_ai_stream_cancel', 'AI stream client supports cancellation.', aiStreamClient?.path || AI_STREAM_CLIENT_PATH)
+      : warn('fullstack_ai_stream_cancel', 'AI stream client should support cancellation with AbortController.', AI_STREAM_CLIENT_PATH));
   }
 
   checks.push(!/service[_-]?role|SUPABASE_SERVICE_ROLE|sbp_[a-z0-9]|secret eyJ/i.test(allSource) && !containsSecret(allSource)
