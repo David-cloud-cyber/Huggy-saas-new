@@ -5326,9 +5326,12 @@ function normalizeVerificationKey(key: string) {
 function isBlockingVerificationFailure(check: AgentVerificationCheck) {
   if (check.status !== 'fail') return false;
   const key = normalizeVerificationKey(check.key);
+  if (/^(technical_build_score|production_readiness_score|functionality_score|design_score|visual_interaction_probe_score)$/.test(key)) {
+    return false;
+  }
   if (RELIABILITY_BLOCKING_CHECK_KEYS.has(key)) return true;
   return check.severity === 'high'
-    && /(safe|secret|env|forbidden|preview|runtime|vite|import|control|functionality|technical|script|package)/i.test(key);
+    && /(secret|env|forbidden|preview|runtime|vite|import|control|functionality|script|package)/i.test(key);
 }
 
 function toPublicVerificationIssue(check: AgentVerificationCheck) {

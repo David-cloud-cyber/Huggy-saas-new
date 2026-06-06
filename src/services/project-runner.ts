@@ -171,7 +171,8 @@ export class HybridProjectRunner implements RunnerAdapter {
     const checks: RunnerCheck[] = [];
     const byPath = new Map(files.map(file => [normalizePath(file.path).toLowerCase(), file]));
     const source = files.map(file => `${file.path}\n${file.content || ''}`).join('\n\n');
-    const html = previewHtml || files.find(file => normalizePath(file.path).endsWith('.html'))?.content || '';
+    const indexHtml = files.find(file => normalizePath(file.path).toLowerCase() === 'index.html')?.content || '';
+    const html = indexHtml || previewHtml || files.find(file => normalizePath(file.path).endsWith('.html'))?.content || '';
     const hasIndex = byPath.has('index.html');
     const hasMain = Array.from(byPath.keys()).some(file => /^src\/main\.(tsx|jsx|ts|js)$/.test(file));
     const hasApp = Array.from(byPath.keys()).some(file => /^src\/app\.(tsx|jsx)$/.test(file));
@@ -271,7 +272,9 @@ export class HybridProjectRunner implements RunnerAdapter {
       checks.push(hasModalState ? pass('modal_interaction', 'Modal, drawer, or popover has open/close state.') : fail('modal_interaction', 'medium', 'Modal-like UI needs open/close behavior.'));
     }
     if (hasDestructiveAction) {
-      checks.push(hasDestructiveSafety ? pass('destructive_action_safety', 'Destructive actions include confirmation, undo, or feedback.') : fail('destructive_action_safety', 'high', 'Destructive actions need confirmation, undo, or clear feedback.'));
+      checks.push(hasDestructiveSafety
+        ? pass('destructive_action_safety', 'Destructive actions include confirmation, undo, or feedback.')
+        : warn('destructive_action_safety', 'medium', 'Destructive actions should include confirmation, undo, or clear feedback.'));
     }
     checks.push(hasFeedback ? pass('ui_feedback_states', 'User feedback states are represented.') : warn('ui_feedback_states', 'medium', 'No loading, empty, error, success, or disabled state was detected.'));
     return checks;

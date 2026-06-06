@@ -38,6 +38,25 @@ const goodHtml = '<!doctype html><html><head><title>Demo</title><meta name="desc
 
 {
   const runner = new HybridProjectRunner({ executeScripts: false });
+  const stalePreview = '<!doctype html><html><body><main><h1>Old preview</h1></main></body></html>';
+  const result = await runner.run({
+    runId: 'run_source_index_over_preview',
+    projectId: 'project_source_index_over_preview',
+    previewHtml: stalePreview,
+    files: [
+      { path: 'index.html', language: 'html', content: goodHtml },
+      { path: 'package.json', language: 'json', content: JSON.stringify({ scripts: { build: 'vite build' } }) },
+      { path: 'src/main.tsx', language: 'tsx', content: 'import App from "./App"; console.log(App);' },
+      { path: 'src/App.tsx', language: 'tsx', content: 'export default function App(){ return <main><h1>Todo</h1><button onClick={() => undefined}>Add</button><p>empty success loading</p></main> }' },
+    ],
+  });
+
+  assert.ok(result.checks.some(check => check.check_type === 'vite_main_script' && check.status === 'passed'));
+  assert.ok(result.checks.some(check => check.check_type === 'vite_root_mount' && check.status === 'passed'));
+}
+
+{
+  const runner = new HybridProjectRunner({ executeScripts: false });
   const result = await runner.run({
     runId: 'run_fake_backend',
     projectId: 'project_fake_backend',
