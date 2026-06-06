@@ -429,12 +429,32 @@ app.get('/api/debug/auth-session', requireAuth, (req: any, res) => {
 
 app.get('/api/health', (_req, res) => {
   const supabaseDiagnostics = getSupabaseRuntimeDiagnostics();
+  const deployedCommit =
+    process.env.HUGGY_BUILD_COMMIT ||
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GIT_COMMIT ||
+    null;
   res.json({
     success: true,
     status: 'ok',
     service: 'huggy-saas',
     time: new Date().toISOString(),
     static_dist: pathExists(staticRoot),
+    deployment: {
+      commit: deployedCommit,
+      commit_short: deployedCommit ? deployedCommit.slice(0, 7) : null,
+      branch:
+        process.env.HUGGY_BUILD_BRANCH ||
+        process.env.RAILWAY_GIT_BRANCH ||
+        process.env.VERCEL_GIT_COMMIT_REF ||
+        null,
+      environment:
+        process.env.RAILWAY_ENVIRONMENT_NAME ||
+        process.env.VERCEL_ENV ||
+        process.env.NODE_ENV ||
+        null,
+    },
     project_refs_match: supabaseDiagnostics.project_refs_match,
     integrations: {
       supabase_url: Boolean(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL),
