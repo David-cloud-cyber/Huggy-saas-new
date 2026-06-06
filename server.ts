@@ -1555,7 +1555,11 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
       react: 'latest',
       'react-dom': 'latest',
     },
-    devDependencies: {},
+    devDependencies: {
+      tailwindcss: '^3.4.17',
+      postcss: '^8.4.49',
+      autoprefixer: '^10.4.20',
+    },
   }, null, 2));
 
   const viteIndex = [
@@ -1603,6 +1607,10 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
 
   const extractedCss = cssFromStandaloneHtml(existingHtml);
   addIfMissing('src/index.css', extractedCss || [
+    '@tailwind base;',
+    '@tailwind components;',
+    '@tailwind utilities;',
+    '',
     ':root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1c; background: #fcfbf8; }',
     '* { box-sizing: border-box; }',
     'body { margin: 0; min-height: 100vh; background: #fcfbf8; }',
@@ -1652,6 +1660,40 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '});',
     '',
   ].join('\n'), 'ts');
+
+  addIfMissing('tailwind.config.ts', [
+    "import type { Config } from 'tailwindcss';",
+    '',
+    'export default {',
+    "  content: ['./index.html', './src/**/*.{ts,tsx,js,jsx}'],",
+    '  theme: {',
+    '    extend: {',
+    '      colors: {',
+    "        huggyCream: '#fcfbf8',",
+    "        huggyInk: '#1c1c1c',",
+    "        huggyMuted: '#5f5f5d',",
+    "        huggyBorder: '#eceae4',",
+    "        huggyBlue: '#2f6df6',",
+    '      },',
+    '      borderRadius: {',
+    "        huggy: '1.5rem',",
+    '      },',
+    '    },',
+    '  },',
+    '  plugins: [],',
+    '} satisfies Config;',
+    '',
+  ].join('\n'), 'ts');
+
+  addIfMissing('postcss.config.cjs', [
+    'module.exports = {',
+    '  plugins: {',
+    '    tailwindcss: {},',
+    '    autoprefixer: {},',
+    '  },',
+    '};',
+    '',
+  ].join('\n'), 'js');
 
   addIfMissing('README.md', [
     `# ${projectName || 'Huggy App'}`,
@@ -2566,7 +2608,12 @@ class AgentOrchestrator {
     ];
     const debugHints = [
       'bug', 'erreur', 'error', 'request failed', '500', '404', 'ne fonctionne pas',
-      'marche pas', 'broken', 'crash', 'corrige', 'fix', 'debug'
+      'marche pas', 'broken', 'crash', 'corrige', 'fix', 'debug',
+      'huggy stopped before saving', 'blocking issue', 'blocking issues',
+      'technical build score', 'preview ne s affiche pas', 'preview ne s affiche plus',
+      'app ne s affiche pas', 'application ne s affiche pas', 'generated app still has',
+      'index html should load', 'index.html should load', 'src main tsx', 'main tsx absent',
+      'app tsx absent', 'preview blanche', 'blank preview', 'corrige le probleme'
     ];
     const verifyHints = [
       'verifie', 'vérifie', 'verify', 'audit', 'check', 'teste', 'test', 'review',
@@ -4064,8 +4111,348 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
   };
 }
 
+type AutoFixEngineResult = {
+  files: GeneratedFile[];
+  changed: boolean;
+  changedPaths: string[];
+  summaries: string[];
+};
+
+function generatedPath(value: string) {
+  return String(value || '').replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function setGeneratedFile(
+  byPath: Map<string, GeneratedFile>,
+  filePath: string,
+  content: string,
+  language = inferGeneratedLanguage(filePath),
+  summaries?: string[],
+) {
+  const normalized = generatedPath(filePath);
+  const existing = byPath.get(normalized);
+  if (existing?.content === content) return false;
+  byPath.set(normalized, {
+    path: normalized,
+    language,
+    content,
+    updated_at: new Date().toISOString(),
+  });
+  summaries?.push(existing ? `Updated ${normalized}.` : `Created ${normalized}.`);
+  return true;
+}
+
+function createAutoFixViteIndexHtml(projectName = 'Huggy App', prompt = '') {
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '  <head>',
+    '    <meta charset="UTF-8" />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `    <title>${escapeHtml(projectName || 'Huggy App')}</title>`,
+    `    <meta name="description" content="${escapeHtml(summarizeForMeta(prompt || projectName, 'A production-ready React app generated with Huggy.'))}" />`,
+    '  </head>',
+    '  <body>',
+    '    <div id="root"></div>',
+    '    <script type="module" src="/src/main.tsx"></script>',
+    '  </body>',
+    '</html>',
+    '',
+  ].join('\n');
+}
+
+function createAutoFixMainTsx() {
+  return [
+    "import React from 'react';",
+    "import ReactDOM from 'react-dom/client';",
+    "import App from './App';",
+    "import './index.css';",
+    '',
+    "ReactDOM.createRoot(document.getElementById('root')!).render(",
+    '  <React.StrictMode>',
+    '    <App />',
+    '  </React.StrictMode>,',
+    ');',
+    '',
+  ].join('\n');
+}
+
+function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
+  const isTodo = /\b(todo|to do|to-do|tache|taches|task|tasks)\b/i.test(`${projectName} ${prompt}`);
+  if (isTodo) {
+    return [
+      "import { FormEvent, useMemo, useState } from 'react';",
+      "import './index.css';",
+      '',
+      "type Filter = 'all' | 'active' | 'completed';",
+      'type Todo = { id: number; title: string; completed: boolean };',
+      '',
+      'const initialTodos: Todo[] = [',
+      "  { id: 1, title: 'Plan the first release', completed: true },",
+      "  { id: 2, title: 'Test the preview', completed: false },",
+      '];',
+      '',
+      'export default function App() {',
+      "  const [todos, setTodos] = useState<Todo[]>(initialTodos);",
+      "  const [title, setTitle] = useState('');",
+      "  const [filter, setFilter] = useState<Filter>('all');",
+      "  const [feedback, setFeedback] = useState('');",
+      '  const visibleTodos = useMemo(() => todos.filter((todo) => filter === "all" || (filter === "completed" ? todo.completed : !todo.completed)), [todos, filter]);',
+      '  const completedCount = todos.filter((todo) => todo.completed).length;',
+      '',
+      '  function addTodo(event: FormEvent) {',
+      '    event.preventDefault();',
+      '    const clean = title.trim();',
+      '    if (!clean) {',
+      "      setFeedback('Add a task name first.');",
+      '      return;',
+      '    }',
+      '    setTodos((current) => [{ id: Date.now(), title: clean, completed: false }, ...current]);',
+      "    setTitle('');",
+      "    setFeedback('Task added.');",
+      '  }',
+      '',
+      '  function deleteTodo(todo: Todo) {',
+      "    if (!window.confirm(`Delete \"${todo.title}\"?`)) return;",
+      '    setTodos((current) => current.filter((item) => item.id !== todo.id));',
+      "    setFeedback('Task deleted.');",
+      '  }',
+      '',
+      '  return (',
+      '    <main className="app-shell">',
+      '      <section className="todo-card" aria-label="Todo application">',
+      '        <p className="eyebrow">Generated by Huggy</p>',
+      '        <div className="hero-row">',
+      '          <div>',
+      '            <h1>Todo workspace</h1>',
+      '            <p>Create, complete, filter and delete tasks in a responsive app.</p>',
+      '          </div>',
+      '          <strong>{completedCount}/{todos.length} done</strong>',
+      '        </div>',
+      '        <form className="todo-form" onSubmit={addTodo}>',
+      '          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a task..." aria-label="Task name" />',
+      '          <button type="submit">Add task</button>',
+      '        </form>',
+      '        <div className="filters" aria-label="Task filters">',
+      "          {(['all', 'active', 'completed'] as Filter[]).map((item) => (",
+      '            <button key={item} type="button" className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item}</button>',
+      '          ))}',
+      '        </div>',
+      '        {feedback ? <p className="feedback" role="status">{feedback}</p> : null}',
+      '        <ul className="todo-list">',
+      '          {visibleTodos.length ? visibleTodos.map((todo) => (',
+      '            <li key={todo.id}>',
+      '              <label>',
+      '                <input type="checkbox" checked={todo.completed} onChange={() => setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, completed: !item.completed } : item))} />',
+      '                <span>{todo.title}</span>',
+      '              </label>',
+      '              <button type="button" onClick={() => deleteTodo(todo)}>Delete</button>',
+      '            </li>',
+      '          )) : <li className="empty">No tasks match this filter.</li>}',
+      '        </ul>',
+      '      </section>',
+      '    </main>',
+      '  );',
+      '}',
+      '',
+    ].join('\n');
+  }
+
+  return [
+    "import './index.css';",
+    '',
+    'export default function App() {',
+    '  return (',
+    '    <main className="app-shell">',
+    '      <section className="todo-card">',
+    '        <p className="eyebrow">Generated by Huggy</p>',
+    `        <h1>${escapeHtml(projectName || 'Your app is ready')}</h1>`,
+    `        <p>${escapeHtml(summarizeForMeta(prompt || 'A responsive React app generated by Huggy.', 'A responsive React app generated by Huggy.'))}</p>`,
+    '        <div className="hero-row">',
+    '          <button type="button" onClick={() => window.alert("Primary action ready.")}>Primary action</button>',
+    '          <button type="button" onClick={() => window.alert("Secondary action ready.")}>Secondary action</button>',
+    '        </div>',
+    '      </section>',
+    '    </main>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+function createAutoFixIndexCss() {
+  return [
+    '@tailwind base;',
+    '@tailwind components;',
+    '@tailwind utilities;',
+    '',
+    ':root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1c; background: #fcfbf8; }',
+    '* { box-sizing: border-box; }',
+    'body { margin: 0; min-height: 100vh; background: #fcfbf8; }',
+    'button, input, textarea, select { font: inherit; }',
+    '.app-shell { min-height: 100vh; display: grid; place-items: center; padding: clamp(24px, 6vw, 72px); background: radial-gradient(circle at top left, rgba(61, 115, 255, 0.12), transparent 34%), #fcfbf8; }',
+    '.todo-card { width: min(100%, 760px); border: 1px solid #eceae4; border-radius: 28px; background: rgba(255,255,255,0.86); box-shadow: 0 24px 80px rgba(28,28,28,0.08); padding: clamp(22px, 4vw, 42px); }',
+    '.eyebrow { margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #5f5f5d; font-size: 0.78rem; font-weight: 800; }',
+    '.hero-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }',
+    'h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: 0; }',
+    'p { color: #5f5f5d; line-height: 1.65; }',
+    '.todo-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin: 28px 0 16px; }',
+    'input { border: 1px solid #dedbd2; border-radius: 999px; padding: 14px 16px; background: #fff; color: #1c1c1c; }',
+    'button { border: 1px solid #1c1c1c; border-radius: 999px; background: #1c1c1c; color: #fff; padding: 12px 16px; cursor: pointer; transition: transform 160ms ease, opacity 160ms ease; }',
+    'button:hover { transform: translateY(-1px); }',
+    '.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }',
+    '.filters button { background: #fff; color: #1c1c1c; border-color: #dedbd2; }',
+    '.filters button.active { background: #dbe8ff; border-color: #8cb4ff; }',
+    '.feedback { border-radius: 14px; background: #eef5ff; padding: 10px 12px; color: #1f4d8f; }',
+    '.todo-list { display: grid; gap: 10px; padding: 0; margin: 18px 0 0; list-style: none; }',
+    '.todo-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #eceae4; border-radius: 18px; padding: 12px; background: #fff; }',
+    '.todo-list label { display: flex; align-items: center; gap: 10px; }',
+    '.todo-list button { background: #fff; color: #1c1c1c; border-color: #dedbd2; }',
+    '.empty { color: #5f5f5d; justify-content: center; }',
+    '@media (max-width: 640px) { .todo-form { grid-template-columns: 1fr; } .todo-list li { align-items: flex-start; flex-direction: column; } }',
+    '@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }',
+    '',
+  ].join('\n');
+}
+
+function fixPackageJsonScripts(byPath: Map<string, GeneratedFile>, summaries: string[]) {
+  const existing = byPath.get('package.json');
+  let json: any = {};
+  try {
+    json = existing?.content ? JSON.parse(existing.content) : {};
+  } catch {
+    json = {};
+  }
+  json.scripts = {
+    ...(json.scripts || {}),
+    dev: 'vite',
+    build: 'vite build',
+    test: json.scripts?.test || 'node --experimental-strip-types src/app.test.ts',
+    lint: json.scripts?.lint || 'tsc --noEmit',
+  };
+  json.dependencies = {
+    ...(json.dependencies || {}),
+    '@vitejs/plugin-react': json.dependencies?.['@vitejs/plugin-react'] || 'latest',
+    vite: json.dependencies?.vite || 'latest',
+    typescript: json.dependencies?.typescript || 'latest',
+    react: json.dependencies?.react || 'latest',
+    'react-dom': json.dependencies?.['react-dom'] || 'latest',
+  };
+  json.devDependencies = json.devDependencies || {};
+  json.devDependencies.tailwindcss = json.devDependencies.tailwindcss || '^3.4.17';
+  json.devDependencies.postcss = json.devDependencies.postcss || '^8.4.49';
+  json.devDependencies.autoprefixer = json.devDependencies.autoprefixer || '^10.4.20';
+  return setGeneratedFile(byPath, 'package.json', JSON.stringify(json, null, 2), 'json', summaries);
+}
+
+function applyGeneratedDestructiveSafety(files: GeneratedFile[], summaries: string[]) {
+  const appFile = fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx');
+  if (!appFile) return files;
+  const source = appFile.content || '';
+  const hasDestructive = /\b(delete|remove|reset|clear|supprimer|effacer)\b/i.test(source);
+  const hasSafety = /\b(confirm\(|confirmation|undo|toast|modal|dialog|cancel|annuler|restore|rollback|feedback)\b/i.test(source);
+  if (!hasDestructive || hasSafety) return files;
+  const byPath = new Map(files.map(file => [generatedPath(file.path), { ...file }]));
+  const injected = source.replace(
+    /export\s+default\s+function\s+App\s*\(\)\s*\{/,
+    "export default function App() {\n  const confirmDestructiveAction = (label = 'this item') => window.confirm(`Are you sure you want to delete ${label}?`);",
+  );
+  if (injected !== source) {
+    setGeneratedFile(byPath, appFile.path, injected, appFile.language || inferGeneratedLanguage(appFile.path), summaries);
+    return Array.from(byPath.values());
+  }
+  return files;
+}
+
+function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], errors: any[]): AutoFixEngineResult {
+  const reasonText = errors.map(error => `${error?.key || ''} ${error?.message || ''} ${error?.file || ''}`).join('\n');
+  const shouldForceModernVite = !isModernFrontendProject(files)
+    || /index\.html should load \/src\/main\.tsx as a module|vite_main_script|missing.*main\.tsx|missing.*app\.tsx|blank preview|preview.*empty|technical build score|runner/i.test(reasonText);
+  const shouldFixDestructive = /destructive.*confirmation|destructive.*undo|clear feedback|delete\/remove|visual_destructive_confirmation|destructive_action_safety/i.test(reasonText);
+  const summaries: string[] = [];
+  if (!shouldForceModernVite && !shouldFixDestructive) {
+    return { files, changed: false, changedPaths: [], summaries: [] };
+  }
+  let working = shouldForceModernVite ? ensureModernFrontendProject(files, project.name, project.prompt || project.name) : files.map(file => ({ ...file }));
+  const byPath = new Map(working.map(file => [generatedPath(file.path), { ...file, path: generatedPath(file.path) }]));
+
+  if (shouldForceModernVite || !byPath.has('index.html')) {
+    setGeneratedFile(byPath, 'index.html', createAutoFixViteIndexHtml(project.name, project.prompt || project.name), 'html', summaries);
+  }
+
+  const indexHtml = byPath.get('index.html')?.content || '';
+  if (!/<div\s+id=["']root["']\s*><\/div>/i.test(indexHtml) || !/<script[^>]+type=["']module["'][^>]+src=["']\/src\/main\.tsx["'][^>]*><\/script>/i.test(indexHtml)) {
+    setGeneratedFile(byPath, 'index.html', createAutoFixViteIndexHtml(project.name, project.prompt || project.name), 'html', summaries);
+  }
+
+  if (!byPath.has('src/main.tsx') && !byPath.has('src/main.jsx')) {
+    setGeneratedFile(byPath, 'src/main.tsx', createAutoFixMainTsx(), 'tsx', summaries);
+  }
+
+  if (!byPath.has('src/App.tsx') && !byPath.has('src/App.jsx')) {
+    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, project.prompt || project.name), 'tsx', summaries);
+  }
+
+  if (!byPath.has('src/index.css')) {
+    setGeneratedFile(byPath, 'src/index.css', createAutoFixIndexCss(), 'css', summaries);
+  }
+
+  if (shouldForceModernVite) {
+    fixPackageJsonScripts(byPath, summaries);
+    setGeneratedFile(byPath, 'tailwind.config.ts', [
+      "import type { Config } from 'tailwindcss';",
+      '',
+      'export default {',
+      "  content: ['./index.html', './src/**/*.{ts,tsx,js,jsx}'],",
+      '  theme: { extend: {} },',
+      '  plugins: [],',
+      '} satisfies Config;',
+      '',
+    ].join('\n'), 'ts', summaries);
+    setGeneratedFile(byPath, 'postcss.config.cjs', [
+      'module.exports = {',
+      '  plugins: {',
+      '    tailwindcss: {},',
+      '    autoprefixer: {},',
+      '  },',
+      '};',
+      '',
+    ].join('\n'), 'js', summaries);
+  }
+
+  working = Array.from(byPath.values()).sort((a, b) => a.path.localeCompare(b.path));
+  working = applyGeneratedDestructiveSafety(working, summaries);
+
+  const originalByPath = new Map(files.map(file => [generatedPath(file.path), file.content]));
+  const changedPaths = working
+    .filter(file => originalByPath.get(generatedPath(file.path)) !== file.content)
+    .map(file => file.path);
+
+  return {
+    files: working,
+    changed: changedPaths.length > 0,
+    changedPaths,
+    summaries: Array.from(new Set(summaries.length ? summaries : changedPaths.map(path => `Repaired ${path}.`))),
+  };
+}
+
 function applyAutoFix(project: GeneratedProject, files: GeneratedFile[], errors: any[]) {
   if (!errors.length) return { files, fixed: false, patch: null as any };
+  const engineFix = runAutoFixEngine(project, files, errors);
+  if (engineFix.changed) {
+    return {
+      files: engineFix.files,
+      fixed: true,
+      patch: {
+        id: randomUUID(),
+        project_id: project.id,
+        target_file: engineFix.changedPaths[0] || 'index.html',
+        summary: `AutoFixEngine repaired ${engineFix.changedPaths.length} file${engineFix.changedPaths.length > 1 ? 's' : ''}: ${engineFix.changedPaths.join(', ')}`,
+        details: engineFix.summaries,
+        created_at: new Date().toISOString(),
+      },
+    };
+  }
   const primary = errors[0];
   if (errors.some(error => error?.diagnostic_code === 'SUPABASE_AUTH_CLIENT_UNDEFINED' || error?.suggested_action === 'fix_generated_auth_client')) {
     const fix = applyGeneratedSupabaseAuthClientFix(files);
@@ -5419,6 +5806,136 @@ function summarizeQualityForMemory(checks: AgentVerificationCheck[]) {
     warnings,
     status: failed.length ? 'failed' : warnings.length ? 'warning' : 'passed',
   });
+}
+
+function collectGenerationVerificationChecks(input: {
+  projectName: string;
+  files: GeneratedFile[];
+  previewHtml: string;
+  uiPolicy: any;
+  hasExistingFiles: boolean;
+  runnerResult: RunnerResult | null;
+}) {
+  return [
+    ...verifyGeneratedProject({ projectName: input.projectName, files: input.files, previewHtml: input.previewHtml }),
+    ...auditGeneratedDesign({
+      files: input.files,
+      previewHtml: input.previewHtml,
+      platformType: input.uiPolicy.appType,
+      designDirection: input.uiPolicy.designDirection,
+      hasExistingFiles: input.hasExistingFiles,
+    }),
+    ...auditGeneratedFunctionality({
+      files: input.files,
+      previewHtml: input.previewHtml,
+      platformType: input.uiPolicy.appType,
+      designDirection: input.uiPolicy.designDirection,
+      hasExistingFiles: input.hasExistingFiles,
+    }),
+    ...inspectVisualPreview({
+      files: input.files,
+      previewHtml: input.previewHtml,
+      platformType: input.uiPolicy.appType,
+    }),
+    ...(input.runnerResult ? runnerChecksToVerificationChecks(input.runnerResult.checks) : []),
+  ];
+}
+
+function reliabilitySummaryToAutoFixErrors(summary: ReliabilityGateSummary) {
+  return summary.blocking.map(item => ({
+    key: item.key,
+    file: item.file || 'index.html',
+    message: item.message,
+    severity: item.severity,
+  }));
+}
+
+async function finalReliabilityAutoFix(input: {
+  project: GeneratedProject;
+  userId: string;
+  agentRunId: string;
+  requestId: string;
+  files: GeneratedFile[];
+  pipeline: PreviewBuildResult;
+  runnerResult: RunnerResult | null;
+  uiPolicy: any;
+  hasExistingFiles: boolean;
+  shouldRunRunner: boolean;
+  maxAttempts: number;
+}) {
+  let files = input.files;
+  let pipeline = input.pipeline;
+  let previewHtml = pipeline.html;
+  let runnerResult = input.runnerResult;
+  const previewPipelineChecks = () => pipeline.errors.map(error => ({
+    key: 'preview_pipeline',
+    status: 'fail' as const,
+    severity: (['info', 'low', 'medium', 'high'].includes(String(error?.severity)) ? error.severity : 'high') as AgentVerificationCheck['severity'],
+    message: String(error?.message || 'Preview pipeline failed.'),
+    file: error?.file || 'index.html',
+  }));
+  let verificationChecks = [
+    ...previewPipelineChecks(),
+    ...collectGenerationVerificationChecks({
+      projectName: input.project.name,
+      files,
+      previewHtml,
+      uiPolicy: input.uiPolicy,
+      hasExistingFiles: input.hasExistingFiles,
+      runnerResult,
+    }),
+  ];
+  let verificationSummary = summarizeVerificationChecks(verificationChecks);
+  let reliabilitySummary = summarizeReliabilityGate(verificationChecks);
+  let qualitySummary = summarizeQualityForMemory(verificationChecks);
+  let autoFixPatch: any = null;
+
+  for (let attempt = 1; reliabilitySummary.status === 'failed' && attempt <= input.maxAttempts; attempt += 1) {
+    const fix = applyAutoFix(input.project, files, reliabilitySummaryToAutoFixErrors(reliabilitySummary));
+    if (!fix.fixed) break;
+    autoFixPatch = fix.patch;
+    files = fix.files;
+    pipeline = runPreviewPipeline(input.project, files);
+    previewHtml = pipeline.html;
+
+    if (input.shouldRunRunner) {
+      runnerResult = await projectRunner.run({
+        runId: input.agentRunId || input.requestId,
+        projectId: input.project.id,
+        files,
+        previewHtml,
+        timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+      });
+      await saveAgentRunnerResults(input.project, input.userId, input.agentRunId, runnerResult);
+    }
+
+    verificationChecks = [
+      ...previewPipelineChecks(),
+      ...collectGenerationVerificationChecks({
+        projectName: input.project.name,
+        files,
+        previewHtml,
+        uiPolicy: input.uiPolicy,
+        hasExistingFiles: input.hasExistingFiles,
+        runnerResult,
+      }),
+    ];
+    verificationSummary = summarizeVerificationChecks(verificationChecks);
+    reliabilitySummary = summarizeReliabilityGate(verificationChecks);
+    qualitySummary = summarizeQualityForMemory(verificationChecks);
+  }
+
+  return {
+    files,
+    pipeline,
+    previewHtml,
+    runnerResult,
+    verificationChecks,
+    verificationSummary,
+    reliabilitySummary,
+    qualitySummary,
+    autoFixPatch,
+  };
 }
 
 async function saveAgentRunnerResults(project: GeneratedProject, userId: string, runId: string, result: RunnerResult | null) {
@@ -8371,34 +8888,42 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         platformType: uiPolicy.appType,
       }).filter(isBlockingVerificationFailure);
     }
-    const verificationChecks = [
-      ...verifyGeneratedProject({ projectName: project.name, files: finalFiles, previewHtml }),
-      ...auditGeneratedDesign({
-        files: finalFiles,
-        previewHtml,
-        platformType: uiPolicy.appType,
-        designDirection: uiPolicy.designDirection,
-        hasExistingFiles: existingFiles.length > 0,
-      }),
-      ...auditGeneratedFunctionality({
-        files: finalFiles,
-        previewHtml,
-        platformType: uiPolicy.appType,
-        designDirection: uiPolicy.designDirection,
-        hasExistingFiles: existingFiles.length > 0,
-      }),
-      ...inspectVisualPreview({
-        files: finalFiles,
-        previewHtml,
-        platformType: uiPolicy.appType,
-      }),
-      ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
-    ];
-    const verificationSummary = summarizeVerificationChecks(verificationChecks);
-    const reliabilitySummary = summarizeReliabilityGate(verificationChecks);
-    const qualitySummary = summarizeQualityForMemory(verificationChecks);
+    let finalGate = await finalReliabilityAutoFix({
+      project,
+      userId,
+      agentRunId,
+      requestId,
+      files: finalFiles,
+      pipeline,
+      runnerResult,
+      uiPolicy,
+      hasExistingFiles: existingFiles.length > 0,
+      shouldRunRunner: Boolean(AGENT_V3_ENABLED && reliability.requires_runner),
+      maxAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+    });
+    finalFiles = finalGate.files;
+    pipeline = finalGate.pipeline;
+    previewHtml = finalGate.previewHtml;
+    runnerResult = finalGate.runnerResult;
+    if (finalGate.autoFixPatch) autoFix = finalGate.autoFixPatch;
+    const verificationChecks = finalGate.verificationChecks;
+    const verificationSummary = finalGate.verificationSummary;
+    const reliabilitySummary = finalGate.reliabilitySummary;
+    const qualitySummary = finalGate.qualitySummary;
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     if (reliabilitySummary.status === 'failed') {
+      const recoverableProject: GeneratedProject = {
+        ...project,
+        prompt,
+        model_id: generation.model,
+        status: project.status || 'draft',
+        preview_status: 'needs_fix',
+        preview_html: previewHtml,
+        updated_at: new Date().toISOString(),
+      };
+      await saveProject(recoverableProject, finalFiles).catch(error => {
+        console.warn('[huggy:needs_fix_draft_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
       throw new ReliabilityGateError(reliabilitySummary);
     }
     const updatedProject: GeneratedProject = {
@@ -9815,32 +10340,28 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Verification finale.', 'Final verification.'),
       step_detail: streamCopy('Je controle les fichiers, la preview, le design de base et les interactions.', 'I am checking files, preview, basic design, and interactions.'),
     });
-    const verificationChecks = [
-      ...verifyGeneratedProject({ projectName: project.name, files, previewHtml }),
-      ...auditGeneratedDesign({
-        files,
-        previewHtml,
-        platformType: uiPolicy.appType,
-        designDirection: uiPolicy.designDirection,
-        hasExistingFiles: existingFiles.length > 0,
-      }),
-      ...auditGeneratedFunctionality({
-        files,
-        previewHtml,
-        platformType: uiPolicy.appType,
-        designDirection: uiPolicy.designDirection,
-        hasExistingFiles: existingFiles.length > 0,
-      }),
-      ...inspectVisualPreview({
-        files,
-        previewHtml,
-        platformType: uiPolicy.appType,
-      }),
-      ...(runnerResult ? runnerChecksToVerificationChecks(runnerResult.checks) : []),
-    ];
-    const verificationSummary = summarizeVerificationChecks(verificationChecks);
-    const reliabilitySummary = summarizeReliabilityGate(verificationChecks);
-    const qualitySummary = summarizeQualityForMemory(verificationChecks);
+    let finalGate = await finalReliabilityAutoFix({
+      project,
+      userId,
+      agentRunId,
+      requestId,
+      files,
+      pipeline,
+      runnerResult,
+      uiPolicy,
+      hasExistingFiles: existingFiles.length > 0,
+      shouldRunRunner: Boolean(AGENT_V3_ENABLED && reliability.requires_runner),
+      maxAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+    });
+    files = finalGate.files;
+    pipeline = finalGate.pipeline;
+    previewHtml = finalGate.previewHtml;
+    runnerResult = finalGate.runnerResult;
+    if (finalGate.autoFixPatch) autoFix = finalGate.autoFixPatch;
+    const verificationChecks = finalGate.verificationChecks;
+    const verificationSummary = finalGate.verificationSummary;
+    const reliabilitySummary = finalGate.reliabilitySummary;
+    const qualitySummary = finalGate.qualitySummary;
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     if (reliabilitySummary.status === 'failed') {
       await send('verification_failed', reliabilitySummary.message, {
@@ -9884,6 +10405,18 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     );
 
     if (reliabilitySummary.status === 'failed') {
+      const recoverableProject: GeneratedProject = {
+        ...project,
+        prompt,
+        model_id: model,
+        status: project.status || 'draft',
+        preview_status: 'needs_fix',
+        preview_html: previewHtml,
+        updated_at: new Date().toISOString(),
+      };
+      await saveProject(recoverableProject, files).catch(error => {
+        console.warn('[huggy:needs_fix_draft_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
       throw new ReliabilityGateError(reliabilitySummary);
     }
 

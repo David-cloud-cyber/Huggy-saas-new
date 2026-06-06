@@ -59,6 +59,9 @@ const cases: EvalCase[] = [
   { prompt: 'supprime tous les providers non whitelistes du backend et de l UI', hasFiles: true, shouldMutate: true },
   { prompt: 'donne moi un diagnostic de l erreur Request failed with 500', hasFiles: true, shouldMutate: false },
   { prompt: 'corrige les erreurs OpenRouter pour afficher un message propre', hasFiles: true, shouldMutate: true },
+  { prompt: 'Huggy stopped before saving because the generated app still has blocking issues', hasFiles: true, shouldMutate: true },
+  { prompt: 'index.html should load /src/main.tsx as a module, corrige le probleme', hasFiles: true, shouldMutate: true },
+  { prompt: "la preview ne s'affiche pas, repare la preview blanche", hasFiles: true, shouldMutate: true },
   { prompt: 'publie cette app maintenant', hasFiles: true, shouldMutate: true },
 ];
 

@@ -268,6 +268,25 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'error', 'request failed', 'crash', 'broken', 'cass', 'ne soumet rien',
     'soumet rien', 'n envoie rien', 'ne s ouvre pas', 'ne s affiche pas',
   ]) && hasTechnicalTarget && !asksForGeneratedArtifact;
+  const hasGenerationFailureReport = Boolean(input.hasFiles) && includesAny(text, [
+    'huggy stopped before saving',
+    'blocking issue',
+    'blocking issues',
+    'technical build score',
+    'preview ne s affiche pas',
+    'app ne s affiche pas',
+    'application ne s affiche pas',
+    'generated app still has',
+    'index html should load',
+    'src main tsx',
+    'main tsx absent',
+    'app tsx absent',
+    'corrige le probleme',
+    'corrige ce probleme',
+    'repare la preview',
+    'preview blanche',
+    'blank preview',
+  ]) && !asksForGeneratedArtifact;
   const advisoryQuestionSignals = [
     'bonne idee', 'bon choix', 'mauvaise idee', 'dois je', 'devrais je',
     'est ce que je dois', 'est-ce que je dois', 'est ce une bonne idee', 'est-ce une bonne idee', 'est ce que c est une bonne idee',
@@ -283,6 +302,16 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       confidence: 0.95,
       reason: 'dangerous_or_product_harming_request',
       signals: ['bad_product_decision'],
+    });
+  }
+
+  if (hasGenerationFailureReport && !hasNoAction) {
+    return result({
+      category: 'bug',
+      action: 'file_action',
+      confidence: 0.94,
+      reason: 'generated_app_or_preview_failure_requires_debug_fix',
+      signals: ['generation_failure', 'debug_fix'],
     });
   }
 
