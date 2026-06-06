@@ -333,6 +333,10 @@ h1 {
     transition: opacity 260ms ease, transform 260ms ease;
 }
 
+:root[data-theme="dark"] #rotating-word {
+    color: var(--text);
+}
+
 #rotating-word.exit {
     opacity: 0;
     transform: translateY(-12px) rotateX(22deg);
