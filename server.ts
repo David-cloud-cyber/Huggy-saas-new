@@ -2510,8 +2510,8 @@ class AgentOrchestrator {
       });
     }
 
-    const explicitAppBuildRequest = /\b(crÃ©e|cree|creer|gÃ©nÃ¨re|genere|generer|build|create|make|construis|fabrique)\b[\s\S]{0,80}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b/i.test(lower)
-      || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b[\s\S]{0,80}\b(crÃ©e|cree|creer|gÃ©nÃ¨re|genere|generer|build|create|make|construis|fabrique)\b/i.test(lower);
+    const explicitAppBuildRequest = /\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique)\b[\s\S]{0,80}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b/i.test(lower)
+      || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b[\s\S]{0,80}\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique)\b/i.test(lower);
 
     if ((understanding.needsClarification && !explicitAppBuildRequest) || (forceBuild && !understanding.allowsFileAction && !explicitAppBuildRequest)) {
       return decision({
@@ -3255,7 +3255,7 @@ async function resolveAgentProviderModel(input: {
   const plan = (input.plan || await getOrganizationPlan(input.project.organization_id).catch(() => 'free')) as RoutingContext['plan'];
   const credits = Number.isFinite(Number(input.userCredits))
     ? Number(input.userCredits)
-    : await getDbHelpers().getWallet(input.project.organization_id).catch(() => FALLBACK_WALLET_CREDITS);
+    : await getWalletWithFallback(getOptionalDbHelpers('model_routing'), input.project.organization_id);
   const complexity = inferAgentTaskComplexity(input.prompt, input.decision, input.files || []);
   const mode = routingModeForPolicy(input.decision.selectedModelPolicy);
   const model = await modelRouter.selectModel({
@@ -3605,8 +3605,23 @@ function estimateActionCost(prompt: string, intent: IntentDecision, modelId?: un
   });
 }
 
-async function chargeCompletedAgentAction(helpers: ReturnType<typeof getDbHelpers>, userId: string, amount: number, description: string, referenceId: string) {
+async function chargeCompletedAgentAction(
+  helpers: ReturnType<typeof getDbHelpers> | null,
+  userId: string,
+  amount: number,
+  description: string,
+  referenceId: string,
+) {
   if (!Number.isFinite(amount) || amount <= 0) return;
+  if (!helpers) {
+    console.warn('[huggy:credit_charge_skipped]', {
+      reason: 'persistence_unavailable',
+      user_id: userId,
+      amount,
+      reference_id: referenceId,
+    });
+    return;
+  }
   const finalBalance = await helpers.updateWallet(userId, -amount);
   await helpers.addLedger(userId, 'usage', -amount, finalBalance, description, referenceId);
 }
@@ -6074,6 +6089,28 @@ function getDbHelpers() {
   };
 }
 
+function getOptionalDbHelpers(context = 'optional persistence'): ReturnType<typeof getDbHelpers> | null {
+  try {
+    return getDbHelpers();
+  } catch (error: any) {
+    console.warn('[huggy:db_helpers_unavailable]', {
+      context,
+      diagnostic_code: 'SERVER_PERSISTENCE_UNAVAILABLE',
+      message: redactSecrets(error?.message || String(error)),
+    });
+    return null;
+  }
+}
+
+async function getWalletWithFallback(
+  helpers: ReturnType<typeof getDbHelpers> | null,
+  orgId: string,
+  fallback = FALLBACK_WALLET_CREDITS,
+) {
+  if (!helpers) return fallback;
+  return helpers.getWallet(orgId).catch(() => fallback);
+}
+
 async function loadCloudWalletSnapshot(organizationId: string, plan: ReturnType<typeof getPlanConfig>) {
   const fallbackCloud = plan?.cloud || SAAS_PLANS.free.cloud;
   const snapshot = {
@@ -6390,8 +6427,8 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
     routingSource: 'heuristic',
   };
 
-  const helpers = getDbHelpers();
-  const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  const helpers = getOptionalDbHelpers('assistant_chat');
+  const wallet = await getWalletWithFallback(helpers, userId);
   const estimate = estimateActionCost(prompt, decision, selectedModel);
   if (wallet < estimate.finalCredits) {
     return res.status(402).json({
@@ -6537,8 +6574,8 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
     selectedModelPolicy: 'balanced',
     routingSource: 'heuristic',
   };
-  const helpers = getDbHelpers();
-  const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  const helpers = getOptionalDbHelpers('assistant_chat_stream');
+  const wallet = await getWalletWithFallback(helpers, userId);
   const estimate = estimateActionCost(prompt, decision, selectedModel);
   if (wallet < estimate.finalCredits) {
     return res.status(402).json({
@@ -7925,16 +7962,22 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
       return res.status(200).json(publicCreditGateResponse());
     }
-    let agentText;
+    let agentText: any;
+    let content = '';
     try {
-      agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' });
+      if (decision.intent === 'clarification_required') {
+        content = createClarificationContent(decision);
+        agentText = { text: content, model: 'router', cost_usd: 0 };
+      } else {
+        agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' });
+        content = agentText.text;
+      }
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: diagnostic.diagnostic_code, suggested_action: diagnostic.suggested_action });
       return res.status(message.includes('not configured') ? 503 : 200).json({ success: false, error: message, message });
     }
-    const content = agentText.text;
     await saveProjectMessage({
       organization_id: project.organization_id,
       project_id: project.id,
@@ -7944,7 +7987,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       intent: decision.intent,
       requested_mode: decision.requestedMode,
     });
-    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : cost.finalCredits;
+    const chargedCredits = agentText.model === 'router' || (agentText.model === 'auto' && agentText.cost_usd === 0) ? 0 : cost.finalCredits;
     await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${decision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
     await recordAgentImprovementSignal(project, userId, {
       prompt,
@@ -8595,6 +8638,39 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       return;
     }
 
+    if (quickDecision.intent === 'clarification_required') {
+      const content = createClarificationContent(quickDecision);
+      await saveProjectMessage({
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'assistant',
+        content,
+        intent: quickDecision.intent,
+        requested_mode: quickDecision.requestedMode,
+      });
+      await recordAgentImprovementSignal(project, userId, {
+        prompt,
+        decision: quickDecision,
+        outcome: improvementOutcomeForDecision(quickDecision),
+        previewChanged: false,
+        qualityStatus: 'clarification',
+      }).catch(() => null);
+      await send('clarification_required', content, {
+        text: content,
+        question: quickDecision.clarification?.question,
+        choices: quickDecision.clarification?.choices || [],
+        recommendation: quickDecision.clarification?.recommendation,
+        original_prompt: prompt,
+        reliability: buildReliabilityDecision(quickDecision),
+        fast_path: true,
+        no_stream: true,
+      });
+      await send('done', 'Clarification requested.', { fast_path: true });
+      endStream();
+      return;
+    }
+
     let agentText;
     let streamedAnyToken = false;
     try {
@@ -8651,7 +8727,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       intent: quickDecision.intent,
       requested_mode: quickDecision.requestedMode,
     });
-    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : quickEstimate.finalCredits;
+    const chargedCredits = agentText.model === 'router' || (agentText.model === 'auto' && agentText.cost_usd === 0) ? 0 : quickEstimate.finalCredits;
     await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${quickDecision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
     await recordAgentImprovementSignal(project, userId, {
       prompt,
@@ -8660,7 +8736,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       previewChanged: false,
       qualityStatus: 'fast_path',
     }).catch(() => null);
-    await send(quickDecision.intent === 'clarification_required' ? 'clarification_required' : 'answering', content, {
+    await send('answering', content, {
       text: content,
       question: quickDecision.clarification?.question,
       choices: quickDecision.clarification?.choices || [],
@@ -8925,38 +9001,46 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         fast_path: !shouldStreamAgentTrace,
       });
     }
-    let agentText;
+    let agentText: any;
+    let content = '';
     let streamedAnyToken = false;
     try {
-      agentText = shouldStreamTextResponse
-        ? await streamAgentTextResponse({
-            project,
-            prompt: agentPromptForText,
-            files: existingFiles,
-            decision,
-            modelId: requestedModelSelection,
-            userCredits: walletForRouting,
-            researchContext,
-            allowLocalFallback: requestedModelSelection === 'auto',
-            onToken: async (chunk, meta) => {
-              if (await stopIfCancelled('answer')) return;
-              streamedAnyToken = true;
-              await send('answer_token', chunk, {
-                text_delta: chunk,
-                index: meta.index,
-              });
-            },
-          })
-        : await createAgentTextResponse({
-            project,
-            prompt: agentPromptForText,
-            files: existingFiles,
-            decision,
-            modelId: requestedModelSelection,
-            userCredits: walletForRouting,
-            researchContext,
-            allowLocalFallback: requestedModelSelection === 'auto',
-          });
+      if (decision.intent === 'clarification_required') {
+        content = createClarificationContent(decision);
+        agentText = { text: content, model: 'router', cost_usd: 0 };
+      } else if (shouldStreamTextResponse) {
+        agentText = await streamAgentTextResponse({
+          project,
+          prompt: agentPromptForText,
+          files: existingFiles,
+          decision,
+          modelId: requestedModelSelection,
+          userCredits: walletForRouting,
+          researchContext,
+          allowLocalFallback: requestedModelSelection === 'auto',
+          onToken: async (chunk, meta) => {
+            if (await stopIfCancelled('answer')) return;
+            streamedAnyToken = true;
+            await send('answer_token', chunk, {
+              text_delta: chunk,
+              index: meta.index,
+            });
+          },
+        });
+        content = agentText.text;
+      } else {
+        agentText = await createAgentTextResponse({
+          project,
+          prompt: agentPromptForText,
+          files: existingFiles,
+          decision,
+          modelId: requestedModelSelection,
+          userCredits: walletForRouting,
+          researchContext,
+          allowLocalFallback: requestedModelSelection === 'auto',
+        });
+        content = agentText.text;
+      }
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
       await recordAgentImprovementSignal(project, userId, {
@@ -8976,7 +9060,6 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       endStream();
       return;
     }
-    const content = agentText.text;
     await saveProjectMessage({
       organization_id: project.organization_id,
       project_id: project.id,
@@ -8986,7 +9069,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       intent: decision.intent,
       requested_mode: decision.requestedMode,
     });
-    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
+    const chargedCredits = agentText.model === 'router' || (agentText.model === 'auto' && agentText.cost_usd === 0) ? 0 : estimate.finalCredits;
     await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI ${decision.intent} with ${agentText.model}`, `agent_${randomUUID()}`);
     await recordAgentImprovementSignal(project, userId, {
       prompt,
@@ -9624,7 +9707,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     const promptIsFrench = isLikelyFrenchPrompt(prompt);
     const previewReadyMessage = promptIsFrench
       ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.'
-      : (parsed.summary || 'Done. I updated the app and refreshed the preview.');
+      : 'Done. I updated the app and refreshed the preview.';
     const assistantSummary = [
       previewReadyMessage,
       diff.summary ? `${promptIsFrench ? 'Changements' : 'Changes'}: ${diff.summary}.` : '',
@@ -10639,6 +10722,42 @@ app.use(async (req, res, next) => {
   } catch (error: any) {
     return res.status(500).send(escapeHtml(redactSecrets(error?.message || 'Unable to load custom domain app.')));
   }
+});
+
+app.use((error: any, req: any, res: any, next: any) => {
+  if (res.headersSent) return next(error);
+  const requestId = `err_${randomUUID()}`;
+  const rawMessage = redactSecrets(error?.message || String(error || 'Unexpected server error'));
+  const status = Number(error?.status || error?.statusCode || 500);
+  const persistenceMissing = /SUPABASE_SERVICE_ROLE_KEY|persistence requires/i.test(rawMessage);
+  const diagnosticCode = persistenceMissing
+    ? 'SERVER_PERSISTENCE_UNAVAILABLE'
+    : /Cannot read properties of undefined.*auth/i.test(rawMessage)
+      ? 'SUPABASE_AUTH_CLIENT_UNDEFINED'
+      : 'INTERNAL_SERVER_ERROR';
+  const publicMessage = persistenceMissing
+    ? 'Server persistence is not configured for this environment.'
+    : 'The request could not be completed. Please retry in a moment.';
+
+  console.error('[huggy:api_unhandled_error]', {
+    request_id: requestId,
+    path: req.path,
+    diagnostic_code: diagnosticCode,
+    message: rawMessage,
+  });
+
+  if (req.path?.startsWith('/api')) {
+    return res.status(status >= 400 && status < 600 ? status : 500).json({
+      success: false,
+      message: publicMessage,
+      error: publicMessage,
+      diagnostic_code: diagnosticCode,
+      request_id: requestId,
+      suggested_action: persistenceMissing ? 'check_server_env' : 'retry',
+    });
+  }
+
+  return res.status(500).send(escapeHtml(publicMessage));
 });
 
 // Static files (frontend)

@@ -2049,6 +2049,44 @@ function recentConversationForAssistant(currentPrompt = '') {
     }));
 }
 
+function looksLikeGeneratedSourceDump(value: unknown) {
+  const text = redactSecrets(String(value || '')).trim();
+  if (text.length < 420) return false;
+
+  const signals = [
+    /```(?:tsx|jsx|ts|js|html|css|json)\b/i,
+    /\bsrc\/(?:App|main|components|pages|lib)\.(?:tsx|jsx|ts|js)\b/i,
+    /\bimport\s+(?:\*\s+as\s+)?React\b|\bfrom\s+['"]react['"]/i,
+    /\bexport\s+default\s+(?:function|class|const)?\s*App\b/i,
+    /\bfunction\s+App\s*\(|\bconst\s+App\s*[:=]/i,
+    /\buseState\s*\(|\buseEffect\s*\(/i,
+    /\bclassName\s*=\s*["'{]/i,
+    /\blocalStorage\.(?:getItem|setItem)\s*\(/i,
+    /<!doctype\s+html>|<html[\s>]|<body[\s>]/i,
+  ].filter(pattern => pattern.test(text)).length;
+
+  return signals >= 2;
+}
+
+function generatedCodeBlockedText(speaksFrench: boolean) {
+  return speaksFrench
+    ? 'Je ne vais pas coller le code brut dans le chat. Une vraie génération doit écrire les fichiers du projet, rafraîchir la preview, puis afficher un résumé court.'
+    : 'I will not paste raw generated code into chat. A real generation must write project files, refresh the preview, then show a short summary.';
+}
+
+function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
+  const text = redactSecrets(String(value || '').trim());
+  if (!text) return fallback;
+  if (looksLikeGeneratedSourceDump(text)) return fallback || generatedCodeBlockedText(speaksFrench);
+  return text;
+}
+
+function generationReadyText(speaksFrench: boolean) {
+  return speaksFrench
+    ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.'
+    : 'Done. I updated the app and refreshed the preview.';
+}
+
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
   try {
@@ -2063,7 +2101,7 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
     });
     const content = String(payload.text || payload.message || payload.error || '').trim();
     if (!content) throw new Error('Assistant response was empty.');
-    updateMessage(card, content.trim());
+    updateMessage(card, safeAssistantDisplayText(content, speaksFrench, fallback));
     clearMessageShimmer(card);
   } catch (error) {
     console.warn('[huggy] simple provider chat fallback', error);
@@ -4709,7 +4747,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
 
       if (eventType === 'answering' || eventType === 'clarification_required' || eventType === 'plan_ready' || eventType === 'preview_ready') {
-        streamFinalText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
+        const rawEventText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
+        const safeEventText = safeAssistantDisplayText(rawEventText, speaksFrench, '');
+        const blockedRawCode = rawEventText && !safeEventText && looksLikeGeneratedSourceDump(rawEventText);
+        if (safeEventText) {
+          streamFinalText = safeEventText;
+        } else if (blockedRawCode && (eventType === 'answering' || eventType === 'clarification_required')) {
+          streamFinalText = generatedCodeBlockedText(speaksFrench);
+        }
         if ((eventType === 'answering' || eventType === 'clarification_required') && !previewReadyPayload?.preview?.html) {
           switchToPlainResponse();
           if (streamFinalText) updateMessage(status, streamFinalText);
@@ -4751,10 +4796,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 
     const diffSummary = String(previewReadyPayload?.diff?.summary || finalPayload?.diff?.summary || '').trim();
     const verificationMessage = String(previewReadyPayload?.reliability_summary?.message || previewReadyPayload?.verification?.message || '').trim();
-    const finalText = streamFinalText
-      || answerBuffer.trim()
+    const safeStreamFinalText = safeAssistantDisplayText(streamFinalText, speaksFrench, '');
+    const safeAnswerBuffer = safeAssistantDisplayText(answerBuffer.trim(), speaksFrench, '');
+    const finalText = safeStreamFinalText
+      || safeAnswerBuffer
       || (previewReadyPayload?.preview?.html
-        ? (speaksFrench ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.' : 'Done. I updated the app and refreshed the preview.')
+        ? generationReadyText(speaksFrench)
         : (speaksFrench ? 'C’est prêt.' : 'Done.'));
     const target = commitAssistantText([
       finalText,
