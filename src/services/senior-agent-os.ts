@@ -1,8 +1,6 @@
 import { redactSecrets } from './secret-redaction.ts';
-import {
-  buildProductionBlueprintPromptContext,
-  inferProductionBlueprint,
-} from './production-blueprints.ts';
+import { architectPromptContext, compileArchitectBlueprint, type ArchitectBlueprint } from './architect-blueprint.ts';
+import { inferProductionBlueprint } from './production-blueprints.ts';
 
 export type SeniorAgentFile = {
   path: string;
@@ -84,6 +82,7 @@ export type SeniorAgentContext = {
   operation: string;
   project_index: SeniorAgentProjectIndex;
   task_decomposition: SeniorAgentTask[];
+  architect_blueprint: ArchitectBlueprint;
   blueprint: SeniorAgentBlueprint;
   playbooks: SeniorAgentPlaybook[];
   policy: SeniorAgentPolicy;
@@ -473,6 +472,13 @@ export function compileSeniorAgentContext(input: {
     importContext: input.importContext,
   });
   const blueprint = inferProductBlueprint(input.prompt);
+  const architectBlueprint = compileArchitectBlueprint({
+    prompt: input.prompt,
+    files: input.files || [],
+    decision: input.decision,
+    projectIndex,
+    importContext: input.importContext,
+  });
   const policy = evaluateSeniorPolicy({ prompt: input.prompt, decision: input.decision, tasks, projectIndex });
   const playbooks = selectPlaybooks(tasks, blueprint, input.importContext);
 
@@ -481,6 +487,7 @@ export function compileSeniorAgentContext(input: {
     operation: String(input.decision?.intent || 'auto'),
     project_index: projectIndex,
     task_decomposition: tasks,
+    architect_blueprint: architectBlueprint,
     blueprint,
     playbooks,
     policy,
@@ -493,7 +500,6 @@ export function compileSeniorAgentContext(input: {
 }
 
 export function seniorAgentPromptContext(context: SeniorAgentContext) {
-  const productionBlueprint = inferProductionBlueprint(context.prompt_normalization.user_goal);
   return [
     'Senior Agent OS context:',
     JSON.stringify({
@@ -509,10 +515,17 @@ export function seniorAgentPromptContext(context: SeniorAgentContext) {
         checks: playbook.checks,
       })),
       policy: context.policy,
+      architect_summary: {
+        version: context.architect_blueprint.version,
+        archetype: context.architect_blueprint.archetype,
+        stage: context.architect_blueprint.discovery.product_stage,
+        missing_questions: context.architect_blueprint.discovery.missing_questions,
+        quality_gates: context.architect_blueprint.quality_gates,
+      },
       known_failure_memory: KNOWN_FAILURES,
       rule: 'No fake success: do not say ready unless the build/preview/checks are truly acceptable or the blocker is clearly reported.',
     }),
-    buildProductionBlueprintPromptContext(productionBlueprint),
+    architectPromptContext(context.architect_blueprint),
   ].join('\n');
 }
 

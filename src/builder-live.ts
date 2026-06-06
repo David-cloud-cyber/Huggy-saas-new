@@ -23,6 +23,7 @@ import {
 } from './services/design-workshop';
 
 type ChatMode = 'auto' | 'plan' | 'build';
+type PromptUiContext = 'chat_simple' | 'planning_only' | 'project_mission' | 'critical_action';
 type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 
@@ -1819,13 +1820,13 @@ function normalizePromptIntentText(value: string) {
 function isQuickConversationPrompt(value: string, mode: ChatMode) {
   if (mode !== 'auto') return false;
   const normalized = normalizePromptIntentText(value);
-  if (!normalized || normalized.length > 280) return false;
+  if (!normalized || normalized.length > 420) return false;
   const projectContextHints = /\b(ce projet|cette app|cette application|mon projet|mon app|mon application|l app actuelle|le code actuel|les fichiers|dans le projet|dans l application|preview actuelle|fichiers actuels|current project|current app|current files|existing code)\b/i;
   if (projectContextHints.test(normalized)) return false;
-  const changeHints = /\b(create|build|generate|add|edit|change|modify|fix|debug|deploy|publish|crée|creer|génère|genere|ajoute|modifie|corrige|déploie|deploie|publie|supprime|remplace|couleur|color|button|bouton|texte|text)\b/i;
-  if (changeHints.test(normalized)) return false;
-  const technicalActionHints = /\b(api|database|base de donnees|component|composant|page|app|application|site|interface|fonctionnalite|feature|bug|erreur|error|login|auth|supabase|vercel|railway)\b/i;
-  if (technicalActionHints.test(normalized)) return false;
+  const explicitProjectAction = /\b(create|build|generate|make|add|edit|change|modify|fix|debug|deploy|publish|implement|cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|d[ée]ploie|deploie|publie|supprime|remplace|impl[ée]mente|ameliore|am[ée]liore)\b[\s\S]{0,90}\b(app|application|site|page|component|composant|api|database|base de donnees|interface|dashboard|builder|projet|code|bug|auth|login|supabase|vercel|railway|button|bouton|couleur|color|texte|text|footer|header|pricing|settings|publish|design|ui|ux|saas|agent)\b/i;
+  if (explicitProjectAction.test(normalized)) return false;
+  const bareCriticalAction = /^(publish|publie|deploie|d[ée]ploie|deploy|rollback|restore|supprime|delete|efface|connecte domaine|custom domain)\b/i;
+  if (bareCriticalAction.test(normalized)) return false;
   const direct = new Set([
     'bonjour',
     'bonsoir',
@@ -1856,12 +1857,150 @@ function isQuickConversationPrompt(value: string, mode: ChatMode) {
     'what are you able to do',
     'aide moi',
     'help me',
+    'je veux juste discuter',
+    'je veux discuter',
+    'juste discuter',
+    'parlons',
+    'lets chat',
+    'let s chat',
   ]);
   if (direct.has(normalized)) return true;
-  if (/\b(explique|pourquoi|comment|conseil|avis|strategie|analyse|compare|resume|reformule|corrige ce texte|que penses tu|peux tu me dire|est ce que|what|why|how|should|can you explain)\b/i.test(normalized)) {
+  if (/\b(dis moi|dit moi|c est quoi|c'est quoi|qu est ce que|qu'est ce que|qu'est-ce que|explique|pourquoi|comment|conseil|avis|compare|resume|reformule|corrige ce texte|que penses tu|peux tu me dire|est ce que|what is|what are|why|how|should|can you explain|tell me about)\b/i.test(normalized)) {
     return true;
   }
   return /^(qui es tu|qui es-tu|tu es qui|what are you|what is huggy|c est quoi huggy|c'est quoi huggy|comment tu peux m aider|comment tu peux m'aider)/i.test(normalized);
+}
+
+function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext {
+  const normalized = normalizePromptIntentText(value);
+  if (!normalized) return 'chat_simple';
+  if (activeWorkshop !== 'chat') return 'project_mission';
+  if (mode === 'build') return 'project_mission';
+  if (mode === 'plan') return 'planning_only';
+
+  const criticalAction = /^(publish|publie|publier|deploy|deploie|d[ée]ploie|rollback|restore|restaure|supprime|delete|efface|connecte domaine|custom domain|mets en ligne|met en ligne)\b/i;
+  if (criticalAction.test(normalized)) return 'critical_action';
+
+  if (isQuickConversationPrompt(value, mode)) return 'chat_simple';
+
+  const planningOnly = /\b(plan|roadmap|strategie|strat[ée]gie|architecture|audit|analyse|compare|conseil|recommandation|prompt|design direction|direction creative|explique)\b/i;
+  const explicitMutation = /\b(create|build|generate|make|add|edit|change|modify|fix|debug|deploy|publish|implement|cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|d[ée]ploie|deploie|publie|supprime|remplace|impl[ée]mente|applique|refais|ameliore|am[ée]liore)\b[\s\S]{0,120}\b(app|application|site|page|component|composant|api|database|base de donnees|interface|dashboard|builder|projet|code|bug|auth|login|supabase|vercel|railway|button|bouton|couleur|color|texte|text|footer|header|pricing|settings|publish|fichier|file|design|ui|ux|saas|agent)\b/i;
+  if (planningOnly.test(normalized) && !explicitMutation.test(normalized)) return 'planning_only';
+  if (explicitMutation.test(normalized)) return 'project_mission';
+
+  const projectContext = /\b(ce projet|cette app|mon app|mon application|preview|fichiers|code|bug|erreur|error|dashboard|builder|settings|publish|supabase|auth|database|api)\b/i;
+  return projectContext.test(normalized) ? 'project_mission' : 'chat_simple';
+}
+
+function buildSimpleConversationReply(prompt: string, speaksFrench: boolean) {
+  const normalized = normalizePromptIntentText(prompt);
+  const isGreeting = /^(bonjour|bonsoir|salut|coucou|hello|hi|hey|comment ca va|comment tu vas|how are you)\b/i.test(normalized);
+  const asksCapabilities = /\b(que peux tu faire|que peux-tu faire|que sais tu faire|que sais-tu faire|what can you do|tu peux faire quoi|comment tu peux m aider|comment tu peux m'aider)\b/i.test(normalized);
+  const asksLovable = /\b(lovable|lovable dev|lovable\.dev)\b/i.test(normalized);
+  const wantsChat = /\b(juste discuter|je veux discuter|parlons|lets chat|let s chat)\b/i.test(normalized);
+
+  if (speaksFrench) {
+    if (isGreeting) return 'Salut ! Je suis là. Tu peux me parler simplement, me demander un conseil, ou me demander de créer/modifier quelque chose quand tu veux.';
+    if (wantsChat) return 'Bien sûr. On peut juste discuter. Pose-moi ta question ou explique-moi ce que tu as en tête, sans que je lance de génération.';
+    if (asksCapabilities) return 'Je peux discuter, expliquer une idée, te conseiller, faire un plan, créer une app, corriger un bug, améliorer une interface, gérer le publish et t’aider à itérer sans casser ton projet. Si tu veux juste parler, je réponds simplement. Si tu me demandes une vraie action projet, je passe en mode mission.';
+    if (asksLovable) return 'Lovable.dev est un AI app builder : tu décris une idée en langage naturel, puis l’outil génère une interface/app avec preview et itérations par chat. Sa force est l’expérience fluide : comprendre vite, générer, montrer la preview, puis permettre de corriger par petites demandes. Pour Huggy, l’objectif est de garder cette simplicité, mais avec plus de contrôle, de fiabilité, de publish et de qualité agent.';
+    return 'Oui, je te réponds simplement ici. Dis-moi ce que tu veux comprendre, comparer ou décider, et je ne lance aucune génération tant que tu ne demandes pas une vraie action sur le projet.';
+  }
+
+  if (isGreeting) return 'Hi! I’m here. You can talk normally, ask for advice, or ask me to create/fix something whenever you want.';
+  if (wantsChat) return 'Of course. We can just chat. Ask your question or share what you’re thinking, and I won’t start a build.';
+  if (asksCapabilities) return 'I can chat, explain ideas, advise you, plan, build an app, fix bugs, improve UI, help publish, and iterate safely. Simple conversation stays simple. Real project work becomes a mission.';
+  if (asksLovable) return 'Lovable.dev is an AI app builder: you describe an idea, it generates an app-like preview, then you iterate through chat. Its strength is the smooth product loop. Huggy should keep that simplicity while adding stronger reliability, publish control, and agent quality.';
+  return 'Yes, I’ll answer normally here. Tell me what you want to understand, compare, or decide, and I won’t start a generation unless you ask for real project work.';
+}
+
+function buildPlanningOnlyReply(prompt: string, speaksFrench: boolean) {
+  const goal = redactSecrets(prompt).trim();
+  if (speaksFrench) {
+    return [
+      'Voici un plan léger, sans modifier les fichiers :',
+      '',
+      `1. Clarifier l’objectif : ${goal.length > 120 ? `${goal.slice(0, 117)}...` : goal}`,
+      '2. Identifier le résultat attendu côté utilisateur.',
+      '3. Découper en petites étapes sûres.',
+      '4. Repérer les risques : données, auth, paiement, publish ou design.',
+      '5. Seulement si tu confirmes une vraie action projet, Huggy passera en mission et modifiera les fichiers.',
+    ].join('\n');
+  }
+  return [
+    'Here is a lightweight plan, without changing files:',
+    '',
+    `1. Clarify the goal: ${goal.length > 120 ? `${goal.slice(0, 117)}...` : goal}`,
+    '2. Identify the expected user outcome.',
+    '3. Split the work into safe steps.',
+    '4. Check risks: data, auth, payments, publish, or design.',
+    '5. Only if you confirm real project work will Huggy start a mission and modify files.',
+  ].join('\n');
+}
+
+function streamAssistantBubble(card: HTMLElement | null, text: string) {
+  const safeText = redactSecrets(text);
+  let index = 0;
+  const chunkSize = Math.max(8, Math.ceil(safeText.length / 36));
+  updateMessage(card, '');
+  return new Promise<void>(resolve => {
+    const tick = () => {
+      index = Math.min(safeText.length, index + chunkSize);
+      updateMessage(card, safeText.slice(0, index));
+      if (index >= safeText.length) {
+        clearMessageShimmer(card);
+        resolve();
+        return;
+      }
+      window.setTimeout(tick, 18);
+    };
+    window.setTimeout(tick, 90);
+  });
+}
+
+function appendCriticalActionConfirmation(prompt: string, speaksFrench: boolean) {
+  const card = appendMessage('assistant', '');
+  const normalized = normalizePromptIntentText(prompt);
+  const wantsPublish = /\b(publish|publie|publier|deploy|deploie|d[ée]ploie|mets en ligne|met en ligne)\b/i.test(normalized);
+  const wantsRollback = /\b(rollback|restore|restaure|retour en arriere)\b/i.test(normalized);
+  const title = speaksFrench ? 'Confirmation nécessaire' : 'Confirmation required';
+  const body = speaksFrench
+    ? wantsPublish
+      ? 'Publier mettra en ligne la version actuelle. Je peux ouvrir le panneau Publish pour vérifier l’URL, les checks et le domaine avant action.'
+      : wantsRollback
+        ? 'Un rollback remplace la preview par une version précédente. Confirme avant que je touche à l’historique.'
+        : 'Cette action peut modifier fortement ton projet. Confirme avant que je continue.'
+    : wantsPublish
+      ? 'Publishing will put the current version live. I can open the Publish panel so you can review the URL, checks, and domain first.'
+      : wantsRollback
+        ? 'A rollback replaces the preview with an older version. Please confirm before I touch history.'
+        : 'This action can significantly change your project. Please confirm before I continue.';
+  setMessageBlock(card, {
+    type: 'confirmation',
+    title,
+    body,
+    state: 'approval-requested',
+    approveLabel: speaksFrench ? 'Continuer' : 'Continue',
+    rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
+  });
+  if (wantsPublish) {
+    addInlineAction(card, speaksFrench ? 'Ouvrir Publish' : 'Open Publish', () => void openPublishPanel());
+  } else if (wantsRollback) {
+    addInlineAction(card, speaksFrench ? 'Voir historique' : 'View history', () => void openHistoryPanel());
+  } else {
+    addInlineAction(card, speaksFrench ? 'Continuer en mission' : 'Continue as mission', () => void generateFromPrompt(prompt, 'auto', false, { confirmedCriticalAction: true }, prompt));
+  }
+  addInlineAction(card, speaksFrench ? 'Annuler' : 'Cancel', () => {
+    setMessageBlock(card, {
+      type: 'confirmation',
+      title,
+      body: speaksFrench ? 'Action annulée. Rien n’a été modifié.' : 'Action cancelled. Nothing was changed.',
+      state: 'rejected',
+      approveLabel: speaksFrench ? 'Continuer' : 'Continue',
+      rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
+    });
+  });
+  return card;
 }
 
 function addInlineAction(card: HTMLElement | null, label: string, action: () => void) {
@@ -3681,23 +3820,48 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const safePrompt = redactSecrets(prompt).trim();
   const safeDisplayText = redactSecrets(displayText);
   if (isGenerating || !safePrompt) return;
+  const speaksFrench = isLikelyFrenchText(safePrompt);
+  const promptUiContext = extra.confirmedCriticalAction ? 'project_mission' : classifyPromptUiContext(safePrompt, requestedMode);
   const handoff = getInitialBuilderHandoff();
   const effectiveExtra = {
     ...extra,
     ...(extra.studioContext === undefined && activeWorkshop !== 'chat' ? { studioContext: studioPromptContextPayload() } : {}),
     ...(extra.importContext === undefined && handoff.importContext ? { importContext: handoff.importContext } : {}),
   };
+  clearInlineBlocks();
+  appendMessage('user', safeDisplayText);
+
+  if (promptUiContext === 'chat_simple') {
+    const card = appendMessage('assistant', speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', { working: true });
+    setMessageShimmer(card, speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', false);
+    await streamAssistantBubble(card, buildSimpleConversationReply(safePrompt, speaksFrench));
+    return;
+  }
+
+  if (promptUiContext === 'planning_only') {
+    const content = buildPlanningOnlyReply(safePrompt, speaksFrench);
+    const card = appendMessage('assistant', speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', { working: true });
+    setMessageShimmer(card, speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', false);
+    await streamAssistantBubble(card, content);
+    lastPlan = content;
+    setMessageBlock(card, buildPlanBlock(content, safePrompt, false));
+    addInlineAction(card, speaksFrench ? 'Construire ce plan' : 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
+    return;
+  }
+
+  if (promptUiContext === 'critical_action') {
+    appendCriticalActionConfirmation(safePrompt, speaksFrench);
+    return;
+  }
+
   if (handoff.importContext && effectiveExtra.importContext === handoff.importContext) {
     delete handoff.importContext;
   }
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
-  clearInlineBlocks();
 
-  appendMessage('user', safeDisplayText);
-  const speaksFrench = isLikelyFrenchText(safePrompt);
-  const quickConversation = isQuickConversationPrompt(safePrompt, requestedMode);
+  const quickConversation = false;
   const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
   const firstWorkingLabel = quickConversation
     ? (speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...')

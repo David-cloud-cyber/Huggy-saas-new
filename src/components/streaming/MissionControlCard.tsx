@@ -29,17 +29,15 @@ export function MissionControlCard({ state }: MissionControlCardProps) {
   const files = state.files || [];
   const critics = state.critics || [];
   const checkItems = state.checkItems || [];
-  const hasCards = Boolean(
-    tasks.length ||
-    agents.length ||
+  const hasPrimaryCards = Boolean(
     files.length ||
     state.preview.hasPreviewEvent ||
     state.checks.hasCheckEvent ||
     checkItems.length ||
     state.recovery.hasRecoveryEvent ||
-    critics.length ||
     state.finalSummary,
   );
+  const hasDetailCards = detailsOpen && Boolean(tasks.length || agents.length || critics.length);
 
   return (
     <article className="agent-card mission-control-card" data-status={state.status} aria-live={state.status === "active" ? "polite" : "off"}>
@@ -66,16 +64,20 @@ export function MissionControlCard({ state }: MissionControlCardProps) {
       />
       <AgentPhaseTimeline phases={state.phases} />
 
-      {hasCards ? (
+      {hasPrimaryCards || hasDetailCards ? (
         <div className="agent-card-grid mission-control-grid">
-          <MissionTaskGraph tasks={tasks} />
-          <AgentCouncilCard agents={agents} />
           <LiveFilesCard files={files} />
           <PreviewStatusCard preview={state.preview} />
           <ChecksMatrixCard checks={state.checks} checkItems={checkItems} />
-          <CriticCouncilCard critics={critics} />
           <RecoveryCard recovery={state.recovery} />
           <DeliverySummaryCard summary={state.finalSummary} />
+          {detailsOpen ? (
+            <>
+              <MissionTaskGraph tasks={tasks} />
+              <AgentCouncilCard agents={agents} />
+              <CriticCouncilCard critics={critics} />
+            </>
+          ) : null}
         </div>
       ) : null}
       <NextBestActionCard state={state} />

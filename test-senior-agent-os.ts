@@ -79,9 +79,16 @@ assert.ok(context.policy.confidence_score <= 100 && context.policy.confidence_sc
 assert.ok(context.playbooks.some(playbook => playbook.id === 'add-auth'), 'auth playbook should be selected');
 assert.ok(context.playbooks.some(playbook => playbook.id === 'add-database-crud'), 'database playbook should be selected');
 assert.ok(context.playbooks.some(playbook => playbook.id === 'import-from-github'), 'GitHub import playbook should be selected');
+assert.equal(context.architect_blueprint.version, 'huggy-architect-blueprint-v1');
+assert.equal(context.architect_blueprint.archetype, 'saas_webapp');
+assert.ok(context.architect_blueprint.blueprint_sections.includes('Build order'), 'architect blueprint should keep the 16-section checklist');
+assert.ok(context.architect_blueprint.quality_gates.some(gate => gate.includes('No blank preview')), 'architect blueprint should require a nonblank preview');
+assert.equal(context.architect_blueprint.confirmation_policy.max_questions_per_turn, 3, 'architect mode should keep questioning tight');
 
 const promptContext = seniorAgentPromptContext(context);
 assert.ok(promptContext.includes('Senior Agent OS context'), 'prompt context should be clearly delimited');
+assert.ok(promptContext.includes('Huggy Architect Blueprint context'), 'prompt context should include Architect Blueprint context');
+assert.ok(promptContext.includes('required_blueprint_sections'), 'prompt context should include blueprint completeness sections');
 assert.ok(promptContext.includes('known_failure_memory'), 'prompt context should include failure memory');
 assert.ok(promptContext.includes('SUPABASE_AUTH_CLIENT_UNDEFINED'), 'prompt context should include known Supabase auth failure');
 assert.ok(promptContext.includes('Production architecture blueprint'), 'prompt context should include production blueprint');

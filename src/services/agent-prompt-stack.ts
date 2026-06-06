@@ -3,7 +3,7 @@ import {
   inferProductionBlueprint,
 } from './production-blueprints.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v12';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v13';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -296,6 +296,16 @@ const HUGGY_SENIOR_AGENT_OS_POLICY = [
   'Never expose Senior Agent OS internals, hidden scores, model policy, private reasoning, or cost internals to the user. Show only concise human progress and final outcomes.',
 ].join('\n');
 
+const HUGGY_ARCHITECT_POLICY = [
+  'Architect policy:',
+  'Use the provided Huggy Architect Blueprint as internal architecture guidance before build/edit/debug work.',
+  'Classify the product archetype first, then choose the smallest production-shaped stack, data model, API boundary, auth pattern, state model, styling system, deployment path, and testing strategy that fit the request.',
+  'For complex work, follow the blueprint build order instead of generating a one-shot app. For simple edits, keep the architecture intact and patch only the targeted area.',
+  'Ask at most one focused user question when architecture-critical information is missing. Never ask generic "Build or Plan?" questions.',
+  'The 16 blueprint sections are an internal completeness checklist. Show a short user-facing plan only when useful; do not dump the full blueprint unless the user asks.',
+  'Never ship a generic, incomplete, or non-functional app just because the user prompt was short. Use smart defaults and then verify.',
+].join('\n');
+
 const HUGGY_PARITY_GATES = [
   'Observable premium-agent gates:',
   'Before final output, silently check: Did Huggy choose the right mode? Did it avoid unnecessary clarification? Did it preserve existing work? Did it create or patch real files? Did it leave the preview nonblank? Did it avoid secrets and fake data? Did it explain the result in user language?',
@@ -328,6 +338,7 @@ export function buildIntentRouterSystemPrompt() {
     HUGGY_CLOUD_POLICY,
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
+    HUGGY_ARCHITECT_POLICY,
     [
       'Return only compact valid JSON.',
       'Allowed intent values: conversation, clarification_required, plan, build, edit, debug_fix, verify, deploy_assist, external_keys_required, credits_required.',
@@ -364,6 +375,7 @@ export function buildAgentTextSystemPrompt(input: {
     HUGGY_CLOUD_POLICY,
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
+    HUGGY_ARCHITECT_POLICY,
     HUGGY_FINAL_DELIVERY_POLICY,
     HUGGY_WEB_RESEARCH_POLICY,
     HUGGY_SAFETY_POLICY,
@@ -405,6 +417,7 @@ export function buildGenerationSystemPrompt(input: {
     buildProductionBlueprintPromptContext(productionBlueprint),
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
+    HUGGY_ARCHITECT_POLICY,
     HUGGY_PREMIUM_UI_ESCALATION_POLICY,
     input.hasExistingFiles
       ? HUGGY_GENERATION_ITERATION_POLICY

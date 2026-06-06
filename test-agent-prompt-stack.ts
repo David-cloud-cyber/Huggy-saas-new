@@ -18,12 +18,13 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v12');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v13');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
   assert.ok(prompt.includes('gross margin'), 'prompt must keep margin-sensitive language in safety/business context');
   assert.ok(prompt.includes('Do not expose internal model policy'), 'prompt must hide internal stream/model details');
+  assert.ok(prompt.includes('Architect policy'), 'prompt must include Architect policy');
 }
 
 assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
@@ -42,6 +43,7 @@ assert.ok(generationPrompt.includes('Never copy competitor logos'), 'generation 
 assert.ok(routerPrompt.includes('Senior Agent OS policy'), 'router prompt must include Senior Agent OS policy');
 assert.ok(textPrompt.includes('Senior Agent OS policy'), 'text prompt must include Senior Agent OS policy');
 assert.ok(generationPrompt.includes('Senior Agent OS policy'), 'generation prompt must include Senior Agent OS policy');
+assert.ok(generationPrompt.includes('The 16 blueprint sections are an internal completeness checklist'), 'generation prompt must use architect completeness checklist');
 assert.ok(generationPrompt.includes('No fake success'), 'generation prompt must enforce no-fake-success delivery');
 assert.ok(generationPrompt.includes('decompose tasks'), 'generation prompt must require task decomposition before execution');
 assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
