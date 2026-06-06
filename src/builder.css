@@ -468,24 +468,18 @@ body {
   content: "";
   position: absolute;
   inset: -1.5px;
-  background: conic-gradient(
-    from 0deg,
-    color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent),
-    color-mix(in srgb, var(--accent-blue, #2f6df6) 72%, #bfdbfe),
-    color-mix(in srgb, var(--accent-blue-deep, #173f8f) 62%, #fffdf8),
-    color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent)
-  );
-  animation: rotateGlow 4s linear infinite;
+  background: transparent;
+  animation: none;
   z-index: -1;
-  opacity: 0.12;
+  opacity: 0;
   transition: opacity 300ms;
-  filter: blur(1.5px);
+  filter: none;
   clip-path: inset(0 round 14px);
 }
 @keyframes rotateGlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-.input-wrapper:focus-within::before { opacity: 1; }
-.input-wrapper:focus-within { border-color: transparent; box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,0.10)), 0 10px 30px rgba(9,9,11,0.12); }
+.input-wrapper:focus-within::before { opacity: 0; }
+.input-wrapper:focus-within { border-color: var(--border-mid); box-shadow: 0 1px 0 rgba(255,255,255,.72) inset, 0 10px 30px rgba(9,9,11,0.08); }
 
 #ai-textarea {
   width: 100%;

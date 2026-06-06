@@ -48,6 +48,36 @@ export default defineConfig(({mode}) => {
     build: {
       rollupOptions: {
         input: discoverHtmlInputs(__dirname),
+        output: {
+          manualChunks(id) {
+            const normalized = id.replace(/\\/g, '/');
+            if (normalized.includes('/node_modules/@supabase/')) return 'vendor-supabase';
+            if (
+              normalized.includes('/node_modules/react/') ||
+              normalized.includes('/node_modules/react-dom/') ||
+              normalized.includes('/node_modules/scheduler/')
+            ) {
+              return 'vendor-react';
+            }
+            if (
+              normalized.includes('/node_modules/lucide-react/') ||
+              normalized.includes('/node_modules/motion/') ||
+              normalized.includes('/node_modules/nanoid/')
+            ) {
+              return 'vendor-ai-ui';
+            }
+            if (
+              normalized.includes('/src/builder-conversation-island') ||
+              normalized.includes('/src/components/ai-elements/') ||
+              normalized.includes('/src/components/huggy-streaming/') ||
+              normalized.includes('/src/components/streaming/') ||
+              normalized.includes('/src/streaming/')
+            ) {
+              return 'builder-streaming-ui';
+            }
+            if (normalized.includes('/src/settings-panel')) return 'settings-panel';
+          },
+        },
         onwarn(warning, defaultHandler) {
           const message = String(warning.message || '');
           if (

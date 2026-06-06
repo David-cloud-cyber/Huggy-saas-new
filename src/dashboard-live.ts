@@ -32,6 +32,18 @@ type UserWorkspaceState = {
 };
 
 type DashboardMode = 'auto' | 'plan' | 'build';
+type PlanKey = 'free' | 'pro' | 'scale' | 'enterprise';
+
+type BillingWalletResponse = {
+  success: boolean;
+  plan?: string;
+  balance?: number | null;
+  buckets?: {
+    monthly_credits?: number | null;
+    daily_promo_credits?: number | null;
+    topup_credits?: number | null;
+  };
+};
 
 type AiUsageResponse = {
   success: boolean;
@@ -352,13 +364,51 @@ async function loadLiveWallet() {
   const count = document.querySelector('.credits-count');
   const total = document.querySelector('.credits-total');
   try {
-    const wallet = await apiFetch<{ success: boolean; balance: number }>('/api/billing/wallet');
+    const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
+    syncDashboardPlanBadges(wallet.plan || 'free');
     if (count) count.textContent = String(wallet.balance ?? 0);
-    if (total) total.textContent = ' credits';
+    if (total) total.textContent = ` credits · ${planLabel(normalizePlanKey(wallet.plan))}`;
   } catch {
+    syncDashboardPlanBadges('free');
     if (count) count.textContent = '--';
     if (total) total.textContent = ' credits unavailable';
   }
+}
+
+function normalizePlanKey(value: unknown): PlanKey {
+  const raw = String(value || 'free').trim().toLowerCase();
+  if (raw === 'pro' || raw === 'scale' || raw === 'enterprise') return raw;
+  return 'free';
+}
+
+function planLabel(plan: PlanKey) {
+  if (plan === 'enterprise') return 'Enterprise';
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+function planRank(plan: PlanKey) {
+  return plan === 'enterprise' ? 4 : plan === 'scale' ? 3 : plan === 'pro' ? 2 : 1;
+}
+
+function syncDashboardPlanBadges(planInput: unknown) {
+  const plan = normalizePlanKey(planInput);
+  const badge = document.getElementById('dashboard-plan-badge');
+  if (badge) {
+    badge.textContent = planLabel(plan);
+    badge.classList.remove('free', 'pro', 'scale', 'enterprise', 'team');
+    badge.classList.add(plan);
+    badge.setAttribute('title', `Current plan: ${planLabel(plan)}`);
+  }
+  document.querySelectorAll<HTMLElement>('.workspace-plan-tag[data-plan-min]').forEach(tag => {
+    const minPlan = normalizePlanKey(tag.dataset.planMin);
+    const included = planRank(plan) >= planRank(minPlan);
+    tag.textContent = included ? 'Included' : planLabel(minPlan);
+    tag.classList.toggle('included', included);
+    tag.classList.toggle('locked', !included);
+    tag.setAttribute('title', included
+      ? `Available on your ${planLabel(plan)} plan`
+      : `Requires ${planLabel(minPlan)} plan`);
+  });
 }
 
 function formatCredits(value: unknown) {

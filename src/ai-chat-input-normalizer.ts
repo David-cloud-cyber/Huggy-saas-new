@@ -34,8 +34,8 @@ function installAiInputStyle() {
     }
 
     .huggy-ai-input:focus-within {
-      border-color: var(--border-focus, rgba(47,109,246,.34)) !important;
-      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,.10)), 0 12px 32px rgba(28,28,28,.09) !important;
+      border-color: var(--border-mid, var(--border, #eceae4)) !important;
+      box-shadow: 0 1px 0 rgba(255,255,255,.78) inset, 0 12px 32px rgba(28,28,28,.08) !important;
     }
 
     .huggy-ai-input textarea,

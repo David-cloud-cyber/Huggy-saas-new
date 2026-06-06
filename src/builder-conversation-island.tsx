@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CheckIcon, Code2, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { Code2, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -1344,7 +1344,7 @@ function renderMessageBlock(message: HuggyConversationMessage) {
 
 function renderWorkingStatus(message: HuggyConversationMessage) {
   const lines = message.content.split("\n").map(line => line.trim()).filter(Boolean);
-  const [headline = "Thinking", ...details] = lines;
+  const [headline = "Huggy ecrit", ...details] = lines;
   const activeDetail = details.find(step => step.startsWith("now:"));
   const latestDetail = activeDetail || details[details.length - 1] || "";
   const cleanDetail = latestDetail.replace(/^(done|now):\s*/, "").trim();
@@ -1354,46 +1354,12 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
 }
 
 function renderAgentTrace(message: HuggyConversationMessage) {
-  const trace = message.trace;
-  if (!trace) return null;
-  const status = trace.status || (message.working ? "active" : "done");
-  const rawSteps = (trace.steps || []).filter(step => step.label?.trim());
-  const steps = rawSteps.length
-    ? rawSteps
-    : [{ id: "current", label: trace.title || message.content || "Working", status }];
-  const title = trace.title || (status === "done" ? "Completed" : "Working");
-
-  return (
-    <div className="huggy-agent-trace" data-status={status}>
-      <div className="huggy-agent-trace-head">
-        <span className="huggy-agent-trace-dot" aria-hidden="true" />
-        <span className="huggy-agent-trace-title">
-          {status === "active" ? <ShiningText text={title} /> : title}
-        </span>
-        {trace.elapsed ? <span className="huggy-agent-trace-elapsed" aria-hidden="true">{trace.elapsed}</span> : null}
-      </div>
-      <div className="huggy-agent-steps">
-        {steps.map(step => {
-          const stepStatus = step.status || "pending";
-          return (
-            <div className="huggy-agent-step" data-status={stepStatus} key={step.id || step.label}>
-              {stepStatus === "done" ? (
-                <CheckIcon className="huggy-agent-step-mark" size={12} aria-hidden="true" />
-              ) : stepStatus === "failed" ? (
-                <XIcon className="huggy-agent-step-mark" size={12} aria-hidden="true" />
-              ) : (
-                <span className="huggy-agent-step-mark" aria-hidden="true" />
-              )}
-              <span className="huggy-agent-step-copy">
-                <span className="huggy-agent-step-label">{step.label}</span>
-                {step.detail ? <span className="huggy-agent-step-detail">{step.detail}</span> : null}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  // Legacy traces are intentionally not rendered anymore.
+  // Project work is shown through the AI Elements MissionStream block, and
+  // simple conversation is shown through ChatStream. Keeping this as a no-op
+  // preserves the old API surface while preventing duplicated streaming UIs.
+  void message;
+  return null;
 }
 
 const BuilderConversationMessageItem = React.memo(function BuilderConversationMessageItem({

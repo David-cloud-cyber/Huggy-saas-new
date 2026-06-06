@@ -247,6 +247,7 @@
       border: 1px solid var(--border-mid);
     }
     .plan-badge.pro { background: var(--warning-dim); color: var(--warning); border-color: rgba(251,191,36,0.3); }
+    .plan-badge.scale,
     .plan-badge.team { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,0.3); }
 
     .credits-value-row {
@@ -490,23 +491,17 @@
         content: "";
         position: absolute;
         inset: -1.5px;
-        background: conic-gradient(
-            from 0deg,
-            color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent),
-            color-mix(in srgb, var(--accent-blue, #2f6df6) 72%, #bfdbfe),
-            color-mix(in srgb, var(--accent-blue-deep, #173f8f) 62%, #fffdf8),
-            color-mix(in srgb, var(--accent-blue, #2f6df6) 34%, transparent)
-        );
-        animation: rotate 4s linear infinite;
+        background: transparent;
+        animation: none;
         z-index: -1;
-        opacity: 0.12;
+        opacity: 0;
         transition: opacity 300ms;
-        filter: blur(1.5px);
+        filter: none;
         clip-path: inset(0 round 14px);
     }
 
     .input-wrapper:focus-within::before {
-        opacity: 1;
+        opacity: 0;
     }
 
     .input-wrapper::after {
@@ -524,8 +519,8 @@
     }
 
     .input-wrapper:focus-within {
-        border-color: transparent;
-        box-shadow: 0 0 20px color-mix(in srgb, var(--accent-blue, #2f6df6) 15%, transparent), 0 20px 60px rgba(0,0,0,0.35);
+        border-color: var(--border-mid);
+        box-shadow: 0 1px 0 rgba(255,255,255,.72) inset, 0 14px 34px rgba(28,28,28,.08);
     }
 
     #ai-textarea {
@@ -967,9 +962,49 @@
     }
 
     .workspace-hub-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
       font-size: 12px;
       font-weight: 780;
       letter-spacing: -0.01em;
+    }
+
+    .workspace-beta-badge,
+    .workspace-plan-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 16px;
+      padding: 0 6px;
+      border: 1px solid color-mix(in srgb, var(--accent-blue, #2f6df6) 26%, var(--border));
+      border-radius: 999px;
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      color: var(--accent-blue-deep, #2458dc);
+      font-size: 8.5px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .workspace-plan-tag {
+      border-color: var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .workspace-plan-tag.included {
+      border-color: rgba(22, 163, 74, .24);
+      background: rgba(22, 163, 74, .10);
+      color: #15803d;
+    }
+
+    .workspace-plan-tag.locked {
+      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 24%, var(--border));
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      color: var(--accent-blue-deep, #2458dc);
     }
 
     .workspace-hub-desc {
@@ -1790,7 +1825,7 @@
       <div class="sidebar-credits">
         <div class="credits-header">
           <span class="plan-label">Plan</span>
-          <span class="plan-badge" id="dashboard-plan-badge">Live</span>
+          <span class="plan-badge" id="dashboard-plan-badge">Free</span>
         </div>
         <div class="credits-value-row">
           <span class="credits-count">--</span>
@@ -1969,7 +2004,7 @@
                   <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
                 </svg>
               </span>
-              <span class="workspace-hub-title">Sites</span>
+              <span class="workspace-hub-title">Sites <span class="workspace-plan-tag" data-plan-min="free">Free</span></span>
               <span class="workspace-hub-desc">Build, edit and publish web apps.</span>
             </button>
             <button class="workspace-hub-card" type="button" data-workshop-open="design">
@@ -1978,7 +2013,7 @@
                   <rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16"></path><path d="M3 9h18"></path>
                 </svg>
               </span>
-              <span class="workspace-hub-title">Huggy Design</span>
+              <span class="workspace-hub-title">Huggy Design <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="pro">Pro</span></span>
               <span class="workspace-hub-desc">UI direction, prototypes and polish.</span>
             </button>
             <button class="workspace-hub-card" type="button" data-workshop-open="decks">
@@ -1987,7 +2022,7 @@
                   <rect x="4" y="5" width="16" height="12" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path>
                 </svg>
               </span>
-              <span class="workspace-hub-title">Pitch decks</span>
+              <span class="workspace-hub-title">Pitch decks <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="pro">Pro</span></span>
               <span class="workspace-hub-desc">Slides, story and one-pagers.</span>
             </button>
             <button class="workspace-hub-card" type="button" data-workshop-open="media">
@@ -1996,7 +2031,7 @@
                   <rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 14h5"></path>
                 </svg>
               </span>
-              <span class="workspace-hub-title">Huggy Media</span>
+              <span class="workspace-hub-title">Huggy Media <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="scale">Scale</span></span>
               <span class="workspace-hub-desc">UGC ads, product visuals and promos.</span>
             </button>
           </div>

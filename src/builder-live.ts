@@ -9,7 +9,6 @@ import {
 } from './prompt-input-actions';
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
-import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
 import { isSeniorStreamEvent } from './streaming/agent-stream-event-map';
 import { createInitialAgentStreamState, reduceAgentStreamEvent, type AgentStreamUiState } from './streaming/agent-stream-reducer';
@@ -26,6 +25,7 @@ type ChatMode = 'auto' | 'plan' | 'build';
 type PromptUiContext = 'chat_simple' | 'planning_only' | 'project_mission' | 'critical_action';
 type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
+type PlanKey = 'free' | 'pro' | 'scale' | 'enterprise';
 
 type GeneratedFile = {
   path: string;
@@ -76,6 +76,17 @@ type MediaGeneratePayload = {
   preview?: {
     status: string;
     html: string;
+  };
+};
+
+type BillingWalletResponse = {
+  success: boolean;
+  plan?: string;
+  balance?: number | null;
+  buckets?: {
+    monthly_credits?: number | null;
+    daily_promo_credits?: number | null;
+    topup_credits?: number | null;
   };
 };
 
@@ -230,7 +241,7 @@ let activeAbort: AbortController | null = null;
 let stopRequested = false;
 let workingTimer: number | null = null;
 let activeWorkingCard: HTMLElement | null = null;
-let activeWorkingLabel = 'Thinking';
+let activeWorkingLabel = 'Huggy is preparing';
 let activeWorkingDetails: string[] = [];
 let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
 let activeAgentActivityMessageId = '';
@@ -262,9 +273,11 @@ let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let currentMediaPreviewHtml = '';
+let currentPlanKey: PlanKey = 'free';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
 let modelSelectionBridgeBound = false;
+let settingsPanelModulePromise: Promise<typeof import('./settings-panel')> | null = null;
 const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
 const SELECTED_MODEL_STORAGE_KEY = 'huggy-selected-model';
 const ACTIVE_WORKSHOP_STORAGE_KEY = 'huggy-active-workshop';
@@ -396,6 +409,57 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function loadSettingsPanelModule() {
+  settingsPanelModulePromise ||= import('./settings-panel');
+  return settingsPanelModulePromise;
+}
+
+async function ensureSettingsPanelLazy() {
+  const module = await loadSettingsPanelModule();
+  module.ensureSettingsPanel();
+}
+
+async function openBuilderSettings(tab: string) {
+  const module = await loadSettingsPanelModule();
+  module.openSettings(tab as any);
+}
+
+function normalizePlanKey(value: unknown): PlanKey {
+  const raw = String(value || 'free').trim().toLowerCase();
+  if (raw === 'pro' || raw === 'scale' || raw === 'enterprise') return raw;
+  return 'free';
+}
+
+function planLabel(plan: PlanKey) {
+  if (plan === 'enterprise') return 'Enterprise';
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+function planRank(plan: PlanKey) {
+  return plan === 'enterprise' ? 4 : plan === 'scale' ? 3 : plan === 'pro' ? 2 : 1;
+}
+
+function syncBuilderPlanBadges(planInput: unknown) {
+  const plan = normalizePlanKey(planInput);
+  currentPlanKey = plan;
+  document.querySelectorAll<HTMLElement>('#builder-plan-badge, #project-menu-plan-badge').forEach(badge => {
+    badge.textContent = planLabel(plan);
+    badge.classList.remove('free', 'pro', 'scale', 'enterprise');
+    badge.classList.add(plan);
+    badge.setAttribute('title', `Current workspace plan: ${planLabel(plan)}`);
+  });
+  document.querySelectorAll<HTMLElement>('.pane-plan-tag[data-plan-min], .builder-action-plan-tag[data-plan-min]').forEach(tag => {
+    const minPlan = normalizePlanKey(tag.dataset.planMin);
+    const included = planRank(plan) >= planRank(minPlan);
+    tag.textContent = included ? 'Included' : planLabel(minPlan);
+    tag.classList.toggle('included', included);
+    tag.classList.toggle('locked', !included);
+    tag.setAttribute('title', included
+      ? `Available on your ${planLabel(plan)} plan`
+      : `Requires ${planLabel(minPlan)} plan`);
+  });
 }
 
 const DESIGN_CONTROL_ORDER: Array<keyof typeof DESIGN_WORKSHOP_OPTIONS> = ['action', 'scope', 'target', 'direction'];
@@ -1524,15 +1588,16 @@ function buildWorkingTrace(card: HTMLElement | null, label: string, status: Hugg
 }
 
 function applyWorkingTrace(card: HTMLElement | null, label = activeWorkingLabel, status: HuggyAgentTrace['status'] = 'active') {
-  const id = messageHandleId(card);
-  if (id && id === activeAgentActivityMessageId) return;
-  if (!id || !conversationApi?.setTrace) return;
-  conversationApi.setTrace(id, buildWorkingTrace(card, label, status));
+  // Legacy traces are kept as a compatibility surface only. The visible
+  // streaming UI is now driven by AI Elements blocks.
+  void card;
+  void label;
+  void status;
 }
 
 function renderWorkingLabel(label = activeWorkingLabel) {
   if (!activeWorkingCard) return;
-  activeWorkingLabel = label || 'Thinking';
+  activeWorkingLabel = label || 'Huggy is preparing';
   const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
   const detail = currentWorkingDetail();
@@ -1544,7 +1609,7 @@ function renderWorkingLabel(label = activeWorkingLabel) {
   updateMessage(activeWorkingCard, `${headline} · Working for ${elapsed}${detailSuffix}`);
 }
 
-function startWorkingTimer(card: HTMLElement | null, label = 'Thinking') {
+function startWorkingTimer(card: HTMLElement | null, label = 'Huggy is preparing') {
   if (!card) return;
   if (workingTimer !== null) window.clearInterval(workingTimer);
   activeWorkingCard = card;
@@ -1671,7 +1736,7 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, opti
   return card;
 }
 
-function setMessageShimmer(card: HTMLElement | null, label = 'Thinking', withTimer = true) {
+function setMessageShimmer(card: HTMLElement | null, label = 'Huggy is writing', withTimer = true) {
   if (!card) return;
   ensureChatShimmerStyle();
   const id = messageHandleId(card);
@@ -1706,11 +1771,9 @@ function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
   const startedAt = Number(card.dataset.workingStartedAt || 0);
   const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '';
   const detail = currentWorkingDetail();
-  const finalTrace = buildWorkingTrace(card, label, 'done');
   stopWorkingTimer(card);
   const id = messageHandleId(card);
   if (id && conversationApi) {
-    if (id !== activeAgentActivityMessageId) conversationApi.setTrace?.(id, finalTrace);
     conversationApi.clearWorking(id);
   }
   card.classList.remove('message-card-shimmer');
@@ -2173,8 +2236,19 @@ function closeProjectMenu() {
 async function loadProjectMenuCredits() {
   const status = document.getElementById('project-menu-credit-status');
   const fill = document.getElementById('project-menu-credit-fill') as HTMLElement | null;
-  if (status) status.textContent = 'View credit usage in Settings.';
-  if (fill) fill.style.width = '100%';
+  try {
+    const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
+    const balance = Number(wallet.balance ?? 0);
+    const monthly = Number(wallet.buckets?.monthly_credits ?? 0);
+    const percent = monthly > 0 ? Math.max(0, Math.min(100, Math.round((balance / monthly) * 100))) : 100;
+    syncBuilderPlanBadges(wallet.plan || 'free');
+    if (status) status.textContent = `${Number.isFinite(balance) ? balance : 0} credits · ${planLabel(currentPlanKey)} plan`;
+    if (fill) fill.style.width = `${percent}%`;
+  } catch {
+    syncBuilderPlanBadges('free');
+    if (status) status.textContent = 'View credit usage in Settings.';
+    if (fill) fill.style.width = '100%';
+  }
 }
 
 function openProjectMenu() {
@@ -2256,7 +2330,7 @@ function bindProjectMenu() {
   });
   document.getElementById('project-menu-settings')?.addEventListener('click', () => {
     closeProjectMenu();
-    openSettings('ai-usage');
+    void openBuilderSettings('ai-usage');
   });
   document.getElementById('project-menu-history')?.addEventListener('click', () => {
     closeProjectMenu();
@@ -2602,7 +2676,7 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
       }
       if (action === 'settings') {
         closePublishPanel();
-        openSettings('account');
+        void openBuilderSettings('account');
       }
       if (action === 'copy' && publicUrl) {
         void navigator.clipboard?.writeText(publicUrl);
@@ -3983,17 +4057,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   activeAbort = new AbortController();
 
   const quickConversation = false;
-  const initialLabel = requestedMode === 'plan' ? 'Planning' : 'Thinking';
-  const firstWorkingLabel = quickConversation
-    ? (speaksFrench ? 'Huggy écrit...' : 'Huggy is writing...')
-    : initialLabel;
-  const status = appendMessage('assistant', firstWorkingLabel, { working: true });
-  if (quickConversation) {
-    setMessageShimmer(status, firstWorkingLabel, false);
-  } else {
-    setMessageShimmer(status, initialLabel, true);
-    startWorkingTimer(status, initialLabel);
-  }
+  const initialLabel = requestedMode === 'plan'
+    ? (speaksFrench ? 'Je prépare le plan' : 'Preparing the plan')
+    : (speaksFrench ? 'Je comprends la mission' : 'Understanding the mission');
+  const status = appendMessage('assistant', '');
+  if (status) status.dataset.workingStartedAt = String(Date.now());
   let generationTouchesPreview = false;
   activeGenerationTouchesPreview = false;
   let streamedText = '';
@@ -4030,7 +4098,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           autonomy: requestedMode === 'plan' ? 'L2 - plan seulement' : 'L4 - modification avec rollback',
           risk: 'Faible',
           rollbackAvailable: Boolean(currentProjectId && currentFiles.length),
-          status: speaksFrench ? 'Preparation du run' : 'Preparing run',
+          status: speaksFrench ? 'Espace de travail en préparation' : 'Workspace is being prepared',
         },
       });
       setAgentActivityBlock(status, agentActivityState);
@@ -4057,8 +4125,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     });
     if (!agentActivityFrame) agentActivityFrame = window.requestAnimationFrame(flushAgentActivity);
   };
-  // Wait for real server events before rendering Mission Control. Until then the
-  // assistant bubble keeps a lightweight shimmer, which avoids fake "Progression 0" cards.
+  ensureAgentActivity(initialLabel);
+  // The assistant message is now a MissionStream for real project work. Simple
+  // chat and planning-only requests return before this branch, so no technical
+  // mission UI appears for normal conversation.
   const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
     if (quickConversation && !generationTouchesPreview) return;
     if (shownStreamBlocks.has(key)) return;
@@ -4086,6 +4156,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const syncAgentSteps = (headline = activeWorkingLabel) => {
     if (quickConversation && !generationTouchesPreview) return;
+    void headline;
     activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
     activeWorkingSteps = Array.from(agentSteps.entries()).map(([id, step]) => ({
       id,
@@ -4093,7 +4164,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       detail: step.detail,
       status: step.state === 'now' ? 'active' : 'done',
     }));
-    renderWorkingLabel(headline);
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     if (quickConversation && !generationTouchesPreview) return;
@@ -4113,7 +4183,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const setAssistantWorking = (label: string) => {
     if (assistantHasFinalContent) return;
     if (quickConversation && !generationTouchesPreview) return;
-    setMessageShimmer(status, label);
+    activeWorkingLabel = label;
     if (activeWorkingDetails.length) syncAgentSteps(label);
   };
   const shouldPreserveWorkingTrace = () => Boolean(generationTouchesPreview && !quickConversation && status);
@@ -4128,7 +4198,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const ensureResponseCard = (traceLabel = say('Terminé', 'Completed')) => {
     if (assistantHasFinalContent) return responseCard;
     if (shouldPreserveWorkingTrace()) {
-      completeMessageShimmer(status, traceLabel);
+      clearMessageShimmer(status);
       responseCard = appendMessage('assistant', '');
     } else if (!status) {
       responseCard = appendMessage('assistant', '');
@@ -4153,7 +4223,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       activeGenerationTouchesPreview = true;
       activateBuilderView('preview');
       setAssistantWorking('Generating media');
-      markAgentStep('media_brief', say('Brief media prepare.', 'Media brief prepared.'), 'Thinking', say('Je comprends le format, le modele et le type de contenu.', 'I am reading the format, model and content type.'));
+      markAgentStep('media_brief', say('Brief media prepare.', 'Media brief prepared.'), say('Mission media', 'Media mission'), say('Je comprends le format, le modele et le type de contenu.', 'I am reading the format, model and content type.'));
       setMediaPreviewHtml(mediaPreviewShellHtml('working', 'Generating media'), 'media.huggy.local / rendering');
       const mediaPayload = await apiFetch<MediaGeneratePayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/media/generate`, {
         method: 'POST',
@@ -4257,7 +4327,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             ? 'Building'
             : eventType === 'validation_step'
               ? 'Checking'
-              : 'Thinking';
+            : 'Understanding';
         markAgentStep(stepKey, realLabel(say('Etape en cours.', 'Step in progress.')), label);
         setAssistantWorking(label);
         if (eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step') promoteToPreviewWork(label);
@@ -4275,21 +4345,21 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
       if (eventType === 'run_started') {
-        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), 'Thinking', trustDetail('Je garde une trace claire du travail reel effectue.', 'I keep a clear trace of the real work performed.'));
+        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), say('Mission recue', 'Mission received'), trustDetail('Je garde une trace claire du travail reel effectue.', 'I keep a clear trace of the real work performed.'));
         return;
       }
       if (eventType === 'context_loaded') {
-        markAgentStep('context', visibleStepLabel(say('Projet inspecte.', 'Project inspected.')), 'Thinking', trustDetail('Je lis l etat actuel pour garder ce qui fonctionne deja.', 'I am reading the current state so I keep what already works.'));
+        markAgentStep('context', visibleStepLabel(say('Projet inspecte.', 'Project inspected.')), say('Contexte lu', 'Context loaded'), trustDetail('Je lis l etat actuel pour garder ce qui fonctionne deja.', 'I am reading the current state so I keep what already works.'));
         return;
       }
       if (eventType === 'agent_thinking') {
-        markAgentStep('thinking', visibleStepLabel(say('Demande analysee.', 'Request analyzed.')), 'Thinking', trustDetail('Je choisis l action la plus sure avant de toucher au projet.', 'I am choosing the safest action before touching the project.'));
+        markAgentStep('thinking', visibleStepLabel(say('Demande analysee.', 'Request analyzed.')), say('Mission cadree', 'Mission framed'), trustDetail('Je choisis l action la plus sure avant de toucher au projet.', 'I am choosing the safest action before touching the project.'));
         return;
       }
       if (eventType === 'intent_detected') {
-        markAgentStep('intent', visibleIntentLabel(), 'Thinking', intentTrustDetail());
+        markAgentStep('intent', visibleIntentLabel(), say('Intention confirmee', 'Intent confirmed'), intentTrustDetail());
         if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
-          promoteToPreviewWork('Thinking');
+          promoteToPreviewWork(say('Mission en cours', 'Mission in progress'));
         }
         return;
       }
@@ -4299,7 +4369,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             const phase = String(payload.phase || 'working').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40) || 'working';
             markAgentStep(`working_${phase}`, visibleStepLabel(say('Travail en cours.', 'Work in progress.')), activeWorkingLabel, trustDetail('Je continue cette etape cote serveur.', 'I am continuing this server-side step.'));
           }
-          renderWorkingLabel(activeWorkingLabel);
           if (generationTouchesPreview) setEmptyPreviewState('working', activeWorkingLabel);
         }
         return;
@@ -4345,8 +4414,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           : eventType === 'research_started'
             ? 'Researching'
             : eventType === 'tool_loop_started'
-              ? 'Thinking'
-              : 'Thinking';
+              ? 'Preparing actions'
+              : 'Preparing response';
         if (eventType === 'planning') markAgentStep('plan', visibleStepLabel(say('Planification du travail utile.', 'Planning the useful work.')), label, trustDetail('Je pose une sequence courte pour reduire les changements inutiles.', 'I am setting a short sequence to reduce unnecessary changes.'));
         if (eventType === 'research_started') markAgentStep('research', visibleStepLabel(say('Recherche des informations utiles.', 'Looking up useful context.')), label, trustDetail('Je cherche seulement si la demande depend d informations recentes ou externes.', 'I only research when the request depends on recent or external information.'));
         if (eventType === 'tool_loop_started') markAgentStep('tools', visibleStepLabel(say('Preparation des actions techniques.', 'Preparing technical actions.')), label, trustDetail('Je limite les outils pour garder le run rapide et controlable.', 'I am limiting tool work so the run stays fast and controlled.'));
@@ -4361,8 +4430,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           eventType === 'research_result'
             ? trustDetail('J integre seulement les sources utiles au contexte.', 'I am keeping only useful sources in context.')
             : trustDetail('Le contexte projet suffit pour continuer.', 'The project context is enough to continue.'));
-        setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Thinking');
-        if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Thinking');
+        setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Context ready');
+        if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Context ready');
         return;
       }
       if (eventType === 'plan_ready' || eventType === 'answering') {
@@ -4437,12 +4506,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
               ? 'Retesting'
               : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
                 ? 'Fixing'
-                : 'Thinking';
+                : 'Preparing';
         if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Espace de travail prepare.', 'Workspace prepared.')), label);
-        if (eventType === 'codebase_indexed') markAgentStep('index', visibleStepLabel(say('Projet indexe.', 'Project indexed.')), 'Thinking', trustDetail('Je repere les routes, composants, APIs et fichiers critiques avant toute action.', 'I map routes, components, APIs, and critical files before any action.'));
+        if (eventType === 'codebase_indexed') markAgentStep('index', visibleStepLabel(say('Projet indexe.', 'Project indexed.')), say('Contexte projet', 'Project context'), trustDetail('Je repere les routes, composants, APIs et fichiers critiques avant toute action.', 'I map routes, components, APIs, and critical files before any action.'));
         if (eventType === 'task_decomposed') markAgentStep('decompose', visibleStepLabel(say('Tache decomposee.', 'Task decomposed.')), 'Planning', trustDetail('Je transforme la demande en etapes produit et qualite pour eviter une sortie generique.', 'I turn the request into product and quality steps to avoid a generic output.'));
         if (eventType === 'policy_checked') finishAgentStep('guardrails', visibleStepLabel(say('Garde-fous valides.', 'Guardrails checked.')), trustDetail('Je garde les limites, rollback et verifications avant de livrer.', 'I keep scope limits, rollback, and checks in place before delivery.'));
-        if (eventType === 'import_started') markAgentStep('import', visibleStepLabel(say('Source importee.', 'Import source prepared.')), 'Thinking', trustDetail('Je transforme la source en produit utilisable, pas en copie statique.', 'I am turning the source into a usable product, not a static copy.'));
+        if (eventType === 'import_started') markAgentStep('import', visibleStepLabel(say('Source importee.', 'Import source prepared.')), say('Import en cours', 'Import in progress'), trustDetail('Je transforme la source en produit utilisable, pas en copie statique.', 'I am turning the source into a usable product, not a static copy.'));
         if (eventType === 'import_analyzed') finishAgentStep('import', visibleStepLabel(say('Import analyse.', 'Import analyzed.')), trustDetail('Les etats, interactions et responsive manquants seront completes.', 'Missing states, interactions, and responsive behavior will be completed.'));
         if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers.', 'Generating files.')), label, trustDetail('Je cree une structure moderne avec composants, styles et interactions utiles.', 'I am creating a modern structure with useful components, styles, and interactions.'));
         if (eventType === 'model_streaming') markAgentStep('model', visibleStepLabel(say('Fichiers en cours de generation.', 'Files are being generated.')), label, trustDetail('Je recois les changements cote serveur sans afficher de donnees internes.', 'I am receiving server-side changes without showing internal data.'));
@@ -4569,10 +4638,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       const stoppedText = stopRequested ? 'Generation stopped.' : 'Build cancelled.';
-      const id = messageHandleId(status);
-      if (id && conversationApi?.setTrace && id !== activeAgentActivityMessageId) {
-        conversationApi.setTrace(id, buildWorkingTrace(status, stoppedText, 'cancelled'));
-      }
       if (agentActivityState) {
         agentActivityState = reduceAgentStreamEvent(agentActivityState, {
           type: 'cancelled',
@@ -4586,10 +4651,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
-      const id = messageHandleId(status);
-      if (id && conversationApi?.setTrace && id !== activeAgentActivityMessageId) {
-        conversationApi.setTrace(id, buildWorkingTrace(status, say('Erreur', 'Error'), 'failed'));
-      }
       if (agentActivityState) {
         agentActivityState = reduceAgentStreamEvent(agentActivityState, {
           type: 'error',
@@ -5351,7 +5412,7 @@ function bindMobileBuilderShell() {
 
 function init() {
   initHuggyMotion();
-  ensureSettingsPanel();
+  void ensureSettingsPanelLazy();
   ensureConversationApi();
   bindSharedModelSelectionEvents();
   applySelectedModel(readStoredSelectedModel());
@@ -5363,6 +5424,8 @@ function init() {
   ensureDatabaseView();
   ensureResizableSidebar();
   bindProjectMenu();
+  syncBuilderPlanBadges(currentPlanKey);
+  void loadProjectMenuCredits();
   bindPreviewDeviceToggle();
   bindMobileBuilderShell();
   initStudioWorkshops();

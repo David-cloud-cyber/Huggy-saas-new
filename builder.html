@@ -316,6 +316,37 @@
       flex: 0 0 auto;
     }
 
+    .builder-plan-badge {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 860;
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+
+    .project-menu-badge.pro,
+    .builder-plan-badge.pro {
+      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 28%, var(--border));
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      color: var(--accent-blue-deep, #2458dc);
+    }
+
+    .project-menu-badge.scale,
+    .builder-plan-badge.scale {
+      border-color: rgba(111, 66, 193, .26);
+      background: rgba(111, 66, 193, .10);
+      color: #5b35a8;
+    }
+
     .project-menu-card {
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -491,6 +522,10 @@
     .btn-publish {
       position: relative;
       overflow: hidden;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
       background:
         radial-gradient(circle at 24% 12%, rgba(191, 219, 254, 0.30), transparent 34%),
         linear-gradient(135deg, #173f8f 0%, #102f70 54%, #151e55 100%);
@@ -978,9 +1013,53 @@
     }
 
     .pane-studio-option-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 12px;
       font-weight: 720;
       letter-spacing: 0;
+    }
+
+    .pane-studio-beta,
+    .huggy-workshop-beta,
+    .pane-plan-tag,
+    .builder-action-plan-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 16px;
+      padding: 0 6px;
+      border: 1px solid color-mix(in srgb, var(--accent-blue, #2f6df6) 26%, var(--border));
+      border-radius: 999px;
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      color: var(--accent-blue-deep, #2458dc);
+      font-size: 8.5px;
+      font-weight: 850;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .pane-plan-tag,
+    .builder-action-plan-tag {
+      border-color: var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .pane-plan-tag.included,
+    .builder-action-plan-tag.included {
+      border-color: rgba(22, 163, 74, .24);
+      background: rgba(22, 163, 74, .10);
+      color: #15803d;
+    }
+
+    .pane-plan-tag.locked,
+    .builder-action-plan-tag.locked {
+      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 24%, var(--border));
+      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      color: var(--accent-blue-deep, #2458dc);
     }
 
     .pane-studio-option-desc {
@@ -1326,16 +1405,16 @@
         content: "";
         position: absolute;
         inset: -1.5px;
-        background: conic-gradient(from 0deg, #dbeafe, #93c5fd, #f7f4ed, #bfdbfe, #dbeafe);
-        animation: rotate 4s linear infinite;
+        background: transparent;
+        animation: none;
         z-index: -1;
-        opacity: 0.18;
+        opacity: 0;
         transition: opacity 300ms;
-        filter: blur(1.5px);
+        filter: none;
         clip-path: inset(0 round 12px);
     }
     .chat-input-row .input-wrapper:focus-within::before {
-        opacity: 0.68;
+        opacity: 0;
     }
     .chat-input-row .input-wrapper::after {
         content: "";
@@ -1346,8 +1425,8 @@
         z-index: -1;
     }
     .chat-input-row .input-wrapper:focus-within {
-        border-color: transparent !important;
-        box-shadow: 0 0 0 3px rgba(191, 219, 254, 0.40), 0 14px 34px rgba(28,28,28,0.10) !important;
+        border-color: var(--border-mid) !important;
+        box-shadow: 0 1px 0 rgba(255,255,255,.72) inset, 0 12px 30px rgba(28,28,28,0.08) !important;
     }
     .chat-input-row .icon-btn:hover {
         border-color: var(--border-focus);
@@ -2467,9 +2546,11 @@
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
           Add integration
+          <span class="builder-action-plan-tag" data-plan-min="scale">Scale</span>
         </button>
+        <span class="builder-plan-badge" id="builder-plan-badge" title="Current workspace plan">Free</span>
         <button class="btn-upgrade">Upgrade plan</button>
-        <button class="btn-publish" type="button">Publish</button>
+        <button class="btn-publish" type="button">Publish <span class="builder-action-plan-tag" data-plan-min="free">Free</span></button>
         <div class="avatar-circle"></div>
       </div>
     </header>
@@ -2486,7 +2567,7 @@
           <div class="project-menu-name" id="project-menu-title">Untitled app</div>
           <div class="project-menu-muted">Workspace project</div>
         </div>
-        <div class="project-menu-badge">FREE</div>
+        <div class="project-menu-badge" id="project-menu-plan-badge">FREE</div>
       </div>
       <div class="project-menu-card">
         <div class="project-menu-card-row">
@@ -2562,7 +2643,7 @@
                   </svg>
                 </span>
                 <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Design</span>
+                  <span class="pane-studio-option-title">Huggy Design <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="pro">Pro</span></span>
                   <span class="pane-studio-option-desc">UI, layout, branding and product polish</span>
                 </span>
               </button>
@@ -2577,7 +2658,7 @@
                   </svg>
                 </span>
                 <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Decks</span>
+                  <span class="pane-studio-option-title">Huggy Decks <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="pro">Pro</span></span>
                   <span class="pane-studio-option-desc">Pitch decks, slides and one-pagers</span>
                 </span>
               </button>
@@ -2594,7 +2675,7 @@
                   </svg>
                 </span>
                 <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Media</span>
+                  <span class="pane-studio-option-title">Huggy Media <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="scale">Scale</span></span>
                   <span class="pane-studio-option-desc">Ads, UGC videos, images and campaign assets</span>
                 </span>
               </button>
@@ -2618,6 +2699,7 @@
                 <path d="M12 3l1.35 4.15L17.5 8.5l-4.15 1.35L12 14l-1.35-4.15L6.5 8.5l4.15-1.35L12 3z"></path>
               </svg>
               <span id="huggy-workshop-context-label">Huggy Design</span>
+              <span class="huggy-workshop-beta">Beta</span>
             </div>
             <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
             
