@@ -10852,9 +10852,21 @@ function buildPublishedProxyTargets(project: GeneratedProject, deploymentUrl: st
   });
 }
 
+async function servePublishedSnapshot(project: GeneratedProject, deployment: any, res: any, proxyBasePath = '') {
+  const files = await loadProjectFiles(project.id);
+  const html = getProjectPreviewHtml(project, files, 'production');
+  if (!html.trim()) return res.status(404).send('This published app has no saved snapshot yet.');
+  res.status(200);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+  res.setHeader('X-Huggy-Published-App', project.id);
+  res.setHeader('X-Huggy-Published-Source', 'snapshot');
+  return res.send(rewritePublishedHtmlForProxy(html, project, deployment, proxyBasePath));
+}
+
 async function proxyPublishedDeployment(project: GeneratedProject, deployment: any, req: any, res: any, proxyBasePath = '') {
   const deploymentUrl = String(deployment?.deployment_url || '');
-  if (!deploymentUrl) return res.status(404).send('This app has not been published yet.');
+  if (!deploymentUrl) return servePublishedSnapshot(project, deployment, res, proxyBasePath);
 
   const requestPath = String(req.url || '/');
   const targets = buildPublishedProxyTargets(project, deploymentUrl, requestPath);
@@ -10873,6 +10885,8 @@ async function proxyPublishedDeployment(project: GeneratedProject, deployment: a
       continue;
     }
 
+    if (!upstream.ok) continue;
+
     const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
     const cacheControl = upstream.headers.get('cache-control') || 'public, max-age=60, stale-while-revalidate=300';
     res.status(upstream.status);
@@ -10889,7 +10903,7 @@ async function proxyPublishedDeployment(project: GeneratedProject, deployment: a
     return res.send(body);
   }
 
-  return res.status(lastStatus).send('The published Vercel app is not publicly accessible yet. Click Publish again after Railway redeploys, or check Vercel deployment protection.');
+  return servePublishedSnapshot(project, deployment, res, proxyBasePath);
 }
 
 // Public published app route. This reads the latest publish snapshot only.
