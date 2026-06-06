@@ -1440,7 +1440,7 @@ function applyWorkspaceState(state?: WorkspaceState | null) {
   const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
   const submit = document.getElementById('chat-submit-btn') as HTMLButtonElement | null;
   if (input && !handoff.prompt && !input.value.trim() && state.draft_prompt) {
-    input.value = state.draft_prompt;
+    input.value = repairTextEncoding(state.draft_prompt);
     input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
     if (submit) syncSubmitButtonState();
   }
@@ -1714,9 +1714,53 @@ function clearInlineBlocks() {
   if (host) host.innerHTML = '';
 }
 
+function repairTextEncoding(value: unknown): string {
+  let text = String(value ?? '');
+  if (!text) return text;
+  const replacements: Array<[RegExp, string | ((substring: string) => string)]> = [
+    [/Ã©/g, 'é'],
+    [/Ã¨/g, 'è'],
+    [/Ãª/g, 'ê'],
+    [/Ã«/g, 'ë'],
+    [/Ã /g, 'à'],
+    [/Ã¢/g, 'â'],
+    [/Ã§/g, 'ç'],
+    [/Ã®/g, 'î'],
+    [/Ã¯/g, 'ï'],
+    [/Ã´/g, 'ô'],
+    [/Ã¹/g, 'ù'],
+    [/Ã»/g, 'û'],
+    [/Ã¼/g, 'ü'],
+    [/Ã‰/g, 'É'],
+    [/Â /g, ' '],
+    [/Â/g, ''],
+    [/â€™/g, "'"],
+    [/â€œ|â€/g, '"'],
+    [/â€“|â€”/g, '-'],
+    [/cr�e/gi, match => match[0] === 'C' ? 'Crée' : 'crée'],
+    [/cr�er/gi, match => match[0] === 'C' ? 'Créer' : 'créer'],
+    [/g�n�re/gi, match => match[0] === 'G' ? 'Génère' : 'génère'],
+    [/g�n�rer/gi, match => match[0] === 'G' ? 'Générer' : 'générer'],
+    [/g�n�ration/gi, match => match[0] === 'G' ? 'Génération' : 'génération'],
+    [/t�che/gi, match => match[0] === 'T' ? 'Tâche' : 'tâche'],
+    [/t�ches/gi, match => match[0] === 'T' ? 'Tâches' : 'tâches'],
+    [/�tat/gi, match => match[0] === '�' ? 'état' : 'état'],
+    [/r�ponse/gi, match => match[0] === 'R' ? 'Réponse' : 'réponse'],
+    [/pr�t/gi, match => match[0] === 'P' ? 'Prêt' : 'prêt'],
+    [/d�j�/gi, 'déjà'],
+    [/�/g, 'é'],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    text = typeof replacement === 'function'
+      ? text.replace(pattern, replacement)
+      : text.replace(pattern, replacement);
+  }
+  return text;
+}
+
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, options: { working?: boolean } = {}) {
   ensureChatShimmerStyle();
-  const safeBody = redactSecrets(body);
+  const safeBody = repairTextEncoding(redactSecrets(body));
   const api = ensureConversationApi();
   if (api) {
     const id = api.addMessage({ role: kind, content: safeBody, working: Boolean(options.working) });
@@ -1795,7 +1839,7 @@ function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
 }
 
 function updateMessage(card: HTMLElement | null, body: string) {
-  const safeBody = redactSecrets(body);
+  const safeBody = repairTextEncoding(redactSecrets(body));
   const id = messageHandleId(card);
   if (id && conversationApi) {
     conversationApi.updateMessage(id, safeBody);
@@ -4282,8 +4326,8 @@ function commandSummaryItem(payload: Record<string, any>, rawMessage = '') {
 }
 
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
-  const safePrompt = redactSecrets(prompt).trim();
-  const safeDisplayText = redactSecrets(displayText);
+  const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
+  const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
   if (isGenerating || !safePrompt) return;
   const speaksFrench = isLikelyFrenchText(safePrompt);
   const promptUiContext = extra.confirmedCriticalAction ? 'project_mission' : classifyPromptUiContext(safePrompt, requestedMode);
@@ -5386,9 +5430,19 @@ function bindChat() {
   submit.style.cursor = 'pointer';
   syncSubmitButtonState();
 
+  input.addEventListener('input', () => {
+    const repaired = repairTextEncoding(input.value);
+    if (repaired !== input.value) {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.value = repaired;
+      input.setSelectionRange(Math.min(start, repaired.length), Math.min(end, repaired.length));
+    }
+  });
+
   const send = (mode: ChatMode) => {
     if (isGenerating) return;
-    const value = input.value.trim();
+    const value = repairTextEncoding(input.value).trim();
     if (!value) return;
     input.value = '';
     input.style.height = '48px';
@@ -5494,7 +5548,7 @@ function hydrateDashboardPrompt() {
   if (!currentProjectId && currentProjectName === 'Untitled app') {
     setProjectNameDisplay(projectNameFromPrompt(prompt));
   }
-  input.value = prompt;
+  input.value = repairTextEncoding(prompt);
   input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
   if (submit) syncSubmitButtonState();
 }
@@ -5503,7 +5557,7 @@ function maybeStartInitialGeneration() {
   if (initialGenerationStarted || isGenerating) return;
   const handoff = getInitialBuilderHandoff();
   if (!handoff.shouldAutoRun) return;
-  const prompt = handoff.prompt.trim();
+  const prompt = repairTextEncoding(handoff.prompt).trim();
   if (!prompt) return;
   initialGenerationStarted = true;
 
