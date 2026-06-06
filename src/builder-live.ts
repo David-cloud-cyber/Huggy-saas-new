@@ -20,7 +20,7 @@ import {
 } from './services/design-workshop';
 
 type ChatMode = 'auto' | 'plan' | 'build';
-type PromptUiContext = 'chat_simple' | 'planning_only' | 'project_mission' | 'critical_action';
+type PromptUiContext = 'chat_simple' | 'clarification_only' | 'planning_only' | 'project_mission' | 'critical_action';
 type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 type PlanKey = 'free' | 'pro' | 'scale' | 'enterprise';
@@ -1952,7 +1952,7 @@ function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext
   if (explicitMutation.test(normalized)) return 'project_mission';
 
   const bareAction = /^(cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|ameliore|am[ée]liore|refais|implemente|impl[ée]mente|applique|fais)\b.{0,90}$/i;
-  if (bareAction.test(normalized)) return 'planning_only';
+  if (bareAction.test(normalized)) return 'clarification_only';
 
   const projectContext = /\b(ce projet|cette app|mon app|mon application|preview|fichiers|code|bug|erreur|error|dashboard|builder|settings|publish|supabase|auth|database|api)\b/i;
   return projectContext.test(normalized) ? 'project_mission' : 'chat_simple';
@@ -2002,6 +2002,28 @@ function buildPlanningOnlyReply(prompt: string, speaksFrench: boolean) {
     '4. Check risks: data, auth, payments, publish, or design.',
     '5. Only if you confirm real project work will Huggy start a mission and modify files.',
   ].join('\n');
+}
+
+function buildClarificationOnlyReply(prompt: string, speaksFrench: boolean) {
+  const normalized = normalizePromptIntentText(prompt);
+  const wantsGenerate = /^(genere|generer|g[ée]n[èe]re|cree|creer|cr[ée]e|create|build|make|construis|fabrique)\b/i.test(normalized);
+  const wantsFix = /^(corrige|fix|debug|repare|répare)\b/i.test(normalized);
+  if (speaksFrench) {
+    if (wantsGenerate) {
+      return 'Que veux-tu générer exactement ? Donne-moi le type d’app et 2 ou 3 fonctions clés. Exemple : “crée une todo app avec ajout, suppression, filtres et design responsive”.';
+    }
+    if (wantsFix) {
+      return 'Qu’est-ce que tu veux que je corrige exactement ? Indique l’écran, le bouton, l’erreur ou le comportement qui ne marche pas.';
+    }
+    return 'Je peux le faire, mais il me manque la cible exacte. Dis-moi quoi modifier ou construire, en une phrase simple.';
+  }
+  if (wantsGenerate) {
+    return 'What exactly should I generate? Give me the app type and 2 or 3 key features. Example: “create a todo app with add, delete, filters and responsive design”.';
+  }
+  if (wantsFix) {
+    return 'What exactly should I fix? Name the screen, button, error or behavior that is not working.';
+  }
+  return 'I can do that, but I need the exact target. Tell me what to change or build in one simple sentence.';
 }
 
 function showAssistantBubble(card: HTMLElement | null, text: string) {
@@ -4240,6 +4262,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const card = appendMessage('assistant', speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', { working: true });
     setMessageShimmer(card, speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', false);
     await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench);
+    return;
+  }
+
+  if (promptUiContext === 'clarification_only') {
+    const content = buildClarificationOnlyReply(safePrompt, speaksFrench);
+    const card = appendMessage('assistant', speaksFrench ? 'Je precise avant d agir...' : 'Clarifying before acting...', { working: true });
+    setMessageShimmer(card, speaksFrench ? 'Je precise avant d agir...' : 'Clarifying before acting...', false);
+    await showAssistantBubble(card, content);
     return;
   }
 

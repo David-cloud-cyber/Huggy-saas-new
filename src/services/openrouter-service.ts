@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import { validateAllowedModel } from './ai-validator.ts';
 import { AI_MODEL_FALLBACKS, type AllowedModelId } from '../config/ai-models.ts';
+import { toOpenRouterChatPayloadExtras, type ProviderRequestConfig } from './provider-adapters.ts';
 
 export const OPENROUTER_API_KEY_ENV_NAMES = [
   'OPENROUTER_API_KEY',
@@ -68,7 +69,13 @@ export class OpenRouterService {
   /**
    * Main chat completion logic with exponential backoff retries, robust timeouts, and full token tracking.
    */
-  async chat(modelId: string, messages: ChatMessage[], retryAttempts = 3, timeoutMs = 45000): Promise<ChatCompletionResult> {
+  async chat(
+    modelId: string,
+    messages: ChatMessage[],
+    retryAttempts = 3,
+    timeoutMs = 45000,
+    runtimeConfig?: ProviderRequestConfig,
+  ): Promise<ChatCompletionResult> {
     // 1. Validate models against strict allowlist
     validateAllowedModel(modelId);
 
@@ -77,7 +84,7 @@ export class OpenRouterService {
       validateAllowedModel(fb);
     }
 
-    const payload = this.buildChatPayload(modelId, messages);
+    const payload = this.buildChatPayload(modelId, messages, runtimeConfig);
 
     let attempt = 0;
     let delay = 1000; // start with 1s backoff
@@ -153,7 +160,12 @@ export class OpenRouterService {
     return await response.json();
   }
 
-  async *streamChat(modelId: string, messages: ChatMessage[], timeoutMs = 90000): AsyncGenerator<StreamChatEvent> {
+  async *streamChat(
+    modelId: string,
+    messages: ChatMessage[],
+    timeoutMs = 90000,
+    runtimeConfig?: ProviderRequestConfig,
+  ): AsyncGenerator<StreamChatEvent> {
     validateAllowedModel(modelId);
 
     const fallbackModels = AI_MODEL_FALLBACKS[modelId as AllowedModelId] || [];
@@ -170,7 +182,7 @@ export class OpenRouterService {
         headers: this.buildHeaders(),
         signal: controller.signal as any,
         body: JSON.stringify({
-          ...this.buildChatPayload(modelId, messages),
+          ...this.buildChatPayload(modelId, messages, runtimeConfig),
           stream: true,
           stream_options: { include_usage: true }
         })
@@ -260,7 +272,7 @@ export class OpenRouterService {
     };
   }
 
-  private buildChatPayload(modelId: string, messages: ChatMessage[]) {
+  private buildChatPayload(modelId: string, messages: ChatMessage[], runtimeConfig?: ProviderRequestConfig) {
     // ProviderGateway already performs strict, allowlisted fallback one model at
     // a time. Sending OpenRouter's multi-model `models` body here makes
     // diagnostics opaque and some providers reject the request shape during
@@ -268,6 +280,7 @@ export class OpenRouterService {
     return {
       model: modelId,
       messages,
+      ...toOpenRouterChatPayloadExtras(runtimeConfig),
     };
   }
 

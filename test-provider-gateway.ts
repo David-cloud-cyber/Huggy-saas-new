@@ -52,6 +52,8 @@ class FakeOpenRouter {
   const result = await gateway.chat('google/gemini-3.5-flash', messages, { maxAttempts: 2 });
   assert.equal(result.text, 'ok');
   assert.equal(fake.calls.length, 2);
+  const metrics = gateway.getRuntimeMetricsSnapshot();
+  assert.ok(metrics.some(item => item.model_id === 'google/gemini-3.5-flash' && item.requests >= 2 && item.successes === 1 && item.retries >= 1));
 }
 
 {

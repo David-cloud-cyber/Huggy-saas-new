@@ -12,6 +12,12 @@ import WebSocket from 'ws';
 // Import our custom services
 import { OpenRouterService, resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
+import {
+  buildAIModelRuntimeConfig,
+  getAIModelCapabilityProfile,
+  type AIWorkflowTask,
+} from './src/services/ai-model-runtime.ts';
+import { buildProviderRequestConfig } from './src/services/provider-adapters.ts';
 import { ModelRouter, type RoutingContext } from './src/services/model-router.ts';
 import { ForbiddenModelError, validateAllowedModel } from './src/services/ai-validator.ts';
 import {
@@ -2504,7 +2510,10 @@ class AgentOrchestrator {
       });
     }
 
-    if (understanding.needsClarification || (forceBuild && !understanding.allowsFileAction)) {
+    const explicitAppBuildRequest = /\b(crÃ©e|cree|creer|gÃ©nÃ¨re|genere|generer|build|create|make|construis|fabrique)\b[\s\S]{0,80}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b/i.test(lower)
+      || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b[\s\S]{0,80}\b(crÃ©e|cree|creer|gÃ©nÃ¨re|genere|generer|build|create|make|construis|fabrique)\b/i.test(lower);
+
+    if ((understanding.needsClarification && !explicitAppBuildRequest) || (forceBuild && !understanding.allowsFileAction && !explicitAppBuildRequest)) {
       return decision({
         intent: 'clarification_required',
         confidence: Math.max(0.78, understanding.confidence),
@@ -2516,13 +2525,13 @@ class AgentOrchestrator {
         clarification: {
           question: isLikelyFrenchPrompt(text)
             ? 'Tu veux que Huggy réponde seulement, ou qu’il modifie vraiment le projet ?'
-            : 'Should Huggy only answer, or actually change the project?',
+            : 'What exact part should Huggy change or build?',
           choices: input.hasFiles
             ? ['Répondre sans modifier', 'Modifier une partie précise', 'Corriger un bug précis', 'Créer une nouvelle fonctionnalité']
             : ['Répondre sans générer', 'Créer une app précise', 'Faire un plan', 'Améliorer un texte ou prompt'],
           recommendation: isLikelyFrenchPrompt(text)
             ? 'Si tu veux coder, indique l’écran, le composant, l’API, la base de données ou le bug exact.'
-            : 'If you want code work, name the screen, component, API, database, or exact bug.',
+            : 'One sentence is enough: for example, "create a todo app with add, delete and filters".',
         },
       });
     }
@@ -2873,7 +2882,7 @@ function guardAiDecisionWithUnderstanding(
       clarification: {
         question: isLikelyFrenchPrompt(input.prompt)
           ? 'Tu veux une réponse simple, ou une vraie modification du projet ?'
-          : 'Do you want a simple answer, or an actual project change?',
+          : 'What exact result should Huggy produce or change?',
         choices: input.hasFiles
           ? ['Répondre seulement', 'Modifier un composant précis', 'Corriger un bug précis']
           : ['Répondre seulement', 'Créer une app précise', 'Faire un plan'],
@@ -2900,6 +2909,13 @@ function guardAiDecisionWithUnderstanding(
 
 async function classifyIntentWithAi(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }, fallback: IntentDecision): Promise<IntentDecision | null> {
   if (!getOpenRouterApiKey() || !agentIntentNeedsAiRouter(fallback)) return null;
+  const routerRuntime = buildAIModelRuntimeConfig({
+    modelId: DEFAULT_PROVIDER_MODEL_ID,
+    task: 'intent',
+    stream: false,
+    timeoutMs: 18_000,
+    maxTokens: 1600,
+  });
   const result = await providerGateway.chat(DEFAULT_PROVIDER_MODEL_ID, [
     {
       role: 'system',
@@ -2916,7 +2932,11 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
         fallbackIntent: fallback.intent,
       }),
     },
-  ], { maxAttempts: 1, timeoutMs: 18_000 });
+  ], {
+    maxAttempts: 1,
+    timeoutMs: routerRuntime.timeoutMs,
+    runtimeConfig: buildProviderRequestConfig(routerRuntime),
+  });
   const aiDecision = buildDecisionFromAi(parseLooseJsonObject(result.text), fallback);
   return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
@@ -3157,6 +3177,59 @@ function requiredModelCapabilitiesForTask(
   };
 }
 
+function inferRuntimeTaskForPrompt(prompt: string, decision: IntentDecision, mode: 'text' | 'generation' = 'text'): AIWorkflowTask {
+  const text = normalizePromptIntentText(prompt);
+  if (mode === 'generation') {
+    if (/\b(database|supabase|postgres|sql|rls|schema|table|auth|login|stripe|billing|webhook|storage|realtime)\b/i.test(text)) return 'backend_generation';
+    if (/\b(security|sÃ©curitÃ©|securite|permission|role|secret|policy|policies|webhook)\b/i.test(text)) return 'security';
+    if (/\b(ui|ux|design|style|layout|animation|responsive|mobile|hero|dashboard|component|composant)\b/i.test(text)) return 'frontend_generation';
+    return 'frontend_generation';
+  }
+  if (decision.intent === 'conversation') return 'conversation';
+  if (decision.intent === 'clarification_required') return 'clarification';
+  if (decision.intent === 'plan') return 'planning';
+  if (decision.intent === 'verify') return 'tests';
+  if (decision.intent === 'deploy_assist') return 'deploy';
+  if (decision.intent === 'debug_fix') return 'debug';
+  if (decision.intent === 'edit' || decision.intent === 'build') {
+    if (/\b(database|supabase|postgres|sql|rls|schema|table|auth|login|stripe|billing|webhook|storage|realtime)\b/i.test(text)) return 'backend_generation';
+    if (/\b(security|sÃ©curitÃ©|securite|permission|role|secret|policy|policies|webhook)\b/i.test(text)) return 'security';
+    if (/\b(ui|ux|design|style|layout|animation|responsive|mobile|hero|dashboard|component|composant)\b/i.test(text)) return 'design';
+    return 'frontend_generation';
+  }
+  if (/\b(image|screenshot|capture|figma|maquette|wireframe|mockup|visuel)\b/i.test(text)) return 'vision';
+  return 'summary';
+}
+
+function createProviderRuntimeOptions(input: {
+  model: AllowedModelId;
+  prompt: string;
+  decision: IntentDecision;
+  files?: GeneratedFile[];
+  mode?: 'text' | 'generation';
+  stream?: boolean;
+  timeoutMs?: number;
+  maxTokens?: number;
+}) {
+  const task = inferRuntimeTaskForPrompt(input.prompt, input.decision, input.mode || 'text');
+  const runtime = buildAIModelRuntimeConfig({
+    modelId: input.model,
+    task,
+    stream: input.stream,
+    timeoutMs: input.timeoutMs,
+    maxTokens: input.maxTokens,
+    hasVisionInput: /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel)\b/i.test(input.prompt),
+    estimatedInputTokens: Math.ceil((
+      String(input.prompt || '').length +
+      (input.files || []).reduce((total, file) => total + String(file.content || '').length, 0)
+    ) / 4),
+  });
+  return {
+    runtime,
+    providerConfig: buildProviderRequestConfig(runtime),
+  };
+}
+
 async function resolveAgentProviderModel(input: {
   modelId?: unknown;
   project: GeneratedProject;
@@ -3283,12 +3356,24 @@ async function createAgentTextResponse(input: {
     plan: input.plan,
   })).model;
   validateAllowedModel(selectedModel);
+  const runtimeOptions = createProviderRuntimeOptions({
+    model: selectedModel,
+    prompt,
+    decision,
+    files,
+    stream: false,
+    timeoutMs: decision.intent === 'conversation' ? 12_000 : decision.intent === 'plan' ? 30_000 : 45_000,
+  });
 
   try {
     const result = await providerGateway.chat(
       selectedModel,
       buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
-      { maxAttempts: 1, timeoutMs: 45_000 },
+      {
+        maxAttempts: 1,
+        timeoutMs: runtimeOptions.runtime.timeoutMs,
+        runtimeConfig: runtimeOptions.providerConfig,
+      },
     );
 
     return {
@@ -3355,6 +3440,19 @@ async function streamAgentTextResponse(input: {
     plan: input.plan,
   })).model;
   validateAllowedModel(selectedModel);
+  const textResponseTimeoutMs = decision.intent === 'plan'
+    ? 30_000
+    : decision.intent === 'deploy_assist'
+      ? 14_000
+      : 12_000;
+  const runtimeOptions = createProviderRuntimeOptions({
+    model: selectedModel,
+    prompt,
+    decision,
+    files,
+    stream: true,
+    timeoutMs: textResponseTimeoutMs,
+  });
   let text = '';
   let model: string = selectedModel;
   let cost_usd = 0;
@@ -3362,15 +3460,10 @@ async function streamAgentTextResponse(input: {
   let streamed = false;
 
   try {
-    const textResponseTimeoutMs = decision.intent === 'plan'
-      ? 30_000
-      : decision.intent === 'deploy_assist'
-        ? 14_000
-        : 12_000;
     for await (const event of providerGateway.streamChat(
       selectedModel,
       buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
-      { timeoutMs: textResponseTimeoutMs },
+      { timeoutMs: runtimeOptions.runtime.timeoutMs, runtimeConfig: runtimeOptions.providerConfig },
     )) {
       if (event.type === 'token') {
         const chunk = event.text || '';
@@ -3522,6 +3615,29 @@ function providerModelToDisplayName(modelId: string) {
   return AI_MODEL_DISPLAY_NAMES[modelId as AllowedModelId] || modelId.split('/').pop()?.replace(/[-_]/g, ' ') || modelId;
 }
 
+function buildPublicRuntimeCapabilities(modelId: AllowedModelId) {
+  const profile = getAIModelCapabilityProfile(modelId);
+  return {
+    best_for: profile.bestUse,
+    reasoning: profile.reasoning,
+    code: profile.code,
+    comprehension: profile.comprehension,
+    agentic: profile.agentic,
+    design: profile.design,
+    security: profile.security,
+    supports: {
+      streaming: profile.supports.streaming,
+      tool_calling: profile.supports.toolCalling,
+      structured_output: profile.supports.structuredOutput,
+      vision: profile.supports.vision,
+      long_context: profile.supports.longContext,
+    },
+    speed: profile.speed,
+    reliability: profile.reliability,
+    fallback_available: Boolean(profile.fallbackPrimary),
+  };
+}
+
 function buildPublicModelList() {
   const autoCapabilities = {
     supportsStreaming: true,
@@ -3537,6 +3653,17 @@ function buildPublicModelList() {
       display_name: AI_AUTO_MODEL_OPTION.display_name,
       tier: AI_AUTO_MODEL_OPTION.tier,
       capabilities: autoCapabilities,
+      runtime_capabilities: {
+        best_for: ['automatic_routing', 'conversation', 'planning', 'code_generation', 'debug', 'design', 'security'],
+        supports: {
+          streaming: true,
+          tool_calling: true,
+          structured_output: true,
+          vision: true,
+          long_context: true,
+        },
+        fallback_available: true,
+      },
       description: AI_AUTO_MODEL_OPTION.description,
       locked: false,
     },
@@ -3547,6 +3674,7 @@ function buildPublicModelList() {
         display_name: definition?.label || providerModelToDisplayName(id),
         tier: AI_MODEL_TIERS[id],
         capabilities: AI_MODEL_CAPABILITIES[id],
+        runtime_capabilities: buildPublicRuntimeCapabilities(id),
         provider: definition?.provider,
         description: definition?.description,
         plan_minimum: definition?.minPlan,
@@ -3572,6 +3700,7 @@ function buildPublicModelProviderGroups() {
       tier: model.tier,
       provider: model.provider,
       capabilities: AI_MODEL_CAPABILITIES[model.id as AllowedModelId],
+      runtime_capabilities: buildPublicRuntimeCapabilities(model.id as AllowedModelId),
       description: model.description,
       plan_minimum: model.minPlan,
       badges: {
@@ -4052,6 +4181,18 @@ async function generateFilesWithAi(input: {
     .join('\n');
   const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
+  const runtimeOptions = input.decision
+    ? createProviderRuntimeOptions({
+      model: selectedModel,
+      prompt: input.prompt,
+      decision: input.decision,
+      files: input.existingFiles,
+      mode: 'generation',
+      stream: false,
+      timeoutMs: 120_000,
+      maxTokens: 12_000,
+    })
+    : null;
 
   const result = await providerGateway.chat(selectedModel, [
     {
@@ -4073,7 +4214,11 @@ async function generateFilesWithAi(input: {
         seniorAgentOS: input.seniorAgentContext || undefined,
       }),
     },
-  ], { maxAttempts: 1, timeoutMs: 90_000 });
+  ], {
+    maxAttempts: 1,
+    timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
+    runtimeConfig: runtimeOptions?.providerConfig,
+  });
 
   const parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
     hasExistingFiles: input.existingFiles.length > 0,
@@ -6152,7 +6297,11 @@ app.post('/api/ai/route', async (req, res) => {
     };
 
     const targetModel = await modelRouter.selectModel(context, customModelId);
-    res.json({ success: true, routed_model: targetModel });
+    res.json({
+      success: true,
+      routed_model: targetModel,
+      runtime_capabilities: buildPublicRuntimeCapabilities(targetModel),
+    });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
   }
@@ -8953,10 +9102,23 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
       const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext, seniorAgentContext });
+      const runtimeOptions = createProviderRuntimeOptions({
+        model: selectedModel,
+        prompt: effectivePrompt,
+        decision,
+        files: existingFiles,
+        mode: 'generation',
+        stream: true,
+        timeoutMs: 180_000,
+        maxTokens: 12_000,
+      });
 
       let lastModelProgressAt = Date.now();
       let lastModelProgressChars = 0;
-      for await (const event of providerGateway.streamChat(selectedModel, messages, { timeoutMs: 150_000 })) {
+      for await (const event of providerGateway.streamChat(selectedModel, messages, {
+        timeoutMs: runtimeOptions.runtime.timeoutMs,
+        runtimeConfig: runtimeOptions.providerConfig,
+      })) {
         const session = await getBuildSession(buildSessionId);
         if (session?.status === 'cancelled') {
           await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId, agent_run_id: agentRunId });

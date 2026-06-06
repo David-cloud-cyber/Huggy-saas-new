@@ -6,10 +6,23 @@ import {
 } from '../config/ai-models.ts';
 import { validateAllowedModel } from './ai-validator.ts';
 import type { ChatCompletionResult, ChatMessage, OpenRouterService, StreamChatEvent } from './openrouter-service.ts';
+import type { ProviderRequestConfig } from './provider-adapters.ts';
 
 type CircuitState = {
   failures: number;
   blockedUntil: number;
+};
+
+type ModelRuntimeMetric = {
+  model_id: string;
+  requests: number;
+  successes: number;
+  failures: number;
+  retries: number;
+  fallback_uses: number;
+  total_latency_ms: number;
+  last_error_code: string | null;
+  last_used_at: string | null;
 };
 
 export class ProviderGatewayError extends Error {
@@ -30,6 +43,7 @@ export class ProviderGatewayError extends Error {
 
 export class ProviderGateway {
   private circuits = new Map<string, CircuitState>();
+  private metrics = new Map<string, ModelRuntimeMetric>();
   private openRouter: OpenRouterService;
   private options: { breakerMs?: number; failureThreshold?: number };
 
@@ -44,29 +58,46 @@ export class ProviderGateway {
     return DEFAULT_PROVIDER_MODEL_ID;
   }
 
-  async chat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number; maxAttempts?: number } = {}): Promise<ChatCompletionResult> {
+  async chat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number; maxAttempts?: number; runtimeConfig?: ProviderRequestConfig } = {}): Promise<ChatCompletionResult> {
     const primary = this.requireProviderModel(modelId);
     const candidates = this.candidatesFor(primary);
     const maxAttempts = Math.max(1, options.maxAttempts || 2);
     let lastError: any = null;
 
     for (const candidate of candidates) {
+      if (candidate !== primary) this.noteFallbackUse(candidate);
       const circuitError = this.getCircuitError(candidate);
       if (circuitError) {
         lastError = circuitError;
         continue;
       }
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const startedAt = Date.now();
+        this.noteRequest(candidate);
         try {
-          const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000);
+          const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000, options.runtimeConfig);
+          this.noteMetricSuccess(candidate, Date.now() - startedAt);
           this.noteSuccess(candidate);
           return result;
         } catch (error: any) {
           lastError = error;
           const classified = this.classifyError(error, candidate);
+          if (classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && options.runtimeConfig) {
+            try {
+              this.noteRetry(candidate);
+              const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000);
+              this.noteMetricSuccess(candidate, Date.now() - startedAt);
+              this.noteSuccess(candidate);
+              return result;
+            } catch (degradedError: any) {
+              lastError = degradedError;
+            }
+          }
           this.noteFailure(candidate, classified.retryable);
+          this.noteMetricFailure(candidate, classified.diagnosticCode, Date.now() - startedAt);
           if (!classified.retryable) throw classified;
           if (attempt >= maxAttempts) break;
+          this.noteRetry(candidate);
           await sleep(250 * attempt);
         }
       }
@@ -75,29 +106,48 @@ export class ProviderGateway {
     throw this.classifyError(lastError, primary);
   }
 
-  async *streamChat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number } = {}): AsyncGenerator<StreamChatEvent> {
+  async *streamChat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number; runtimeConfig?: ProviderRequestConfig } = {}): AsyncGenerator<StreamChatEvent> {
     const primary = this.requireProviderModel(modelId);
     const candidates = this.candidatesFor(primary);
     let lastError: any = null;
 
     for (const candidate of candidates) {
+      if (candidate !== primary) this.noteFallbackUse(candidate);
       const circuitError = this.getCircuitError(candidate);
       if (circuitError) {
         lastError = circuitError;
         continue;
       }
       let yieldedAnyEvent = false;
+      const startedAt = Date.now();
+      this.noteRequest(candidate);
       try {
-        for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {
+        for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000, options.runtimeConfig)) {
           yieldedAnyEvent = true;
           yield event;
         }
+        this.noteMetricSuccess(candidate, Date.now() - startedAt);
         this.noteSuccess(candidate);
         return;
       } catch (error: any) {
         lastError = error;
         const classified = this.classifyError(error, candidate);
+        if (!yieldedAnyEvent && classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && options.runtimeConfig) {
+          try {
+            this.noteRetry(candidate);
+            for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {
+              yieldedAnyEvent = true;
+              yield event;
+            }
+            this.noteMetricSuccess(candidate, Date.now() - startedAt);
+            this.noteSuccess(candidate);
+            return;
+          } catch (degradedError: any) {
+            lastError = degradedError;
+          }
+        }
         this.noteFailure(candidate, classified.retryable);
+        this.noteMetricFailure(candidate, classified.diagnosticCode, Date.now() - startedAt);
         if (yieldedAnyEvent || !classified.retryable) throw classified;
       }
     }
@@ -112,6 +162,13 @@ export class ProviderGateway {
       failures: state.failures,
       blocked: state.blockedUntil > now,
       blocked_until: state.blockedUntil > now ? new Date(state.blockedUntil).toISOString() : null,
+    }));
+  }
+
+  getRuntimeMetricsSnapshot() {
+    return Array.from(this.metrics.values()).map(item => ({
+      ...item,
+      average_latency_ms: item.requests ? Math.round(item.total_latency_ms / item.requests) : 0,
     }));
   }
 
@@ -170,6 +227,52 @@ export class ProviderGateway {
     });
   }
 
+  private metricFor(modelId: string): ModelRuntimeMetric {
+    const current = this.metrics.get(modelId);
+    if (current) return current;
+    const next: ModelRuntimeMetric = {
+      model_id: modelId,
+      requests: 0,
+      successes: 0,
+      failures: 0,
+      retries: 0,
+      fallback_uses: 0,
+      total_latency_ms: 0,
+      last_error_code: null,
+      last_used_at: null,
+    };
+    this.metrics.set(modelId, next);
+    return next;
+  }
+
+  private noteRequest(modelId: string) {
+    const metric = this.metricFor(modelId);
+    metric.requests += 1;
+    metric.last_used_at = new Date().toISOString();
+  }
+
+  private noteRetry(modelId: string) {
+    this.metricFor(modelId).retries += 1;
+  }
+
+  private noteFallbackUse(modelId: string) {
+    this.metricFor(modelId).fallback_uses += 1;
+  }
+
+  private noteMetricSuccess(modelId: string, latencyMs: number) {
+    const metric = this.metricFor(modelId);
+    metric.successes += 1;
+    metric.total_latency_ms += Math.max(0, latencyMs);
+    metric.last_error_code = null;
+  }
+
+  private noteMetricFailure(modelId: string, diagnosticCode: string, latencyMs: number) {
+    const metric = this.metricFor(modelId);
+    metric.failures += 1;
+    metric.total_latency_ms += Math.max(0, latencyMs);
+    metric.last_error_code = diagnosticCode;
+  }
+
   private classifyError(error: any, modelId: string): ProviderGatewayError {
     if (error instanceof ProviderGatewayError) return error;
     const message = String(error?.message || error || 'AI provider request failed.');
@@ -216,7 +319,15 @@ export class ProviderGateway {
         modelId,
       });
     }
-    if (/400|bad request|invalid request|unsupported parameter|provider rejected/i.test(message)) {
+    if (/unsupported parameter|unsupported.*response_format|tool_choice|tools|reasoning|json_schema/i.test(message)) {
+      return new ProviderGatewayError('The selected model rejected an advanced runtime option. Huggy will retry with a simpler compatible request.', {
+        diagnosticCode: 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG',
+        statusCode: 502,
+        retryable: true,
+        modelId,
+      });
+    }
+    if (/400|bad request|invalid request|provider rejected/i.test(message)) {
       return new ProviderGatewayError('OpenRouter rejected the AI request format. Retry with Auto; if it keeps happening, check the selected model and Railway logs.', {
         diagnosticCode: 'PROVIDER_BAD_REQUEST',
         statusCode: 502,

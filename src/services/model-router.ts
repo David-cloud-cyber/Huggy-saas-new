@@ -64,6 +64,11 @@ export class ModelRouter {
       if (context.requiredCapabilities?.tools && !caps.supportsTools) return false;
       if (context.requiredCapabilities?.structuredOutput && !caps.supportsStructuredOutput) return false;
       if (context.requiredCapabilities?.longContext && !caps.supportsLongContext) return false;
+      if (context.requiredCapabilities?.reasoning && caps.reasoningLevel === 'low') return false;
+      if (context.requiredCapabilities?.code && caps.codeLevel === 'low') return false;
+      if (context.requiredCapabilities?.agentic && caps.agenticLevel === 'low') return false;
+      if (context.requiredCapabilities?.design && caps.designLevel === 'low') return false;
+      if (context.requiredCapabilities?.security && caps.securityLevel === 'low') return false;
       return true;
     });
 
