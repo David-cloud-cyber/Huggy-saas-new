@@ -8312,14 +8312,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const sendCheckStarted = async (checkType: string, fr: string, en: string, payload: Record<string, unknown> = {}) => {
     const label = streamCopy(fr, en);
     await send('check_started', label, { check_type: checkType, label, ...payload });
+    await send('check_running', label, { check_type: checkType, label, status: 'running', ...payload });
   };
 
   const sendCheckCompleted = async (checkType: string, status: string, fr: string, en: string, payload: Record<string, unknown> = {}) => {
     const summary = streamCopy(fr, en);
     await send('check_completed', summary, { check_type: checkType, status, summary, ...payload });
+    await send('check_done', summary, { check_type: checkType, status, summary, ...payload });
   };
 
   const commandStartedAt = new Map<string, number>();
+  const completedToolCommands: string[] = [];
   const sendCommandStarted = async (id: string, command: string, fr: string, en: string, checkType = 'command') => {
     commandStartedAt.set(id, Date.now());
     const label = streamCopy(fr, en);
@@ -8340,7 +8343,18 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       status,
       duration_ms,
       output_summary,
+      tool_group_deferred: true,
       ...payload,
+    });
+    const commandSummary = [command, output_summary].filter(Boolean).join(' — ');
+    if (commandSummary && !completedToolCommands.includes(commandSummary)) completedToolCommands.push(commandSummary);
+    await send('tool_group', `${completedToolCommands.length} ${streamCopy('commandes executees', 'commands executed')}`, {
+      group: 'commands',
+      label: streamCopy('commandes executees', 'commands executed'),
+      count: completedToolCommands.length,
+      items: completedToolCommands.slice(-32),
+      latest: commandSummary,
+      status,
     });
     commandStartedAt.delete(id);
   };
@@ -9093,6 +9107,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     const maxAutoFixAttempts = AGENT_V3_ENABLED ? DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts : 3;
     if (pipeline.status === 'failed') {
       await send('error_detected', pipeline.errors[0]?.message || 'Preview build failed.', { errors: pipeline.errors });
+      await sendNarration(
+        'La premiere preview ne tient pas. Je traite ca comme un blocage de livraison et je corrige avant de te montrer le resultat.',
+        'The first preview did not hold. I am treating that as a delivery blocker and fixing it before showing the result.',
+        { phase: 'recovery', source: 'preview', errors: pipeline.errors },
+      );
       await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
       for (; autoFixAttempts < maxAutoFixAttempts && pipeline.status === 'failed'; autoFixAttempts += 1) {
         toolLoop.claim('preview_auto_fix');
@@ -9102,6 +9121,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           step_label: streamCopy('Correction preview.', 'Preview fix.'),
           step_detail: streamCopy('Je repare la preview avant de l afficher.', 'I am repairing the preview before showing it.'),
         });
+        await sendNarration(
+          'Je limite le patch a la cause la plus probable, puis je reconstruis pour verifier.',
+          'I am limiting the patch to the most likely cause, then rebuilding to verify it.',
+          { phase: 'recovery', source: 'preview', attempt },
+        );
         const fix = applyAutoFix(project, files, pipeline.errors);
         autoFix = fix.patch;
         if (!fix.fixed) break;
@@ -9172,6 +9196,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       if (await stopIfCancelled('runner')) return;
 
       let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
+      if (runnerBlocking.length) {
+        await sendNarration(
+          'Le runner a trouve un vrai blocage. Je change d hypothese et je pars des erreurs executees, pas du prompt initial.',
+          'The runner found a real blocker. I am changing hypothesis and working from executed errors, not the initial prompt.',
+          { phase: 'recovery', source: 'runner', blockers: runnerBlocking },
+        );
+      }
       while (runnerBlocking.length && autoFixAttempts < maxAutoFixAttempts) {
         toolLoop.claim('runner_auto_fix');
         autoFixAttempts += 1;
@@ -9197,6 +9228,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           step_label: streamCopy('Retest.', 'Retest.'),
           step_detail: streamCopy('Je confirme que la correction n a pas casse autre chose.', 'I am confirming the fix did not break something else.'),
         });
+        await sendNarration(
+          'Je relance le check parce qu un patch non teste ne vaut pas une livraison.',
+          'I am rerunning the check because an untested patch is not a delivery.',
+          { phase: 'retest', source: 'runner', attempt: autoFixAttempts },
+        );
         await sendCommandStarted(`runner_retest_${autoFixAttempts}`, 'project runner retest', 'En cours retest runner', 'Running runner retest', 'runner');
         pipeline = runPreviewPipeline(project, files);
         previewHtml = pipeline.html;

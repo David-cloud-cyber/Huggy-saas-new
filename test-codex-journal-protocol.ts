@@ -10,10 +10,13 @@ const styles = readFileSync('src/styles/huggy-ai-elements.css', 'utf8');
   'narration',
   'thinking',
   'file_edit',
+  'tool_group',
   'command_started',
   'command_completed',
   'check_started',
   'check_completed',
+  'check_running',
+  'check_done',
   'final_summary',
 ].forEach(eventType => {
   assert.ok(server.includes(`'${eventType}'`), `server should emit ${eventType}`);

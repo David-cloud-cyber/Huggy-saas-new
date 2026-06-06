@@ -3913,8 +3913,11 @@ function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary
     'file_edit',
     'command_started',
     'command_completed',
+    'tool_group',
     'check_started',
     'check_completed',
+    'check_running',
+    'check_done',
     'final_summary',
     'preview_ready',
     'error',
@@ -3967,11 +3970,19 @@ function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary
       return;
     }
     if (step.event_type === 'command_completed') {
+      if (payload.tool_group_deferred) return;
       const item = commandSummaryItem(payload, message);
       if (item && !commandItems.includes(item)) commandItems.push(item);
       return;
     }
-    if (step.event_type === 'check_completed') {
+    if (step.event_type === 'tool_group') {
+      const items = Array.isArray(payload.items) ? payload.items.map((item: any) => redactSecrets(String(item || '')).trim()).filter(Boolean) : [];
+      items.forEach((item: string) => {
+        if (!commandItems.includes(item)) commandItems.push(item);
+      });
+      return;
+    }
+    if (step.event_type === 'check_completed' || step.event_type === 'check_done') {
       const checkType = redactSecrets(String(payload.check_type || 'check')).trim();
       const status = redactSecrets(String(payload.status || step.status || '')).trim();
       const summary = redactSecrets(String(payload.summary || message || '')).trim();
@@ -4360,6 +4371,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       journal.entries = journal.entries.filter(item => item !== entry);
       runningCommandEntries.delete(key);
     }
+    if (payload.tool_group_deferred) {
+      scheduleJournal();
+      return;
+    }
     const item = commandSummaryItem(payload, rawMessage);
     if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes executees' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
@@ -4504,12 +4519,31 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         return;
       }
 
-      if (eventType === 'check_started') {
+      if (eventType === 'tool_group') {
+        const items = Array.isArray(eventPayload.items)
+          ? eventPayload.items.map((item: any) => redactSecrets(String(item || '')).trim()).filter(Boolean)
+          : [];
+        if (items.length) {
+          let group = journalGroups.get('commands');
+          if (!group) {
+            group = { id: 'commands', kind: 'group', text: speaksFrench ? 'commandes executees' : 'commands executed', items: [], status: 'done' };
+            journalGroups.set('commands', group);
+            journal.entries.push(group);
+          }
+          group.text = speaksFrench ? 'commandes executees' : 'commands executed';
+          group.status = eventPayload.status === 'failed' ? 'failed' : 'done';
+          group.items = items.slice(-32);
+          scheduleJournal();
+        }
+        return;
+      }
+
+      if (eventType === 'check_started' || eventType === 'check_running') {
         setJournalActive(String(eventPayload.label || eventMessage || say('Verification en cours', 'Check running')));
         return;
       }
 
-      if (eventType === 'check_completed') {
+      if (eventType === 'check_completed' || eventType === 'check_done') {
         seenJournalKeys.add('new_check_protocol');
         const checkType = String(eventPayload.check_type || 'check').trim();
         const status = String(eventPayload.status || '').trim();
