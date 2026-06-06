@@ -20,7 +20,7 @@ export function AgentPhaseTimeline({ phases }: AgentPhaseTimelineProps) {
   if (!visiblePhases.length) return null;
 
   return (
-    <ol className="agent-phase-timeline" aria-label="Agent activity">
+    <ol className="agent-phase-timeline" aria-label="Mission timeline">
       {visiblePhases.map(phase => (
         <li className="agent-phase" data-status={phase.status} key={phase.id}>
           <span className="agent-phase-marker">{phaseIcon(phase.status)}</span>
@@ -41,12 +41,12 @@ type PhaseGroup = {
 };
 
 const PHASE_GROUPS: PhaseGroup[] = [
-  { id: "understanding", label: "Analyze", ids: ["understanding", "context"] },
-  { id: "planning", label: "Plan", ids: ["planning", "research"] },
-  { id: "files", label: "Files", ids: ["building", "files"] },
+  { id: "understanding", label: "Mission", ids: ["understanding", "context"] },
+  { id: "planning", label: "Agents", ids: ["planning", "research"] },
+  { id: "files", label: "Fichiers", ids: ["building", "files"] },
   { id: "preview", label: "Preview", ids: ["preview"] },
-  { id: "checks", label: "Checks", ids: ["checks", "visual_check", "recovery", "quality", "memory"] },
-  { id: "done", label: "Done", ids: ["done", "failed"] },
+  { id: "checks", label: "Tests", ids: ["checks", "visual_check", "recovery", "quality", "memory"] },
+  { id: "done", label: "Livraison", ids: ["done", "failed"] },
 ];
 
 function compactPhases(phases: StreamPhase[]): StreamPhase[] {

@@ -16,7 +16,7 @@ export function AgentEventDetails({ details, open, onToggle }: AgentEventDetails
   return (
     <section className="agent-event-details" data-open={open ? "true" : "false"}>
       <button className="agent-event-details-toggle" type="button" aria-expanded={open} onClick={onToggle}>
-        <span>{open ? "Hide details" : "View details"}</span>
+        <span>{open ? "Masquer details" : "Voir details"}</span>
         <ChevronDownIcon size={13} aria-hidden="true" />
       </button>
       {open ? (

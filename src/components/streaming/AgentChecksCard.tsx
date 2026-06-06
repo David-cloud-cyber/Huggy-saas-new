@@ -1,22 +1,13 @@
 import * as React from "react";
-import { ShieldCheckIcon } from "lucide-react";
 
-import type { StreamCheckState } from "../../streaming/agent-stream-reducer";
+import type { StreamCheckItem, StreamCheckState } from "../../streaming/agent-stream-reducer";
+import { ChecksMatrixCard } from "./ChecksMatrixCard";
 
 type AgentChecksCardProps = {
   checks: StreamCheckState;
+  checkItems?: StreamCheckItem[];
 };
 
-export function AgentChecksCard({ checks }: AgentChecksCardProps) {
-  if (!checks.hasCheckEvent) return null;
-
-  return (
-    <section className="agent-mini-card" data-status={checks.status} aria-label="Checks status">
-      <div className="agent-mini-card-head">
-        <ShieldCheckIcon size={14} aria-hidden="true" />
-        <span>Checks</span>
-      </div>
-      <p>{checks.message || (checks.status === "passed" ? "Critical checks passed." : "Checks are running.")}</p>
-    </section>
-  );
+export function AgentChecksCard({ checks, checkItems }: AgentChecksCardProps) {
+  return <ChecksMatrixCard checks={checks} checkItems={checkItems} />;
 }

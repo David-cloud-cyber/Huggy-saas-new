@@ -36,6 +36,7 @@ import { AgentActivityCard } from "./components/streaming/AgentActivityCard";
 import type { AgentStreamUiState } from "./streaming/agent-stream-reducer";
 import "./styles/agent-motion.css";
 import "./styles/agent-streaming.css";
+import "./styles/mission-streaming.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
 

@@ -31,7 +31,32 @@ const goodHtml = '<!doctype html><html><head><title>Demo</title><meta name="desc
   assert.ok(result.checks.some(check => check.check_type === 'script_build_exec' && check.status === 'skipped'));
   assert.ok(result.checks.some(check => check.check_type === 'vite_main_present' && check.status === 'passed'));
   assert.ok(result.checks.some(check => check.check_type === 'control_handlers' && check.status === 'passed'));
+  assert.ok(result.checks.some(check => check.check_type === 'production_frontend' && check.status === 'passed'));
+  assert.ok(result.checks.some(check => check.check_type === 'production_readiness_score'));
   assert.ok(result.checks.some(check => check.check_type === 'technical_build_score' && check.status === 'passed'));
+}
+
+{
+  const runner = new HybridProjectRunner({ executeScripts: false });
+  const result = await runner.run({
+    runId: 'run_fake_backend',
+    projectId: 'project_fake_backend',
+    previewHtml: goodHtml,
+    files: [
+      { path: 'index.html', language: 'html', content: goodHtml },
+      { path: 'package.json', language: 'json', content: JSON.stringify({ scripts: { build: 'vite build' } }) },
+      { path: 'src/main.tsx', language: 'tsx', content: 'import App from "./App"; console.log(App);' },
+      {
+        path: 'src/App.tsx',
+        language: 'tsx',
+        content: 'export default function App(){ localStorage.setItem("customers", "[]"); return <main><h1>CRM customers</h1><button onClick={() => localStorage.setItem("customers", "[]")}>Save customer</button></main> }',
+      },
+    ],
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.ok(result.checks.some(check => check.check_type === 'production_backend_contract' && check.status === 'failed'));
+  assert.ok(result.checks.some(check => check.check_type === 'production_no_fake_localstorage' && check.status === 'failed'));
 }
 
 {

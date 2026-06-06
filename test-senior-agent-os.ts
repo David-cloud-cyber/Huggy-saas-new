@@ -84,6 +84,8 @@ const promptContext = seniorAgentPromptContext(context);
 assert.ok(promptContext.includes('Senior Agent OS context'), 'prompt context should be clearly delimited');
 assert.ok(promptContext.includes('known_failure_memory'), 'prompt context should include failure memory');
 assert.ok(promptContext.includes('SUPABASE_AUTH_CLIENT_UNDEFINED'), 'prompt context should include known Supabase auth failure');
+assert.ok(promptContext.includes('Production architecture blueprint'), 'prompt context should include production blueprint');
+assert.ok(promptContext.includes('Every private table needs RLS'), 'production blueprint should carry hard security rules');
 
 const upgradedPrompt = applySeniorAgentContextToPrompt('Build the app.', context);
 assert.ok(upgradedPrompt.startsWith('Build the app.'), 'original user prompt should remain first');

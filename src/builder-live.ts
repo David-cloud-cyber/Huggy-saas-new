@@ -3742,6 +3742,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           workflow: requestedMode === 'plan' ? 'Plan' : requestedMode === 'build' ? 'Build' : 'Auto',
           objective: safePrompt.length > 96 ? `${safePrompt.slice(0, 93)}...` : safePrompt,
           scope: currentProjectName && currentProjectName !== 'Untitled app' ? currentProjectName : 'Current project',
+          autonomy: requestedMode === 'plan' ? 'L2 - plan seulement' : 'L4 - modification avec rollback',
+          risk: 'Faible',
           rollbackAvailable: Boolean(currentProjectId && currentFiles.length),
           status: speaksFrench ? 'Preparation du run' : 'Preparing run',
         },

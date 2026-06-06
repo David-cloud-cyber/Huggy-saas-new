@@ -105,6 +105,10 @@ import {
   summarizeHuggyCloudRequirements,
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
+import {
+  applyHuggyFullstackKit,
+  shouldApplyHuggyFullstackKit,
+} from './src/services/fullstack-generation.ts';
 import { containsSecret, redactSecretPayload, redactSecrets } from './src/services/secret-redaction.ts';
 import {
   MEDIA_MODEL_REGISTRY,
@@ -1635,7 +1639,18 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '',
   ].join('\n'), 'markdown');
 
-  return Array.from(byPath.values()).slice(0, 80);
+  let outputFiles = Array.from(byPath.values()).slice(0, 80);
+  const fullstackRequirement = detectHuggyCloudRequirements(promptOrDescription);
+  if (shouldApplyHuggyFullstackKit({ prompt: promptOrDescription, files: outputFiles, requirement: fullstackRequirement })) {
+    outputFiles = applyHuggyFullstackKit({
+      files: outputFiles,
+      projectName,
+      prompt: promptOrDescription,
+      requirement: fullstackRequirement,
+    }).slice(0, 90);
+  }
+
+  return outputFiles;
 }
 
 function escapeHtml(value: string): string {
@@ -2379,7 +2394,7 @@ function getProjectPreviewHtml(project: GeneratedProject, files: GeneratedFile[]
 }
 
 function createTemplateFiles(projectName: string, prompt: string): GeneratedFile[] {
-  return withProjectSeoSupport([
+  const files = withProjectSeoSupport([
     {
       path: 'index.html',
       language: 'html',
@@ -2396,6 +2411,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
       content: `# ${projectName}\n\nGenerated from this prompt:\n\n${prompt || 'No prompt provided.'}\n\nThis MVP is static-preview ready and includes Supabase schema notes for the backend layer.\n`,
     },
   ], projectName, prompt);
+  return ensureModernFrontendProject(files, projectName, prompt);
 }
 
 class AgentOrchestrator {
@@ -3952,6 +3968,7 @@ async function generateFilesWithAi(input: {
     {
       role: 'system',
       content: buildGenerationSystemPrompt({
+        prompt: input.prompt,
         uiPolicySystemPrompt: uiPolicy.systemPrompt,
         hasExistingFiles: input.existingFiles.length > 0,
       }),
@@ -4003,6 +4020,7 @@ function buildGenerationMessages(input: {
     {
       role: 'system' as const,
       content: buildGenerationSystemPrompt({
+        prompt: input.prompt,
         uiPolicySystemPrompt: uiPolicy.systemPrompt,
         hasExistingFiles: input.existingFiles.length > 0,
         hasResearchContext: Boolean(input.researchContext),

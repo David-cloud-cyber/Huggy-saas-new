@@ -32,7 +32,7 @@ export function AgentCommandBar({ state, detailsOpen, onToggleDetails }: AgentCo
   const canRollback = Boolean(state.runHeader?.rollbackAvailable);
 
   return (
-    <div className="agent-command-bar" role="toolbar" aria-label="Agent run actions">
+    <div className="agent-command-bar" role="toolbar" aria-label="Mission actions">
       {isActive ? (
         <button className="agent-command-button danger" type="button" onClick={() => dispatchCommand("stop")}>
           <StopCircleIcon size={13} aria-hidden="true" />
@@ -47,13 +47,13 @@ export function AgentCommandBar({ state, detailsOpen, onToggleDetails }: AgentCo
         onClick={onToggleDetails}
       >
         <ClipboardListIcon size={13} aria-hidden="true" />
-        {detailsOpen ? "Hide details" : "View details"}
+        {detailsOpen ? "Masquer details" : "Voir details"}
       </button>
 
       {hasFiles ? (
         <button className="agent-command-button" type="button" onClick={() => dispatchCommand("files")}>
           <FileCode2Icon size={13} aria-hidden="true" />
-          {isActive ? "Files" : "View diff"}
+          {isActive ? "Fichiers" : "Voir diff"}
         </button>
       ) : null}
 
@@ -68,16 +68,16 @@ export function AgentCommandBar({ state, detailsOpen, onToggleDetails }: AgentCo
         <>
           <button className="agent-command-button" type="button" onClick={() => dispatchPreview("mobile")}>
             <SmartphoneIcon size={13} aria-hidden="true" />
-            Test mobile
+            Tester mobile
           </button>
           <button className="agent-command-button primary" type="button" onClick={() => dispatchPreview("publish")}>
             <RocketIcon size={13} aria-hidden="true" />
-            Publish
+            Publier
           </button>
           {!isActive ? (
             <button className="agent-command-button" type="button" onClick={() => dispatchCommand("media")}>
               <SparklesIcon size={13} aria-hidden="true" />
-              Media kit
+              Kit media
             </button>
           ) : null}
         </>

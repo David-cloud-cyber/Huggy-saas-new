@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { runBrowserInteractionAudit } from './browser-interaction-runner.ts';
 import type { AgentVerificationCheck } from './agent-v2.ts';
 import { containsSecret, redactSecrets } from './secret-redaction.ts';
+import { detectHuggyCloudRequirements } from './huggy-cloud.ts';
+import { validateHuggyFullstackFiles } from './fullstack-generation.ts';
 
 export type RunnerStatus = 'passed' | 'failed' | 'skipped';
 export type RunnerSeverity = 'info' | 'low' | 'medium' | 'high';
@@ -185,8 +187,24 @@ export class HybridProjectRunner implements RunnerAdapter {
 
     checks.push(...this.localImportChecks(files));
     checks.push(...this.interactionChecks(source));
+    checks.push(...this.fullstackChecks(files, source));
     checks.push(...this.previewRuntimeChecks(html));
+    checks.push(...this.productionReadinessChecks(files, source, hasPackageJson));
     return checks;
+  }
+
+  private fullstackChecks(files: RunnerFile[], source: string): RunnerCheck[] {
+    const hasExplicitFullstackSurface = files.some(file => /^(supabase\/schema\.sql|src\/lib\/huggyCloud\.ts|src\/lib\/appData\.ts|src\/fullstack\.test\.ts|FULLSTACK\.md)$/i.test(normalizePath(file.path)))
+      || /@supabase\/supabase-js|Huggy Cloud|huggyCloud|supabase\s*\.|getHuggyCloudClient|from\(['"`]app_/i.test(source);
+    if (!hasExplicitFullstackSurface) return [];
+    const requirement = detectHuggyCloudRequirements(source);
+    return validateHuggyFullstackFiles(files, requirement).map(check => ({
+      check_type: check.key,
+      status: check.status === 'fail' ? 'failed' : check.status === 'pass' ? 'passed' : 'skipped',
+      severity: check.severity,
+      message: check.message,
+      file_path: check.file,
+    }));
   }
 
   private localImportChecks(files: RunnerFile[]): RunnerCheck[] {
@@ -271,6 +289,89 @@ export class HybridProjectRunner implements RunnerAdapter {
     } else {
       checks.push(pass('preview_body_content', 'Preview body contains rendered content or a mounted shell.'));
     }
+    return checks;
+  }
+
+  private productionReadinessChecks(files: RunnerFile[], source: string, hasPackageJson: boolean): RunnerCheck[] {
+    const checks: RunnerCheck[] = [];
+    const paths = new Set(files.map(file => normalizePath(file.path).toLowerCase()));
+    const hasModernReact = hasPackageJson && paths.has('index.html') && Array.from(paths).some(file => /^src\/main\.(tsx|ts|jsx|js)$/.test(file)) && Array.from(paths).some(file => /^src\/app\.(tsx|jsx)$/.test(file));
+    const hasCss = Array.from(paths).some(file => /\.(css|scss)$/.test(file));
+    const hasResponsiveCss = /@media|clamp\(|minmax\(|grid-template|flex-wrap|container-type|max-width/i.test(source);
+    const hasDataIntent = /\b(auth|login|sign in|signup|database|crud|orders?|products?|customers?|clients?|bookings?|reservations?|payments?|invoices?|contacts?|deals?|tasks?|notes?|storage|upload|seller|buyer)\b/i.test(source);
+    const hasLocalStorage = /\blocalStorage\b/i.test(source);
+    const hasSupabaseSchema = paths.has('supabase/schema.sql');
+    const schemaFile = files.find(file => normalizePath(file.path).toLowerCase() === 'supabase/schema.sql');
+    const schema = schemaFile?.content || '';
+    const hasRls = /enable row level security/i.test(schema);
+    const hasPolicies = /create policy/i.test(schema);
+    const hasOwnerScope = /owner_id|organization_id|org_id/i.test(schema);
+    const hasValidation = paths.has('src/lib/validation.ts') && /zod|z\.object/i.test(source);
+    const hasRateLimit = /assertRateLimit|rate limit|RATE_LIMITED/i.test(source);
+    const hasWebhookSignature = /assertWebhookSignature|stripe-signature|webhook signature/i.test(source);
+    const hasStripe = /\b(stripe|checkout|subscription|payment|invoice)\b/i.test(source);
+    const hasRouteGuard = /getHuggyCloudClient|auth\.getUser|onAuthStateChange|ProtectedRoute|requireAuth|session/i.test(source);
+    const hasDeployScript = /"build"\s*:|"preview"\s*:|vite build|next build/i.test(source);
+    const noSecrets = !containsSecret(source) && !/service[_-]?role|SUPABASE_SERVICE_ROLE|sbp_[a-z0-9]|secret eyJ/i.test(source);
+
+    checks.push(hasModernReact
+      ? readinessPass('production_frontend', 92, 'Frontend uses a modern React project structure.')
+      : fail('production_frontend', 'high', 'Production apps need a modern React/TypeScript project structure.'));
+    checks.push(hasCss && hasResponsiveCss
+      ? readinessPass('production_responsive', 88, 'Responsive/mobile-first CSS patterns are present.')
+      : fail('production_responsive', 'medium', 'Responsive/mobile-first CSS patterns are missing.'));
+    if (hasDataIntent) {
+      checks.push(hasSupabaseSchema
+        ? readinessPass('production_backend_contract', 86, 'Data app includes a backend schema contract.')
+        : fail('production_backend_contract', 'high', 'Data/auth/payment apps must include a real backend schema contract, not only frontend state.'));
+      checks.push(hasRls && hasPolicies && hasOwnerScope
+        ? readinessPass('production_database_security', 90, 'Database schema includes RLS, policies, and owner/org scoping.')
+        : fail('production_database_security', 'high', 'Private data tables need RLS, policies, and owner/org scoping.'));
+      checks.push(hasValidation
+        ? readinessPass('production_validation', 84, 'Validation layer is present.')
+        : fail('production_validation', 'high', 'Sensitive data apps need Zod/server validation.'));
+      checks.push(hasRouteGuard
+        ? readinessPass('production_auth_guard', 84, 'Auth/session guard path is present.')
+        : fail('production_auth_guard', 'high', 'Private routes or data actions need auth/session guards.'));
+    }
+    if (hasLocalStorage && hasDataIntent && !/isPreviewRuntime/i.test(source)) {
+      checks.push(fail('production_no_fake_localstorage', 'high', 'localStorage cannot be production persistence for real private data.'));
+    } else if (hasLocalStorage) {
+      checks.push(readinessPass('production_demo_data_honesty', 78, 'Local demo storage is limited or appears preview-only.'));
+    }
+    checks.push(noSecrets
+      ? readinessPass('production_secret_safety', 96, 'No frontend secrets or service role keys detected.')
+      : fail('production_secret_safety', 'high', 'Secrets or service role keys must never appear in generated frontend files.'));
+    if (hasDataIntent || hasStripe) {
+      checks.push(hasRateLimit
+        ? readinessPass('production_rate_limit', 78, 'Rate limit helper or guard is present.')
+        : warn('production_rate_limit', 'medium', 'Sensitive actions should include rate limiting.'));
+    }
+    if (hasStripe) {
+      checks.push(hasWebhookSignature
+        ? readinessPass('production_stripe_webhook', 86, 'Webhook signature verification path is present.')
+        : fail('production_stripe_webhook', 'high', 'Payment apps need server-side webhook signature verification.'));
+    }
+    checks.push(hasDeployScript
+      ? readinessPass('production_deploy', 82, 'Build/deploy script surface is present.')
+      : warn('production_deploy', 'medium', 'Deploy readiness could not be confirmed without build scripts.'));
+
+    const categoryScores = {
+      frontend: scoreFromBooleans([hasModernReact, hasCss, hasResponsiveCss]),
+      backend: hasDataIntent ? scoreFromBooleans([hasSupabaseSchema, hasValidation, hasRouteGuard]) : 100,
+      database: hasDataIntent ? scoreFromBooleans([hasSupabaseSchema, hasRls, hasPolicies, hasOwnerScope]) : 100,
+      security: scoreFromBooleans([noSecrets, !hasStripe || hasWebhookSignature, !hasDataIntent || hasValidation, !hasDataIntent || hasRouteGuard]),
+      responsive: scoreFromBooleans([hasCss, hasResponsiveCss]),
+      deploy: scoreFromBooleans([hasDeployScript, hasPackageJson]),
+    };
+    const minScore = Math.min(...Object.values(categoryScores));
+    checks.push({
+      check_type: 'production_readiness_score',
+      status: minScore >= 76 ? 'passed' : minScore >= 60 ? 'skipped' : 'failed',
+      severity: minScore >= 60 ? 'low' : 'high',
+      message: `Production readiness score: frontend ${categoryScores.frontend}, backend ${categoryScores.backend}, database ${categoryScores.database}, security ${categoryScores.security}, responsive ${categoryScores.responsive}, deploy ${categoryScores.deploy}.`,
+      public_payload: categoryScores,
+    });
     return checks;
   }
 
@@ -433,6 +534,21 @@ function safeRunnerEnv() {
 
 function redactOutput(value: string) {
   return redactSecrets(value, '[redacted]').slice(-4000);
+}
+
+function readinessPass(check_type: string, score: number, message: string): RunnerCheck {
+  return {
+    check_type,
+    status: 'passed',
+    severity: 'info',
+    message,
+    public_payload: { score },
+  };
+}
+
+function scoreFromBooleans(values: boolean[]) {
+  if (!values.length) return 100;
+  return Math.round(values.filter(Boolean).length / values.length * 100);
 }
 
 function pass(check_type: string, message: string, file_path?: string): RunnerCheck {

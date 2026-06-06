@@ -13,11 +13,12 @@ const textPrompt = buildAgentTextSystemPrompt({
   languageInstruction: 'Respond in French.',
 });
 const generationPrompt = buildGenerationSystemPrompt({
+  prompt: 'Create a SaaS app with auth, database and billing.',
   uiPolicySystemPrompt: 'UI policy test.',
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v11');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v12');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
@@ -43,5 +44,8 @@ assert.ok(textPrompt.includes('Senior Agent OS policy'), 'text prompt must inclu
 assert.ok(generationPrompt.includes('Senior Agent OS policy'), 'generation prompt must include Senior Agent OS policy');
 assert.ok(generationPrompt.includes('No fake success'), 'generation prompt must enforce no-fake-success delivery');
 assert.ok(generationPrompt.includes('decompose tasks'), 'generation prompt must require task decomposition before execution');
+assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
+assert.ok(generationPrompt.includes('Production architecture blueprint'), 'generation prompt must include production blueprint context');
+assert.ok(generationPrompt.includes('Every private table needs RLS'), 'generation prompt must enforce private table RLS');
 
 console.log('agent prompt stack ok');

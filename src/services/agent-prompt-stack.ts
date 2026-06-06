@@ -1,4 +1,9 @@
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v11';
+import {
+  buildProductionBlueprintPromptContext,
+  inferProductionBlueprint,
+} from './production-blueprints.ts';
+
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v12';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -200,12 +205,25 @@ const HUGGY_CLOUD_POLICY = [
   'Use Huggy Cloud by default. Huggy Cloud is the managed backend layer that creates or tracks backend namespace/project, SQL schema, RLS, auth settings, storage buckets, functions, secrets, public runtime config, logs, and usage.',
   'For Free projects, prefer a shared managed backend isolated by project_id/schema and strict RLS. For Pro, use the standard managed backend. For Scale, Enterprise, or high-isolation needs, recommend a dedicated backend without exposing internal supplier details.',
   'Include supabase/schema.sql when persistent data is needed, but generated previews must be honest: if Huggy Cloud is only planned and not active yet, show local/demo state clearly and never claim real persistence is live.',
+  'For fullstack apps, generate a real backend contract alongside the frontend: src/lib/huggyCloud.ts or equivalent browser-safe client, src/lib/appData.ts or equivalent CRUD layer, supabase/schema.sql with RLS policies and explicit Data API grants, and a smoke test. Do not return only a static preview.',
   'When generated code needs auth, create or import an explicit browser-safe client. Never assume a global supabase variable, never use window.supabase, and never call supabase.auth unless supabase is imported or created in the generated app.',
   'If Huggy Cloud runtime config is not available in preview, show a safe demo/auth-unavailable state instead of crashing. Auth UI can be shown, but real sign-in must be clearly unavailable until Huggy Cloud is active.',
   'Users should only need to confirm sensitive actions: real payments, real email sending, external private APIs, deleting data, custom domains, or capacity upgrades.',
   'Never expose service_role_key, Supabase service role keys, provider secrets, internal Supabase project refs when sensitive, OpenRouter keys, Stripe secrets, raw supplier payloads, provider costs, or margins.',
   'Sensitive backend operations must stay behind Huggy Cloud or server APIs. Generated frontend code may only use publishable browser config and must never include service role keys.',
   'Backend-related UI should be user-level: Database, Auth, Storage, Functions, Secrets, Logs, Usage, status, schema, and safe masked configuration only.',
+].join('\n');
+
+const HUGGY_PRODUCTION_READINESS_POLICY = [
+  'Production-readiness policy:',
+  'Huggy should generate production-shaped applications by default, not throwaway UI demos.',
+  'Default frontend stack for new real apps: React + TypeScript + Vite unless the project type clearly needs Next.js or the existing codebase requires another stack.',
+  'A real data app needs a real backend contract: Supabase/Huggy Cloud schema, RLS, policies, browser-safe client, validation, and runner checks. Do not rely on localStorage for production persistence.',
+  'For every private user table: include owner_id or organization_id, timestamps, useful indexes, RLS enabled, explicit policies, and explicit grants when Data API access is intended.',
+  'For sensitive apps: include audit logs. For payments: include server-side webhook signature handling. For uploads: include MIME/size policy and storage metadata.',
+  'Add Security Agent responsibility to the stream/checks: secrets, service_role exposure, RLS, policies, validation, rate limits, upload safety, webhook signatures, non-sensitive errors, and role permissions.',
+  'Production Readiness Score may be shown only from real checks. Never claim production-ready if build/checks did not run, preview is blank, backend is fake, RLS is missing, validation is missing, private routes are unprotected, or payment logic is client-only.',
+  'Warnings can be delivered as recommendations. High-severity failures block readiness until auto-fix succeeds or a clear blocker is reported.',
 ].join('\n');
 
 const HUGGY_PREMIUM_UI_ESCALATION_POLICY = [
@@ -361,10 +379,12 @@ export function buildAgentTextSystemPrompt(input: {
 }
 
 export function buildGenerationSystemPrompt(input: {
+  prompt?: string;
   uiPolicySystemPrompt: string;
   hasExistingFiles: boolean;
   hasResearchContext?: boolean;
 }) {
+  const productionBlueprint = inferProductionBlueprint(input.prompt || '');
   return joinSections([
     HUGGY_IDENTITY,
     HUGGY_USER_EMPATHY,
@@ -381,6 +401,8 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_GENERATION_PRODUCT_POLICY,
     HUGGY_FUNCTIONAL_QUALITY_POLICY,
     HUGGY_CLOUD_POLICY,
+    HUGGY_PRODUCTION_READINESS_POLICY,
+    buildProductionBlueprintPromptContext(productionBlueprint),
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
     HUGGY_PREMIUM_UI_ESCALATION_POLICY,

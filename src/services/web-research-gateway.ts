@@ -14,23 +14,27 @@ export type ResearchResultItem = {
 export type ResearchResult = {
   status: ResearchStatus;
   query: string;
-  provider: 'tavily' | 'brave' | 'none';
+  provider: 'firecrawl' | 'tavily' | 'brave' | 'none';
   diagnostic_code?: string;
   message: string;
   results: ResearchResultItem[];
 };
 
 export class WebResearchGateway {
+  private firecrawlKey: string;
   private tavilyKey: string;
   private braveKey: string;
+  private fetchImpl: typeof fetch;
 
-  constructor(env: Record<string, any> = process.env) {
+  constructor(env: Record<string, any> = process.env, fetchImpl: typeof fetch = fetch) {
+    this.firecrawlKey = clean(env.FIRECRAWL_API_KEY);
     this.tavilyKey = clean(env.TAVILY_API_KEY);
     this.braveKey = clean(env.BRAVE_SEARCH_API_KEY);
+    this.fetchImpl = fetchImpl;
   }
 
   isConfigured() {
-    return Boolean(this.tavilyKey || this.braveKey);
+    return Boolean(this.firecrawlKey || this.tavilyKey || this.braveKey);
   }
 
   async search(query: string, options: { maxResults?: number; timeoutMs?: number } = {}): Promise<ResearchResult> {
@@ -43,6 +47,16 @@ export class WebResearchGateway {
     }
 
     const maxResults = Math.min(6, Math.max(1, options.maxResults || 4));
+    if (this.firecrawlKey) {
+      try {
+        if (looksLikeUrl(normalizedQuery)) {
+          return await this.scrapeFirecrawl(normalizeScrapeUrl(normalizedQuery), options.timeoutMs || 12_000);
+        }
+        return await this.searchFirecrawl(normalizedQuery, maxResults, options.timeoutMs || 12_000);
+      } catch (error: any) {
+        if (!this.tavilyKey && !this.braveKey) return failed(normalizedQuery, 'firecrawl', error);
+      }
+    }
     if (this.tavilyKey) {
       try {
         return await this.searchTavily(normalizedQuery, maxResults, options.timeoutMs || 12_000);
@@ -57,11 +71,94 @@ export class WebResearchGateway {
     }
   }
 
+  async scrape(url: string, options: { timeoutMs?: number } = {}): Promise<ResearchResult> {
+    const normalizedUrl = normalizeScrapeUrl(url);
+    if (!normalizedUrl) {
+      return skipped(url, 'WEB_RESEARCH_URL_INVALID', 'No valid URL was available for scraping.');
+    }
+    if (!this.firecrawlKey) {
+      return skipped(normalizedUrl, 'FIRECRAWL_NOT_CONFIGURED', 'Firecrawl scraping is not configured.');
+    }
+    try {
+      return await this.scrapeFirecrawl(normalizedUrl, options.timeoutMs || 12_000);
+    } catch (error: any) {
+      return failed(normalizedUrl, 'firecrawl', error);
+    }
+  }
+
+  private async searchFirecrawl(query: string, maxResults: number, timeoutMs: number): Promise<ResearchResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await this.fetchImpl('https://api.firecrawl.dev/v2/search', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.firecrawlKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          limit: maxResults,
+          maxResults,
+        }),
+        signal: controller.signal as any,
+      });
+      if (!response.ok) throw new Error(`Firecrawl Search HTTP ${response.status}`);
+      const data: any = await response.json();
+      const rawResults = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.items)
+            ? data.items
+            : [];
+      const results = rawResults.slice(0, maxResults).map(firecrawlItemToResult).filter((item: ResearchResultItem) => item.url);
+      return {
+        status: 'completed',
+        query,
+        provider: 'firecrawl',
+        message: results.length ? 'Research completed.' : 'Research completed with no results.',
+        results,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async scrapeFirecrawl(url: string, timeoutMs: number): Promise<ResearchResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await this.fetchImpl('https://api.firecrawl.dev/v2/scrape', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.firecrawlKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+        signal: controller.signal as any,
+      });
+      if (!response.ok) throw new Error(`Firecrawl Scrape HTTP ${response.status}`);
+      const data: any = await response.json();
+      const item = data?.data || data;
+      const result = firecrawlItemToResult({ ...item, url: item?.url || item?.metadata?.sourceURL || url });
+      return {
+        status: 'completed',
+        query: url,
+        provider: 'firecrawl',
+        message: result.snippet ? 'Scrape completed.' : 'Scrape completed with no content.',
+        results: result.url ? [result] : [],
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private async searchTavily(query: string, maxResults: number, timeoutMs: number): Promise<ResearchResult> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch('https://api.tavily.com/search', {
+      const response = await this.fetchImpl('https://api.tavily.com/search', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -102,7 +199,7 @@ export class WebResearchGateway {
       const url = new URL('https://api.search.brave.com/res/v1/web/search');
       url.searchParams.set('q', query);
       url.searchParams.set('count', String(maxResults));
-      const response = await fetch(url.toString(), {
+      const response = await this.fetchImpl(url.toString(), {
         headers: {
           accept: 'application/json',
           'x-subscription-token': this.braveKey,
@@ -154,7 +251,7 @@ function skipped(query: string, diagnostic_code: string, message: string): Resea
   return { status: 'skipped', query, provider: 'none', diagnostic_code, message, results: [] };
 }
 
-function failed(query: string, provider: 'tavily' | 'brave', error: any): ResearchResult {
+function failed(query: string, provider: 'firecrawl' | 'tavily' | 'brave', error: any): ResearchResult {
   const message = redactSecrets(error?.message || error || 'Web research failed.', '[redacted]');
   return { status: 'failed', query, provider, diagnostic_code: 'WEB_RESEARCH_FAILED', message, results: [] };
 }
@@ -175,4 +272,30 @@ function truncate(value: unknown, limit: number) {
 function safeUrl(value: unknown) {
   const url = clean(value);
   return /^https?:\/\//i.test(url) ? url.slice(0, 500) : '';
+}
+
+function looksLikeUrl(value: string) {
+  const cleanValue = clean(value);
+  return /^https?:\/\//i.test(cleanValue) || /^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#][^\s]*)?$/i.test(cleanValue);
+}
+
+function normalizeScrapeUrl(value: unknown) {
+  const url = clean(value);
+  if (/^https?:\/\//i.test(url)) return safeUrl(url);
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#][^\s]*)?$/i.test(url)) return `https://${url}`.slice(0, 500);
+  return '';
+}
+
+function firecrawlItemToResult(item: any): ResearchResultItem {
+  const metadata = item?.metadata || {};
+  const url = safeUrl(item?.url || item?.sourceURL || metadata?.sourceURL || metadata?.url);
+  const title = item?.title || metadata?.title || url || 'Untitled result';
+  const snippet = item?.markdown || item?.content || item?.text || item?.description || item?.snippet || metadata?.description || '';
+  return {
+    title: truncate(title, 120),
+    url,
+    snippet: truncate(snippet, 520),
+    published_at: item?.publishedDate || item?.published_at || metadata?.publishedTime || metadata?.published_at || null,
+    source: 'firecrawl',
+  };
 }

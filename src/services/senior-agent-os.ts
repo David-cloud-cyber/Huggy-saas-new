@@ -1,4 +1,8 @@
 import { redactSecrets } from './secret-redaction.ts';
+import {
+  buildProductionBlueprintPromptContext,
+  inferProductionBlueprint,
+} from './production-blueprints.ts';
 
 export type SeniorAgentFile = {
   path: string;
@@ -254,6 +258,30 @@ export function decomposeAgentTask(input: { prompt: string; decision?: SeniorAge
 
 export function inferProductBlueprint(prompt: string): SeniorAgentBlueprint {
   const text = clean(prompt, 1600).toLowerCase();
+  const production = inferProductionBlueprint(text);
+  const productionPlatformMap: Record<string, string> = {
+    admin_dashboard: 'dashboard',
+    internal_tool: 'dashboard',
+    blog_cms: 'cms',
+    ecommerce: 'ecommerce',
+    ai_tool: 'ai_tool',
+  };
+  const platformFromProduction = productionPlatformMap[production.type] || production.type;
+  if (production.type !== 'saas' || /\b(saas|app|dashboard|marketplace|crm|booking|e-?commerce|cms|blog|internal tool|ai tool)\b/i.test(text)) {
+    return {
+      platform_type: platformFromProduction,
+      required_components: unique(production.components, 16),
+      required_states: unique([...production.frontend.requiredStates, 'loading', 'empty', 'error', 'success'], 16),
+      functional_checks: unique(production.tests, 16),
+      forbidden_patterns: unique([
+        'dead primary buttons',
+        'fake connected backend without honest fallback',
+        'beautiful but non-functional UI',
+        'localStorage as production persistence for private data',
+        'table without RLS',
+      ], 12),
+    };
+  }
   const match = (type: string, re: RegExp) => re.test(text) ? type : '';
   const platformType =
     match('crm', /crm|client|pipeline|deal|lead/) ||
@@ -465,6 +493,7 @@ export function compileSeniorAgentContext(input: {
 }
 
 export function seniorAgentPromptContext(context: SeniorAgentContext) {
+  const productionBlueprint = inferProductionBlueprint(context.prompt_normalization.user_goal);
   return [
     'Senior Agent OS context:',
     JSON.stringify({
@@ -483,6 +512,7 @@ export function seniorAgentPromptContext(context: SeniorAgentContext) {
       known_failure_memory: KNOWN_FAILURES,
       rule: 'No fake success: do not say ready unless the build/preview/checks are truly acceptable or the blocker is clearly reported.',
     }),
+    buildProductionBlueprintPromptContext(productionBlueprint),
   ].join('\n');
 }
 
