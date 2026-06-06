@@ -96,6 +96,7 @@ import {
 import {
   GeneratedOutputParseError,
   extractGeneratedJson,
+  extractGeneratedMarkdownFiles,
   looksLikeStandaloneHtml,
 } from './src/services/generated-output-parser.ts';
 import {
@@ -4302,7 +4303,7 @@ function parseGeneratedOutput(
       'Huggy received only a standalone HTML preview, but new apps must be complete React/Vite projects with working files. The existing project was kept unchanged.',
     );
   }
-  const parsed = extractGeneratedJson(rawText) || (
+  const parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
     isStandaloneHtml
       ? {
           summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
