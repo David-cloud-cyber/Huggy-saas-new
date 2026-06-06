@@ -462,6 +462,7 @@ app.use('/api/ai/estimate', requireAuth);
 app.use('/api/ai/route', requireAuth);
 app.use('/api/users/me', requireAuth);
 app.use('/api/admin', requireAuth);
+app.use('/api/assistant', requireAuth);
 app.use('/api/projects', requireAuth);
 
 // Runtime data must live in Supabase. The only in-memory state kept here is
@@ -3223,13 +3224,11 @@ async function createAgentTextResponse(input: {
   userCredits?: number;
   plan?: string;
   researchContext?: string;
+  allowLocalFallback?: boolean;
 }): Promise<{ text: string; model: string; cost_usd: number }> {
   const { project, prompt, files, decision, researchContext } = input;
   if (decision.intent === 'clarification_required') {
     return { text: createClarificationContent(decision), model: 'auto', cost_usd: 0 };
-  }
-  if (decision.intent === 'conversation' && (isGreetingPrompt(prompt) || isSimpleLocalConversationPrompt(prompt))) {
-    return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0 };
   }
   if (decision.intent === 'verify') {
     const pipeline = runPreviewPipeline(project, files);
@@ -3277,6 +3276,7 @@ async function createAgentTextResponse(input: {
       return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0 };
     }
     if (decision.intent === 'conversation') {
+      if (input.allowLocalFallback === false && isExplicitProviderModelSelection(input.modelId)) throw error;
       return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0 };
     }
     if (decision.intent === 'deploy_assist') {
@@ -3295,14 +3295,12 @@ async function streamAgentTextResponse(input: {
   userCredits?: number;
   plan?: string;
   researchContext?: string;
+  allowLocalFallback?: boolean;
   onToken?: (chunk: string, meta: { index: number; model: string }) => Promise<void> | void;
 }): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
   const { project, prompt, files, decision, researchContext, onToken } = input;
   if (decision.intent === 'clarification_required') {
     return { text: createClarificationContent(decision), model: 'auto', cost_usd: 0, streamed: false };
-  }
-  if (decision.intent === 'conversation' && (isGreetingPrompt(prompt) || isSimpleLocalConversationPrompt(prompt))) {
-    return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
   }
   if (decision.intent === 'verify') {
     const pipeline = runPreviewPipeline(project, files);
@@ -3372,6 +3370,7 @@ async function streamAgentTextResponse(input: {
       return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
     }
     if (decision.intent === 'conversation') {
+      if (input.allowLocalFallback === false && isExplicitProviderModelSelection(input.modelId)) throw error;
       return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
     }
     if (decision.intent === 'deploy_assist') {
@@ -3456,6 +3455,10 @@ function modelCreditFloor(modelId: unknown, fallback = 0) {
 
 function normalizeProviderModelForBackend(value: unknown): AllowedModelId {
   return isAllowedModelId(value) ? value : DEFAULT_PROVIDER_MODEL_ID;
+}
+
+function isExplicitProviderModelSelection(value: unknown) {
+  return typeof value === 'string' && value.trim() !== '' && value !== 'auto';
 }
 
 function estimateActionCost(prompt: string, intent: IntentDecision, modelId?: unknown) {
@@ -6069,6 +6072,209 @@ app.post('/api/ai/route', async (req, res) => {
   }
 });
 
+// POST /assistant/chat/stream
+// Lightweight conversational stream: no project creation, no preview mutation, but
+// selected models still go through the provider when OpenRouter is configured.
+app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
+  const requestId = `chat_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = String(authUser.id);
+  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  if (!prompt) {
+    return res.status(400).json({
+      success: false,
+      error: 'Prompt is required.',
+      message: 'Prompt is required.',
+      diagnostic_code: 'PROMPT_REQUIRED',
+      request_id: requestId,
+      suggested_action: 'write_message',
+    });
+  }
+  if (!enforceRateLimit(`assistant_chat:${userId}`, 30, 60_000)) {
+    return res.status(429).json({
+      success: false,
+      error: 'Too many messages. Please wait a moment.',
+      message: 'Too many messages. Please wait a moment.',
+      diagnostic_code: 'RATE_LIMITED',
+      request_id: requestId,
+      suggested_action: 'retry_later',
+    });
+  }
+
+  const selectedModel = normalizeModelSelectionId(req.body?.modelId || 'auto');
+  const requestedProjectId = String(req.body?.projectId || '').trim();
+  const now = new Date().toISOString();
+  let project: GeneratedProject = {
+    id: 'assistant',
+    owner_id: userId,
+    organization_id: userId,
+    created_by: userId,
+    name: 'Huggy',
+    slug: 'huggy-assistant',
+    status: 'assistant',
+    preview_status: 'idle',
+    created_at: now,
+    updated_at: now,
+  };
+  let files: GeneratedFile[] = [];
+  let canPersistConversation = false;
+
+  if (isUuid(requestedProjectId)) {
+    const loadedProject = await loadProject(requestedProjectId, userId).catch(() => null);
+    if (loadedProject && hasProjectCapability(req, 'view', loadedProject)) {
+      project = loadedProject;
+      files = await loadProjectFiles(project.id).catch(() => []);
+      canPersistConversation = true;
+    }
+  }
+
+  const history = Array.isArray(req.body?.messages)
+    ? req.body.messages
+      .filter((message: any) => (message?.role === 'user' || message?.role === 'assistant') && String(message?.content || '').trim())
+      .slice(-10)
+      .map((message: any) => `${message.role === 'assistant' ? 'Huggy' : 'User'}: ${redactSecrets(String(message.content || '')).slice(0, 1200)}`)
+      .join('\n')
+    : '';
+  const promptWithHistory = history
+    ? `${prompt}\n\nRecent conversation context, for continuity only:\n${history}`
+    : prompt;
+  const decision: IntentDecision = {
+    intent: 'conversation',
+    confidence: 0.96,
+    requestedMode: 'auto',
+    understandingCategory: 'explanation',
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: true,
+    userVisibleReason: 'Conversation only. Huggy will not touch files or preview.',
+    reason: 'lightweight_conversation_stream',
+    nextAction: 'answer',
+    autoPlanRequired: false,
+    selectedModelPolicy: 'balanced',
+    routingSource: 'heuristic',
+  };
+  const helpers = getDbHelpers();
+  const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  const estimate = estimateActionCost(prompt, decision, selectedModel);
+  if (wallet < estimate.finalCredits) {
+    return res.status(402).json({
+      ...publicCreditGateResponse(),
+      request_id: requestId,
+    });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  res.write(': huggy-chat-stream-open\n\n');
+
+  let sequence = 0;
+  let closed = false;
+  res.on('close', () => {
+    closed = true;
+  });
+  const send = (eventType: string, message: string, payload: Record<string, unknown> = {}) => {
+    if (closed || res.destroyed || res.writableEnded) return;
+    sequence += 1;
+    const event = {
+      id: `${requestId}_${sequence}`,
+      event_type: eventType,
+      message: redactSecrets(message),
+      payload: redactSecretPayload({ request_id: requestId, ...payload }),
+      created_at: new Date().toISOString(),
+    };
+    res.write(`event: ${eventType}\n`);
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+  const end = () => {
+    if (!closed && !res.writableEnded) res.end();
+  };
+
+  try {
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'user',
+        content: prompt,
+        intent: 'conversation',
+        requested_mode: 'auto',
+      }).catch(() => null);
+      await upsertProjectWorkspaceState(userId, project.id, {
+        draft_prompt: '',
+        selected_mode: 'auto',
+        selected_model: selectedModel,
+      }).catch(() => null);
+    }
+
+    send('answer_stream_started', isLikelyFrenchPrompt(prompt) ? 'Huggy répond.' : 'Huggy is answering.', {
+      intent: 'conversation',
+      preview_touched: false,
+      files_touched: false,
+    });
+
+    let streamedAnyToken = false;
+    const agentText = await streamAgentTextResponse({
+      project,
+      prompt: promptWithHistory,
+      files,
+      decision,
+      modelId: selectedModel,
+      userCredits: wallet,
+      allowLocalFallback: selectedModel === 'auto',
+      onToken: chunk => {
+        streamedAnyToken = true;
+        send('answer_token', chunk, { text_delta: chunk });
+      },
+    });
+
+    const content = agentText.text.trim() || createConversationResponse(project, prompt);
+    if (!streamedAnyToken) {
+      for (const chunk of chunkTextForPublicStream(content, 24)) {
+        send('answer_token', chunk, { text_delta: chunk, fallback_stream: true });
+      }
+    }
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'assistant',
+        content,
+        intent: 'conversation',
+        requested_mode: 'auto',
+      }).catch(() => null);
+    }
+    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
+    await chargeCompletedAgentAction(helpers, userId, chargedCredits, 'AI conversation', `chat_${randomUUID()}`).catch(() => null);
+    send('answering', content, {
+      text: content,
+      no_stream: false,
+      preview_touched: false,
+      files_touched: false,
+    });
+    send('done', 'Answer ready.', { preview_touched: false, files_touched: false });
+    end();
+  } catch (error: any) {
+    const diagnostic = diagnoseProviderError(error);
+    console.warn('[huggy:assistant_chat_stream_failed]', {
+      request_id: requestId,
+      user_id: userId,
+      diagnostic_code: diagnostic.diagnostic_code,
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
+    });
+    send('error', diagnostic.message, {
+      diagnostic_code: diagnostic.diagnostic_code,
+      suggested_action: diagnostic.suggested_action,
+    });
+    end();
+  }
+});
+
 // POST /billing/checkout/cloud-topup
 app.post('/api/billing/checkout/cloud-topup', async (req, res) => {
   const { productId, email, successUrl, cancelUrl } = req.body;
@@ -7338,7 +7544,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     let agentText;
     try {
-      agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: effectiveModelSelection, userCredits: walletForRouting });
+      agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' });
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
@@ -7407,7 +7613,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        executionPlan = (await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting })).text;
+        executionPlan = (await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' })).text;
       } catch {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
       }
@@ -7922,13 +8128,28 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
 
     let agentText;
+    let streamedAnyToken = false;
     try {
-      agentText = await createAgentTextResponse({
+      await send('answer_stream_started', 'Writing the answer.', {
+        intent: quickDecision.intent,
+        fast_path: true,
+      });
+      agentText = await streamAgentTextResponse({
         project,
         prompt,
         files: [],
         decision: quickDecision,
         modelId: requestedModelSelection,
+        userCredits: quickWallet,
+        allowLocalFallback: requestedModelSelection === 'auto',
+        onToken: async (chunk, meta) => {
+          streamedAnyToken = true;
+          await send('answer_token', chunk, {
+            text_delta: chunk,
+            index: meta.index,
+            fast_path: true,
+          });
+        },
       });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
@@ -7943,6 +8164,16 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     }
 
     const content = agentText.text;
+    if (!streamedAnyToken) {
+      for (const [index, chunk] of chunkTextForPublicStream(content).entries()) {
+        await send('answer_token', chunk, {
+          text_delta: chunk,
+          index,
+          fast_path: true,
+          fallback_stream: true,
+        });
+      }
+    }
     await saveProjectMessage({
       organization_id: project.organization_id,
       project_id: project.id,
@@ -7969,7 +8200,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       original_prompt: prompt,
       reliability: buildReliabilityDecision(quickDecision),
       fast_path: true,
-      no_stream: true,
+      no_stream: false,
     });
     await send('done', 'Answer ready.', { fast_path: true });
     endStream();
@@ -8209,7 +8440,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_detail: streamCopy('Je donne les prochaines actions sans toucher a la preview.', 'I am giving next actions without touching the preview.'),
       });
     }
-    const shouldStreamTextResponse = decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
+    const shouldStreamTextResponse = decision.intent === 'conversation' || decision.intent === 'plan' || decision.intent === 'verify' || decision.intent === 'deploy_assist';
     if (shouldStreamTextResponse) {
       await send('answer_stream_started', decision.intent === 'plan' ? 'Writing the plan.' : 'Writing the answer.', {
         intent: decision.intent,
@@ -8225,9 +8456,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
             prompt: agentPromptForText,
             files: existingFiles,
             decision,
-            modelId: effectiveModelSelection,
+            modelId: requestedModelSelection,
             userCredits: walletForRouting,
             researchContext,
+            allowLocalFallback: requestedModelSelection === 'auto',
             onToken: async (chunk, meta) => {
               if (await stopIfCancelled('answer')) return;
               streamedAnyToken = true;
@@ -8242,9 +8474,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
             prompt: agentPromptForText,
             files: existingFiles,
             decision,
-            modelId: effectiveModelSelection,
+            modelId: requestedModelSelection,
             userCredits: walletForRouting,
             researchContext,
+            allowLocalFallback: requestedModelSelection === 'auto',
           });
     } catch (error: any) {
       const diagnostic = diagnoseProviderError(error);
@@ -8363,7 +8596,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           requiresPreviewRebuild: false,
           nextAction: 'plan_only',
         };
-        const planned = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: effectiveModelSelection, userCredits: walletForRouting, researchContext });
+        const planned = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: requestedModelSelection, userCredits: walletForRouting, researchContext, allowLocalFallback: requestedModelSelection === 'auto' });
         executionPlan = planned.text;
         await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true });
       } catch (error) {

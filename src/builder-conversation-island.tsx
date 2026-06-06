@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CheckIcon, Code2, Copy, FileText, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { CheckIcon, Code2, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -9,34 +9,19 @@ import {
   ConversationEmptyState,
 } from "./components/ai-elements/conversation";
 import {
-  Confirmation,
-  ConfirmationAccepted,
   ConfirmationAction,
-  ConfirmationActions,
-  ConfirmationRejected,
-  ConfirmationRequest,
-  ConfirmationTitle,
   type ConfirmationState,
 } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
-import {
-  Plan,
-  PlanAction,
-  PlanContent,
-  PlanDescription,
-  PlanFooter,
-  PlanHeader,
-  PlanTitle,
-  PlanTrigger,
-} from "./components/ai-elements/plan";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "./components/ai-elements/task";
+import { ChatStream } from "./components/huggy-streaming/ChatStream";
+import { CriticalActionStream } from "./components/huggy-streaming/CriticalActionStream";
+import { PlanningStream } from "./components/huggy-streaming/PlanningStream";
 import { AgentActivityCard } from "./components/streaming/AgentActivityCard";
 import type { AgentStreamUiState } from "./streaming/agent-stream-reducer";
-import "./styles/agent-motion.css";
-import "./styles/agent-streaming.css";
-import "./styles/mission-streaming.css";
+import "./styles/huggy-ai-elements.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
 
@@ -1279,31 +1264,23 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   }
 
   if (block.type === "plan") {
+    const actions = message.actions?.length ? (
+      <>
+        {message.actions.map(action => (
+          <button key={action.id} type="button" onClick={action.onClick}>
+            {action.label}
+          </button>
+        ))}
+      </>
+    ) : null;
+
     return (
-      <Plan defaultOpen={block.defaultOpen ?? false}>
-        <PlanHeader>
-          <div>
-            <PlanTitle>
-              <FileText size={14} aria-hidden="true" />
-              {block.title}
-            </PlanTitle>
-            <PlanDescription>{block.description || planSummary(block.content)}</PlanDescription>
-          </div>
-          <PlanTrigger />
-        </PlanHeader>
-        <PlanContent>{block.content}</PlanContent>
-        {message.actions?.length ? (
-          <PlanFooter>
-            <PlanAction>
-              {message.actions.map(action => (
-                <button key={action.id} type="button" onClick={action.onClick}>
-                  {action.label}
-                </button>
-              ))}
-            </PlanAction>
-          </PlanFooter>
-        ) : null}
-      </Plan>
+      <PlanningStream
+        title={block.title}
+        description={block.description || planSummary(block.content)}
+        content={block.content}
+        actions={actions}
+      />
     );
   }
 
@@ -1343,34 +1320,25 @@ function renderMessageBlock(message: HuggyConversationMessage) {
     );
   }
 
+  const actions = message.actions?.length ? (
+    <>
+      {message.actions.map(action => (
+        <ConfirmationAction key={action.id} onClick={action.onClick}>
+          {action.label}
+        </ConfirmationAction>
+      ))}
+    </>
+  ) : (
+    <>
+      <ConfirmationAction>{block.rejectLabel || "Cancel"}</ConfirmationAction>
+      <ConfirmationAction>{block.approveLabel || "Continue"}</ConfirmationAction>
+    </>
+  );
+
   return (
-    <Confirmation approval={{ id: message.id }} state={block.state}>
-      <ConfirmationTitle>
-        <ConfirmationRequest>{block.body}</ConfirmationRequest>
-        <ConfirmationAccepted>
-          <CheckIcon size={14} aria-hidden="true" />
-          <span>Action approved.</span>
-        </ConfirmationAccepted>
-        <ConfirmationRejected>
-          <XIcon size={14} aria-hidden="true" />
-          <span>Action rejected.</span>
-        </ConfirmationRejected>
-      </ConfirmationTitle>
-      <ConfirmationActions>
-        {message.actions?.length ? (
-          message.actions.map(action => (
-            <ConfirmationAction key={action.id} onClick={action.onClick}>
-              {action.label}
-            </ConfirmationAction>
-          ))
-        ) : (
-          <>
-            <ConfirmationAction>{block.rejectLabel || "Cancel"}</ConfirmationAction>
-            <ConfirmationAction>{block.approveLabel || "Continue"}</ConfirmationAction>
-          </>
-        )}
-      </ConfirmationActions>
-    </Confirmation>
+    <CriticalActionStream id={message.id} state={block.state} actions={actions}>
+      {block.body}
+    </CriticalActionStream>
   );
 }
 
@@ -1382,13 +1350,7 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
   const cleanDetail = latestDetail.replace(/^(done|now):\s*/, "").trim();
   const showDetail = cleanDetail && !headline.toLowerCase().includes(cleanDetail.toLowerCase());
 
-  return (
-    <div className="huggy-live-status" aria-live="polite">
-      <span className="huggy-live-dot" aria-hidden="true" />
-      <span className="huggy-live-text"><ShiningText text={headline} /></span>
-      {showDetail ? <span className="huggy-live-detail">· {cleanDetail}</span> : null}
-    </div>
-  );
+  return <ChatStream streaming content={showDetail ? `${headline} · ${cleanDetail}` : headline} />;
 }
 
 function renderAgentTrace(message: HuggyConversationMessage) {

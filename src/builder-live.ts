@@ -264,7 +264,9 @@ let emptyPreviewLabel = '';
 let currentMediaPreviewHtml = '';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
+let modelSelectionBridgeBound = false;
 const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
+const SELECTED_MODEL_STORAGE_KEY = 'huggy-selected-model';
 const ACTIVE_WORKSHOP_STORAGE_KEY = 'huggy-active-workshop';
 const DESIGN_SETTINGS_STORAGE_KEY = 'huggy-design-settings';
 const MEDIA_SETTINGS_STORAGE_KEY = 'huggy-media-settings';
@@ -1192,6 +1194,48 @@ function selectedModel() {
   return selectedModelId || 'auto';
 }
 
+function normalizeBuilderModelSelection(value: unknown) {
+  const raw = String(value || '').trim();
+  if (!raw || raw === 'auto') return 'auto';
+  return MODEL_REGISTRY.some(model => model.id === raw) ? raw : 'auto';
+}
+
+function readStoredSelectedModel() {
+  try {
+    return normalizeBuilderModelSelection(localStorage.getItem(SELECTED_MODEL_STORAGE_KEY));
+  } catch {
+    return 'auto';
+  }
+}
+
+function applySelectedModel(modelId: unknown, options: { persist?: boolean; saveWorkspace?: boolean } = {}) {
+  const normalized = normalizeBuilderModelSelection(modelId);
+  selectedModelId = normalized;
+  try {
+    localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, normalized);
+  } catch {
+    // Local storage is an optimization; the workspace state remains authoritative.
+  }
+  syncModelLabelFromSelection();
+  if (options.saveWorkspace) scheduleWorkspaceSave({ selected_model: selectedModelId }, Boolean(options.persist));
+}
+
+function bindSharedModelSelectionEvents() {
+  if (modelSelectionBridgeBound) return;
+  modelSelectionBridgeBound = true;
+  const syncFromEvent = (event: Event) => {
+    const detail = (event as CustomEvent).detail || {};
+    applySelectedModel(detail.modelId || detail.model || 'auto', { saveWorkspace: true });
+  };
+  window.addEventListener('huggy:model-selected', syncFromEvent);
+  window.addEventListener('huggy:legacy-model-selected', syncFromEvent);
+  window.addEventListener('storage', event => {
+    if (event.key === SELECTED_MODEL_STORAGE_KEY) {
+      applySelectedModel(event.newValue || 'auto');
+    }
+  });
+}
+
 function displayProjectName(value?: string) {
   const clean = String(value || '').trim();
   return clean || 'Untitled app';
@@ -1315,8 +1359,7 @@ function applyWorkspaceState(state?: WorkspaceState | null) {
   projectWorkspaceState = state;
   if (state.selected_mode) setChatMode(state.selected_mode);
   if (state.selected_model) {
-    selectedModelId = state.selected_model;
-    syncModelLabelFromSelection();
+    applySelectedModel(state.selected_model);
   }
   if (state.preview_device) setPreviewDevice(normalizePreviewDevice(state.preview_device), false);
   if (state.sidebar_width) {
@@ -1956,6 +1999,76 @@ function streamAssistantBubble(card: HTMLElement | null, text: string) {
     };
     window.setTimeout(tick, 90);
   });
+}
+
+function recentConversationForAssistantStream(currentPrompt = '') {
+  const api = ensureConversationApi();
+  const normalizedPrompt = redactSecrets(currentPrompt).trim();
+  const messages = (api?.messages() || [])
+    .filter(message => (message.role === 'user' || message.role === 'assistant') && !message.working && String(message.content || '').trim())
+    .slice(-12);
+  const latest = messages[messages.length - 1];
+  if (latest?.role === 'user' && redactSecrets(String(latest.content || '')).trim() === normalizedPrompt) {
+    messages.pop();
+  }
+  return messages.map(message => ({
+      role: message.role,
+      content: redactSecrets(String(message.content || '')).slice(0, 2400),
+    }));
+}
+
+async function streamSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
+  let content = '';
+  let streamError = '';
+  const fallback = buildSimpleConversationReply(prompt, speaksFrench);
+  try {
+    await apiStream('/api/assistant/chat/stream', {
+      prompt,
+      modelId: selectedModel(),
+      projectId: currentProjectId || undefined,
+      messages: recentConversationForAssistantStream(prompt),
+    }, (eventType, event) => {
+      const payload = event?.payload || {};
+      if (eventType === 'answer_token' || eventType === 'token' || eventType === 'delta') {
+        const delta = String(payload.text_delta || payload.delta || payload.content || event?.message || '');
+        if (!delta) return;
+        content += delta;
+        updateMessage(card, content);
+        return;
+      }
+      if (eventType === 'answering') {
+        const text = String(payload.text || event?.message || '').trim();
+        if (text && !content.trim()) {
+          content = text;
+          updateMessage(card, content);
+        }
+        return;
+      }
+      if (eventType === 'error') {
+        streamError = String(payload.message || event?.message || 'Assistant stream failed.');
+      }
+    });
+    if (streamError) throw new Error(streamError);
+    if (!content.trim()) {
+      await streamAssistantBubble(card, fallback);
+      return;
+    }
+    updateMessage(card, content.trim());
+    clearMessageShimmer(card);
+  } catch (error) {
+    console.warn('[huggy] simple provider chat fallback', error);
+    if (selectedModel() !== 'auto') {
+      const message = error instanceof Error && error.message.trim()
+        ? error.message.trim()
+        : (speaksFrench
+          ? 'Le modèle choisi n’a pas répondu. Réessaie ou repasse en Auto.'
+          : 'The selected model did not answer. Retry or switch back to Auto.');
+      updateMessage(card, message);
+      clearMessageShimmer(card);
+      return;
+    }
+    await streamAssistantBubble(card, fallback);
+  }
 }
 
 function appendCriticalActionConfirmation(prompt: string, speaksFrench: boolean) {
@@ -3346,8 +3459,7 @@ async function ensureModelSelector() {
           }, {}));
         const validIds = new Set(models.map(model => model.id));
         if (selectedModelId !== 'auto' && !validIds.has(selectedModelId)) {
-          selectedModelId = 'auto';
-          scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
+          applySelectedModel('auto', { persist: true, saveWorkspace: true });
         }
         if (dropdown.classList.contains('open')) {
           renderDropdown();
@@ -3361,6 +3473,7 @@ async function ensureModelSelector() {
     })();
     return hydrateModelsPromise;
   };
+  setActiveOption();
   window.setTimeout(() => void hydrateModelGroups(), 0);
   const open = async () => {
     const shouldOpen = !dropdown.classList.contains('open');
@@ -3394,11 +3507,10 @@ async function ensureModelSelector() {
     const target = (event.target as HTMLElement).closest('[data-model-id]') as HTMLElement | null;
     if (!target) return;
     if (target.getAttribute('aria-disabled') === 'true') return;
-    selectedModelId = target.dataset.modelId || 'auto';
+    applySelectedModel(target.dataset.modelId || 'auto', { saveWorkspace: true });
     if (label) label.textContent = target.dataset.modelName || 'Auto';
     setActiveOption();
     close();
-    scheduleWorkspaceSave({ selected_model: selectedModelId });
     await apiFetch('/api/users/me/ai-preferences', {
       method: 'PATCH',
       body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
@@ -3834,7 +3946,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   if (promptUiContext === 'chat_simple') {
     const card = appendMessage('assistant', speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', { working: true });
     setMessageShimmer(card, speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', false);
-    await streamAssistantBubble(card, buildSimpleConversationReply(safePrompt, speaksFrench));
+    await streamSimpleConversationFromProvider(card, safePrompt, speaksFrench);
     return;
   }
 
@@ -4902,11 +5014,9 @@ function showCreditsModal() {
   `, (action) => {
     if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
     if (action === 'auto') {
-      selectedModelId = 'auto';
+      applySelectedModel('auto', { persist: true, saveWorkspace: true });
       const label = document.getElementById('current-model-label');
       if (label) label.textContent = 'Auto';
-      syncModelLabelFromSelection();
-      scheduleWorkspaceSave({ selected_model: selectedModelId }, true);
     }
   });
 }
@@ -5237,6 +5347,8 @@ function init() {
   initHuggyMotion();
   ensureSettingsPanel();
   ensureConversationApi();
+  bindSharedModelSelectionEvents();
+  applySelectedModel(readStoredSelectedModel());
   normalizeAiChatInputs();
   ensureToolbar();
   void ensureModelSelector();
