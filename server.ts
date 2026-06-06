@@ -3634,16 +3634,85 @@ function publicCreditGateResponse() {
   };
 }
 
+function countLineDiffStats(beforeContent = '', afterContent = '') {
+  const beforeLines = String(beforeContent || '').split('\n');
+  const afterLines = String(afterContent || '').split('\n');
+  while (beforeLines.length && beforeLines[beforeLines.length - 1] === '') beforeLines.pop();
+  while (afterLines.length && afterLines[afterLines.length - 1] === '') afterLines.pop();
+
+  let start = 0;
+  while (start < beforeLines.length && start < afterLines.length && beforeLines[start] === afterLines[start]) start += 1;
+
+  let beforeEnd = beforeLines.length - 1;
+  let afterEnd = afterLines.length - 1;
+  while (beforeEnd >= start && afterEnd >= start && beforeLines[beforeEnd] === afterLines[afterEnd]) {
+    beforeEnd -= 1;
+    afterEnd -= 1;
+  }
+
+  const beforeMiddle = beforeLines.slice(start, beforeEnd + 1);
+  const afterMiddle = afterLines.slice(start, afterEnd + 1);
+  if (!beforeMiddle.length) return { additions: afterMiddle.length, deletions: 0 };
+  if (!afterMiddle.length) return { additions: 0, deletions: beforeMiddle.length };
+
+  const cellBudget = beforeMiddle.length * afterMiddle.length;
+  if (cellBudget > 350_000) {
+    const beforeCounts = new Map<string, number>();
+    const afterCounts = new Map<string, number>();
+    beforeMiddle.forEach(line => beforeCounts.set(line, (beforeCounts.get(line) || 0) + 1));
+    afterMiddle.forEach(line => afterCounts.set(line, (afterCounts.get(line) || 0) + 1));
+    let common = 0;
+    beforeCounts.forEach((count, line) => {
+      common += Math.min(count, afterCounts.get(line) || 0);
+    });
+    return {
+      additions: Math.max(0, afterMiddle.length - common),
+      deletions: Math.max(0, beforeMiddle.length - common),
+    };
+  }
+
+  const previous = new Array(afterMiddle.length + 1).fill(0);
+  const current = new Array(afterMiddle.length + 1).fill(0);
+  for (let i = 1; i <= beforeMiddle.length; i += 1) {
+    for (let j = 1; j <= afterMiddle.length; j += 1) {
+      current[j] = beforeMiddle[i - 1] === afterMiddle[j - 1]
+        ? previous[j - 1] + 1
+        : Math.max(previous[j], current[j - 1]);
+    }
+    for (let j = 0; j <= afterMiddle.length; j += 1) previous[j] = current[j];
+  }
+  const common = previous[afterMiddle.length] || 0;
+  return {
+    additions: Math.max(0, afterMiddle.length - common),
+    deletions: Math.max(0, beforeMiddle.length - common),
+  };
+}
+
 function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
   const beforeMap = new Map(before.map(file => [file.path, file.content]));
   const afterMap = new Map(after.map(file => [file.path, file.content]));
   const created = after.filter(file => !beforeMap.has(file.path)).map(file => file.path);
   const modified = after.filter(file => beforeMap.has(file.path) && beforeMap.get(file.path) !== file.content).map(file => file.path);
   const deleted = before.filter(file => !afterMap.has(file.path)).map(file => file.path);
+  const file_stats = [
+    ...created.map(path => {
+      const stats = countLineDiffStats('', afterMap.get(path) || '');
+      return { path, action: 'created', ...stats };
+    }),
+    ...modified.map(path => {
+      const stats = countLineDiffStats(beforeMap.get(path) || '', afterMap.get(path) || '');
+      return { path, action: 'modified', ...stats };
+    }),
+    ...deleted.map(path => {
+      const stats = countLineDiffStats(beforeMap.get(path) || '', '');
+      return { path, action: 'deleted', ...stats };
+    }),
+  ];
   return {
     created,
     modified,
     deleted,
+    file_stats,
     summary: `${created.length} created, ${modified.length} modified, ${deleted.length} deleted`,
   };
 }
@@ -6097,6 +6166,154 @@ app.post('/api/ai/route', async (req, res) => {
   }
 });
 
+// POST /assistant/chat
+// Lightweight conversational response: no SSE, no project creation, no preview
+// mutation. The selected model is still honored through the provider gateway.
+app.post('/api/assistant/chat', async (req: any, res: any) => {
+  const requestId = `chat_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = String(authUser.id);
+  const prompt = redactSecrets(req.body?.prompt || '').trim();
+  if (!prompt) {
+    return res.status(400).json({
+      success: false,
+      error: 'Prompt is required.',
+      message: 'Prompt is required.',
+      diagnostic_code: 'PROMPT_REQUIRED',
+      request_id: requestId,
+      suggested_action: 'write_message',
+    });
+  }
+  if (!enforceRateLimit(`assistant_chat:${userId}`, 30, 60_000)) {
+    return res.status(429).json({
+      success: false,
+      error: 'Too many messages. Please wait a moment.',
+      message: 'Too many messages. Please wait a moment.',
+      diagnostic_code: 'RATE_LIMITED',
+      request_id: requestId,
+      suggested_action: 'retry_later',
+    });
+  }
+
+  const selectedModel = normalizeModelSelectionId(req.body?.modelId || 'auto');
+  const requestedProjectId = String(req.body?.projectId || '').trim();
+  const now = new Date().toISOString();
+  let project: GeneratedProject = {
+    id: 'assistant',
+    owner_id: userId,
+    organization_id: userId,
+    created_by: userId,
+    name: 'Huggy',
+    slug: 'huggy-assistant',
+    status: 'assistant',
+    preview_status: 'idle',
+    created_at: now,
+    updated_at: now,
+  };
+  let files: GeneratedFile[] = [];
+  let canPersistConversation = false;
+
+  if (isUuid(requestedProjectId)) {
+    const loadedProject = await loadProject(requestedProjectId, userId).catch(() => null);
+    if (loadedProject && hasProjectCapability(req, 'view', loadedProject)) {
+      project = loadedProject;
+      files = await loadProjectFiles(project.id).catch(() => []);
+      canPersistConversation = true;
+    }
+  }
+
+  const history = Array.isArray(req.body?.messages)
+    ? req.body.messages
+      .filter((message: any) => (message?.role === 'user' || message?.role === 'assistant') && String(message?.content || '').trim())
+      .slice(-10)
+      .map((message: any) => `${message.role === 'assistant' ? 'Huggy' : 'User'}: ${redactSecrets(String(message.content || '')).slice(0, 1200)}`)
+      .join('\n')
+    : '';
+  const promptWithHistory = history
+    ? `${prompt}\n\nRecent conversation context, for continuity only:\n${history}`
+    : prompt;
+  const decision: IntentDecision = {
+    intent: 'conversation',
+    confidence: 0.96,
+    requestedMode: 'auto',
+    understandingCategory: 'explanation',
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: true,
+    userVisibleReason: 'Conversation only. Huggy will not touch files or preview.',
+    reason: 'lightweight_conversation_response',
+    nextAction: 'answer',
+    autoPlanRequired: false,
+    selectedModelPolicy: 'balanced',
+    routingSource: 'heuristic',
+  };
+
+  const helpers = getDbHelpers();
+  const wallet = await helpers.getWallet(userId).catch(() => FALLBACK_WALLET_CREDITS);
+  const estimate = estimateActionCost(prompt, decision, selectedModel);
+  if (wallet < estimate.finalCredits) {
+    return res.status(402).json({
+      ...publicCreditGateResponse(),
+      request_id: requestId,
+    });
+  }
+
+  try {
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'user',
+        content: prompt,
+        intent: 'conversation',
+        requested_mode: 'auto',
+      }).catch(() => null);
+    }
+
+    const agentText = await createAgentTextResponse({
+      project,
+      prompt: promptWithHistory,
+      files,
+      decision,
+      modelId: selectedModel,
+      userCredits: wallet,
+      allowLocalFallback: selectedModel === 'auto',
+    });
+
+    const content = redactSecrets(agentText.text || '').trim() || createConversationResponse(project, prompt);
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'assistant',
+        content,
+        intent: 'conversation',
+        requested_mode: 'auto',
+      }).catch(() => null);
+    }
+    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
+    await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI conversation with ${agentText.model}`, `agent_${randomUUID()}`);
+    return res.json({
+      success: true,
+      request_id: requestId,
+      text: content,
+    });
+  } catch (error: any) {
+    const diagnostic = diagnoseProviderError(error);
+    return res.status(diagnostic.status).json({
+      success: false,
+      error: diagnostic.message,
+      message: diagnostic.message,
+      diagnostic_code: diagnostic.diagnostic_code,
+      request_id: requestId,
+      suggested_action: diagnostic.suggested_action,
+    });
+  }
+});
+
 // POST /assistant/chat/stream
 // Lightweight conversational stream: no project creation, no preview mutation, but
 // selected models still go through the provider when OpenRouter is configured.
@@ -8082,6 +8299,77 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  const sendNarration = async (fr: string, en: string, payload: Record<string, unknown> = {}) => {
+    const text = streamCopy(fr, en);
+    await send('narration', text, { text, ...payload });
+  };
+
+  const sendThinking = async (fr: string, en: string, phase: string) => {
+    const text = streamCopy(fr, en);
+    await send('thinking', text, { text, phase, active: true });
+  };
+
+  const sendCheckStarted = async (checkType: string, fr: string, en: string, payload: Record<string, unknown> = {}) => {
+    const label = streamCopy(fr, en);
+    await send('check_started', label, { check_type: checkType, label, ...payload });
+  };
+
+  const sendCheckCompleted = async (checkType: string, status: string, fr: string, en: string, payload: Record<string, unknown> = {}) => {
+    const summary = streamCopy(fr, en);
+    await send('check_completed', summary, { check_type: checkType, status, summary, ...payload });
+  };
+
+  const commandStartedAt = new Map<string, number>();
+  const sendCommandStarted = async (id: string, command: string, fr: string, en: string, checkType = 'command') => {
+    commandStartedAt.set(id, Date.now());
+    const label = streamCopy(fr, en);
+    await send('command_started', label, {
+      command,
+      label,
+      check_type: checkType,
+      started_at: new Date().toISOString(),
+    });
+  };
+
+  const sendCommandCompleted = async (id: string, command: string, status: string, fr: string, en: string, payload: Record<string, unknown> = {}) => {
+    const startedAt = commandStartedAt.get(id);
+    const duration_ms = startedAt ? Date.now() - startedAt : undefined;
+    const output_summary = streamCopy(fr, en);
+    await send('command_completed', output_summary, {
+      command,
+      status,
+      duration_ms,
+      output_summary,
+      ...payload,
+    });
+    commandStartedAt.delete(id);
+  };
+
+  const sendFileEditEvents = async (diff: any, source = 'diff') => {
+    const stats = Array.isArray(diff?.file_stats) ? diff.file_stats : [];
+    for (const item of stats) {
+      const path = String(item?.path || '').trim();
+      if (!path) continue;
+      const action = ['created', 'modified', 'deleted'].includes(String(item?.action || ''))
+        ? String(item.action)
+        : 'modified';
+      const additions = Math.max(0, Number(item?.additions || 0));
+      const deletions = Math.max(0, Number(item?.deletions || 0));
+      const actionLabel = action === 'created'
+        ? streamCopy('Creation', 'Creation')
+        : action === 'deleted'
+          ? streamCopy('Suppression', 'Deletion')
+          : streamCopy('Modification', 'Modification');
+      await send('file_edit', `${actionLabel} de ${path} +${additions} -${deletions}`, {
+        path,
+        action,
+        additions,
+        deletions,
+        source,
+      });
+    }
+  };
+
   let workingTimer: ReturnType<typeof setInterval> | null = null;
   let shouldEmitWorkingTicks = false;
   const endStream = () => {
@@ -8320,6 +8608,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_label: streamCopy('Demande recue.', 'Request received.'),
         step_detail: streamCopy('Je demarre un run trace pour garder le travail lisible.', 'I am starting a traceable run so the work stays readable.'),
       });
+      await sendNarration(
+        'Je commence par comprendre la mission, puis je toucherai seulement les fichiers necessaires.',
+        'I am first understanding the mission, then I will touch only the files that matter.',
+        { phase: 'start', agent_run_id: agentRunId },
+      );
       await send('context_loaded', streamCopy('Contexte du projet charge.', 'Project context loaded.'), {
         context: contextPack,
         step_label: streamCopy('Contexte du projet charge.', 'Project context loaded.'),
@@ -8373,6 +8666,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Analyse de la demande.', 'Analyzing the request.'),
       step_detail: streamCopy('Je determine si je dois repondre, planifier, modifier ou generer.', 'I am deciding whether to answer, plan, edit, or generate.'),
     });
+    await sendThinking(
+      'Je verifie l intention reelle avant de lancer une action.',
+      'I am checking the real intent before starting an action.',
+      'intent',
+    );
   }
   const estimate = estimateActionCost(prompt, decision, effectiveModelSelection);
   const wallet = estimate.finalCredits > 0 ? walletForRouting : Number.POSITIVE_INFINITY;
@@ -8697,6 +8995,11 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     );
     files = ensureModernFrontendProject(files, project.name, prompt);
     const generatedDiff = diffFiles(existingFiles, files);
+    await sendNarration(
+      'Je garde ce qui fonctionne deja et je prepare un diff lisible.',
+      'I am keeping what already works and preparing a readable diff.',
+      { phase: 'files' },
+    );
     const importantStreamPaths = [
       ...generatedDiff.created,
       ...generatedDiff.modified,
@@ -8748,6 +9051,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Diff prêt.', 'Diff ready.'),
       step_detail: streamCopy('Je résume exactement ce qui va changer avant les checks.', 'I summarize exactly what will change before checks.'),
     });
+    await sendFileEditEvents(generatedDiff, 'generated_diff');
     await send('files_changed', streamCopy('Fichiers integres au projet.', 'Generated files were merged into the project.'), {
       diff: generatedDiff,
       step_label: streamCopy('Fichiers mis a jour.', 'Files updated.'),
@@ -8761,7 +9065,29 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Construction de la preview.', 'Building preview.'),
       step_detail: streamCopy('La version publiee reste intacte tant que tu ne cliques pas Publish.', 'The published version stays unchanged until you click Publish.'),
     });
+    await sendNarration(
+      'Je reconstruis la preview avant de te livrer quoi que ce soit.',
+      'I am rebuilding the preview before delivering anything.',
+      { phase: 'preview' },
+    );
+    await sendCommandStarted('preview_pipeline', 'preview pipeline', 'En cours preview pipeline', 'Running preview pipeline', 'preview');
+    await sendCheckStarted('preview', 'Verification de la preview', 'Checking preview');
     let pipeline = runPreviewPipeline(project, files);
+    await sendCommandCompleted(
+      'preview_pipeline',
+      'preview pipeline',
+      pipeline.status === 'ready' ? 'passed' : 'failed',
+      pipeline.status === 'ready' ? 'Preview construite.' : 'Preview en erreur.',
+      pipeline.status === 'ready' ? 'Preview built.' : 'Preview failed.',
+      { preview_status: pipeline.status, errors: pipeline.errors },
+    );
+    await sendCheckCompleted(
+      'preview',
+      pipeline.status === 'ready' ? 'passed' : 'failed',
+      pipeline.status === 'ready' ? 'Preview valide.' : 'Preview a corriger.',
+      pipeline.status === 'ready' ? 'Preview is valid.' : 'Preview needs a fix.',
+      { preview_status: pipeline.status, errors: pipeline.errors },
+    );
     let autoFix = null as any;
     let autoFixAttempts = 0;
     const maxAutoFixAttempts = AGENT_V3_ENABLED ? DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts : 3;
@@ -8809,6 +9135,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         step_label: streamCopy('Verification du projet.', 'Checking project.'),
         step_detail: streamCopy('Je cherche les erreurs de build, preview vide, imports manquants et interactions critiques.', 'I am checking build errors, blank preview, missing imports, and critical interactions.'),
       });
+      await sendCommandStarted('project_runner', 'project runner', 'En cours project runner', 'Running project runner', 'runner');
+      await sendCheckStarted('runner', 'Checks techniques en cours', 'Running technical checks');
       runnerResult = await projectRunner.run({
         runId: agentRunId || requestId,
         projectId: project.id,
@@ -8818,6 +9146,21 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
       await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult.status, tool_budget: toolLoop.snapshot });
+      await sendCommandCompleted(
+        'project_runner',
+        'project runner',
+        runnerResult.status === 'passed' ? 'passed' : 'failed',
+        runnerResult.status === 'passed' ? 'Runner termine sans blocage.' : 'Runner termine avec blocage.',
+        runnerResult.status === 'passed' ? 'Runner completed without blockers.' : 'Runner completed with blockers.',
+        { status: runnerResult.status, checks: runnerResult.checks },
+      );
+      await sendCheckCompleted(
+        'runner',
+        runnerResult.status === 'passed' ? 'passed' : 'failed',
+        runnerResult.status === 'passed' ? 'Checks techniques passes.' : 'Checks techniques a corriger.',
+        runnerResult.status === 'passed' ? 'Technical checks passed.' : 'Technical checks need a fix.',
+        { status: runnerResult.status, checks: runnerResult.checks },
+      );
       await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? streamCopy('Checks critiques passes.', 'Runner checks passed.') : streamCopy('Checks a corriger detectes.', 'Runner checks found issues.'), {
         status: runnerResult.status,
         checks: runnerResult.checks,
@@ -8854,6 +9197,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           step_label: streamCopy('Retest.', 'Retest.'),
           step_detail: streamCopy('Je confirme que la correction n a pas casse autre chose.', 'I am confirming the fix did not break something else.'),
         });
+        await sendCommandStarted(`runner_retest_${autoFixAttempts}`, 'project runner retest', 'En cours retest runner', 'Running runner retest', 'runner');
         pipeline = runPreviewPipeline(project, files);
         previewHtml = pipeline.html;
         runnerResult = await projectRunner.run({
@@ -8866,6 +9210,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
         await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult.status, tool_budget: toolLoop.snapshot });
         runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
+        await sendCommandCompleted(
+          `runner_retest_${autoFixAttempts}`,
+          'project runner retest',
+          runnerResult.status === 'passed' ? 'passed' : 'failed',
+          runnerResult.status === 'passed' ? 'Retest runner passe.' : 'Retest runner encore en erreur.',
+          runnerResult.status === 'passed' ? 'Runner retest passed.' : 'Runner retest still failed.',
+          { status: runnerResult.status, checks: runnerResult.checks },
+        );
         await send(runnerResult.status === 'passed' ? 'runner_passed' : 'runner_failed', runnerResult.status === 'passed' ? streamCopy('Retest passe.', 'Runner retest passed.') : streamCopy('Le retest trouve encore des soucis.', 'Runner retest still found issues.'), {
           status: runnerResult.status,
           checks: runnerResult.checks,
@@ -8882,12 +9234,20 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Test des interactions.', 'Testing interactions.'),
       step_detail: streamCopy('Je verifie les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'),
     });
+    await sendCheckStarted('visual', 'Inspection des interactions en cours', 'Inspecting interactions');
     let visualChecks = inspectVisualPreview({
       files,
       previewHtml,
       platformType: uiPolicy.appType,
     });
     let visualBlocking = visualChecks.filter(isBlockingVerificationFailure);
+    await sendCheckCompleted(
+      'visual',
+      visualBlocking.length ? 'failed' : 'passed',
+      visualBlocking.length ? 'Interactions a corriger.' : 'Interactions essentielles verifiees.',
+      visualBlocking.length ? 'Interactions need a fix.' : 'Essential interactions checked.',
+      { checks: visualChecks },
+    );
     await send(visualBlocking.length ? 'visual_inspection_failed' : 'visual_inspection_passed', visualBlocking.length ? streamCopy('Interactions a corriger detectees.', 'Interaction issues detected.') : streamCopy('Interactions essentielles verifiees.', 'Essential interactions checked.'), {
       checks: visualChecks,
       step_label: visualBlocking.length ? streamCopy('Interaction a corriger.', 'Interaction issue.') : streamCopy('Interactions OK.', 'Interactions OK.'),
@@ -8943,6 +9303,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       step_label: streamCopy('Quality gate.', 'Quality gate.'),
       step_detail: streamCopy('Je vérifie seulement les points qui peuvent casser l experience ou bloquer la suite.', 'I am checking only points that can break the experience or block the next step.'),
     });
+    await sendCheckStarted('quality', 'Quality gate final en cours', 'Running final quality gate');
     await send('verification_started', streamCopy('Verification finale des fichiers et de la preview.', 'Verifying generated files and preview.'), {
       step_label: streamCopy('Verification finale.', 'Final verification.'),
       step_detail: streamCopy('Je controle les fichiers, la preview, le design de base et les interactions.', 'I am checking files, preview, basic design, and interactions.'),
@@ -8999,6 +9360,21 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           : streamCopy('Les notes non bloquantes restent visibles pour les prochaines iterations.', 'Non-blocking notes stay visible for future iterations.'),
       },
     );
+    await sendCheckCompleted(
+      'quality',
+      reliabilitySummary.status === 'failed' ? 'failed' : qualitySummary.status,
+      reliabilitySummary.status === 'failed'
+        ? 'Quality gate bloque la livraison.'
+        : qualitySummary.status === 'passed'
+          ? 'Quality gate passe.'
+          : 'Quality gate passe avec notes.',
+      reliabilitySummary.status === 'failed'
+        ? 'Quality gate blocks delivery.'
+        : qualitySummary.status === 'passed'
+          ? 'Quality gate passed.'
+          : 'Quality gate passed with notes.',
+      { quality: qualitySummary, summary: verificationSummary, reliability: reliabilitySummary },
+    );
 
     if (reliabilitySummary.status === 'failed') {
       throw new ReliabilityGateError(reliabilitySummary);
@@ -9016,6 +9392,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
 
     await saveProject(updatedProject, files);
     const diff = diffFiles(existingFiles, files);
+    await sendFileEditEvents(diff, 'final_diff');
     await createProjectVersion(updatedProject, files, prompt, { ...diff, verification: verificationSummary, reliability: reliabilitySummary, agent_run_id: agentRunId || null });
     if (autoFix) await saveProjectPatch(updatedProject, autoFix);
     const memorySummary = summarizeAgentMemory({
@@ -9071,6 +9448,19 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       content: assistantSummary,
       intent: decision.intent,
       requested_mode: decision.requestedMode,
+    });
+
+    await send('final_summary', assistantSummary, {
+      text: assistantSummary,
+      changes: diff.summary,
+      files: diff.file_stats || [],
+      checks: verificationSummary,
+      preview_status: pipeline.status,
+      auto_fix: autoFix ? { applied: true, patch: autoFix } : { applied: false },
+      rollback: { available: true },
+      next_action: pipeline.status === 'ready'
+        ? streamCopy('Tester la preview ou publier quand tu es pret.', 'Test the preview or publish when you are ready.')
+        : streamCopy('Corriger les blocages restants avant publication.', 'Fix remaining blockers before publishing.'),
     });
 
     await send('preview_ready', previewReadyMessage, {

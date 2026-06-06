@@ -10,8 +10,6 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
-import { isSeniorStreamEvent } from './streaming/agent-stream-event-map';
-import { createInitialAgentStreamState, reduceAgentStreamEvent, type AgentStreamUiState } from './streaming/agent-stream-reducer';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
 import {
@@ -221,6 +219,15 @@ type AgentRunSummary = {
   created_at?: string;
 };
 
+type AgentRunStep = {
+  sequence_number?: number;
+  event_type: string;
+  status?: string;
+  message?: string;
+  public_payload?: Record<string, any>;
+  created_at?: string;
+};
+
 type ProjectVersionSummary = {
   id: string;
   version_number?: number;
@@ -244,7 +251,6 @@ let activeWorkingCard: HTMLElement | null = null;
 let activeWorkingLabel = 'Huggy is preparing';
 let activeWorkingDetails: string[] = [];
 let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
-let activeAgentActivityMessageId = '';
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
 let designSettings: DesignWorkshopSettings = {
@@ -1807,84 +1813,29 @@ function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock
   }
 }
 
-function setAgentActivityBlock(card: HTMLElement | null, state: AgentStreamUiState | null) {
-  if (!card || !state) return;
-  setMessageBlock(card, { type: 'agent_activity', state });
-}
+type CodexJournalBlock = Extract<HuggyConversationBlock, { type: 'work_journal' }>;
+type CodexJournalEntry = CodexJournalBlock['entries'][number];
 
-function buildPlanBlock(content: string, prompt: string, open = false): HuggyConversationBlock {
-  const summary = content.split('\n').map(line => line.trim()).find(Boolean) || 'Huggy prepared a plan before changing the app.';
-  const title = isLikelyFrenchText(prompt) ? 'Plan de Huggy' : 'Huggy plan';
-  const description = summary.length > 180 ? `${summary.slice(0, 177)}...` : summary;
+function createCodexJournalBlock(): CodexJournalBlock {
   return {
-    type: 'plan',
-    title,
-    description,
-    content,
-    defaultOpen: open,
+    type: 'work_journal',
+    status: 'active',
+    startedAt: new Date().toISOString(),
+    elapsed: '0m 00s',
+    entries: [],
+    activeText: 'En réflexion',
   };
 }
 
-function redactStreamingCodeSnippet(value: unknown) {
-  const text = redactSecrets(value);
-  const lines = text.split('\n').slice(0, 22);
-  const clipped = lines.join('\n').slice(0, 1800);
-  return clipped || '// No public snippet available for this step.';
-}
-
-function inferCodeLanguage(path = '') {
-  const lower = path.toLowerCase();
-  if (lower.endsWith('.tsx') || lower.endsWith('.jsx')) return 'tsx';
-  if (lower.endsWith('.ts') || lower.endsWith('.js')) return 'ts';
-  if (lower.endsWith('.css')) return 'css';
-  if (lower.endsWith('.html')) return 'html';
-  if (lower.endsWith('.json')) return 'json';
-  if (lower.endsWith('.sql')) return 'sql';
-  return 'text';
-}
-
-function diffPreviewSnippet(diff: any) {
-  const created = Array.isArray(diff?.created) ? diff.created : [];
-  const modified = Array.isArray(diff?.modified) ? diff.modified : [];
-  const deleted = Array.isArray(diff?.deleted) ? diff.deleted : [];
-  const lines = [
-    ...created.map((path: string) => `+ ${path}`),
-    ...modified.map((path: string) => `~ ${path}`),
-    ...deleted.map((path: string) => `- ${path}`),
-  ];
-  return lines.slice(0, 16).join('\n') || String(diff?.summary || 'Project files updated.');
-}
-
-function filePreviewSnippet(files: GeneratedFile[], preferredPaths: string[] = []) {
-  const pathSet = new Set(preferredPaths.filter(Boolean));
-  const file = files.find(item => pathSet.has(item.path)) || files.find(item => item.path === 'src/App.tsx') || files.find(item => item.path === 'index.html') || files[0];
-  if (!file) return null;
-  return {
-    path: file.path,
-    language: inferCodeLanguage(file.path),
-    code: redactStreamingCodeSnippet(file.content),
-  };
-}
-
-function appendCodePreviewBlock(options: {
-  title: string;
-  subtitle?: string;
-  code: string;
-  language?: string;
-  status?: 'writing' | 'done' | 'failed';
-  defaultOpen?: boolean;
-}) {
-  const card = appendMessage('assistant', '');
+function setWorkJournalBlock(card: HTMLElement | null, journal: CodexJournalBlock | null) {
+  if (!card || !journal) return;
   setMessageBlock(card, {
-    type: 'code_preview',
-    title: options.title,
-    subtitle: options.subtitle,
-    language: options.language || 'text',
-    code: redactStreamingCodeSnippet(options.code),
-    status: options.status || 'done',
-    defaultOpen: options.defaultOpen ?? false,
+    ...journal,
+    entries: journal.entries.map(entry => ({
+      ...entry,
+      items: entry.items ? [...entry.items] : undefined,
+    })),
   });
-  return card;
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -2050,27 +2001,14 @@ function buildPlanningOnlyReply(prompt: string, speaksFrench: boolean) {
   ].join('\n');
 }
 
-function streamAssistantBubble(card: HTMLElement | null, text: string) {
+function showAssistantBubble(card: HTMLElement | null, text: string) {
   const safeText = redactSecrets(text);
-  let index = 0;
-  const chunkSize = Math.max(8, Math.ceil(safeText.length / 36));
-  updateMessage(card, '');
-  return new Promise<void>(resolve => {
-    const tick = () => {
-      index = Math.min(safeText.length, index + chunkSize);
-      updateMessage(card, safeText.slice(0, index));
-      if (index >= safeText.length) {
-        clearMessageShimmer(card);
-        resolve();
-        return;
-      }
-      window.setTimeout(tick, 18);
-    };
-    window.setTimeout(tick, 90);
-  });
+  updateMessage(card, safeText);
+  clearMessageShimmer(card);
+  return Promise.resolve();
 }
 
-function recentConversationForAssistantStream(currentPrompt = '') {
+function recentConversationForAssistant(currentPrompt = '') {
   const api = ensureConversationApi();
   const normalizedPrompt = redactSecrets(currentPrompt).trim();
   const messages = (api?.messages() || [])
@@ -2086,42 +2024,20 @@ function recentConversationForAssistantStream(currentPrompt = '') {
     }));
 }
 
-async function streamSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
-  let content = '';
-  let streamError = '';
+async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
   try {
-    await apiStream('/api/assistant/chat/stream', {
-      prompt,
-      modelId: selectedModel(),
-      projectId: currentProjectId || undefined,
-      messages: recentConversationForAssistantStream(prompt),
-    }, (eventType, event) => {
-      const payload = event?.payload || {};
-      if (eventType === 'answer_token' || eventType === 'token' || eventType === 'delta') {
-        const delta = String(payload.text_delta || payload.delta || payload.content || event?.message || '');
-        if (!delta) return;
-        content += delta;
-        updateMessage(card, content);
-        return;
-      }
-      if (eventType === 'answering') {
-        const text = String(payload.text || event?.message || '').trim();
-        if (text && !content.trim()) {
-          content = text;
-          updateMessage(card, content);
-        }
-        return;
-      }
-      if (eventType === 'error') {
-        streamError = String(payload.message || event?.message || 'Assistant stream failed.');
-      }
+    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt,
+        modelId: selectedModel(),
+        projectId: currentProjectId || undefined,
+        messages: recentConversationForAssistant(prompt),
+      }),
     });
-    if (streamError) throw new Error(streamError);
-    if (!content.trim()) {
-      await streamAssistantBubble(card, fallback);
-      return;
-    }
+    const content = String(payload.text || payload.message || payload.error || '').trim();
+    if (!content) throw new Error('Assistant response was empty.');
     updateMessage(card, content.trim());
     clearMessageShimmer(card);
   } catch (error) {
@@ -2136,7 +2052,7 @@ async function streamSimpleConversationFromProvider(card: HTMLElement | null, pr
       clearMessageShimmer(card);
       return;
     }
-    await streamAssistantBubble(card, fallback);
+    await showAssistantBubble(card, fallback);
   }
 }
 
@@ -3959,6 +3875,7 @@ async function loadProject() {
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     syncWorkshopPreview();
     removeMessage(loading);
+    void restoreLatestCodexJournalFromRunHistory(payload);
     if (!payload.messages?.length) {
       showTransientNotice('Ready when you are.', 1600);
     }
@@ -3980,10 +3897,144 @@ function restoreMessages(payload: ProjectPayload) {
     const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
     if (message.intent === 'plan') {
       lastPlan = message.content;
-      setMessageBlock(card, buildPlanBlock(message.content, message.content, false));
       addInlineAction(card, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
     }
     });
+}
+
+function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): CodexJournalBlock | null {
+  const relevant = steps
+    .slice()
+    .sort((a, b) => Number(a.sequence_number || 0) - Number(b.sequence_number || 0))
+    .filter(step => step?.event_type);
+  const hasMissionJournal = relevant.some(step => [
+    'narration',
+    'thinking',
+    'file_edit',
+    'command_started',
+    'command_completed',
+    'check_started',
+    'check_completed',
+    'final_summary',
+    'preview_ready',
+    'error',
+    'cancelled',
+  ].includes(step.event_type));
+  if (!hasMissionJournal) return null;
+
+  const journal = createCodexJournalBlock();
+  journal.status = run?.status === 'failed'
+    ? 'failed'
+    : run?.status === 'cancelled'
+      ? 'cancelled'
+      : run?.status === 'completed'
+        ? 'done'
+        : 'active';
+  journal.elapsed = run?.duration_ms ? formatWorkingDuration(Number(run.duration_ms || 0)) : undefined;
+  journal.activeText = journal.status === 'active' ? 'En reflexion' : '';
+  const fileEntries = new Map<string, CodexJournalEntry>();
+  const commandItems: string[] = [];
+  const checkItems: string[] = [];
+  let finalText = '';
+
+  relevant.forEach(step => {
+    const payload = redactInternalModelFields(step.public_payload || {});
+    const message = redactSecrets(String(step.message || '')).trim();
+    if (step.event_type === 'narration') {
+      const text = redactSecrets(String(payload.text || message || '')).trim();
+      if (text) journal.entries.push({ id: journalEntryId('narration'), kind: 'narration', text, status: 'done' });
+      return;
+    }
+    if (step.event_type === 'thinking' && journal.status === 'active') {
+      const text = redactSecrets(String(payload.text || message || 'En reflexion')).trim();
+      if (text) journal.entries.push({ id: journalEntryId('thinking'), kind: 'thinking', text, status: 'muted' });
+      return;
+    }
+    if (step.event_type === 'file_edit') {
+      const entry = createFileEditJournalEntry(payload, true);
+      if (entry?.path) fileEntries.set(entry.path, entry);
+      return;
+    }
+    if (step.event_type === 'command_started' && journal.status === 'active') {
+      const command = redactSecrets(String(payload.command || '')).trim();
+      journal.entries.push({
+        id: journalEntryId('command'),
+        kind: 'command',
+        text: 'En cours',
+        command,
+        status: 'active',
+      });
+      return;
+    }
+    if (step.event_type === 'command_completed') {
+      const item = commandSummaryItem(payload, message);
+      if (item && !commandItems.includes(item)) commandItems.push(item);
+      return;
+    }
+    if (step.event_type === 'check_completed') {
+      const checkType = redactSecrets(String(payload.check_type || 'check')).trim();
+      const status = redactSecrets(String(payload.status || step.status || '')).trim();
+      const summary = redactSecrets(String(payload.summary || message || '')).trim();
+      const item = [checkType, status, summary].filter(Boolean).join(' — ');
+      if (item && !checkItems.includes(item)) checkItems.push(item);
+      return;
+    }
+    if (step.event_type === 'final_summary') {
+      finalText = redactSecrets(String(payload.text || message || '')).trim();
+      return;
+    }
+    if (step.event_type === 'error') {
+      journal.entries.push({ id: journalEntryId('error'), kind: 'update', text: message || 'Le run a echoue.', status: 'failed' });
+      return;
+    }
+    if (step.event_type === 'cancelled') {
+      journal.entries.push({ id: journalEntryId('cancelled'), kind: 'update', text: message || 'Travail annule.', status: 'cancelled' });
+    }
+  });
+
+  fileEntries.forEach(entry => journal.entries.push(entry));
+  if (commandItems.length) {
+    journal.entries.push({
+      id: 'commands_restored',
+      kind: 'group',
+      text: 'commandes executees',
+      status: 'done',
+      items: commandItems.slice(-32),
+    });
+  }
+  if (checkItems.length) {
+    journal.entries.push({
+      id: 'checks_restored',
+      kind: 'group',
+      text: 'verifications terminees',
+      status: checkItems.some(item => /\bfailed\b|erreur|corriger/i.test(item)) ? 'failed' : 'done',
+      items: checkItems.slice(-24),
+    });
+  }
+  journal.finalText = finalText;
+  return journal.entries.length || journal.finalText ? journal : null;
+}
+
+async function restoreLatestCodexJournalFromRunHistory(payload: ProjectPayload) {
+  const scroll = chatScroll();
+  if (!scroll || scroll.dataset.codexJournalRestored === 'true' || !currentProjectId) return;
+  scroll.dataset.codexJournalRestored = 'true';
+  try {
+    const runsPayload = await apiFetch<{ success: boolean; runs: AgentRunSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs?limit=1`);
+    const run = runsPayload.runs?.[0];
+    if (!run?.id) return;
+    const details = await apiFetch<{ success: boolean; run: AgentRunSummary; steps: AgentRunStep[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs/${encodeURIComponent(run.id)}`);
+    const journal = buildCodexJournalFromSteps(details.steps || [], details.run || run);
+    if (!journal) return;
+    const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
+    if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
+      journal.finalText = '';
+    }
+    const card = appendMessage('assistant', '');
+    setWorkJournalBlock(card, journal);
+  } catch (error) {
+    console.warn('[huggy] Unable to restore work journal.', error);
+  }
 }
 
 const STREAM_INTERNAL_MODEL_KEYS = [
@@ -4011,6 +4062,151 @@ function redactInternalModelFields(payload: any): any {
   return redacted;
 }
 
+function journalEntryId(prefix = 'entry') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function journalEventText(eventType: string, rawMessage: string, payload: Record<string, any>, speaksFrench: boolean) {
+  const fallback = redactSecrets(rawMessage || payload.step_label || payload.step_detail || '').trim();
+  const fr: Record<string, string> = {
+    run_started: 'Je prends la demande.',
+    context_loaded: 'Je lis le projet et l’historique utile.',
+    codebase_indexed: 'Je repère les fichiers importants.',
+    task_decomposed: 'Je découpe le travail en petites étapes sûres.',
+    policy_checked: 'Je vérifie les garde-fous avant de modifier.',
+    queued: 'Je prépare une session de travail annulable.',
+    routing: 'Je rassemble le contexte nécessaire.',
+    planning: 'Je prépare le chemin le plus sûr.',
+    plan_ready: 'Le plan est prêt.',
+    research_started: 'Je vérifie les informations externes utiles.',
+    research_result: 'J’ai trouvé le contexte externe nécessaire.',
+    research_skipped: 'Je continue sans recherche externe.',
+    model_started: 'Je commence à produire les fichiers.',
+    diff_ready: 'Le diff est prêt.',
+    files_changed: 'Les fichiers sont intégrés au projet.',
+    preview_skeleton_started: 'Je prépare la preview.',
+    preview_building: 'Je reconstruis la preview.',
+    error_detected: 'J’ai détecté un blocage.',
+    auto_fix_started: 'Je corrige automatiquement.',
+    patch_applied: 'Patch appliqué.',
+    retest_started: 'Je reteste après correction.',
+    auto_fix_succeeded: 'La correction tient.',
+    auto_fix_failed: 'La correction automatique n’a pas tout résolu.',
+    runner_started: 'Je lance les checks techniques.',
+    runner_passed: 'Les checks bloquants passent.',
+    runner_failed: 'Les checks ont trouvé un problème.',
+    visual_inspection_started: 'Je vérifie les interactions visibles.',
+    visual_inspection_passed: 'Les interactions essentielles répondent.',
+    visual_inspection_failed: 'J’ai trouvé une interaction à corriger.',
+    quality_gate_started: 'Je lance le contrôle qualité final.',
+    quality_checked: 'Le contrôle qualité est terminé.',
+    preview_ready: 'La preview est prête.',
+    memory_updated: 'Je mémorise les décisions utiles.',
+    done: 'Travail terminé.',
+    error: 'Le run s’est arrêté sur une erreur.',
+    cancelled: 'Travail annulé proprement.',
+  };
+  const en: Record<string, string> = {
+    run_started: 'I received the request.',
+    context_loaded: 'I am reading the project and useful history.',
+    codebase_indexed: 'I am locating the important files.',
+    task_decomposed: 'I am splitting the work into safe steps.',
+    policy_checked: 'I am checking guardrails before changing anything.',
+    queued: 'I am preparing a cancellable work session.',
+    routing: 'I am gathering the needed context.',
+    planning: 'I am preparing the safest path.',
+    plan_ready: 'The plan is ready.',
+    research_started: 'I am checking useful external context.',
+    research_result: 'I found the external context I needed.',
+    research_skipped: 'I am continuing without external research.',
+    model_started: 'I am starting the file work.',
+    diff_ready: 'The diff is ready.',
+    files_changed: 'The files are merged into the project.',
+    preview_skeleton_started: 'I am preparing the preview.',
+    preview_building: 'I am rebuilding the preview.',
+    error_detected: 'I found a blocker.',
+    auto_fix_started: 'I am fixing it automatically.',
+    patch_applied: 'Patch applied.',
+    retest_started: 'I am retesting after the fix.',
+    auto_fix_succeeded: 'The fix holds.',
+    auto_fix_failed: 'The automatic fix did not resolve everything.',
+    runner_started: 'I am running technical checks.',
+    runner_passed: 'Blocking checks passed.',
+    runner_failed: 'Checks found an issue.',
+    visual_inspection_started: 'I am checking visible interactions.',
+    visual_inspection_passed: 'Essential interactions respond.',
+    visual_inspection_failed: 'I found an interaction to fix.',
+    quality_gate_started: 'I am running the final quality gate.',
+    quality_checked: 'The final quality gate is complete.',
+    preview_ready: 'The preview is ready.',
+    memory_updated: 'I am saving useful project decisions.',
+    done: 'Work complete.',
+    error: 'The run stopped on an error.',
+    cancelled: 'Work cancelled cleanly.',
+  };
+  return (speaksFrench ? fr[eventType] : en[eventType]) || fallback;
+}
+
+function journalDetailFromPayload(payload: Record<string, any>, rawMessage = '') {
+  const detail = redactSecrets(String(payload.step_detail || payload.detail || '')).trim();
+  const message = redactSecrets(rawMessage).trim();
+  if (detail && detail !== message) return detail;
+  return '';
+}
+
+function journalFileLabel(path: string, status = '') {
+  const suffix = status && status !== 'ready' ? ` · ${status}` : '';
+  return `${path}${suffix}`;
+}
+
+function filesFromDiff(diff: any) {
+  const created = Array.isArray(diff?.created) ? diff.created.map((path: string) => `+ ${path}`) : [];
+  const modified = Array.isArray(diff?.modified) ? diff.modified.map((path: string) => `~ ${path}`) : [];
+  const deleted = Array.isArray(diff?.deleted) ? diff.deleted.map((path: string) => `- ${path}`) : [];
+  return [...created, ...modified, ...deleted].filter(Boolean).slice(0, 16);
+}
+
+function fileEditActionLabel(action: string, speaksFrench: boolean) {
+  if (action === 'created') return speaksFrench ? 'Creation de' : 'Creation of';
+  if (action === 'deleted') return speaksFrench ? 'Suppression de' : 'Deletion of';
+  return speaksFrench ? 'Modification de' : 'Modification of';
+}
+
+function normalizedFileEditPayload(payload: Record<string, any>) {
+  const path = String(payload.path || '').trim();
+  if (!path) return null;
+  const action = ['created', 'modified', 'deleted'].includes(String(payload.action || ''))
+    ? String(payload.action)
+    : 'modified';
+  return {
+    path,
+    action: action as 'created' | 'modified' | 'deleted',
+    additions: Math.max(0, Number(payload.additions || 0)),
+    deletions: Math.max(0, Number(payload.deletions || 0)),
+  };
+}
+
+function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): CodexJournalEntry | null {
+  const edit = normalizedFileEditPayload(payload);
+  if (!edit) return null;
+  return {
+    id: journalEntryId('file'),
+    kind: 'file_edit',
+    text: `${fileEditActionLabel(edit.action, speaksFrench)} ${edit.path}`,
+    status: 'done',
+    path: edit.path,
+    action: edit.action,
+    additions: edit.additions,
+    deletions: edit.deletions,
+  };
+}
+
+function commandSummaryItem(payload: Record<string, any>, rawMessage = '') {
+  const command = redactSecrets(String(payload.command || '')).trim();
+  const summary = redactSecrets(String(payload.output_summary || payload.summary || rawMessage || '')).trim();
+  return [command, summary].filter(Boolean).join(' — ');
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = redactSecrets(prompt).trim();
   const safeDisplayText = redactSecrets(displayText);
@@ -4029,7 +4225,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   if (promptUiContext === 'chat_simple') {
     const card = appendMessage('assistant', speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', { working: true });
     setMessageShimmer(card, speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', false);
-    await streamSimpleConversationFromProvider(card, safePrompt, speaksFrench);
+    await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench);
     return;
   }
 
@@ -4037,9 +4233,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const content = buildPlanningOnlyReply(safePrompt, speaksFrench);
     const card = appendMessage('assistant', speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', { working: true });
     setMessageShimmer(card, speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', false);
-    await streamAssistantBubble(card, content);
+    await showAssistantBubble(card, content);
     lastPlan = content;
-    setMessageBlock(card, buildPlanBlock(content, safePrompt, false));
     addInlineAction(card, speaksFrench ? 'Construire ce plan' : 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
     return;
   }
@@ -4056,10 +4251,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   setBusy(true);
   activeAbort = new AbortController();
 
-  const quickConversation = false;
-  const initialLabel = requestedMode === 'plan'
-    ? (speaksFrench ? 'Je prépare le plan' : 'Preparing the plan')
-    : (speaksFrench ? 'Je comprends la mission' : 'Understanding the mission');
   const status = appendMessage('assistant', '');
   if (status) status.dataset.workingStartedAt = String(Date.now());
   let generationTouchesPreview = false;
@@ -4067,155 +4258,161 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let streamedText = '';
   let assistantHasFinalContent = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
-  const agentSteps = new Map<string, { label: string; state: 'done' | 'now'; detail?: string }>();
-  const shownStreamBlocks = new Set<string>();
-  const streamCodeCards = new Map<string, HTMLElement>();
-  const liveFileSnippets = new Map<string, { code: string; language: string; title: string }>();
   let responseCard: HTMLElement | null = status;
-  let agentActivityState: AgentStreamUiState | null = null;
-  let agentActivityFrame = 0;
-  let lastActivityTickAt = 0;
+  const journal = createCodexJournalBlock();
+  const journalGroups = new Map<string, CodexJournalEntry>();
+  const fileEditEntries = new Map<string, CodexJournalEntry>();
+  const runningCommandEntries = new Map<string, CodexJournalEntry>();
+  const seenJournalKeys = new Set<string>();
+  let journalFrame = 0;
+  let lastWorkingTickAt = 0;
+  let journalTimer: number | null = null;
   const elapsedForStatus = () => {
     const startedAt = Number(status?.dataset.workingStartedAt || 0);
     return startedAt ? formatWorkingDuration(Date.now() - startedAt) : undefined;
   };
-  const ensureAgentActivity = (headline = speaksFrench ? 'Huggy comprend la demande' : 'Huggy understands the request') => {
-    if (quickConversation && !generationTouchesPreview) return null;
-    if (!status) return null;
-    const id = messageHandleId(status);
-    if (id) activeAgentActivityMessageId = id;
-    if (!agentActivityState) {
-      agentActivityState = createInitialAgentStreamState({
-        headline,
-        detail: speaksFrench
-          ? 'Je garde uniquement les etapes reelles du serveur.'
-          : 'I am showing only real server-side steps.',
-        elapsed: elapsedForStatus(),
-        runHeader: {
-          workflow: requestedMode === 'plan' ? 'Plan' : requestedMode === 'build' ? 'Build' : 'Auto',
-          objective: safePrompt.length > 96 ? `${safePrompt.slice(0, 93)}...` : safePrompt,
-          scope: currentProjectName && currentProjectName !== 'Untitled app' ? currentProjectName : 'Current project',
-          autonomy: requestedMode === 'plan' ? 'L2 - plan seulement' : 'L4 - modification avec rollback',
-          risk: 'Faible',
-          rollbackAvailable: Boolean(currentProjectId && currentFiles.length),
-          status: speaksFrench ? 'Espace de travail en préparation' : 'Workspace is being prepared',
-        },
-      });
-      setAgentActivityBlock(status, agentActivityState);
-    }
-    return agentActivityState;
+  const flushJournal = () => {
+    journalFrame = 0;
+    journal.elapsed = elapsedForStatus() || journal.elapsed;
+    setWorkJournalBlock(status, journal);
   };
-  const flushAgentActivity = () => {
-    agentActivityFrame = 0;
-    if (agentActivityState) setAgentActivityBlock(status, agentActivityState);
+  const scheduleJournal = () => {
+    if (!journalFrame) journalFrame = window.requestAnimationFrame(flushJournal);
   };
-  const pushAgentActivity = (type: string, payload: Record<string, any> = {}, message?: string) => {
-    if (type === 'working_tick') {
-      const now = Date.now();
-      if (now - lastActivityTickAt < 1600) return;
-      lastActivityTickAt = now;
-    }
-    const current = ensureAgentActivity();
-    if (!current) return;
-    agentActivityState = reduceAgentStreamEvent(current, {
-      type,
-      payload,
-      message,
-      elapsed: elapsedForStatus(),
+  const addJournalLine = (text: string, detail = '', key = '', entryStatus: CodexJournalEntry['status'] = 'done') => {
+    const clean = redactSecrets(text).trim();
+    if (!clean) return;
+    const dedupeKey = key || clean;
+    if (seenJournalKeys.has(dedupeKey)) return;
+    seenJournalKeys.add(dedupeKey);
+    journal.entries.push({
+      id: journalEntryId('line'),
+      kind: 'update',
+      text: clean,
+      detail: redactSecrets(detail).trim() || undefined,
+      status: entryStatus,
     });
-    if (!agentActivityFrame) agentActivityFrame = window.requestAnimationFrame(flushAgentActivity);
+    if (journal.entries.length > 36) journal.entries.splice(0, journal.entries.length - 36);
+    scheduleJournal();
   };
-  ensureAgentActivity(initialLabel);
-  // The assistant message is now a MissionStream for real project work. Simple
-  // chat and planning-only requests return before this branch, so no technical
-  // mission UI appears for normal conversation.
-  const showStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
-    if (quickConversation && !generationTouchesPreview) return;
-    if (shownStreamBlocks.has(key)) return;
-    shownStreamBlocks.add(key);
-    appendCodePreviewBlock(options);
+  const addJournalDivider = (text: string, key = text) => {
+    if (seenJournalKeys.has(`divider:${key}`)) return;
+    seenJournalKeys.add(`divider:${key}`);
+    journal.entries.push({ id: journalEntryId('divider'), kind: 'divider', text });
+    scheduleJournal();
   };
-  const upsertStreamCodeBlock = (key: string, options: Parameters<typeof appendCodePreviewBlock>[0]) => {
-    if (quickConversation && !generationTouchesPreview) return;
-    const existing = streamCodeCards.get(key);
-    if (existing) {
-      setMessageBlock(existing, {
-        type: 'code_preview',
-        title: options.title,
-        subtitle: options.subtitle,
-        language: options.language || 'text',
-        code: redactStreamingCodeSnippet(options.code),
-        status: options.status || 'done',
-        defaultOpen: options.defaultOpen ?? false,
-      });
-      return existing;
+  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: CodexJournalEntry['status'] = 'done') => {
+    const cleanItem = redactSecrets(item).trim();
+    if (!cleanItem) return;
+    let group = journalGroups.get(id);
+    if (!group) {
+      group = { id, kind: 'group', text: label, items: [], status: entryStatus };
+      journalGroups.set(id, group);
+      journal.entries.push(group);
     }
-    const card = appendCodePreviewBlock(options);
-    if (card) streamCodeCards.set(key, card);
-    return card;
+    group.status = entryStatus;
+    group.items ||= [];
+    if (!group.items.includes(cleanItem)) group.items.push(cleanItem);
+    if (group.items.length > 18) group.items = group.items.slice(-18);
+    scheduleJournal();
   };
-  const syncAgentSteps = (headline = activeWorkingLabel) => {
-    if (quickConversation && !generationTouchesPreview) return;
-    void headline;
-    activeWorkingDetails = Array.from(agentSteps.values()).map(step => `${step.state}: ${step.label}`);
-    activeWorkingSteps = Array.from(agentSteps.entries()).map(([id, step]) => ({
-      id,
-      label: step.label,
-      detail: step.detail,
-      status: step.state === 'now' ? 'active' : 'done',
-    }));
+  const upsertFileEditEntry = (payload: Record<string, any>) => {
+    const next = createFileEditJournalEntry(payload, speaksFrench);
+    if (!next?.path) return;
+    const existing = fileEditEntries.get(next.path);
+    if (existing) {
+      existing.text = next.text;
+      existing.action = next.action;
+      existing.additions = next.additions;
+      existing.deletions = next.deletions;
+      existing.status = next.status;
+    } else {
+      fileEditEntries.set(next.path, next);
+      journal.entries.push(next);
+    }
+    scheduleJournal();
+  };
+  const commandKey = (payload: Record<string, any>) => String(payload.command || payload.label || 'command').trim() || 'command';
+  const setRunningCommand = (payload: Record<string, any>) => {
+    const command = redactSecrets(String(payload.command || '')).trim();
+    const key = commandKey(payload);
+    let entry = runningCommandEntries.get(key);
+    if (!entry) {
+      entry = {
+        id: journalEntryId('command'),
+        kind: 'command',
+        text: speaksFrench ? 'En cours' : 'Running',
+        command,
+        status: 'active',
+      };
+      runningCommandEntries.set(key, entry);
+      journal.entries.push(entry);
+    } else {
+      entry.command = command;
+      entry.status = 'active';
+    }
+    scheduleJournal();
+  };
+  const completeRunningCommand = (payload: Record<string, any>, rawMessage: string) => {
+    const key = commandKey(payload);
+    const entry = runningCommandEntries.get(key);
+    if (entry) {
+      journal.entries = journal.entries.filter(item => item !== entry);
+      runningCommandEntries.delete(key);
+    }
+    const item = commandSummaryItem(payload, rawMessage);
+    if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes executees' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
+  };
+  const setJournalActive = (label: string) => {
+    journal.activeText = redactSecrets(label).trim() || journal.activeText;
+    scheduleJournal();
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
-    if (quickConversation && !generationTouchesPreview) return;
-    for (const [stepKey, step] of agentSteps) {
-      if (stepKey !== key && step.state === 'now') agentSteps.set(stepKey, { ...step, state: 'done' });
-    }
-    agentSteps.set(key, { label, state: 'now', detail });
-    syncAgentSteps(headline);
+    void key;
+    setJournalActive(headline);
+    addJournalLine(label, detail || '', `step:${key}`);
   };
   const finishAgentStep = (key: string, label?: string, detail?: string) => {
-    if (quickConversation && !generationTouchesPreview) return;
-    const current = agentSteps.get(key);
-    if (!current && !label) return;
-    agentSteps.set(key, { label: label || current?.label || key, state: 'done', detail: detail ?? current?.detail });
-    syncAgentSteps();
+    if (label) addJournalLine(label, detail || '', `step_done:${key}`);
   };
   const setAssistantWorking = (label: string) => {
     if (assistantHasFinalContent) return;
-    if (quickConversation && !generationTouchesPreview) return;
-    activeWorkingLabel = label;
-    if (activeWorkingDetails.length) syncAgentSteps(label);
+    setJournalActive(label);
   };
-  const shouldPreserveWorkingTrace = () => Boolean(generationTouchesPreview && !quickConversation && status);
-  const promoteToPreviewWork = (label = activeWorkingLabel || initialLabel) => {
+  const promoteToPreviewWork = (label = activeWorkingLabel || say('Je prépare la preview', 'Preparing preview')) => {
     if (generationTouchesPreview) return;
     generationTouchesPreview = true;
     activeGenerationTouchesPreview = true;
-    ensureAgentActivity(label);
     activateBuilderView('preview');
     setEmptyPreviewState('working', label);
   };
   const ensureResponseCard = (traceLabel = say('Terminé', 'Completed')) => {
+    void traceLabel;
     if (assistantHasFinalContent) return responseCard;
-    if (shouldPreserveWorkingTrace()) {
-      clearMessageShimmer(status);
-      responseCard = appendMessage('assistant', '');
-    } else if (!status) {
-      responseCard = appendMessage('assistant', '');
-    } else {
-      clearMessageShimmer(status);
-      responseCard = status;
-    }
+    responseCard = status || appendMessage('assistant', '');
     assistantHasFinalContent = true;
     return responseCard;
   };
   const commitAssistantText = (content: unknown, fallback = 'Done.', traceLabel = say('Terminé', 'Completed')) => {
+    void traceLabel;
     const text = String(content || '').trim() || fallback;
     const target = ensureResponseCard(traceLabel);
     streamedText = text;
-    updateMessage(target, text);
+    if (target === status) {
+      journal.status = 'done';
+      journal.activeText = '';
+      journal.finalText = text;
+      scheduleJournal();
+    } else {
+      updateMessage(target, text);
+    }
     return target;
   };
+  setWorkJournalBlock(status, journal);
+  addJournalLine(say('Je comprends la demande et je prépare le travail.', 'I am understanding the request and preparing the work.'), '', 'journal:start', 'active');
+  journalTimer = window.setInterval(() => {
+    if (journal.status === 'active') scheduleJournal();
+  }, 1000);
   try {
     await ensureProjectForPrompt(safePrompt);
     if (activeWorkshop === 'media') {
@@ -4223,7 +4420,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       activeGenerationTouchesPreview = true;
       activateBuilderView('preview');
       setAssistantWorking('Generating media');
-      markAgentStep('media_brief', say('Brief media prepare.', 'Media brief prepared.'), say('Mission media', 'Media mission'), say('Je comprends le format, le modele et le type de contenu.', 'I am reading the format, model and content type.'));
+      markAgentStep('media_brief', say('Brief media préparé.', 'Media brief prepared.'), say('Atelier media', 'Media workshop'), say('Je comprends le format, le modèle et le type de contenu.', 'I am reading the format, model and content type.'));
       setMediaPreviewHtml(mediaPreviewShellHtml('working', 'Generating media'), 'media.huggy.local / rendering');
       const mediaPayload = await apiFetch<MediaGeneratePayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/media/generate`, {
         method: 'POST',
@@ -4260,416 +4457,292 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       });
       return;
     }
-    await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, {
+    let previewReadyPayload: any = null;
+    let finalPayload: any = null;
+    let answerBuffer = '';
+    let streamFinalText = '';
+    let pendingPlanText = '';
+    let externalRequirements: any[] = [];
+    const streamBody = {
       prompt: safePrompt,
       requestedMode,
       useLastPlan,
       modelId: selectedModel(),
       ...effectiveExtra,
-    }, (eventType, event) => {
-      const payload = redactInternalModelFields(event.payload || {});
-      const realLabel = (fallback: string) => {
-        const raw = String(payload.step_label || payload.message || event.message || fallback || '').trim();
-        return raw.replace(/\s+/g, ' ').slice(0, 140) || fallback;
-      };
-      const visibleStepLabel = (fallback: string) => {
-        const raw = String(payload.step_label || '').trim();
-        return raw ? raw.replace(/\s+/g, ' ').slice(0, 140) : fallback;
-      };
-      const runnerLabel = (fallback: string) => {
-        const checks = Array.isArray(payload.checks) ? payload.checks : [];
-        if (!checks.length) return realLabel(fallback);
-        const failed = checks.filter((check: any) => check?.status === 'failed').length;
-        const passed = checks.filter((check: any) => check?.status === 'passed').length;
-        const skipped = checks.length - failed - passed;
-        return failed
-          ? `${failed} check${failed === 1 ? '' : 's'} need attention`
-          : `${passed} check${passed === 1 ? '' : 's'} passed${skipped ? `, ${skipped} skipped` : ''}`;
-      };
-      const fileDiffLabel = () => {
-        const summary = String(payload.diff?.summary || '').trim();
-        return summary ? `Files updated: ${summary}` : realLabel('Files updated.');
-      };
-      const normalizedIntent = String(payload.intent?.intent || payload.intent || '').replace(/_/g, ' ').trim();
-      const visibleIntentLabel = () => {
-        const intent = normalizedIntent.toLowerCase();
-        if (intent.includes('clarification')) return visibleStepLabel(say('Un point doit etre precise.', 'One detail needs clarification.'));
-        if (intent.includes('debug')) return visibleStepLabel(say('Bug concret identifie.', 'Concrete issue identified.'));
-        if (intent.includes('edit')) return visibleStepLabel(say('Modification ciblee detectee.', 'Targeted change detected.'));
-        if (intent.includes('build')) return visibleStepLabel(say('Construction utile detectee.', 'Build request understood.'));
-        if (intent.includes('plan')) return visibleStepLabel(say('Plan utile detecte.', 'Useful plan requested.'));
-        if (intent.includes('verify')) return visibleStepLabel(say('Verification demandee.', 'Check requested.'));
-        if (intent.includes('deploy')) return visibleStepLabel(say('Publication ou domaine a traiter.', 'Publish or domain work detected.'));
-        return visibleStepLabel(say('Demande comprise.', 'Request understood.'));
-      };
-      const trustDetail = (fr: string, en: string) => String(payload.step_detail || say(fr, en)).replace(/\s+/g, ' ').slice(0, 180);
-      const intentTrustDetail = () => {
-        const intent = String(payload.intent?.intent || '').trim();
-        const mutates = Boolean(payload.intent?.requiresFileChanges || payload.intent?.requiresPreviewRebuild);
-        if (intent === 'build') return trustDetail('Je vais creer une vraie app interactive, puis la verifier avant de montrer la preview.', 'I will create a real interactive app, then verify it before showing the preview.');
-        if (intent === 'edit') return trustDetail('Je preserve l app existante et je modifie seulement la partie demandee.', 'I will preserve the existing app and change only the requested part.');
-        if (intent === 'debug_fix') return trustDetail('Je cherche la cause probable, je corrige de facon ciblee, puis je relance les checks.', 'I will find the likely cause, apply a targeted fix, then rerun checks.');
-        if (intent === 'plan') return trustDetail('Je prepare un plan sans modifier les fichiers.', 'I will prepare a plan without changing files.');
-        if (intent === 'verify') return trustDetail('Je controle le projet actuel sans le modifier.', 'I will inspect the current project without changing it.');
-        if (!mutates) return trustDetail('Je reponds simplement sans toucher a la preview ni aux fichiers.', 'I will answer without touching the preview or files.');
-        return trustDetail('Je choisis l action la plus sure avant de modifier le projet.', 'I am choosing the safest action before changing the project.');
-      };
-      if (payload.build_session_id) lastBuildSessionId = payload.build_session_id;
-      if (payload.agent_run_id) lastAgentRunId = String(payload.agent_run_id);
-      if (isSeniorStreamEvent(eventType) || eventType === 'working_tick') {
-        pushAgentActivity(eventType, payload, event.message);
-      }
-      if (eventType === 'thinking_step' || eventType === 'planning_step' || eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step' || eventType === 'validation_step') {
-        const stepKey = `${eventType}_${String(payload.id || payload.key || payload.label || event.message || '').slice(0, 28)}`;
-        const label = eventType === 'planning_step'
-          ? 'Planning'
-          : eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step'
-            ? 'Building'
-            : eventType === 'validation_step'
-              ? 'Checking'
-            : 'Understanding';
-        markAgentStep(stepKey, realLabel(say('Etape en cours.', 'Step in progress.')), label);
-        setAssistantWorking(label);
-        if (eventType === 'action_step' || eventType === 'file_step' || eventType === 'tool_step') promoteToPreviewWork(label);
-        if (generationTouchesPreview) setEmptyPreviewState('working', label);
+    };
+
+    await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, streamBody, (eventType, eventData) => {
+      const eventPayload = redactInternalModelFields(eventData?.payload || {});
+      const eventMessage = redactSecrets(String(eventData?.message || '')).trim();
+      const detail = journalDetailFromPayload(eventPayload, eventMessage);
+      if (eventPayload.build_session_id) lastBuildSessionId = String(eventPayload.build_session_id);
+      if (eventPayload.agent_run_id) lastAgentRunId = String(eventPayload.agent_run_id);
+
+      if (eventType === 'narration') {
+        addJournalLine(String(eventPayload.text || eventMessage || ''), detail, `narration:${journal.entries.length}`, 'done');
         return;
       }
-      if (eventType === 'answer_stream_started') {
-        if (generationTouchesPreview) markAgentStep('answer', realLabel(say('Réponse en cours.', 'Writing the answer.')), 'Answering');
+
+      if (eventType === 'thinking') {
+        setJournalActive(String(eventPayload.text || eventMessage || say('En reflexion', 'Thinking')));
         return;
       }
-      if (eventType === 'token' || eventType === 'answer_token' || eventType === 'delta') {
-        const target = ensureResponseCard(say('Réponse prête', 'Answer ready'));
-        streamedText += String(payload.text_delta || payload.delta || payload.content || event.message || '');
-        updateMessage(target, streamedText || (speaksFrench ? 'Réponse en cours...' : 'Writing...'));
+
+      if (eventType === 'file_edit') {
+        upsertFileEditEntry(eventPayload);
         return;
       }
-      if (eventType === 'run_started') {
-        markAgentStep('start', visibleStepLabel(say('Demande recue.', 'Request received.')), say('Mission recue', 'Mission received'), trustDetail('Je garde une trace claire du travail reel effectue.', 'I keep a clear trace of the real work performed.'));
+
+      if (eventType === 'command_started') {
+        setRunningCommand(eventPayload);
+        setJournalActive(String(eventPayload.label || eventMessage || say('Commande en cours', 'Command running')));
         return;
       }
-      if (eventType === 'context_loaded') {
-        markAgentStep('context', visibleStepLabel(say('Projet inspecte.', 'Project inspected.')), say('Contexte lu', 'Context loaded'), trustDetail('Je lis l etat actuel pour garder ce qui fonctionne deja.', 'I am reading the current state so I keep what already works.'));
+
+      if (eventType === 'command_completed') {
+        completeRunningCommand(eventPayload, eventMessage);
         return;
       }
-      if (eventType === 'agent_thinking') {
-        markAgentStep('thinking', visibleStepLabel(say('Demande analysee.', 'Request analyzed.')), say('Mission cadree', 'Mission framed'), trustDetail('Je choisis l action la plus sure avant de toucher au projet.', 'I am choosing the safest action before touching the project.'));
+
+      if (eventType === 'check_started') {
+        setJournalActive(String(eventPayload.label || eventMessage || say('Verification en cours', 'Check running')));
         return;
       }
-      if (eventType === 'intent_detected') {
-        markAgentStep('intent', visibleIntentLabel(), say('Intention confirmee', 'Intent confirmed'), intentTrustDetail());
-        if (payload.intent?.requiresPreviewRebuild || payload.intent?.requiresFileChanges) {
-          promoteToPreviewWork(say('Mission en cours', 'Mission in progress'));
-        }
+
+      if (eventType === 'check_completed') {
+        seenJournalKeys.add('new_check_protocol');
+        const checkType = String(eventPayload.check_type || 'check').trim();
+        const status = String(eventPayload.status || '').trim();
+        const summary = String(eventPayload.summary || eventMessage || '').trim();
+        const item = [checkType, status, summary].filter(Boolean).join(' — ');
+        upsertJournalGroup('checks', speaksFrench ? 'verifications terminees' : 'checks completed', item, status === 'failed' ? 'failed' : 'done');
         return;
       }
+
+      if (eventType === 'final_summary') {
+        streamFinalText = String(eventPayload.text || eventMessage || streamFinalText || '').trim();
+        journal.finalText = streamFinalText;
+        scheduleJournal();
+        return;
+      }
+
       if (eventType === 'working_tick') {
-        if (!quickConversation || generationTouchesPreview) {
-          if (payload.step_label) {
-            const phase = String(payload.phase || 'working').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40) || 'working';
-            markAgentStep(`working_${phase}`, visibleStepLabel(say('Travail en cours.', 'Work in progress.')), activeWorkingLabel, trustDetail('Je continue cette etape cote serveur.', 'I am continuing this server-side step.'));
-          }
-          if (generationTouchesPreview) setEmptyPreviewState('working', activeWorkingLabel);
+        const now = Date.now();
+        if (now - lastWorkingTickAt > 2800) {
+          lastWorkingTickAt = now;
+          setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('En réflexion', 'Thinking')));
         }
         return;
       }
-      if (eventType === 'file_stream_started' || eventType === 'file_token' || eventType === 'file_stream_completed' || eventType === 'file_stream_preview') {
-        const path = String(payload.path || payload.file || 'src/App.tsx').trim() || 'src/App.tsx';
-        const language = String(payload.language || inferCodeLanguage(path));
-        const existing = liveFileSnippets.get(path) || {
-          code: '',
-          language,
-          title: path,
-        };
-        const incoming = String(payload.text_delta || payload.delta || payload.snippet || payload.preview || payload.content || '');
-        const nextCode = eventType === 'file_stream_preview' && incoming
-          ? incoming
-          : `${existing.code}${incoming}`;
-        const status = eventType === 'file_stream_completed' ? 'done' : 'writing';
-        const code = nextCode.trim()
-          ? nextCode
-          : `// ${path}\n// ${say('Huggy prépare ce fichier...', 'Huggy is preparing this file...')}`;
-        liveFileSnippets.set(path, { code, language, title: path });
-        promoteToPreviewWork('Building');
-        if (status === 'done') {
-          finishAgentStep(`file_${path}`, `${path} ${say('pret.', 'ready.')}`, trustDetail('Ce fichier est pret pour la fusion.', 'This file is ready to merge.'));
-        } else {
-          markAgentStep(`file_${path}`, `${say('Ecriture', 'Writing')} ${path}`, 'Building', trustDetail('Je montre un extrait public base sur le flux reel.', 'I am showing a public snippet based on the real stream.'));
+
+      if (eventType === 'answer_token') {
+        answerBuffer += String(eventPayload.text_delta || eventMessage || '');
+        setJournalActive(say('Je rédige la réponse', 'Writing the answer'));
+        return;
+      }
+
+      if (eventType === 'model_streaming') {
+        setJournalActive(say('Je travaille sur les fichiers', 'Working on the files'));
+        return;
+      }
+
+      if ((eventType === 'diff_ready' || eventType === 'files_changed') && Array.isArray(eventPayload.diff?.file_stats) && eventPayload.diff.file_stats.length) {
+        setJournalActive(say('Je garde le diff lisible', 'Keeping the diff readable'));
+        return;
+      }
+
+      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
+        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
+        return;
+      }
+
+      if ((eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') && seenJournalKeys.has('new_check_protocol')) {
+        return;
+      }
+
+      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
+        const path = String(eventPayload.path || '').trim();
+        if (path) setJournalActive(journalFileLabel(path, String(eventPayload.status || '')));
+        if (eventType === 'file_stream_completed') setJournalActive(say('Je prepare le diff', 'Preparing the diff'));
+        return;
+      }
+
+      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
+        const path = String(eventPayload.path || '').trim();
+        if (path) {
+          upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', journalFileLabel(path, String(eventPayload.status || '')));
         }
-        upsertStreamCodeBlock(`live_file_${path}`, {
-          title: `${status === 'done' ? say('Fichier prêt', 'File ready') : say('Fichier en cours', 'Writing file')} - ${path}`,
-          subtitle: String(payload.reason || payload.step_detail || event.message || '').trim() || undefined,
-          language,
-          code,
-          status,
-          defaultOpen: false,
-        });
-        setAssistantWorking('Building');
-        setEmptyPreviewState('working', 'Building');
+        if (eventType === 'file_stream_completed') setJournalActive(say('Je prépare le diff', 'Preparing the diff'));
         return;
       }
-      if (eventType === 'planning' || eventType === 'research_started' || eventType === 'tool_loop_started' || (eventType === 'answering' && !payload.text)) {
-        const label = eventType === 'planning'
-          ? 'Planning'
-          : eventType === 'research_started'
-            ? 'Researching'
-            : eventType === 'tool_loop_started'
-              ? 'Preparing actions'
-              : 'Preparing response';
-        if (eventType === 'planning') markAgentStep('plan', visibleStepLabel(say('Planification du travail utile.', 'Planning the useful work.')), label, trustDetail('Je pose une sequence courte pour reduire les changements inutiles.', 'I am setting a short sequence to reduce unnecessary changes.'));
-        if (eventType === 'research_started') markAgentStep('research', visibleStepLabel(say('Recherche des informations utiles.', 'Looking up useful context.')), label, trustDetail('Je cherche seulement si la demande depend d informations recentes ou externes.', 'I only research when the request depends on recent or external information.'));
-        if (eventType === 'tool_loop_started') markAgentStep('tools', visibleStepLabel(say('Preparation des actions techniques.', 'Preparing technical actions.')), label, trustDetail('Je limite les outils pour garder le run rapide et controlable.', 'I am limiting tool work so the run stays fast and controlled.'));
-        setAssistantWorking(label);
-        if (generationTouchesPreview) setEmptyPreviewState('working', label);
-        return;
+
+      if (eventType === 'diff_ready' || eventType === 'files_changed') {
+        const diffFiles = filesFromDiff(eventPayload.diff);
+        diffFiles.forEach(file => upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', file));
       }
-      if (eventType === 'research_result' || eventType === 'research_skipped') {
-        finishAgentStep('research', eventType === 'research_result'
-          ? realLabel(say('Recherche terminée.', 'Research completed.'))
-          : realLabel(say('Recherche non nécessaire.', 'Research not needed.')),
-          eventType === 'research_result'
-            ? trustDetail('J integre seulement les sources utiles au contexte.', 'I am keeping only useful sources in context.')
-            : trustDetail('Le contexte projet suffit pour continuer.', 'The project context is enough to continue.'));
-        setAssistantWorking(eventType === 'research_result' ? 'Researching' : 'Context ready');
-        if (generationTouchesPreview) setEmptyPreviewState('working', eventType === 'research_result' ? 'Researching' : 'Context ready');
-        return;
+
+      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
+        upsertJournalGroup('checks', speaksFrench ? 'vérifications lancées' : 'checks started', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), 'active');
       }
-      if (eventType === 'plan_ready' || eventType === 'answering') {
-        const text = payload.text || event.message || '';
-        if (eventType === 'plan_ready' && payload.auto_plan_required) {
-          finishAgentStep('plan', say('Plan pret, je passe a la realisation.', 'Plan ready, moving into the build.'), trustDetail('Le plan sert maintenant de garde-fou pour la generation.', 'The plan now acts as a guardrail for generation.'));
-          setAssistantWorking('Building');
-        } else {
-          const target = commitAssistantText(text, eventType === 'plan_ready' ? 'Plan ready.' : 'Done.');
-          if (eventType === 'plan_ready') {
-            setMessageBlock(target, buildPlanBlock(String(text || ''), safePrompt, true));
-          }
-        }
-        if (eventType === 'plan_ready' && !payload.auto_plan_required) {
-          lastPlan = payload.text || event.message || '';
-          addInlineAction(responseCard, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
-        }
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready for build');
-        return;
+
+      if (eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') {
+        upsertJournalGroup('checks', speaksFrench ? 'vérifications effectuées' : 'checks completed', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), eventType.includes('failed') ? 'failed' : 'done');
       }
-      if (eventType === 'clarification_required') {
-        const target = commitAssistantText(payload.text || event.message, say('J’ai besoin d’un détail avant d’agir.', 'I need one detail before acting.'));
-        if (!showClarificationActions(target, payload, safePrompt, requestedMode)) {
-          showClarificationBlock(payload, safePrompt, requestedMode);
-        }
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for details');
-        return;
+
+      if (eventType === 'patch_applied') {
+        upsertJournalGroup('fixes', speaksFrench ? 'corrections appliquées' : 'fixes applied', String(eventPayload.patch?.summary || eventMessage || journalEventText(eventType, eventMessage, eventPayload, speaksFrench)));
       }
-      if (eventType === 'credits_insufficient') {
-        commitAssistantText('Upgrade required.');
-        showCreditsModal();
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
-        return;
+
+      if (eventType === 'plan_ready') {
+        pendingPlanText = String(eventPayload.text || eventMessage || '').trim();
+        if (pendingPlanText) lastPlan = pendingPlanText;
       }
+
       if (eventType === 'external_api_keys_required') {
-        const target = commitAssistantText('External API keys are needed or can be skipped.');
-        setMessageBlock(target, {
-          type: 'confirmation',
-          title: 'External API keys',
-          body: speaksFrench
-            ? 'Cette action peut utiliser des clés API externes. Tu peux les ajouter maintenant ou continuer avec des valeurs sûres provisoires.'
-            : 'This action can use external API keys. You can add them now or continue with safe placeholders.',
-          state: 'approval-requested',
-          approveLabel: speaksFrench ? 'Ajouter les clés' : 'Add keys',
-          rejectLabel: speaksFrench ? 'Continuer sans clés' : 'Continue without keys',
-        });
-        addInlineAction(target, speaksFrench ? 'Ajouter les clés' : 'Add keys', () => showApiKeyModal(payload.requirements || []));
-        addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => {
-          void generateFromPrompt(safePrompt, requestedMode, useLastPlan, { ...extra, skipExternalKeys: true }, safeDisplayText);
-        });
-        showApiKeyModal(payload.requirements || []);
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Waiting for keys');
-        return;
+        externalRequirements = Array.isArray(eventPayload.requirements) ? eventPayload.requirements : [];
+        streamFinalText = eventMessage || (speaksFrench
+          ? 'Cette app peut utiliser des clés API externes avant de continuer.'
+          : 'This app can use external API keys before continuing.');
       }
-      if (eventType === 'error_detected' || eventType === 'auto_fix_failed') {
-        markAgentStep('fix', realLabel(say('Erreur detectee, correction en preparation.', 'Issue detected, preparing a fix.')), 'Fixing', trustDetail('Je tente de reparer avant de te montrer une preview cassee.', 'I am trying to fix it before showing you a broken preview.'));
-        showFixBugBox(payload.errors || [{ message: event.message }]);
+
+      if (eventType === 'preview_skeleton_started' || eventType === 'preview_building') {
+        promoteToPreviewWork(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
       }
-      if (eventType === 'verification_started' && payload.text) {
-        commitAssistantText(payload.text || event.message, say('Vérification terminée.', 'Verification complete.'));
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
-        return;
-      }
-      if (eventType === 'queued' || eventType === 'routing' || eventType === 'codebase_indexed' || eventType === 'task_decomposed' || eventType === 'policy_checked' || eventType === 'import_started' || eventType === 'import_analyzed' || eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'build_started' || eventType === 'diff_ready' || eventType === 'files_changed' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building' || eventType === 'runner_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_started' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'verification_failed' || eventType === 'quality_checked' || eventType === 'retest_started' || eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded' || eventType === 'memory_updated') {
-        const label = eventType === 'build_started' || eventType === 'building' || eventType === 'preview_skeleton_started' || eventType === 'preview_building'
-          ? 'Building'
-          : eventType === 'model_started' || eventType === 'model_streaming' || eventType === 'diff_ready' || eventType === 'files_changed'
-            ? 'Building'
-          : eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started' || eventType === 'visual_inspection_started'
-            ? 'Running checks'
-            : eventType === 'retest_started' || eventType === 'runner_failed' || eventType === 'runner_passed' || eventType === 'visual_inspection_failed' || eventType === 'visual_inspection_passed'
-              ? 'Retesting'
-              : eventType === 'auto_fix_started' || eventType === 'patch_applied' || eventType === 'auto_fix_succeeded'
-                ? 'Fixing'
-                : 'Preparing';
-        if (eventType === 'queued' || eventType === 'routing') markAgentStep('prepare', visibleStepLabel(say('Espace de travail prepare.', 'Workspace prepared.')), label);
-        if (eventType === 'codebase_indexed') markAgentStep('index', visibleStepLabel(say('Projet indexe.', 'Project indexed.')), say('Contexte projet', 'Project context'), trustDetail('Je repere les routes, composants, APIs et fichiers critiques avant toute action.', 'I map routes, components, APIs, and critical files before any action.'));
-        if (eventType === 'task_decomposed') markAgentStep('decompose', visibleStepLabel(say('Tache decomposee.', 'Task decomposed.')), 'Planning', trustDetail('Je transforme la demande en etapes produit et qualite pour eviter une sortie generique.', 'I turn the request into product and quality steps to avoid a generic output.'));
-        if (eventType === 'policy_checked') finishAgentStep('guardrails', visibleStepLabel(say('Garde-fous valides.', 'Guardrails checked.')), trustDetail('Je garde les limites, rollback et verifications avant de livrer.', 'I keep scope limits, rollback, and checks in place before delivery.'));
-        if (eventType === 'import_started') markAgentStep('import', visibleStepLabel(say('Source importee.', 'Import source prepared.')), say('Import en cours', 'Import in progress'), trustDetail('Je transforme la source en produit utilisable, pas en copie statique.', 'I am turning the source into a usable product, not a static copy.'));
-        if (eventType === 'import_analyzed') finishAgentStep('import', visibleStepLabel(say('Import analyse.', 'Import analyzed.')), trustDetail('Les etats, interactions et responsive manquants seront completes.', 'Missing states, interactions, and responsive behavior will be completed.'));
-        if (eventType === 'model_started') markAgentStep('model', visibleStepLabel(say('Generation des fichiers.', 'Generating files.')), label, trustDetail('Je cree une structure moderne avec composants, styles et interactions utiles.', 'I am creating a modern structure with useful components, styles, and interactions.'));
-        if (eventType === 'model_streaming') markAgentStep('model', visibleStepLabel(say('Fichiers en cours de generation.', 'Files are being generated.')), label, trustDetail('Je recois les changements cote serveur sans afficher de donnees internes.', 'I am receiving server-side changes without showing internal data.'));
-        if (eventType === 'build_started' || eventType === 'preview_building') markAgentStep('build', visibleStepLabel(say('Construction de la preview.', 'Building the preview.')), label, trustDetail('Je prepare la preview sans changer la version publiee.', 'I am preparing the preview without changing the published version.'));
-        if (eventType === 'preview_skeleton_started') markAgentStep('preview', visibleStepLabel(say('Preview en preparation.', 'Preview is being prepared.')), label, trustDetail('L animation preview correspond au build en cours.', 'The preview animation matches the active build.'));
-        if (eventType === 'diff_ready' || eventType === 'files_changed') markAgentStep('build', fileDiffLabel(), label, trustDetail('J integre les changements avant les checks.', 'I am merging changes before checks.'));
-        if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'verification_started') markAgentStep('verify', visibleStepLabel(say('Verification technique.', 'Technical checks.')), label, trustDetail('Je verifie le build, la preview et les interactions essentielles.', 'I am checking the build, preview, and essential interactions.'));
-        if (eventType === 'visual_inspection_started') markAgentStep('visual', visibleStepLabel(say('Inspection des interactions.', 'Interaction inspection.')), label, trustDetail('Je controle les boutons, formulaires, filtres, modals et etats visibles.', 'I am checking buttons, forms, filters, modals, and visible states.'));
-        if (eventType === 'visual_inspection_failed') markAgentStep('visual', visibleStepLabel(say('Interaction a corriger.', 'Interaction issue found.')), 'Fixing', trustDetail('Je ne valide pas une interface avec des controles morts.', 'I do not approve an interface with dead controls.'));
-        if (eventType === 'visual_inspection_passed') finishAgentStep('visual', visibleStepLabel(say('Interactions essentielles verifiees.', 'Essential interactions checked.')), trustDetail('Les controles principaux sont utilisables ou affichent un etat honnete.', 'Primary controls are usable or show an honest state.'));
-        if (eventType === 'verification_failed') markAgentStep('fix', visibleStepLabel(say('Blocage detecte.', 'Blocker detected.')), 'Fixing', trustDetail('Je ne valide pas une app qui reste cassee.', 'I do not mark a still-broken app as ready.'));
-        if (eventType === 'runner_passed') finishAgentStep('verify', runnerLabel(say('Verifications terminees.', 'Checks completed.')), trustDetail('Les checks critiques sont passes.', 'Critical checks passed.'));
-        if (eventType === 'quality_checked') finishAgentStep('verify', visibleStepLabel(say('Qualite verifiee.', 'Quality checked.')), trustDetail('Je garde les warnings comme notes sans bloquer si l app fonctionne.', 'I keep warnings as notes without blocking when the app works.'));
-        if (eventType === 'runner_failed') markAgentStep('fix', runnerLabel(say('Des verifications demandent une correction.', 'Checks need a fix.')), label, trustDetail('Je corrige les blocages concrets avant de finaliser.', 'I am fixing concrete blockers before finishing.'));
-        if (eventType === 'auto_fix_started' || eventType === 'patch_applied') markAgentStep('fix', visibleStepLabel(say('Correction ciblee appliquee.', 'Targeted fix applied.')), label, trustDetail('Je touche seulement les fichiers utiles pour reduire le risque.', 'I am changing only useful files to reduce risk.'));
-        if (eventType === 'retest_started') markAgentStep('retest', visibleStepLabel(say('Nouvelle verification apres correction.', 'Retesting after the fix.')), label, trustDetail('Je relance les checks pour confirmer que la correction tient.', 'I am rerunning checks to confirm the fix holds.'));
-        if (eventType === 'auto_fix_succeeded') finishAgentStep('fix', visibleStepLabel(say('Correction terminee.', 'Fix completed.')), trustDetail('Le blocage detecte a ete resolu.', 'The detected blocker has been resolved.'));
-        if (eventType === 'memory_updated') finishAgentStep('memory', visibleStepLabel(say('Memoire mise a jour.', 'Memory updated.')), trustDetail('Je garde les decisions utiles pour les prochaines iterations.', 'I keep useful decisions for future iterations.'));
-        setAssistantWorking(label);
-        const fileChangingEvent = eventType !== 'verification_started' || generationTouchesPreview;
-        if (fileChangingEvent) promoteToPreviewWork(label);
-        if (eventType === 'diff_ready' || eventType === 'files_changed') {
-          showStreamCodeBlock('files_changed', {
-            title: say('Fichiers mis a jour', 'Files updated'),
-            subtitle: String(payload.diff?.summary || event.message || '').trim() || undefined,
-            language: 'diff',
-            code: diffPreviewSnippet(payload.diff),
-            status: 'done',
-          });
-        }
-        if (eventType === 'quality_checked') {
-          const quality = payload.quality || {};
-          const reliability = payload.reliability || {};
-          showStreamCodeBlock('quality_checked', {
-            title: say('Controle qualite', 'Quality gate'),
-            subtitle: String((quality as any)?.status || (reliability as any)?.status || event.message || '').trim() || undefined,
-            language: 'json',
-            code: JSON.stringify({ quality, reliability }, null, 2),
-            status: String((reliability as any)?.status || (quality as any)?.status || '').includes('fail') ? 'failed' : 'done',
-            defaultOpen: false,
-          });
-        }
-        if (eventType === 'patch_applied') {
-          const targetFile = String(payload.patch?.target_file || payload.patch?.file || '').trim();
-          showStreamCodeBlock(`patch_${targetFile || 'auto_fix'}`, {
-            title: targetFile ? `${say('Correction', 'Patch')} - ${targetFile}` : say('Correction appliquee', 'Patch applied'),
-            subtitle: String(payload.patch?.summary || event.message || '').trim() || undefined,
-            language: 'diff',
-            code: targetFile ? `~ ${targetFile}\n${String(payload.patch?.summary || event.message || 'Targeted patch applied.')}` : String(payload.patch?.summary || event.message || 'Targeted patch applied.'),
-            status: 'done',
-          });
-        }
-        if (generationTouchesPreview) setEmptyPreviewState('working', label);
-        return;
-      }
+
       if (eventType === 'preview_ready') {
-        finishAgentStep('build', say('Preview prete.', 'Preview ready.'), trustDetail('La preview montre maintenant le resultat le plus recent.', 'The preview now shows the latest result.'));
-        finishAgentStep('verify', say('Derniere verification terminee.', 'Final check completed.'), trustDetail('Les controles finaux sont termines avant le resume.', 'Final checks are complete before the summary.'));
-        activateBuilderView('preview');
-        renderFiles(payload.files || []);
-        if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status);
-        const previewSnippet = filePreviewSnippet(payload.files || [], [
-          ...(Array.isArray(payload.diff?.created) ? payload.diff.created : []),
-          ...(Array.isArray(payload.diff?.modified) ? payload.diff.modified : []),
-        ]);
-        if (previewSnippet) {
-          showStreamCodeBlock(`preview_${previewSnippet.path}`, {
-            title: `${say('Apercu du fichier', 'File preview')} - ${previewSnippet.path}`,
-            subtitle: say('Extrait reel du resultat genere.', 'Real snippet from the generated result.'),
-            language: previewSnippet.language,
-            code: previewSnippet.code,
-            status: 'done',
-          });
+        previewReadyPayload = eventPayload;
+        finalPayload = eventPayload;
+        if (eventPayload.project?.id) {
+          currentProjectId = String(eventPayload.project.id);
+          setCurrentBuilderProjectId(currentProjectId);
+          if (eventPayload.project.name) setProjectNameDisplay(String(eventPayload.project.name));
         }
-        const diff = payload.diff?.summary ? ` ${payload.diff.summary}.` : '';
-        const finalText = speaksFrench
-          ? `${event.message || 'C’est prêt. J’ai mis à jour la preview.'}${diff}`
-          : `${event.message || 'Done. I updated the preview.'}${diff}`;
-        const target = commitAssistantText(finalText, 'Preview ready.', say('Preview prête', 'Preview ready'));
-        addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
-          void recordAgentFeedback('keep');
-          appendMessage('system', speaksFrench ? 'Version gardee comme preview actuelle.' : 'Kept as the current preview.');
-        });
-        addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
-          void recordAgentFeedback('modify');
-          const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
-          promptInput?.focus();
-          if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
-        });
-        addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
-          void recordAgentFeedback('regenerate');
-          void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
-        });
-        addInlineAction(target, 'Publish', () => {
-          void recordAgentFeedback('publish');
-          void openPublishPanel();
-        });
-        addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
-        if (payload.errors?.length) showFixBugBox(payload.errors);
-        return;
+        if (Array.isArray(eventPayload.files)) renderFiles(eventPayload.files);
+        if (eventPayload.preview?.html) {
+          generationTouchesPreview = true;
+          activeGenerationTouchesPreview = true;
+          activateBuilderView('preview');
+          setPreview(String(eventPayload.preview.html), String(eventPayload.preview.status || 'ready'));
+        }
       }
-      if (eventType === 'cancelled') {
-        pushAgentActivity('cancelled', payload, event.message || 'Generation stopped.');
-        commitAssistantText(event.message || 'Generation stopped.', 'Generation stopped.', say('Arrêté', 'Stopped'));
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Generation stopped');
-        setBusy(false);
-        return;
+
+      if (eventType === 'answering' || eventType === 'clarification_required' || eventType === 'plan_ready' || eventType === 'preview_ready') {
+        streamFinalText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
       }
+
       if (eventType === 'done') {
-        if (!assistantHasFinalContent) {
-          commitAssistantText(event.message || (generationTouchesPreview ? 'Done. Preview is ready.' : 'Done.'), 'Done.', say('Terminé', 'Completed'));
-        } else {
-          clearMessageShimmer(status);
-        }
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
-        setBusy(false);
+        finalPayload ||= eventPayload;
       }
+
       if (eventType === 'error') {
-        pushAgentActivity('error', payload, event.message);
-        commitAssistantText(formatAgentErrorMessage(event), 'Generation failed.', say('Erreur', 'Error'));
-        if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
+        journal.status = 'failed';
+        journal.activeText = '';
+        addJournalLine(eventMessage || say('Le run a échoué.', 'The run failed.'), detail, `event:${eventType}:${journal.entries.length}`, 'failed');
+        scheduleJournal();
+        return;
+      }
+
+      if (eventType === 'cancelled') {
+        journal.status = 'cancelled';
+        journal.activeText = '';
+        addJournalLine(eventMessage || say('Travail annulé.', 'Work cancelled.'), detail, `event:${eventType}`, 'cancelled');
+        scheduleJournal();
+        return;
+      }
+
+      const publicText = journalEventText(eventType, eventMessage, eventPayload, speaksFrench);
+      const shouldShowLine = ![
+        'queued',
+        'routing',
+        'answer_stream_started',
+      ].includes(eventType) && publicText;
+      if (shouldShowLine) {
+        addJournalLine(publicText, detail, `event:${eventType}`, eventType.includes('failed') || eventType === 'error_detected' ? 'failed' : 'done');
       }
     }, activeAbort.signal);
+
+    const diffSummary = String(previewReadyPayload?.diff?.summary || finalPayload?.diff?.summary || '').trim();
+    const verificationMessage = String(previewReadyPayload?.reliability_summary?.message || previewReadyPayload?.verification?.message || '').trim();
+    const finalText = streamFinalText
+      || answerBuffer.trim()
+      || (previewReadyPayload?.preview?.html
+        ? (speaksFrench ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.' : 'Done. I updated the app and refreshed the preview.')
+        : (speaksFrench ? 'C’est prêt.' : 'Done.'));
+    const target = commitAssistantText([
+      finalText,
+      diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
+      verificationMessage ? `${speaksFrench ? 'Vérification' : 'Checks'}: ${verificationMessage}` : '',
+    ].filter(Boolean).join('\n'), 'Done.', previewReadyPayload?.preview?.html ? say('Preview prête', 'Preview ready') : say('Terminé', 'Completed'));
+
+    if (pendingPlanText && !previewReadyPayload?.preview?.html) {
+      addInlineAction(target, speaksFrench ? 'Construire ce plan' : 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
+    }
+    if (externalRequirements.length) {
+      addInlineAction(target, speaksFrench ? 'Connecter les clés' : 'Connect keys', () => showApiKeyModal(externalRequirements));
+      addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => void generateFromPrompt('Continue with safe placeholders', 'build', false, { skipExternalKeys: true }));
+    }
+    if (previewReadyPayload?.intent?.intent === 'clarification_required') {
+      setMessageBlock(target, {
+        type: 'confirmation',
+        title: speaksFrench ? 'Clarification nécessaire' : 'Clarification needed',
+        body: finalText,
+        state: 'approval-requested',
+        approveLabel: speaksFrench ? 'Répondre' : 'Answer',
+        rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
+      });
+    }
+    if (previewReadyPayload?.preview?.html) {
+      addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
+        void recordAgentFeedback('keep');
+        appendMessage('system', speaksFrench ? 'Version gardée comme preview actuelle.' : 'Kept as the current preview.');
+      });
+      addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
+        void recordAgentFeedback('modify');
+        const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+        promptInput?.focus();
+        if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
+      });
+      addInlineAction(target, speaksFrench ? 'Regénérer' : 'Regenerate', () => {
+        void recordAgentFeedback('regenerate');
+        void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
+      });
+      addInlineAction(target, 'Publish', () => {
+        void recordAgentFeedback('publish');
+        void openPublishPanel();
+      });
+      addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
+    }
+    if (Array.isArray(previewReadyPayload?.errors) && previewReadyPayload.errors.length) showFixBugBox(previewReadyPayload.errors);
+    if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
+    return;
+
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
-      const stoppedText = stopRequested ? 'Generation stopped.' : 'Build cancelled.';
-      if (agentActivityState) {
-        agentActivityState = reduceAgentStreamEvent(agentActivityState, {
-          type: 'cancelled',
-          message: stoppedText,
-          elapsed: elapsedForStatus(),
-        });
-        setAgentActivityBlock(status, agentActivityState);
-      }
-      clearMessageShimmer(status);
-      appendMessage('assistant', stoppedText);
+      const stoppedText = stopRequested
+        ? (speaksFrench ? 'Génération arrêtée.' : 'Generation stopped.')
+        : (speaksFrench ? 'Build annulé.' : 'Build cancelled.');
+      journal.status = 'cancelled';
+      journal.activeText = '';
+      journal.finalText = stoppedText;
+      scheduleJournal();
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
-      if (agentActivityState) {
-        agentActivityState = reduceAgentStreamEvent(agentActivityState, {
-          type: 'error',
-          message: errorText,
-          elapsed: elapsedForStatus(),
-        });
-        setAgentActivityBlock(status, agentActivityState);
-      }
-      clearMessageShimmer(status);
-      appendMessage('assistant', errorText);
+      journal.status = 'failed';
+      journal.activeText = '';
+      journal.finalText = errorText;
+      addJournalLine(errorText, '', `catch:${Date.now()}`, 'failed');
+      scheduleJournal();
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
-    if (agentActivityFrame) window.cancelAnimationFrame(agentActivityFrame);
+    if (journalTimer !== null) window.clearInterval(journalTimer);
+    if (journalFrame) window.cancelAnimationFrame(journalFrame);
+    flushJournal();
     setBusy(false);
     activeAbort = null;
     stopRequested = false;
     activeGenerationTouchesPreview = false;
-    activeAgentActivityMessageId = '';
   }
 }
 

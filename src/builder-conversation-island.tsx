@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { Code2, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -8,19 +8,11 @@ import {
   ConversationContent,
   ConversationEmptyState,
 } from "./components/ai-elements/conversation";
-import {
-  ConfirmationAction,
-  type ConfirmationState,
-} from "./components/ai-elements/confirmation";
+import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
-import { Task, TaskContent, TaskItem, TaskTrigger } from "./components/ai-elements/task";
 import { ChatStream } from "./components/huggy-streaming/ChatStream";
-import { CriticalActionStream } from "./components/huggy-streaming/CriticalActionStream";
-import { PlanningStream } from "./components/huggy-streaming/PlanningStream";
-import { AgentActivityCard } from "./components/streaming/AgentActivityCard";
-import type { AgentStreamUiState } from "./streaming/agent-stream-reducer";
 import "./styles/huggy-ai-elements.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
@@ -29,12 +21,6 @@ export type HuggyConversationAction = {
   id: string;
   label: string;
   onClick: () => void;
-};
-
-export type HuggyConversationTaskItem = {
-  id: string;
-  label: string;
-  status?: "pending" | "active" | "done" | "failed" | "cancelled";
 };
 
 export type HuggyAgentTraceStep = {
@@ -51,10 +37,29 @@ export type HuggyAgentTrace = {
   steps?: HuggyAgentTraceStep[];
 };
 
+export type HuggyWorkJournalEntry = {
+  id: string;
+  kind: "update" | "group" | "divider" | "summary" | "narration" | "thinking" | "file_edit" | "command";
+  text: string;
+  detail?: string;
+  status?: "active" | "done" | "failed" | "cancelled" | "muted";
+  items?: string[];
+  path?: string;
+  action?: "created" | "modified" | "deleted";
+  additions?: number;
+  deletions?: number;
+  command?: string;
+};
+
 export type HuggyConversationBlock =
   | {
-      type: "agent_activity";
-      state: AgentStreamUiState;
+      type: "work_journal";
+      status: "active" | "done" | "failed" | "cancelled";
+      startedAt?: string;
+      elapsed?: string;
+      entries: HuggyWorkJournalEntry[];
+      activeText?: string;
+      finalText?: string;
     }
   | {
       type: "reasoning";
@@ -63,34 +68,12 @@ export type HuggyConversationBlock =
       isStreaming?: boolean;
     }
   | {
-      type: "plan";
-      title: string;
-      description?: string;
-      content: string;
-      defaultOpen?: boolean;
-    }
-  | {
-      type: "task";
-      title: string;
-      items: HuggyConversationTaskItem[];
-      defaultOpen?: boolean;
-    }
-  | {
       type: "confirmation";
       title: string;
       body: string;
       state: ConfirmationState;
       approveLabel?: string;
       rejectLabel?: string;
-    }
-  | {
-      type: "code_preview";
-      title: string;
-      subtitle?: string;
-      language?: string;
-      code: string;
-      status?: "writing" | "done" | "failed";
-      defaultOpen?: boolean;
     };
 
 export type HuggyConversationMessage = {
@@ -1113,12 +1096,6 @@ function ensureConversationStyles() {
   document.head.appendChild(style);
 }
 
-function planSummary(content: string) {
-  const firstLine = content.split("\n").map(line => line.trim()).find(Boolean);
-  if (!firstLine) return "Huggy prepared a short implementation plan before changing the app.";
-  return firstLine.length > 170 ? `${firstLine.slice(0, 167)}...` : firstLine;
-}
-
 function renderInlineMarkdown(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   const tokenPattern = /(`[^`]+`|\*\*[^*]+?\*\*|__[^_]+?__|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g;
@@ -1246,12 +1223,105 @@ function renderStandardMessageContent(message: HuggyConversationMessage) {
   return renderPlainMessage(message.content);
 }
 
+function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
+  const statusLabel = block.status === "done"
+    ? "Traitement terminé"
+    : block.status === "failed"
+      ? "Traitement interrompu"
+      : block.status === "cancelled"
+        ? "Traitement annulé"
+        : "Traitement en cours";
+  const elapsed = block.elapsed ? ` depuis ${block.elapsed}` : "";
+
+  return (
+    <div className="huggy-codex-journal" data-status={block.status}>
+      <div className="huggy-codex-journal-head">
+        <span>{statusLabel}{elapsed}</span>
+      </div>
+      <div className="huggy-codex-journal-rule" />
+      <div className="huggy-codex-journal-feed">
+        {block.entries.map(entry => {
+          if (entry.kind === "divider") {
+            return (
+              <div className="huggy-codex-journal-divider" key={entry.id}>
+                <span>{entry.text}</span>
+              </div>
+            );
+          }
+
+          if (entry.kind === "file_edit") {
+            const actionLabel = entry.action === "created"
+              ? "Creation de"
+              : entry.action === "deleted"
+                ? "Suppression de"
+                : "Modification de";
+            return (
+              <p className="huggy-codex-file-edit" data-status={entry.status || "done"} key={entry.id}>
+                <Pencil size={16} aria-hidden="true" />
+                <span>{actionLabel}</span>
+                <code>{entry.path || entry.text}</code>
+                <span className="huggy-codex-diff-add">+{Math.max(0, Number(entry.additions || 0))}</span>
+                <span className="huggy-codex-diff-del">-{Math.max(0, Number(entry.deletions || 0))}</span>
+              </p>
+            );
+          }
+
+          if (entry.kind === "command") {
+            return (
+              <p className="huggy-codex-command-line" data-status={entry.status || "active"} key={entry.id}>
+                <span className="huggy-codex-terminal-icon" aria-hidden="true">›_</span>
+                <span>{entry.text}</span>
+                {entry.command ? <code>{entry.command}</code> : null}
+              </p>
+            );
+          }
+
+          if (entry.kind === "group") {
+            const count = entry.items?.length || 0;
+            return (
+              <details className="huggy-codex-journal-group" key={entry.id}>
+                <summary>
+                  <span className="huggy-codex-terminal-icon" aria-hidden="true">⌁</span>
+                  <span>{count ? `${count} ${entry.text}` : entry.text}</span>
+                </summary>
+                {count ? (
+                  <ul>
+                    {entry.items?.map((item, index) => (
+                      <li key={`${entry.id}_${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </details>
+            );
+          }
+
+          return (
+            <p className="huggy-codex-journal-line" data-status={entry.status || "done"} key={entry.id}>
+              {entry.text}
+              {entry.detail ? <span>{entry.detail}</span> : null}
+            </p>
+          );
+        })}
+        {block.status === "active" ? (
+          <p className="huggy-codex-journal-live">
+            <span className="huggy-codex-live-dot" aria-hidden="true" />
+            <span>{block.activeText || "En réflexion"}</span>
+          </p>
+        ) : null}
+        {block.finalText ? (
+          <p className="huggy-codex-journal-final">{block.finalText}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
-  if (block.type === "agent_activity") {
-    return <AgentActivityCard state={block.state} />;
+  if (block.type === "work_journal") {
+    return renderWorkJournalBlock(block);
   }
 
   if (block.type === "reasoning") {
@@ -1263,82 +1333,22 @@ function renderMessageBlock(message: HuggyConversationMessage) {
     );
   }
 
-  if (block.type === "plan") {
-    const actions = message.actions?.length ? (
-      <>
-        {message.actions.map(action => (
+  return (
+    <div className="huggy-codex-confirm" data-state={block.state}>
+      <p>{block.body}</p>
+      <div className="huggy-codex-confirm-actions">
+        {message.actions?.length ? message.actions.map(action => (
           <button key={action.id} type="button" onClick={action.onClick}>
             {action.label}
           </button>
-        ))}
-      </>
-    ) : null;
-
-    return (
-      <PlanningStream
-        title={block.title}
-        description={block.description || planSummary(block.content)}
-        content={block.content}
-        actions={actions}
-      />
-    );
-  }
-
-  if (block.type === "task") {
-    return (
-      <Task defaultOpen={block.defaultOpen ?? true}>
-        <TaskTrigger title={block.title} />
-        <TaskContent>
-          {block.items.map(item => (
-            <TaskItem key={item.id} status={item.status}>
-              {item.label}
-            </TaskItem>
-          ))}
-        </TaskContent>
-      </Task>
-    );
-  }
-
-  if (block.type === "code_preview") {
-    const status = block.status || "done";
-    return (
-      <div className="huggy-code-preview" data-status={status}>
-        <details open={block.defaultOpen ?? false}>
-          <summary>
-            <Code2 size={14} aria-hidden="true" />
-            <span className="huggy-code-preview-title">
-              <strong>{block.title}</strong>
-              {block.subtitle ? <span>{block.subtitle}</span> : null}
-            </span>
-            <span className="huggy-code-preview-badge">{status === "writing" ? "Writing" : status === "failed" ? "Issue" : "Done"}</span>
-          </summary>
-          <pre aria-label={block.title}>
-            <code>{block.code}</code>
-          </pre>
-        </details>
+        )) : (
+          <>
+            <button type="button">{block.rejectLabel || "Cancel"}</button>
+            <button type="button">{block.approveLabel || "Continue"}</button>
+          </>
+        )}
       </div>
-    );
-  }
-
-  const actions = message.actions?.length ? (
-    <>
-      {message.actions.map(action => (
-        <ConfirmationAction key={action.id} onClick={action.onClick}>
-          {action.label}
-        </ConfirmationAction>
-      ))}
-    </>
-  ) : (
-    <>
-      <ConfirmationAction>{block.rejectLabel || "Cancel"}</ConfirmationAction>
-      <ConfirmationAction>{block.approveLabel || "Continue"}</ConfirmationAction>
-    </>
-  );
-
-  return (
-    <CriticalActionStream id={message.id} state={block.state} actions={actions}>
-      {block.body}
-    </CriticalActionStream>
+    </div>
   );
 }
 
@@ -1355,7 +1365,7 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
 
 function renderAgentTrace(message: HuggyConversationMessage) {
   // Legacy traces are intentionally not rendered anymore.
-  // Project work is shown through the AI Elements MissionStream block, and
+  // Project work is now shown through the Codex-like work journal, and
   // simple conversation is shown through ChatStream. Keeping this as a no-op
   // preserves the old API surface while preventing duplicated streaming UIs.
   void message;
@@ -1376,8 +1386,8 @@ const BuilderConversationMessageItem = React.memo(function BuilderConversationMe
   onExpand: (message: HuggyConversationMessage) => void;
 }) {
   const block = renderMessageBlock(message);
-  const trace = message.block?.type === "agent_activity" ? null : renderAgentTrace(message);
-  const contentIsTraceLike = Boolean(trace || message.block?.type === "agent_activity");
+  const trace = renderAgentTrace(message);
+  const contentIsTraceLike = Boolean(trace || message.block?.type === "work_journal");
 
   return (
     <Message from={message.role}>
@@ -1391,7 +1401,7 @@ const BuilderConversationMessageItem = React.memo(function BuilderConversationMe
           ) : (
             message.working ? renderWorkingStatus(message) : renderStandardMessageContent(message)
           )}
-          {message.actions?.length && message.block?.type !== "plan" && message.block?.type !== "confirmation" ? (
+          {message.actions?.length && message.block?.type !== "confirmation" ? (
             <div className="huggy-message-actions">
               {message.actions.map(action => (
                 <button key={action.id} type="button" onClick={action.onClick}>
@@ -1414,26 +1424,7 @@ const BuilderConversationMessageItem = React.memo(function BuilderConversationMe
 });
 
 function compactMessagesForRender(messages: HuggyConversationMessage[]) {
-  const visible = messages.length > 140 ? messages.slice(-140) : messages;
-  let completedActivitySeen = 0;
-  return [...visible].reverse().map(message => {
-    if (message.block?.type !== "agent_activity") return message;
-    if (message.block.state.status !== "done") return message;
-    completedActivitySeen += 1;
-    if (completedActivitySeen <= 2) return message;
-    return {
-      ...message,
-      block: {
-        type: "agent_activity" as const,
-        state: {
-          ...message.block.state,
-          phases: message.block.state.phases.slice(-3),
-          files: message.block.state.files.slice(-3),
-          details: [],
-        },
-      },
-    };
-  }).reverse();
+  return messages.length > 140 ? messages.slice(-140) : messages;
 }
 
 type MessageFeedbackValue = "positive" | "negative";
