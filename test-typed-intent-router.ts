@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict';
+import { understandUserIntent } from './src/services/intent-understanding.ts';
+import { applyTypedIntentGate, buildTypedIntentDecision } from './src/services/typed-intent-router.ts';
+
+type TestIntent = {
+  intent: string;
+  confidence: number;
+  requiresFileChanges: boolean;
+  requiresPreviewRebuild: boolean;
+  requiresCredits: boolean;
+  userVisibleReason: string;
+  selectedModelPolicy?: string;
+  nextAction?: string;
+  autoPlanRequired?: boolean;
+  routingSource?: string;
+  intentUnderstanding?: ReturnType<typeof understandUserIntent>;
+  clarification?: { question: string; choices: string[]; recommendation: string };
+};
+
+function baseDecision(prompt: string, patch: Partial<TestIntent> = {}): TestIntent {
+  const understanding = understandUserIntent({ prompt, hasFiles: Boolean(patch.requiresFileChanges), requestedMode: 'auto' });
+  return {
+    intent: 'conversation',
+    confidence: 0.86,
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: false,
+    nextAction: 'answer',
+    selectedModelPolicy: 'auto',
+    userVisibleReason: 'fallback',
+    intentUnderstanding: understanding,
+    ...patch,
+  };
+}
+
+function typed(prompt: string, patch: Partial<TestIntent> = {}) {
+  const decision = baseDecision(prompt, patch);
+  const typedDecision = buildTypedIntentDecision({ prompt, decision, hasFiles: Boolean(patch.requiresFileChanges) });
+  const gated = applyTypedIntentGate(decision, typedDecision);
+  return { typedDecision, gated };
+}
+
+{
+  const { typedDecision, gated } = typed('dis moi c est quoi lovable.dev ?');
+  assert.equal(typedDecision.primary_intent, 'CHAT');
+  assert.equal(typedDecision.execution_strategy, 'ANSWER_ONLY');
+  assert.equal(gated.intent, 'conversation');
+  assert.equal(gated.requiresFileChanges, false);
+}
+
+{
+  const { typedDecision, gated } = typed('Ajoute un bouton de contact, mais dis-moi d abord si c est une bonne idee', {
+    intent: 'build',
+    requiresFileChanges: true,
+    requiresPreviewRebuild: true,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'DISCUSS_FIRST');
+  assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
+  assert.equal(gated.intent, 'clarification_required');
+  assert.equal(gated.requiresFileChanges, false);
+}
+
+{
+  const { typedDecision, gated } = typed('cree une vraie todo app avec ajout suppression filtres et etat vide', {
+    intent: 'build',
+    requiresFileChanges: true,
+    requiresPreviewRebuild: true,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'BUILD');
+  assert.equal(typedDecision.execution_strategy, 'RUN_AGENT');
+  assert.equal(typedDecision.requires_code_changes, true);
+  assert.equal(gated.requiresFileChanges, true);
+  assert.ok(typedDecision.target_files.includes('src/App.tsx'));
+}
+
+{
+  const { typedDecision, gated } = typed('preview blanche, index.html should load /src/main.tsx, corrige le probleme', {
+    intent: 'debug_fix',
+    requiresFileChanges: true,
+    requiresPreviewRebuild: true,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'DEBUG');
+  assert.equal(typedDecision.execution_strategy, 'RUN_DEBUG_LOOP');
+  assert.ok(typedDecision.target_files.includes('index.html'));
+  assert.ok(typedDecision.target_files.includes('src/main.tsx'));
+  assert.equal(gated.requiresPreviewRebuild, true);
+}
+
+{
+  const { typedDecision, gated } = typed('publie en production maintenant', {
+    intent: 'deploy_assist',
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'CRITICAL_ACTION');
+  assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
+  assert.equal(gated.intent, 'clarification_required');
+  assert.equal(gated.requiresFileChanges, false);
+}
+
+console.log('typed intent router ok');

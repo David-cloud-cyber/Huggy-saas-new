@@ -107,6 +107,11 @@ import {
   type IntentUnderstanding,
   type UserIntentCategory,
 } from './src/services/intent-understanding.ts';
+import {
+  applyTypedIntentGate,
+  buildTypedIntentDecision,
+  type TypedIntentDecision,
+} from './src/services/typed-intent-router.ts';
 import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 import {
   buildHuggyCloudSchemaName,
@@ -942,6 +947,7 @@ type IntentDecision = {
   autoPlanRequired?: boolean;
   selectedModelPolicy?: 'auto' | 'economy' | 'balanced' | 'premium';
   routingSource?: 'heuristic' | 'ai' | 'fallback';
+  typedDecision?: TypedIntentDecision;
   clarification?: {
     question: string;
     choices: string[];
@@ -957,6 +963,7 @@ type ReliabilityDecision = {
   requires_clarification: boolean;
   quality_gate_level: 'conversation' | 'advisory' | 'critical';
   reason: string;
+  typed_decision?: TypedIntentDecision;
 };
 
 function buildReliabilityDecision(decision: IntentDecision): ReliabilityDecision {
@@ -974,6 +981,7 @@ function buildReliabilityDecision(decision: IntentDecision): ReliabilityDecision
         ? 'advisory'
         : 'conversation',
     reason: decision.userVisibleReason || decision.reason || decision.intentUnderstanding?.reason || 'Huggy selected the safest next action.',
+    typed_decision: decision.typedDecision,
   };
 }
 
@@ -3015,11 +3023,24 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
 
 async function resolveAgentDecision(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }) {
   const fallback = intentRouter.decide(input);
+  const finalize = (decision: IntentDecision): IntentDecision => {
+    const typedDecision = buildTypedIntentDecision({
+      prompt: input.prompt,
+      hasFiles: input.hasFiles,
+      requestedMode: input.requestedMode,
+      decision,
+    });
+    const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
+    return {
+      ...gatedDecision,
+      typedDecision,
+    };
+  };
   try {
-    return await classifyIntentWithAi(input, fallback) || fallback;
+    return finalize(await classifyIntentWithAi(input, fallback) || fallback);
   } catch (error) {
     console.warn('[huggy:agent_router_fallback]', { message: normalizeProviderError(error) });
-    return { ...fallback, routingSource: fallback.routingSource === 'ai' ? 'fallback' : fallback.routingSource || 'fallback' };
+    return finalize({ ...fallback, routingSource: fallback.routingSource === 'ai' ? 'fallback' : fallback.routingSource || 'fallback' });
   }
 }
 
