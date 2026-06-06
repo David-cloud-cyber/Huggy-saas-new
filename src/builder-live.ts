@@ -1940,6 +1940,9 @@ function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext
 
   if (isQuickConversationPrompt(value, mode)) return 'chat_simple';
 
+  const existingProjectShortIteration = /\b(fais ca mieux|fais ça mieux|change ca|change ça|corrige tout|corrige l ensemble|ameliore tout|améliore tout|continue et corrige|continue corrige)\b/i;
+  if (currentFiles.length && existingProjectShortIteration.test(normalized)) return 'project_mission';
+
   const adviceOrExplanation = /\b(dis moi|dit moi|explique|comment peut on|comment peut-on|comment peux tu|comment peux-tu|comment faire|pourquoi|que faut il|que faut-il|conseille|recommande|compare|analyse|audit|note mon|qu est ce que|qu'est-ce que|what is|how can|how should|why)\b/i;
   const explicitApplySignal = /\b(applique|implemente|impl[ée]mente|corrige dans|modifie dans|change dans|remplace dans|mets a jour|mets à jour|ajoute a|ajoute à|pousse|push|commit)\b/i;
   const planningOnly = /\b(plan|roadmap|strategie|strat[ée]gie|architecture|audit|analyse|compare|conseil|recommandation|prompt|design direction|direction creative|explique)\b/i;
@@ -4268,6 +4271,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   activeGenerationTouchesPreview = false;
   let streamedText = '';
   let assistantHasFinalContent = false;
+  let plainResponseMode = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   let responseCard: HTMLElement | null = status;
   const journal = createCodexJournalBlock();
@@ -4289,6 +4293,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const scheduleJournal = () => {
     if (!journalFrame) journalFrame = window.requestAnimationFrame(flushJournal);
+  };
+  const switchToPlainResponse = () => {
+    if (plainResponseMode) return;
+    plainResponseMode = true;
+    journal.status = 'done';
+    journal.entries = [];
+    journal.activeText = '';
+    journal.finalText = '';
+    setMessageBlock(status, null);
   };
   const addJournalLine = (text: string, detail = '', key = '', entryStatus: CodexJournalEntry['status'] = 'done') => {
     const clean = redactSecrets(text).trim();
@@ -4414,6 +4427,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const target = ensureResponseCard(traceLabel);
     streamedText = text;
     if (target === status) {
+      if (plainResponseMode) {
+        setMessageBlock(target, null);
+        updateMessage(target, text);
+        return target;
+      }
       journal.status = 'done';
       journal.activeText = '';
       journal.finalText = text;
@@ -4424,7 +4442,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     return target;
   };
   setWorkJournalBlock(status, journal);
-  addJournalLine(say('Je comprends la demande et je prépare le travail.', 'I am understanding the request and preparing the work.'), '', 'journal:start', 'active');
   journalTimer = window.setInterval(() => {
     if (journal.status === 'active') scheduleJournal();
   }, 1000);
@@ -4571,7 +4588,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 
       if (eventType === 'answer_token') {
         answerBuffer += String(eventPayload.text_delta || eventMessage || '');
-        setJournalActive(say('Je rédige la réponse', 'Writing the answer'));
+        switchToPlainResponse();
+        updateMessage(status, answerBuffer.trimStart());
         return;
       }
 
@@ -4662,10 +4680,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 
       if (eventType === 'answering' || eventType === 'clarification_required' || eventType === 'plan_ready' || eventType === 'preview_ready') {
         streamFinalText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
+        if ((eventType === 'answering' || eventType === 'clarification_required') && !previewReadyPayload?.preview?.html) {
+          switchToPlainResponse();
+          if (streamFinalText) updateMessage(status, streamFinalText);
+        }
       }
 
       if (eventType === 'done') {
         finalPayload ||= eventPayload;
+        if (plainResponseMode) return;
       }
 
       if (eventType === 'error') {
@@ -4689,6 +4712,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         'queued',
         'routing',
         'answer_stream_started',
+        'done',
       ].includes(eventType) && publicText;
       if (shouldShowLine) {
         addJournalLine(publicText, detail, `event:${eventType}`, eventType.includes('failed') || eventType === 'error_detected' ? 'failed' : 'done');

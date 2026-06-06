@@ -3424,18 +3424,10 @@ function chunkTextForPublicStream(text: string, targetSize = 28) {
 
 function createClarificationContent(decision: IntentDecision) {
   const question = decision.clarification?.question || 'I need one more detail before I can safely build this.';
-  const choices = decision.clarification?.choices || [];
   const isFrench = isLikelyFrenchPrompt(`${question} ${decision.clarification?.recommendation || ''}`);
-  const intro = isFrench
-    ? `J’ai besoin d’un seul détail pour éviter de partir dans la mauvaise direction : ${question}`
-    : `I need one detail to avoid going in the wrong direction: ${question}`;
-  const options = choices.length
-    ? `\n\n${isFrench ? 'Repères possibles' : 'Possible directions'}: ${choices.join(' / ')}`
-    : '';
-  const recommendation = decision.clarification?.recommendation
-    ? `\n\n${isFrench ? 'Ma recommandation' : 'My recommendation'}: ${decision.clarification.recommendation}`
-    : '';
-  return `${intro}${options}${recommendation}`;
+  return isFrench
+    ? `J’ai besoin d’une précision : ${question}`
+    : `I need one detail: ${question}`;
 }
 
 function detectExternalApiRequirements(prompt: string): ExternalApiRequirement[] {

@@ -31,5 +31,10 @@ assert.ok(conversation.includes('"file_edit"'), 'conversation types should suppo
 assert.ok(conversation.includes('huggy-codex-file-edit'), 'conversation renderer should render exact file edits');
 assert.ok(styles.includes('.huggy-codex-file-edit'), 'journal CSS should style file edits');
 assert.ok(!conversation.includes('Huggy Mission Control'), 'builder conversation should not render Mission Control');
+assert.ok(!builderLive.includes('I am understanding the request and preparing the work.'), 'builder should not inject a fake English startup line');
+assert.ok(builderLive.includes('switchToPlainResponse'), 'builder should collapse answer/clarification streams to plain chat bubbles');
+assert.ok(builderLive.includes("'done',"), 'builder should explicitly suppress done as a visible journal event');
+assert.ok(!server.includes('Possible directions'), 'clarification text should not expose noisy option labels');
+assert.ok(!server.includes('My recommendation'), 'clarification text should not append generic recommendations');
 
 console.log('codex journal protocol ok');
