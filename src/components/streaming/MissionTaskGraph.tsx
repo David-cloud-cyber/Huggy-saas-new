@@ -23,7 +23,7 @@ export function MissionTaskGraph({ tasks }: MissionTaskGraphProps) {
     <section className="agent-mini-card agent-task-graph" aria-label="Mission task graph">
       <div className="agent-mini-card-head">
         <RouteIcon size={14} aria-hidden="true" />
-        <span>Mission Control</span>
+        <span>Journal</span>
       </div>
       <ol className="agent-task-list">
         {visibleTasks.map(task => (

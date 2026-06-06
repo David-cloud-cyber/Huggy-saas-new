@@ -150,7 +150,7 @@ export function createInitialAgentStreamState(seed: Partial<AgentStreamUiState> 
   return {
     status: 'active',
     headline: 'Je comprends la mission.',
-    detail: 'Huggy Mission Control organise le travail avant toute action.',
+    detail: 'Je prépare le travail sans modifier inutilement le projet.',
     phases: [],
     files: [],
     preview: { status: 'idle', hasPreviewEvent: false },
@@ -531,7 +531,7 @@ function agentForEvent(eventType: string, phase: StreamPhaseId, payload: Record<
     return { id: 'product_agent', label: 'Product Agent', role: 'Intent and product outcome', observation: 'Je transforme la demande en objectif produit.', result: 'Objectif clarifie.' };
   }
   if (phase === 'understanding') return { id: 'orchestrator', label: 'Orchestrator', role: 'Mission intake', observation: 'Je comprends la mission.', result: 'Mission cadre.' };
-  if (phase === 'context' || phase === 'planning' || phase === 'research') return { id: 'architect_agent', label: 'Architect Agent', role: 'Scope and plan', observation: 'J organise les agents necessaires.', result: 'Plan borne.' };
+  if (phase === 'context' || phase === 'planning' || phase === 'research') return { id: 'architect_agent', label: 'Architect Agent', role: 'Scope and plan', observation: 'Je prépare un plan court et utile.', result: 'Plan borne.' };
   if (phase === 'building' || phase === 'files') {
     const backend = /supabase|schema|database|auth|storage|backend/i.test(payloadText);
     const security = /security|secret|rls|policy|permission/i.test(payloadText);
@@ -591,7 +591,7 @@ function buildMissionTasks(input: {
   };
   return [
     { id: 'understand', label: 'Je comprends la mission.', detail: 'Intentions, contraintes et risque.', status: phaseStatus(['understanding', 'context']) },
-    { id: 'organize', label: 'J organise les agents necessaires.', detail: 'Scope, plan et garde-fous.', status: phaseStatus(['planning', 'research']) },
+    { id: 'organize', label: 'Je prépare un plan court et utile.', detail: 'Portée, risques et garde-fous.', status: phaseStatus(['planning', 'research']) },
     { id: 'files', label: 'Je modifie les fichiers cibles.', detail: input.files.length ? `${input.files.length} fichier(s) suivi(s).` : 'En attente de vrais changements.', status: phaseStatus(['building', 'files']) },
     { id: 'preview', label: 'Je reconstruis la preview.', detail: input.preview.hasPreviewEvent ? input.preview.message || 'Preview synchronisee.' : 'Seulement si la preview est touchee.', status: input.preview.hasPreviewEvent ? statusFromPreview(input.preview.status) : 'pending' },
     { id: 'tests', label: 'Je teste.', detail: input.checks.hasCheckEvent ? input.checks.message || 'Checks synchronises.' : 'Seulement si des checks tournent.', status: input.checks.hasCheckEvent ? statusFromChecks(input.checks.status) : 'pending' },
@@ -695,7 +695,7 @@ function headlineFor(phase: StreamPhaseId, status: AgentStreamStatus): string {
   const headlines: Partial<Record<StreamPhaseId, string>> = {
     understanding: 'Je comprends la mission.',
     context: 'Je garde ce qui fonctionne deja.',
-    planning: 'J organise les agents necessaires.',
+    planning: 'Je prépare un plan court et utile.',
     research: 'Je verifie le contexte externe utile.',
     building: 'Je prepare l execution.',
     files: 'Je modifie les fichiers cibles.',
@@ -706,7 +706,7 @@ function headlineFor(phase: StreamPhaseId, status: AgentStreamStatus): string {
     quality: 'Je critique le resultat.',
     memory: 'Je retiens les decisions utiles.',
   };
-  return headlines[phase] || 'Huggy Mission Control';
+  return headlines[phase] || 'En reflexion';
 }
 
 function publicMessage(payload: Record<string, any>, message: unknown, fallback: string): string {

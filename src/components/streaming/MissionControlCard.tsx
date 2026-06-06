@@ -47,7 +47,7 @@ export function MissionControlCard({ state }: MissionControlCardProps) {
           <SparklesIcon size={15} />
         </span>
         <div className="agent-card-title-block">
-          <h3>Huggy Mission Control</h3>
+          <h3>Journal Huggy</h3>
           <div className="agent-mission-line">
             {state.status === "active" ? <ShiningText text={state.headline} /> : <span>{state.headline}</span>}
           </div>

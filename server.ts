@@ -14,6 +14,7 @@ import { OpenRouterService, resolveOpenRouterApiKey, type ChatMessage } from './
 import { ProviderGateway } from './src/services/provider-gateway.ts';
 import {
   buildAIModelRuntimeConfig,
+  getAllAIModelCapabilityProfiles,
   getAIModelCapabilityProfile,
   type AIWorkflowTask,
 } from './src/services/ai-model-runtime.ts';
@@ -78,7 +79,9 @@ import {
   runnerChecksToVerificationChecks,
   type RunnerResult,
 } from './src/services/project-runner.ts';
+import { runBrowserInteractionAuditDetailed } from './src/services/browser-interaction-runner.ts';
 import { inspectVisualPreview } from './src/services/visual-preview-inspector.ts';
+import { scanGeneratedSecurity } from './src/services/generated-security-scanner.ts';
 import {
   WebResearchGateway,
   researchToPromptContext,
@@ -2298,6 +2301,9 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
   );
   const previewReady = project.preview_status === 'ready' && Boolean(project.preview_html);
   const hasFiles = files.length > 0;
+  const securityScan = scanGeneratedSecurity(files);
+  const securityBlocking = securityScan.findings.filter(item => item.status === 'fail');
+  const securityWarnings = securityScan.findings.filter(item => item.status === 'warn');
   const publicUrl = customDomain ? normalizeDomainUrl(customDomain) : getDefaultPublishedUrl(project);
   const state: PublishStatus['state'] = !previewReady || !hasFiles
     ? 'not_ready'
@@ -2315,7 +2321,7 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
     latest_published_at: latestPublishedAt,
     project_updated_at: projectUpdatedAt,
     badge_required: isFreePlanKey(plan),
-    can_publish: previewReady && hasFiles,
+    can_publish: previewReady && hasFiles && !securityBlocking.length,
     has_unpublished_changes: hasUnpublishedChanges,
     checks: [
       {
@@ -2329,6 +2335,16 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
         label: 'Preview',
         status: previewReady ? 'pass' : 'fail',
         detail: previewReady ? 'Preview is ready to snapshot.' : 'Run Build until the preview is ready.',
+      },
+      {
+        key: 'security',
+        label: 'Security',
+        status: securityBlocking.length ? 'fail' : securityWarnings.length ? 'warn' : 'pass',
+        detail: securityBlocking.length
+          ? `${securityBlocking.length} blocking security issue${securityBlocking.length > 1 ? 's' : ''} must be fixed before publish.`
+          : securityWarnings.length
+            ? `${securityWarnings.length} security note${securityWarnings.length > 1 ? 's' : ''} saved for review.`
+            : 'No blocking security issue detected.',
       },
       {
         key: 'domain',
@@ -5837,6 +5853,7 @@ function collectGenerationVerificationChecks(input: {
       previewHtml: input.previewHtml,
       platformType: input.uiPolicy.appType,
     }),
+    ...scanGeneratedSecurity(input.files).checks,
     ...(input.runnerResult ? runnerChecksToVerificationChecks(input.runnerResult.checks) : []),
   ];
 }
@@ -7059,6 +7076,60 @@ app.get('/api/ai/models', (req, res) => {
     success: true,
     models: buildPublicModelList(),
     providers: buildPublicModelProviderGroups(),
+  });
+});
+
+// GET /ai/model-runtime
+// Public, redacted model runtime view. It exposes capability routing and health
+// signals, never provider secrets or raw provider payloads.
+app.get('/api/ai/model-runtime', requireAuth, (req: any, res) => {
+  const profiles = getAllAIModelCapabilityProfiles().map(profile => ({
+    id: profile.id,
+    provider: profile.provider,
+    display_name: AI_MODEL_DISPLAY_NAMES[profile.id as AllowedModelId] || providerModelToDisplayName(profile.id),
+    best_for: profile.bestUse,
+    strengths: {
+      reasoning: profile.reasoning,
+      code: profile.code,
+      comprehension: profile.comprehension,
+      agentic: profile.agentic,
+      design: profile.design,
+      security: profile.security,
+    },
+    supports: {
+      streaming: profile.supports.streaming,
+      tool_calling: profile.supports.toolCalling,
+      structured_output: profile.supports.structuredOutput,
+      vision: profile.supports.vision,
+      long_context: profile.supports.longContext,
+    },
+    speed: profile.speed,
+    reliability: profile.reliability,
+    fallback_primary: profile.fallbackPrimary || null,
+    fallback_secondary: profile.fallbackSecondary || null,
+    limits_known: profile.limits.known,
+    recommended_parameters: {
+      temperature: profile.recommended.temperature,
+      max_tokens: profile.recommended.maxTokens,
+      timeout_ms: profile.recommended.timeoutMs,
+      streaming_timeout_ms: profile.recommended.streamingTimeoutMs,
+      reasoning_control: profile.supports.reasoningControl,
+      json_mode: Boolean(profile.supports.jsonMode),
+    },
+  }));
+  res.json({
+    success: true,
+    auto_model: {
+      chooses_model: true,
+      chooses_workflow: true,
+      chooses_provider_config: true,
+      uses_fallback: true,
+    },
+    runtime: profiles,
+    monitoring: {
+      metrics: providerGateway.getRuntimeMetricsSnapshot(),
+      circuit_breakers: providerGateway.getCircuitSnapshot(),
+    },
   });
 });
 
@@ -10821,6 +10892,107 @@ app.get('/api/projects/:id/diff', async (req: any, res: any) => {
   res.json({ success: true, diff: versions[0]?.diff_summary || { created: [], modified: [], deleted: [], summary: 'No diff yet' } });
 });
 
+app.post('/api/projects/:id/browser-test', async (req: any, res: any) => {
+  const requestId = `browser_${randomUUID()}`;
+  try {
+    const userId = getUserOrgId(req);
+    const project = await loadProject(req.params.id, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found.', request_id: requestId });
+    }
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const files = await loadProjectFiles(project.id);
+    const previewHtml = String(req.body?.preview_html || req.body?.previewHtml || getProjectPreviewHtml(project, files, 'preview'));
+    const result = await runBrowserInteractionAuditDetailed({
+      files,
+      previewHtml,
+      timeoutMs: Number(req.body?.timeout_ms || req.body?.timeoutMs || 20_000),
+    });
+    res.json({ success: true, request_id: requestId, browser_test: result });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      request_id: requestId,
+      message: 'Browser test could not complete.',
+      diagnostic_code: 'BROWSER_TEST_FAILED',
+      suggested_action: 'retry_or_use_static_checks',
+      error: redactSecrets(error?.message || String(error), '[redacted]'),
+    });
+  }
+});
+
+app.post('/api/projects/:id/security-scan', async (req: any, res: any) => {
+  const requestId = `sec_${randomUUID()}`;
+  try {
+    const userId = getUserOrgId(req);
+    const project = await loadProject(req.params.id, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found.', request_id: requestId });
+    }
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const files = await loadProjectFiles(project.id);
+    const security = scanGeneratedSecurity(files);
+    res.json({ success: true, request_id: requestId, security });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      request_id: requestId,
+      message: 'Security scan could not complete.',
+      diagnostic_code: 'SECURITY_SCAN_FAILED',
+      suggested_action: 'retry_or_run_build',
+      error: redactSecrets(error?.message || String(error), '[redacted]'),
+    });
+  }
+});
+
+app.post('/api/projects/:id/import-context', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const context = buildImportContext({
+    source: req.body?.source,
+    mode: req.body?.mode,
+    url: req.body?.url,
+    fileName: req.body?.file_name || req.body?.fileName,
+    mimeType: req.body?.mime_type || req.body?.mimeType,
+    hasAttachment: Boolean(req.body?.has_attachment || req.body?.hasAttachment),
+  }, {
+    figmaConfigured: Boolean(process.env.FIGMA_ACCESS_TOKEN || process.env.FIGMA_TOKEN),
+    githubConfigured: Boolean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
+  });
+  res.json({ success: true, import_context: publicImportContext(context), prompt_context: context?.prompt || '' });
+});
+
+app.post('/api/projects/:id/visual-edit', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const selector = String(req.body?.selector || '').trim().slice(0, 240);
+  const instruction = String(req.body?.instruction || req.body?.prompt || '').trim().slice(0, 1200);
+  if (!instruction) {
+    return res.status(400).json({
+      success: false,
+      message: 'Describe the visual change to apply.',
+      diagnostic_code: 'VISUAL_EDIT_INSTRUCTION_REQUIRED',
+      suggested_action: 'provide_visual_edit_instruction',
+    });
+  }
+  const prompt = [
+    'Visual edit request.',
+    selector ? `Target selector: ${selector}` : 'Target selector: not provided; infer the smallest safe target from the current preview.',
+    `Instruction: ${instruction}`,
+    'Patch only the smallest relevant files. Preserve data, state, routes, generated app behavior and preview bootstrap code.',
+  ].join('\n');
+  res.json({
+    success: true,
+    mode: 'generate_with_visual_edit_prompt',
+    prompt,
+    suggested_action: 'send_prompt_to_generate_endpoint',
+  });
+});
+
 app.get('/api/projects/:id/database', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
@@ -11206,13 +11378,15 @@ async function publishProjectSnapshot(req: any, res: any) {
     const context = await createPublishContext(project);
     const publishStatus = buildPublishStatus(context);
     if (!publishStatus.can_publish) {
+      const failedCheck = publishStatus.checks.find((check: any) => check.status === 'fail');
+      const diagnosticCode = failedCheck?.key === 'security' ? 'PUBLISH_SECURITY_CHECK_FAILED' : 'PREVIEW_NOT_READY';
       return res.status(409).json({
         success: false,
-        error: 'Build a ready preview before publishing.',
-        message: 'Build a ready preview before publishing.',
-        diagnostic_code: 'PREVIEW_NOT_READY',
+        error: failedCheck?.detail || 'Build a ready preview before publishing.',
+        message: failedCheck?.detail || 'Build a ready preview before publishing.',
+        diagnostic_code: diagnosticCode,
         request_id: requestId,
-        suggested_action: 'build_first',
+        suggested_action: failedCheck?.key === 'security' ? 'fix_security_then_publish' : 'build_first',
         publish: publishStatus,
       });
     }

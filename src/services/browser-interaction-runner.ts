@@ -8,6 +8,22 @@ export type BrowserInteractionAuditInput = {
   env?: Record<string, string | undefined>;
 };
 
+export type BrowserFinding = {
+  key: string;
+  severity: 'info' | 'low' | 'medium' | 'high';
+  message: string;
+  selector?: string;
+  viewport?: 'desktop' | 'mobile';
+  public_payload?: Record<string, unknown>;
+};
+
+export type BrowserTestResult = {
+  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  duration_ms: number;
+  findings: BrowserFinding[];
+  checks: AgentVerificationCheck[];
+};
+
 type PlaywrightModule = {
   chromium: {
     launch(options?: Record<string, unknown>): Promise<any>;
@@ -17,25 +33,30 @@ type PlaywrightModule = {
 const CONTROL_SELECTOR = 'button, [role="button"], input, select, textarea, a[href]';
 
 export async function runBrowserInteractionAudit(input: BrowserInteractionAuditInput): Promise<AgentVerificationCheck[]> {
+  return (await runBrowserInteractionAuditDetailed(input)).checks;
+}
+
+export async function runBrowserInteractionAuditDetailed(input: BrowserInteractionAuditInput): Promise<BrowserTestResult> {
+  const startedAt = Date.now();
   const env = input.env || process.env;
   if (env.AGENT_BROWSER_RUNNER_ENABLED !== '1') {
-    return [warn('browser_runner_disabled', 'Browser interaction runner is disabled; static visual and functional checks were used.')];
+    return result('skipped', startedAt, [finding('browser_runner_disabled', 'low', 'Browser interaction runner is disabled; static visual and functional checks were used.')]);
   }
 
   const html = String(input.previewHtml || input.files.find(file => /(?:^|\/)index\.html$/i.test(file.path))?.content || '');
   if (!html.trim()) {
-    return [fail('browser_preview_missing', 'Browser runner could not inspect an empty preview.')];
+    return result('failed', startedAt, [finding('browser_preview_missing', 'high', 'Browser runner could not inspect an empty preview.')]);
   }
 
   const playwright = await loadPlaywright();
   if (!playwright) {
-    return [warn('browser_runner_unavailable', 'Browser runner is enabled but Playwright is not installed in this environment.')];
+    return result('warning', startedAt, [finding('browser_runner_unavailable', 'low', 'Browser runner is enabled but Playwright is not installed in this environment.')]);
   }
 
   const timeoutMs = Math.max(3_000, Math.min(input.timeoutMs || 20_000, 30_000));
-  const startedAt = Date.now();
   const runtimeErrors: string[] = [];
   const clickErrors: string[] = [];
+  const findings: BrowserFinding[] = [];
   let browser: any = null;
 
   try {
@@ -55,7 +76,16 @@ export async function runBrowserInteractionAudit(input: BrowserInteractionAuditI
     const before = await page.evaluate(() => ({
       text: document.body?.innerText || '',
       htmlLength: document.body?.innerHTML?.length || 0,
+      width: document.documentElement?.scrollWidth || 0,
+      height: document.documentElement?.scrollHeight || 0,
+      viewportWidth: window.innerWidth,
+      bodyRectCount: document.body ? document.body.getClientRects().length : 0,
     }));
+
+    if (!before.text.trim() || before.htmlLength < 80 || before.bodyRectCount === 0) {
+      findings.push(finding('browser_blank_preview', 'high', 'Browser rendered an empty or nearly empty preview.', undefined, 'desktop'));
+    }
+
     const controls = await page.evaluate((selector: string) => {
       return Array.from(document.querySelectorAll(selector)).map((element, index) => {
         element.setAttribute('data-huggy-probe', String(index));
@@ -66,6 +96,7 @@ export async function runBrowserInteractionAudit(input: BrowserInteractionAuditI
           tag,
           type: input.type || '',
           href: element.getAttribute('href') || '',
+          label: (element.textContent || element.getAttribute('aria-label') || input.placeholder || '').trim().slice(0, 80),
           disabled: Boolean((element as HTMLButtonElement).disabled || element.getAttribute('aria-disabled') === 'true'),
         };
       });
@@ -93,26 +124,95 @@ export async function runBrowserInteractionAudit(input: BrowserInteractionAuditI
         if (afterControl.text !== before.text || afterControl.htmlLength !== before.htmlLength) changedControls += 1;
       } catch (error: any) {
         clickErrors.push(redactError(error?.message || 'Control interaction failed'));
+        findings.push(finding('browser_control_interaction_failed', 'high', `Control could not be interacted with: ${redactError(error?.message || 'Control interaction failed')}`, selector, 'desktop', { label: control.label || control.tag }));
       }
     }
 
-    const checks: AgentVerificationCheck[] = [];
-    checks.push(runtimeErrors.length
-      ? fail('browser_no_runtime_errors', `Preview raised runtime errors: ${runtimeErrors.slice(0, 3).join(' | ')}`)
-      : pass('browser_no_runtime_errors', 'Preview loaded without browser runtime errors.'));
-    checks.push(clickErrors.length
-      ? fail('browser_primary_controls_clickable', `Some visible controls could not be interacted with: ${clickErrors.slice(0, 3).join(' | ')}`)
-      : pass('browser_primary_controls_clickable', controls.length ? 'Primary controls accepted browser interactions.' : 'No browser controls were detected for this preview.'));
-    checks.push(controls.length > 0 && changedControls === 0
-      ? warn('browser_actions_change_state', 'Browser interactions did not visibly change the page; verify that primary controls provide feedback.')
-      : pass('browser_actions_change_state', controls.length ? 'At least one browser interaction changed visible state.' : 'No interactive controls required state changes.'));
-    checks.push(pass('browser_runner_duration', `Browser interaction audit completed in ${Date.now() - startedAt}ms.`));
-    return checks;
+    if (controls.length > 0 && changedControls === 0) {
+      findings.push(finding('browser_actions_change_state', 'medium', 'Browser interactions did not visibly change the page; primary controls need feedback or state changes.', undefined, 'desktop'));
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(120).catch(() => null);
+    const mobile = await page.evaluate(() => {
+      const offenders = Array.from(document.body?.querySelectorAll('*') || [])
+        .filter((element) => {
+          const rect = (element as HTMLElement).getBoundingClientRect();
+          return rect.width > window.innerWidth + 2 || rect.left < -8 || rect.right > window.innerWidth + 8;
+        })
+        .slice(0, 6)
+        .map((element) => ({
+          tag: element.tagName.toLowerCase(),
+          className: String((element as HTMLElement).className || '').slice(0, 80),
+          text: String(element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+        }));
+      return {
+        text: document.body?.innerText || '',
+        scrollWidth: document.documentElement?.scrollWidth || 0,
+        innerWidth: window.innerWidth,
+        offenders,
+      };
+    });
+
+    if (!mobile.text.trim()) {
+      findings.push(finding('browser_mobile_blank_preview', 'high', 'Mobile viewport rendered a blank preview.', undefined, 'mobile'));
+    }
+    if (mobile.scrollWidth > mobile.innerWidth + 12 || mobile.offenders.length) {
+      findings.push(finding('browser_mobile_overflow', 'medium', 'Mobile viewport has horizontal overflow or oversized elements.', undefined, 'mobile', { offenders: mobile.offenders }));
+    }
+
+    if (runtimeErrors.length) {
+      findings.push(finding('browser_no_runtime_errors', 'high', `Preview raised runtime errors: ${runtimeErrors.slice(0, 3).join(' | ')}`));
+    }
+    if (clickErrors.length) {
+      findings.push(finding('browser_primary_controls_clickable', 'high', `Some visible controls could not be interacted with: ${clickErrors.slice(0, 3).join(' | ')}`));
+    }
+    if (!findings.some(item => item.key === 'browser_no_runtime_errors')) {
+      findings.push(finding('browser_no_runtime_errors', 'info', 'Preview loaded without browser runtime errors.'));
+    }
+    if (!findings.some(item => item.key === 'browser_primary_controls_clickable')) {
+      findings.push(finding('browser_primary_controls_clickable', 'info', controls.length ? 'Primary controls accepted browser interactions.' : 'No browser controls were detected for this preview.'));
+    }
+    findings.push(finding('browser_runner_duration', 'info', `Browser interaction audit completed in ${Date.now() - startedAt}ms.`, undefined, undefined, { duration_ms: Date.now() - startedAt }));
+    return result(statusForFindings(findings), startedAt, findings);
   } catch (error: any) {
-    return [warn('browser_runner_failed', `Browser interaction runner could not complete: ${redactError(error?.message || 'Unknown browser runner error')}`)];
+    return result('warning', startedAt, [finding('browser_runner_failed', 'low', `Browser interaction runner could not complete: ${redactError(error?.message || 'Unknown browser runner error')}`)]);
   } finally {
     await browser?.close?.().catch(() => null);
   }
+}
+
+function finding(
+  key: string,
+  severity: BrowserFinding['severity'],
+  message: string,
+  selector?: string,
+  viewport?: BrowserFinding['viewport'],
+  public_payload?: Record<string, unknown>,
+): BrowserFinding {
+  return { key, severity, message, selector, viewport, public_payload };
+}
+
+function statusForFindings(findings: BrowserFinding[]): BrowserTestResult['status'] {
+  if (findings.some(item => item.severity === 'high' && !/_duration$|_errors$/.test(item.key))) return 'failed';
+  if (findings.some(item => item.severity === 'high')) return 'failed';
+  if (findings.some(item => item.severity === 'medium' || item.severity === 'low')) return 'warning';
+  return 'passed';
+}
+
+function result(status: BrowserTestResult['status'], startedAt: number, findings: BrowserFinding[]): BrowserTestResult {
+  return {
+    status,
+    duration_ms: Date.now() - startedAt,
+    findings,
+    checks: findings.map(item => ({
+      key: item.key,
+      status: item.severity === 'high' ? 'fail' : item.severity === 'info' ? 'pass' : 'warn',
+      severity: item.severity,
+      message: item.message,
+      file: item.selector,
+    })),
+  };
 }
 
 async function loadPlaywright(): Promise<PlaywrightModule | null> {
@@ -122,18 +222,6 @@ async function loadPlaywright(): Promise<PlaywrightModule | null> {
   } catch {
     return null;
   }
-}
-
-function pass(key: string, message: string): AgentVerificationCheck {
-  return { key, status: 'pass', severity: 'info', message };
-}
-
-function warn(key: string, message: string): AgentVerificationCheck {
-  return { key, status: 'warn', severity: 'low', message };
-}
-
-function fail(key: string, message: string): AgentVerificationCheck {
-  return { key, status: 'fail', severity: 'high', message };
 }
 
 function redactError(value: string) {

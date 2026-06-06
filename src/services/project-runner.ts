@@ -8,6 +8,7 @@ import type { AgentVerificationCheck } from './agent-v2.ts';
 import { containsSecret, redactSecrets } from './secret-redaction.ts';
 import { detectHuggyCloudRequirements } from './huggy-cloud.ts';
 import { validateHuggyFullstackFiles } from './fullstack-generation.ts';
+import { scanGeneratedSecurity } from './generated-security-scanner.ts';
 
 export type RunnerStatus = 'passed' | 'failed' | 'skipped';
 export type RunnerSeverity = 'info' | 'low' | 'medium' | 'high';
@@ -190,6 +191,7 @@ export class HybridProjectRunner implements RunnerAdapter {
     checks.push(...this.localImportChecks(files));
     checks.push(...this.interactionChecks(source));
     checks.push(...this.fullstackChecks(files, source));
+    checks.push(...verificationChecksToRunnerChecks(scanGeneratedSecurity(files).checks));
     checks.push(...this.previewRuntimeChecks(html));
     checks.push(...this.productionReadinessChecks(files, source, hasPackageJson));
     return checks;

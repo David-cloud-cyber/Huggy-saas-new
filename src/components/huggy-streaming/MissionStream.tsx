@@ -74,7 +74,7 @@ export function MissionStream({ state }: { state: AgentStreamUiState }) {
         <AgentHeader>
           <span className="huggy-mission-orb" aria-hidden="true" />
           <div>
-            <AgentTitle>Huggy Mission Control</AgentTitle>
+            <AgentTitle>Journal Huggy</AgentTitle>
             <AgentDescription>{state.headline || "Je comprends la mission."}</AgentDescription>
           </div>
           {state.elapsed ? <span className="huggy-mission-elapsed">{state.elapsed}</span> : null}
