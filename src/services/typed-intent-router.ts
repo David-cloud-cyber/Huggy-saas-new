@@ -70,13 +70,28 @@ type BuildInput = {
 };
 
 function normalize(value: string) {
-  return String(value || '')
+  return repairCommonEncodingBreaks(value)
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[’'`"]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function repairCommonEncodingBreaks(value: string) {
+  return String(value || '')
+    .replace(/cr\uFFFDer/gi, match => match[0] === 'C' ? 'Creer' : 'creer')
+    .replace(/cr\uFFFDe/gi, match => match[0] === 'C' ? 'Cree' : 'cree')
+    .replace(/g\uFFFDn\uFFFDrer/gi, match => match[0] === 'G' ? 'Generer' : 'generer')
+    .replace(/g\uFFFDn\uFFFDr?e/gi, match => match[0] === 'G' ? 'Genere' : 'genere')
+    .replace(/t\uFFFDches/gi, match => match[0] === 'T' ? 'Taches' : 'taches')
+    .replace(/t\uFFFDche/gi, match => match[0] === 'T' ? 'Tache' : 'tache')
+    .replace(/\uFFFDtats/gi, 'etats')
+    .replace(/\uFFFDtat/gi, 'etat')
+    .replace(/r\uFFFDponses/gi, 'reponses')
+    .replace(/r\uFFFDponse/gi, 'reponse')
+    .replace(/\uFFFD/g, 'e');
 }
 
 function unique<T>(items: T[]): T[] {
@@ -194,11 +209,7 @@ function clarificationFor(primary: TypedPrimaryIntent, prompt: string): TypedInt
     };
   }
   if (primary === 'DISCUSS_FIRST') {
-    return {
-      question: fr ? 'Tu veux que Huggy réponde d’abord ou qu’il applique ensuite le changement ?' : 'Should Huggy answer first or apply the change afterward?',
-      choices: fr ? ['Répondre seulement', 'Faire un plan', 'Appliquer après confirmation'] : ['Answer only', 'Plan only', 'Apply after confirmation'],
-      recommendation: fr ? 'Je réponds d’abord, puis tu peux confirmer si tu veux que je code.' : 'I should answer first, then you can confirm if you want code changes.',
-    };
+    return undefined;
   }
   if (primary === 'BLOCKED') {
     return {

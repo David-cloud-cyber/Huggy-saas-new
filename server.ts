@@ -1368,7 +1368,7 @@ function isGreetingPrompt(value: string) {
 }
 
 function normalizePromptIntentText(value: string) {
-  return String(value || '')
+  return repairTextEncoding(value)
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -2599,13 +2599,11 @@ class AgentOrchestrator {
           : 'The request is ambiguous enough that coding now could create the wrong result.',
         clarification: {
           question: isLikelyFrenchPrompt(text)
-            ? 'Tu veux que Huggy réponde seulement, ou qu’il modifie vraiment le projet ?'
+            ? 'Quelle app, écran, composant ou bug dois-je traiter ?'
             : 'What exact part should Huggy change or build?',
-          choices: input.hasFiles
-            ? ['Répondre sans modifier', 'Modifier une partie précise', 'Corriger un bug précis', 'Créer une nouvelle fonctionnalité']
-            : ['Répondre sans générer', 'Créer une app précise', 'Faire un plan', 'Améliorer un texte ou prompt'],
+          choices: [],
           recommendation: isLikelyFrenchPrompt(text)
-            ? 'Si tu veux coder, indique l’écran, le composant, l’API, la base de données ou le bug exact.'
+            ? 'Une phrase suffit.'
             : 'One sentence is enough: for example, "create a todo app with add, delete and filters".',
         },
       });
@@ -2961,13 +2959,11 @@ function guardAiDecisionWithUnderstanding(
       userVisibleReason: 'Huggy paused because the message does not clearly request a safe file change.',
       clarification: {
         question: isLikelyFrenchPrompt(input.prompt)
-          ? 'Tu veux une réponse simple, ou une vraie modification du projet ?'
+          ? 'Quelle app, écran, composant ou bug dois-je traiter ?'
           : 'What exact result should Huggy produce or change?',
-        choices: input.hasFiles
-          ? ['Répondre seulement', 'Modifier un composant précis', 'Corriger un bug précis']
-          : ['Répondre seulement', 'Créer une app précise', 'Faire un plan'],
+        choices: [],
         recommendation: isLikelyFrenchPrompt(input.prompt)
-          ? 'Pour modifier le projet, cite l’écran, le composant, l’API, la base de données ou le bug exact.'
+          ? 'Une phrase suffit.'
           : 'For project changes, name the exact screen, component, API, database, or bug.',
       },
     });
@@ -3148,7 +3144,7 @@ function createDeployAssistResponse(project: GeneratedProject) {
 }
 
 function isLikelyFrenchPrompt(prompt: string) {
-  return /\b(je|tu|vous|nous|veux|j'aimerais|crée|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application)\b/i.test(prompt);
+  return /\b(je|tu|vous|nous|veux|j'aimerais|crée|cree|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application)\b/i.test(repairTextEncoding(prompt));
 }
 
 function summarizeProjectFilesForAgent(files: GeneratedFile[]) {

@@ -57,12 +57,27 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   });
   assert.equal(typedDecision.primary_intent, 'DISCUSS_FIRST');
   assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
+  assert.equal(typedDecision.clarification, undefined);
   assert.equal(gated.intent, 'conversation');
   assert.equal(gated.requiresFileChanges, false);
 }
 
 {
   const { typedDecision, gated } = typed('cree une vraie todo app avec ajout suppression filtres et etat vide', {
+    intent: 'build',
+    requiresFileChanges: true,
+    requiresPreviewRebuild: true,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'BUILD');
+  assert.equal(typedDecision.execution_strategy, 'RUN_AGENT');
+  assert.equal(typedDecision.requires_code_changes, true);
+  assert.equal(gated.requiresFileChanges, true);
+  assert.ok(typedDecision.target_files.includes('src/App.tsx'));
+}
+
+{
+  const { typedDecision, gated } = typed('cr\uFFFDe une vraie todo app web avec ajout de t\uFFFDche suppression filtres et \uFFFDtat vide', {
     intent: 'build',
     requiresFileChanges: true,
     requiresPreviewRebuild: true,

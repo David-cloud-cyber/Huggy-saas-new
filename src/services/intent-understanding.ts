@@ -39,7 +39,7 @@ type IntentInput = {
 };
 
 function normalizeIntentText(value: string) {
-  return String(value || '')
+  return repairCommonEncodingBreaks(value)
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -47,6 +47,21 @@ function normalizeIntentText(value: string) {
     .replace(/[!?.,;:()[\]{}"“”«»]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function repairCommonEncodingBreaks(value: string) {
+  return String(value || '')
+    .replace(/cr\uFFFDer/gi, match => match[0] === 'C' ? 'Creer' : 'creer')
+    .replace(/cr\uFFFDe/gi, match => match[0] === 'C' ? 'Cree' : 'cree')
+    .replace(/g\uFFFDn\uFFFDrer/gi, match => match[0] === 'G' ? 'Generer' : 'generer')
+    .replace(/g\uFFFDn\uFFFDr?e/gi, match => match[0] === 'G' ? 'Genere' : 'genere')
+    .replace(/t\uFFFDches/gi, match => match[0] === 'T' ? 'Taches' : 'taches')
+    .replace(/t\uFFFDche/gi, match => match[0] === 'T' ? 'Tache' : 'tache')
+    .replace(/\uFFFDtats/gi, 'etats')
+    .replace(/\uFFFDtat/gi, 'etat')
+    .replace(/r\uFFFDponses/gi, 'reponses')
+    .replace(/r\uFFFDponse/gi, 'reponse')
+    .replace(/\uFFFD/g, 'e');
 }
 
 function includesAny(text: string, hints: string[]) {

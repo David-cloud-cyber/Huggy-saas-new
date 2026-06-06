@@ -70,6 +70,11 @@ check(
 );
 
 check(
+  'cr\uFFFDe une vraie todo app web avec ajout de t\uFFFDche, suppression, filtres et \uFFFDtat vide',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
   'reformule ce texte : cree une app restaurant complete avec reservation',
   { category: 'text', action: 'answer', allowsFileAction: false },
 );
