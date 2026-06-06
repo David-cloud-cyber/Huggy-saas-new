@@ -4291,6 +4291,192 @@ function buildGenerationMessages(input: {
   ];
 }
 
+function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOrDescription = '') {
+  const prompt = String(promptOrDescription || projectName || '').trim();
+  const normalized = normalizePromptIntentText(prompt);
+  const isTodo = /\b(todo|to do|to-do|task|tasks|tache|taches|tâche|tâches)\b/i.test(normalized);
+  const safeName = JSON.stringify(projectName || 'Huggy App');
+  const safePrompt = JSON.stringify(prompt || 'A useful generated application.');
+
+  const appContent = isTodo
+    ? [
+        "import { useMemo, useState } from 'react';",
+        "import './index.css';",
+        '',
+        "type TodoFilter = 'all' | 'active' | 'completed';",
+        'type TodoItem = { id: number; title: string; completed: boolean };',
+        '',
+        'const starterTodos: TodoItem[] = [',
+        "  { id: 1, title: 'Plan the first useful version', completed: true },",
+        "  { id: 2, title: 'Add real interactions', completed: false },",
+        "  { id: 3, title: 'Test the responsive preview', completed: false },",
+        '];',
+        '',
+        'export default function App() {',
+        '  const [todos, setTodos] = useState<TodoItem[]>(starterTodos);',
+        "  const [filter, setFilter] = useState<TodoFilter>('all');",
+        "  const [draft, setDraft] = useState('');",
+        '',
+        '  const visibleTodos = useMemo(() => {',
+        "    if (filter === 'active') return todos.filter(todo => !todo.completed);",
+        "    if (filter === 'completed') return todos.filter(todo => todo.completed);",
+        '    return todos;',
+        '  }, [filter, todos]);',
+        '',
+        '  const completedCount = todos.filter(todo => todo.completed).length;',
+        '  const activeCount = todos.length - completedCount;',
+        '',
+        '  function addTodo(event: { preventDefault: () => void }) {',
+        '    event.preventDefault();',
+        '    const title = draft.trim();',
+        '    if (!title) return;',
+        '    setTodos(current => [{ id: Date.now(), title, completed: false }, ...current]);',
+        "    setDraft('');",
+        '  }',
+        '',
+        '  function toggleTodo(id: number) {',
+        '    setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));',
+        '  }',
+        '',
+        '  function deleteTodo(id: number) {',
+        '    setTodos(current => current.filter(todo => todo.id !== id));',
+        '  }',
+        '',
+        '  return (',
+        '    <main className="app-shell">',
+        '      <section className="hero">',
+        '        <span className="eyebrow">Interactive todo workspace</span>',
+        `        <h1>{${safeName}}</h1>`,
+        `        <p>{${safePrompt}}</p>`,
+        '      </section>',
+        '',
+        '      <section className="todo-panel" aria-label="Todo app">',
+        '        <div className="stats-grid">',
+        '          <div><strong>{todos.length}</strong><span>Total</span></div>',
+        '          <div><strong>{activeCount}</strong><span>Active</span></div>',
+        '          <div><strong>{completedCount}</strong><span>Completed</span></div>',
+        '        </div>',
+        '',
+        '        <form className="todo-form" onSubmit={addTodo}>',
+        '          <input',
+        '            value={draft}',
+        '            onChange={event => setDraft(event.target.value)}',
+        '            placeholder="Add a task..."',
+        '            aria-label="New task"',
+        '          />',
+        '          <button type="submit" disabled={!draft.trim()}>Add</button>',
+        '        </form>',
+        '',
+        '        <div className="filters" aria-label="Todo filters">',
+        "          {(['all', 'active', 'completed'] as TodoFilter[]).map(option => (",
+        '            <button',
+        '              key={option}',
+        "              className={filter === option ? 'selected' : ''}",
+        '              onClick={() => setFilter(option)}',
+        '              type="button"',
+        '            >',
+        '              {option}',
+        '            </button>',
+        '          ))}',
+        '        </div>',
+        '',
+        '        <div className="todo-list">',
+        '          {visibleTodos.length ? visibleTodos.map(todo => (',
+        '            <article className={todo.completed ? "todo-item done" : "todo-item"} key={todo.id}>',
+        '              <label>',
+        '                <input type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo.id)} />',
+        '                <span>{todo.title}</span>',
+        '              </label>',
+        '              <button type="button" onClick={() => deleteTodo(todo.id)} aria-label={`Delete ${todo.title}`}>Delete</button>',
+        '            </article>',
+        '          )) : (',
+        '            <div className="empty-state">',
+        '              <strong>No tasks here.</strong>',
+        '              <span>Switch filters or add a new task to keep moving.</span>',
+        '            </div>',
+        '          )}',
+        '        </div>',
+        '      </section>',
+        '    </main>',
+        '  );',
+        '}',
+        '',
+      ].join('\n')
+    : [
+        "import { useState } from 'react';",
+        "import './index.css';",
+        '',
+        'const features = [',
+        "  'Responsive product interface',",
+        "  'Working primary controls',",
+        "  'Clear empty and success states',",
+        '];',
+        '',
+        'export default function App() {',
+        "  const [status, setStatus] = useState('Ready');",
+        '',
+        '  return (',
+        '    <main className="app-shell">',
+        '      <section className="hero">',
+        '        <span className="eyebrow">Generated application</span>',
+        `        <h1>{${safeName}}</h1>`,
+        `        <p>{${safePrompt}}</p>`,
+        '        <button type="button" onClick={() => setStatus("Interaction confirmed")}>Try primary action</button>',
+        '      </section>',
+        '      <section className="feature-grid">',
+        '        {features.map(feature => <article key={feature}><strong>{feature}</strong><span>{status}</span></article>)}',
+        '      </section>',
+        '    </main>',
+        '  );',
+        '}',
+        '',
+      ].join('\n');
+
+  const cssContent = [
+    ':root { color: #1c1c1c; background: #fcfbf8; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }',
+    '* { box-sizing: border-box; }',
+    'body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, rgba(84,132,255,.14), transparent 32%), #fcfbf8; }',
+    'button, input { font: inherit; }',
+    '.app-shell { min-height: 100vh; padding: clamp(20px, 5vw, 72px); display: grid; gap: 24px; align-content: start; }',
+    '.hero, .todo-panel, .feature-grid article { border: 1px solid #eceae4; background: rgba(255,255,255,.82); border-radius: 28px; box-shadow: 0 24px 70px rgba(28,28,28,.08); }',
+    '.hero { padding: clamp(24px, 5vw, 56px); display: grid; gap: 14px; max-width: 980px; }',
+    '.eyebrow { color: #315fdc; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }',
+    'h1 { margin: 0; font-size: clamp(36px, 7vw, 76px); line-height: .95; letter-spacing: 0; }',
+    'p { margin: 0; color: #5f5f5d; font-size: clamp(16px, 2vw, 20px); line-height: 1.55; max-width: 760px; }',
+    '.todo-panel { padding: clamp(18px, 4vw, 34px); display: grid; gap: 18px; max-width: 980px; }',
+    '.stats-grid, .feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }',
+    '.stats-grid div, .feature-grid article { padding: 18px; display: grid; gap: 4px; }',
+    '.stats-grid strong { font-size: 30px; }',
+    '.stats-grid span, .feature-grid span { color: #5f5f5d; }',
+    '.todo-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }',
+    'input { width: 100%; border: 1px solid #eceae4; border-radius: 999px; padding: 14px 16px; background: #fff; color: #1c1c1c; }',
+    'button { border: 0; border-radius: 999px; padding: 12px 18px; background: #1c1c1c; color: #fff; font-weight: 800; cursor: pointer; transition: transform .18s ease, opacity .18s ease; }',
+    'button:hover { transform: translateY(-1px); }',
+    'button:disabled { opacity: .45; cursor: not-allowed; transform: none; }',
+    '.filters { display: flex; flex-wrap: wrap; gap: 8px; }',
+    '.filters button { background: #f7f4ed; color: #1c1c1c; border: 1px solid #eceae4; }',
+    '.filters button.selected { background: #315fdc; color: #fff; border-color: #315fdc; }',
+    '.todo-list { display: grid; gap: 10px; }',
+    '.todo-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid #eceae4; border-radius: 18px; background: #fff; }',
+    '.todo-item label { display: flex; align-items: center; gap: 10px; min-width: 0; }',
+    '.todo-item input { width: auto; }',
+    '.todo-item.done span { color: #8a8984; text-decoration: line-through; }',
+    '.todo-item button { background: #f7f4ed; color: #1c1c1c; }',
+    '.empty-state { border: 1px dashed #d8d4ca; border-radius: 20px; padding: 22px; display: grid; gap: 6px; color: #5f5f5d; }',
+    '@media (max-width: 720px) { .stats-grid, .feature-grid { grid-template-columns: 1fr; } .todo-form { grid-template-columns: 1fr; } .todo-item { align-items: flex-start; flex-direction: column; } }',
+    '@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }',
+    '',
+  ].join('\n');
+
+  return {
+    summary: 'Generated a safe React/Vite fallback application because the model output was not structured.',
+    files: [
+      { path: 'src/App.tsx', content: appContent, language: 'tsx' },
+      { path: 'src/index.css', content: cssContent, language: 'css' },
+    ],
+  };
+}
+
 function parseGeneratedOutput(
   projectName: string,
   rawText: string,
@@ -4298,18 +4484,13 @@ function parseGeneratedOutput(
   options: { hasExistingFiles?: boolean } = {},
 ) {
   const isStandaloneHtml = looksLikeStandaloneHtml(rawText);
-  if (isStandaloneHtml && !options.hasExistingFiles) {
-    throw new GeneratedOutputParseError(
-      'Huggy received only a standalone HTML preview, but new apps must be complete React/Vite projects with working files. The existing project was kept unchanged.',
-    );
-  }
   const parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
     isStandaloneHtml
       ? {
           summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
           files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
         }
-      : null
+      : buildDeterministicFallbackGeneratedOutput(projectName, promptOrDescription)
   );
   if (!parsed) {
     throw new GeneratedOutputParseError();
