@@ -2036,26 +2036,10 @@ function buildSimpleConversationReply(prompt: string, speaksFrench: boolean) {
 
 function buildPlanningOnlyReply(prompt: string, speaksFrench: boolean) {
   const goal = redactSecrets(prompt).trim();
-  if (speaksFrench) {
-    return [
-      'Voici un plan léger, sans modifier les fichiers :',
-      '',
-      `1. Clarifier l’objectif : ${goal.length > 120 ? `${goal.slice(0, 117)}...` : goal}`,
-      '2. Identifier le résultat attendu côté utilisateur.',
-      '3. Découper en petites étapes sûres.',
-      '4. Repérer les risques : données, auth, paiement, publish ou design.',
-      '5. Seulement si tu confirmes une vraie action projet, Huggy passera en mission et modifiera les fichiers.',
-    ].join('\n');
-  }
-  return [
-    'Here is a lightweight plan, without changing files:',
-    '',
-    `1. Clarify the goal: ${goal.length > 120 ? `${goal.slice(0, 117)}...` : goal}`,
-    '2. Identify the expected user outcome.',
-    '3. Split the work into safe steps.',
-    '4. Check risks: data, auth, payments, publish, or design.',
-    '5. Only if you confirm real project work will Huggy start a mission and modify files.',
-  ].join('\n');
+  const shortGoal = goal.length > 120 ? `${goal.slice(0, 117)}...` : goal;
+  return speaksFrench
+    ? [`Plan court, sans modifier les fichiers :`, '', `Objectif : ${shortGoal}`, 'Prochaine action : dis-moi quoi appliquer exactement, et je l execute.'].join('\n')
+    : [`Short plan, without changing files:`, '', `Goal: ${shortGoal}`, 'Next action: tell me exactly what to apply, and I will execute it.'].join('\n');
 }
 
 function buildClarificationOnlyReply(prompt: string, speaksFrench: boolean) {
@@ -4022,7 +4006,6 @@ function restoreMessages(payload: ProjectPayload) {
     const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
     if (message.intent === 'plan') {
       lastPlan = message.content;
-      addInlineAction(card, 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
     }
     });
 }
@@ -4379,7 +4362,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setMessageShimmer(card, speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', false);
     await showAssistantBubble(card, content);
     lastPlan = content;
-    addInlineAction(card, speaksFrench ? 'Construire ce plan' : 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
     return;
   }
 
@@ -4871,9 +4853,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       verificationMessage ? `${speaksFrench ? 'Vérification' : 'Checks'}: ${verificationMessage}` : '',
     ].filter(Boolean).join('\n'), 'Done.', previewReadyPayload?.preview?.html ? say('Preview prête', 'Preview ready') : say('Terminé', 'Completed'));
 
-    if (pendingPlanText && !previewReadyPayload?.preview?.html) {
-      addInlineAction(target, speaksFrench ? 'Construire ce plan' : 'Build this plan', () => void generateFromPrompt('Build this plan', 'build', true));
-    }
     if (externalRequirements.length) {
       addInlineAction(target, speaksFrench ? 'Connecter les clés' : 'Connect keys', () => showApiKeyModal(externalRequirements));
       addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => void generateFromPrompt('Continue with safe placeholders', 'build', false, { skipExternalKeys: true }));

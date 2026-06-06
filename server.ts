@@ -3609,6 +3609,20 @@ function chunkTextForPublicStream(text: string, targetSize = 28) {
 }
 
 function createClarificationContent(decision: IntentDecision) {
+  if (decision.clarification) {
+    const raw = `${decision.clarification.question || ''} ${decision.clarification.recommendation || ''}`;
+    const isFrenchRaw = isLikelyFrenchPrompt(raw);
+    if (/answer|respond|r[eÃ©]pond|modifier vraiment|change the project|build or plan|possible directions|r[eÃ©]pondre sans|cr[eÃ©]er une app|faire un plan/i.test(raw)) {
+      decision.clarification.question = isFrenchRaw
+        ? 'Quelle app, ecran ou bug dois-je traiter ?'
+        : 'Which app, screen, or bug should I work on?';
+      decision.clarification.choices = [];
+      decision.clarification.recommendation = isFrenchRaw ? 'Une phrase suffit.' : 'One sentence is enough.';
+      return isFrenchRaw
+        ? `Precise la cible : ${decision.clarification.question}`
+        : `I need one detail: ${decision.clarification.question}`;
+    }
+  }
   const question = decision.clarification?.question || 'I need one more detail before I can safely build this.';
   const isFrench = isLikelyFrenchPrompt(`${question} ${decision.clarification?.recommendation || ''}`);
   return isFrench

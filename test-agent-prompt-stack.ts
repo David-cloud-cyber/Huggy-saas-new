@@ -49,5 +49,9 @@ assert.ok(generationPrompt.includes('decompose tasks'), 'generation prompt must 
 assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
 assert.ok(generationPrompt.includes('Production architecture blueprint'), 'generation prompt must include production blueprint context');
 assert.ok(generationPrompt.includes('Every private table needs RLS'), 'generation prompt must enforce private table RLS');
+assert.ok(generationPrompt.includes('A builder agent should not over-explain before acting'), 'generation prompt must keep builder behavior action-first');
+assert.ok(generationPrompt.includes('Never answer a clear build request with a generic plan'), 'generation prompt must reject generic plan detours for build requests');
+assert.ok(generationPrompt.includes('ask exactly one concise question'), 'generation prompt must keep clarification short');
+assert.ok(routerPrompt.includes('Do not ask "Build or Plan?"'), 'router prompt must forbid generic mode questions');
 
 console.log('agent prompt stack ok');

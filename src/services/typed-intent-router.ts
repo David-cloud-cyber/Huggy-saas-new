@@ -281,6 +281,20 @@ export function applyTypedIntentGate<TDecision extends BaseIntent & {
     };
   }
   if (typed.execution_strategy === 'WAIT_FOR_USER_CONFIRMATION') {
+    if (typed.primary_intent === 'DISCUSS_FIRST') {
+      return {
+        ...decision,
+        intent: 'conversation',
+        requiresFileChanges: false,
+        requiresPreviewRebuild: false,
+        requiresCredits: decision.requiresCredits && typed.intent_category !== 'other',
+        nextAction: 'answer',
+        autoPlanRequired: false,
+        selectedModelPolicy: decision.selectedModelPolicy || 'economy',
+        routingSource: decision.routingSource || 'heuristic',
+        userVisibleReason: typed.user_visible_reason,
+      };
+    }
     return {
       ...decision,
       intent: 'clarification_required',

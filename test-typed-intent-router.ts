@@ -57,7 +57,7 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   });
   assert.equal(typedDecision.primary_intent, 'DISCUSS_FIRST');
   assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
-  assert.equal(gated.intent, 'clarification_required');
+  assert.equal(gated.intent, 'conversation');
   assert.equal(gated.requiresFileChanges, false);
 }
 
