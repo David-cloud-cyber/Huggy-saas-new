@@ -2,6 +2,7 @@ import type { IntentUnderstanding, UserIntentCategory } from './intent-understan
 
 export type TypedPrimaryIntent =
   | 'CHAT'
+  | 'CLARIFY'
   | 'DISCUSS_FIRST'
   | 'PLAN_ONLY'
   | 'BUILD'
@@ -34,6 +35,29 @@ export type TypedInfrastructureNeed =
   | 'DOMAIN'
   | 'MEDIA';
 
+export type TypedLifecycleMode =
+  | 'CHAT_MODE'
+  | 'CLARIFICATION_MODE'
+  | 'PLAN_MODE'
+  | 'AGENT_BUILD_MODE'
+  | 'DEBUG_LOOP_MODE'
+  | 'VERIFY_MODE'
+  | 'CRITICAL_CONFIRMATION_MODE'
+  | 'VENT_MODE';
+
+export type TypedLifecycleStep =
+  | 'intent_router'
+  | 'chat_response'
+  | 'knowledge_injection'
+  | 'planner'
+  | 'sandbox'
+  | 'code_write'
+  | 'compile_and_test'
+  | 'auto_debug'
+  | 'visual_render'
+  | 'user_confirmation'
+  | 'vent_to_user';
+
 export type TypedIntentDecision = {
   primary_intent: TypedPrimaryIntent;
   intent_category: UserIntentCategory;
@@ -43,6 +67,11 @@ export type TypedIntentDecision = {
   target_files: string[];
   infrastructure_needed: TypedInfrastructureNeed[];
   execution_strategy: TypedExecutionStrategy;
+  lifecycle_mode: TypedLifecycleMode;
+  lifecycle_steps: TypedLifecycleStep[];
+  knowledge_injection: boolean;
+  sandbox_required: boolean;
+  auto_debug_policy: 'none' | 'compile_signal' | 'runner_signal' | 'blocked_after_retries';
   confidence: number;
   reason: string;
   user_visible_reason: string;
@@ -131,6 +160,15 @@ function isDiscussFirst(text: string) {
   ]);
 }
 
+function isExplicitAppBuildRequest(text: string) {
+  return /\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b[\s\S]{0,100}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool)\b/i.test(text)
+    || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool)\b[\s\S]{0,100}\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b/i.test(text);
+}
+
+function isBareBuildCommand(text: string) {
+  return /^(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)(\s+(app|site|application))?$/i.test(text.trim());
+}
+
 function isCriticalPlatformAction(text: string) {
   return /\b(publie|publier|publish|deploie|deployer|deploy|rollback|restaure|restore|delete project|supprime le projet|reset database|supprime la base|apply migration|applique la migration|custom domain|domaine|billing|stripe live|production)\b/i.test(text);
 }
@@ -170,8 +208,10 @@ function targetFilesFor(text: string, category: UserIntentCategory): string[] {
 function primaryIntentFor(decision: BaseIntent, promptText: string): TypedPrimaryIntent {
   if (isCriticalPlatformAction(promptText)) return 'CRITICAL_ACTION';
   if (isDiscussFirst(promptText)) return 'DISCUSS_FIRST';
+  if (isExplicitAppBuildRequest(promptText)) return decision.intent === 'debug_fix' ? 'DEBUG' : 'BUILD';
+  if (isBareBuildCommand(promptText)) return 'CLARIFY';
   if (decision.intent === 'conversation') return 'CHAT';
-  if (decision.intent === 'clarification_required') return 'DISCUSS_FIRST';
+  if (decision.intent === 'clarification_required') return 'CLARIFY';
   if (decision.intent === 'plan') return 'PLAN_ONLY';
   if (decision.intent === 'debug_fix') return 'DEBUG';
   if (decision.intent === 'verify') return 'VERIFY';
@@ -184,6 +224,7 @@ function primaryIntentFor(decision: BaseIntent, promptText: string): TypedPrimar
 
 function strategyFor(primary: TypedPrimaryIntent): TypedExecutionStrategy {
   if (primary === 'CHAT') return 'ANSWER_ONLY';
+  if (primary === 'CLARIFY') return 'WAIT_FOR_USER_CONFIRMATION';
   if (primary === 'DISCUSS_FIRST') return 'WAIT_FOR_USER_CONFIRMATION';
   if (primary === 'PLAN_ONLY') return 'PLAN_ONLY';
   if (primary === 'DEBUG') return 'RUN_DEBUG_LOOP';
@@ -195,12 +236,19 @@ function strategyFor(primary: TypedPrimaryIntent): TypedExecutionStrategy {
 
 function requiresCode(primary: TypedPrimaryIntent, decision: BaseIntent) {
   if (primary === 'BUILD' || primary === 'EDIT' || primary === 'DEBUG') return true;
-  if (primary === 'DISCUSS_FIRST' || primary === 'CRITICAL_ACTION' || primary === 'CHAT' || primary === 'PLAN_ONLY' || primary === 'VERIFY' || primary === 'BLOCKED') return false;
+  if (primary === 'CLARIFY' || primary === 'DISCUSS_FIRST' || primary === 'CRITICAL_ACTION' || primary === 'CHAT' || primary === 'PLAN_ONLY' || primary === 'VERIFY' || primary === 'BLOCKED') return false;
   return Boolean(decision.requiresFileChanges);
 }
 
 function clarificationFor(primary: TypedPrimaryIntent, prompt: string): TypedIntentDecision['clarification'] | undefined {
   const fr = isFrench(prompt);
+  if (primary === 'CLARIFY') {
+    return {
+      question: fr ? 'Quelle app, écran, composant ou bug dois-je traiter ?' : 'Which app, screen, component, or bug should I work on?',
+      choices: [],
+      recommendation: fr ? 'Une phrase suffit, par exemple : "crée une todo app avec ajout, suppression et filtres".' : 'One sentence is enough, for example: "create a todo app with add, delete and filters".',
+    };
+  }
   if (primary === 'CRITICAL_ACTION') {
     return {
       question: fr ? 'Confirme-tu cette action sensible avant que Huggy continue ?' : 'Do you confirm this sensitive action before Huggy continues?',
@@ -219,6 +267,34 @@ function clarificationFor(primary: TypedPrimaryIntent, prompt: string): TypedInt
     };
   }
   return undefined;
+}
+
+function lifecycleModeFor(primary: TypedPrimaryIntent): TypedLifecycleMode {
+  if (primary === 'CHAT' || primary === 'DISCUSS_FIRST') return 'CHAT_MODE';
+  if (primary === 'CLARIFY') return 'CLARIFICATION_MODE';
+  if (primary === 'PLAN_ONLY') return 'PLAN_MODE';
+  if (primary === 'DEBUG') return 'DEBUG_LOOP_MODE';
+  if (primary === 'VERIFY') return 'VERIFY_MODE';
+  if (primary === 'CRITICAL_ACTION') return 'CRITICAL_CONFIRMATION_MODE';
+  if (primary === 'BLOCKED') return 'VENT_MODE';
+  return 'AGENT_BUILD_MODE';
+}
+
+function lifecycleStepsFor(primary: TypedPrimaryIntent): TypedLifecycleStep[] {
+  if (primary === 'CHAT' || primary === 'DISCUSS_FIRST') return ['intent_router', 'chat_response'];
+  if (primary === 'CLARIFY' || primary === 'CRITICAL_ACTION') return ['intent_router', 'user_confirmation'];
+  if (primary === 'PLAN_ONLY') return ['intent_router', 'knowledge_injection', 'planner'];
+  if (primary === 'VERIFY') return ['intent_router', 'knowledge_injection', 'sandbox', 'compile_and_test'];
+  if (primary === 'DEBUG') return ['intent_router', 'knowledge_injection', 'planner', 'sandbox', 'code_write', 'compile_and_test', 'auto_debug', 'visual_render'];
+  if (primary === 'BLOCKED') return ['intent_router', 'vent_to_user'];
+  return ['intent_router', 'knowledge_injection', 'planner', 'sandbox', 'code_write', 'compile_and_test', 'auto_debug', 'visual_render'];
+}
+
+function autoDebugPolicyFor(primary: TypedPrimaryIntent): TypedIntentDecision['auto_debug_policy'] {
+  if (primary === 'DEBUG') return 'runner_signal';
+  if (primary === 'BUILD' || primary === 'EDIT') return 'compile_signal';
+  if (primary === 'BLOCKED') return 'blocked_after_retries';
+  return 'none';
 }
 
 export function buildTypedIntentDecision(input: BuildInput): TypedIntentDecision {
@@ -245,6 +321,11 @@ export function buildTypedIntentDecision(input: BuildInput): TypedIntentDecision
     target_files: targets,
     infrastructure_needed: infrastructure,
     execution_strategy: strategyFor(primary),
+    lifecycle_mode: lifecycleModeFor(primary),
+    lifecycle_steps: lifecycleStepsFor(primary),
+    knowledge_injection: code || primary === 'PLAN_ONLY' || primary === 'VERIFY',
+    sandbox_required: primary === 'BUILD' || primary === 'EDIT' || primary === 'DEBUG' || primary === 'VERIFY',
+    auto_debug_policy: autoDebugPolicyFor(primary),
     confidence,
     reason,
     user_visible_reason: userVisibleReasonFor(primary, prompt, input.decision.userVisibleReason || reason),
@@ -255,6 +336,7 @@ export function buildTypedIntentDecision(input: BuildInput): TypedIntentDecision
 function userVisibleReasonFor(primary: TypedPrimaryIntent, prompt: string, fallback: string) {
   const fr = isFrench(prompt);
   if (primary === 'CHAT') return fr ? 'Huggy répond sans modifier le projet.' : 'Huggy will answer without changing the project.';
+  if (primary === 'CLARIFY') return fr ? 'Huggy demande la cible manquante avant de lancer l’agent.' : 'Huggy will ask for the missing target before starting the agent.';
   if (primary === 'DISCUSS_FIRST') return fr ? 'Huggy discute d’abord et attend confirmation avant de coder.' : 'Huggy will discuss first and wait for confirmation before coding.';
   if (primary === 'PLAN_ONLY') return fr ? 'Huggy prépare un plan sans toucher aux fichiers.' : 'Huggy will prepare a plan without touching files.';
   if (primary === 'BUILD') return fr ? 'Huggy va créer une vraie application et vérifier la preview.' : 'Huggy will create a real app and verify the preview.';

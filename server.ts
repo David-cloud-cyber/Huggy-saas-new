@@ -2614,6 +2614,24 @@ class AgentOrchestrator {
       });
     }
 
+    if (/^(crée|cree|créer|creer|génère|genere|générer|generer|build|create|generate|make|construis|fabrique)(\s+(app|site|application))?$/i.test(lower)) {
+      return decision({
+        intent: 'clarification_required',
+        confidence: 0.86,
+        nextAction: 'ask_clarification',
+        userVisibleReason: 'The user wants generation, but the product target is missing.',
+        clarification: {
+          question: isLikelyFrenchPrompt(text)
+            ? 'Quelle app veux-tu que je génère ?'
+            : 'What app should I generate?',
+          choices: [],
+          recommendation: isLikelyFrenchPrompt(text)
+            ? 'Exemple : "crée une todo app avec ajout, suppression et filtres".'
+            : 'Example: "create a todo app with add, delete and filters".',
+        },
+      });
+    }
+
     const shouldInspectInsteadOfChat = /\b(verifie|vérifie|verify|audit|check|teste|test|review|inspecte|inspect|analyse le projet|validate|validation)\b/i.test(lower);
     if (!forceBuild && !shouldInspectInsteadOfChat && understanding.action === 'answer' && !understanding.allowsFileAction) {
       return decision({
@@ -3058,21 +3076,23 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
   return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
 
+function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: string; hasFiles: boolean }, decision: IntentDecision): IntentDecision {
+  const typedDecision = buildTypedIntentDecision({
+    prompt: input.prompt,
+    hasFiles: input.hasFiles,
+    requestedMode: input.requestedMode,
+    decision,
+  });
+  const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
+  return {
+    ...gatedDecision,
+    typedDecision,
+  };
+}
+
 async function resolveAgentDecision(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }) {
   const fallback = intentRouter.decide(input);
-  const finalize = (decision: IntentDecision): IntentDecision => {
-    const typedDecision = buildTypedIntentDecision({
-      prompt: input.prompt,
-      hasFiles: input.hasFiles,
-      requestedMode: input.requestedMode,
-      decision,
-    });
-    const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
-    return {
-      ...gatedDecision,
-      typedDecision,
-    };
-  };
+  const finalize = (decision: IntentDecision): IntentDecision => applyTypedIntentLifecycle(input, decision);
   try {
     return finalize(await classifyIntentWithAi(input, fallback) || fallback);
   } catch (error) {
@@ -9512,7 +9532,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
-  const quickDecision = intentRouter.decide({ prompt, requestedMode, hasFiles: false });
+  const quickDecision = applyTypedIntentLifecycle(
+    { prompt, requestedMode, hasFiles: false },
+    intentRouter.decide({ prompt, requestedMode, hasFiles: false }),
+  );
   if (canUseFastAnswerPath(quickDecision, prompt)) {
     const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
     const quickWallet = quickEstimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;

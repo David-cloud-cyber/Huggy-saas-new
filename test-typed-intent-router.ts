@@ -44,8 +44,27 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   const { typedDecision, gated } = typed('dis moi c est quoi lovable.dev ?');
   assert.equal(typedDecision.primary_intent, 'CHAT');
   assert.equal(typedDecision.execution_strategy, 'ANSWER_ONLY');
+  assert.equal(typedDecision.lifecycle_mode, 'CHAT_MODE');
+  assert.deepEqual(typedDecision.lifecycle_steps, ['intent_router', 'chat_response']);
   assert.equal(gated.intent, 'conversation');
   assert.equal(gated.requiresFileChanges, false);
+}
+
+{
+  const { typedDecision, gated } = typed('genere', {
+    intent: 'clarification_required',
+    confidence: 0.78,
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: false,
+  });
+  assert.equal(typedDecision.primary_intent, 'CLARIFY');
+  assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
+  assert.equal(typedDecision.lifecycle_mode, 'CLARIFICATION_MODE');
+  assert.equal(typedDecision.sandbox_required, false);
+  assert.equal(gated.intent, 'clarification_required');
+  assert.equal(gated.requiresFileChanges, false);
+  assert.match(gated.clarification?.question || '', /app|écran|composant|bug/i);
 }
 
 {
@@ -57,6 +76,7 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   });
   assert.equal(typedDecision.primary_intent, 'DISCUSS_FIRST');
   assert.equal(typedDecision.execution_strategy, 'WAIT_FOR_USER_CONFIRMATION');
+  assert.equal(typedDecision.lifecycle_mode, 'CHAT_MODE');
   assert.equal(typedDecision.clarification, undefined);
   assert.equal(gated.intent, 'conversation');
   assert.equal(gated.requiresFileChanges, false);
@@ -71,6 +91,11 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   });
   assert.equal(typedDecision.primary_intent, 'BUILD');
   assert.equal(typedDecision.execution_strategy, 'RUN_AGENT');
+  assert.equal(typedDecision.lifecycle_mode, 'AGENT_BUILD_MODE');
+  assert.equal(typedDecision.sandbox_required, true);
+  assert.equal(typedDecision.auto_debug_policy, 'compile_signal');
+  assert.ok(typedDecision.lifecycle_steps.includes('knowledge_injection'));
+  assert.ok(typedDecision.lifecycle_steps.includes('compile_and_test'));
   assert.equal(typedDecision.requires_code_changes, true);
   assert.equal(gated.requiresFileChanges, true);
   assert.ok(typedDecision.target_files.includes('src/App.tsx'));
@@ -99,6 +124,8 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   });
   assert.equal(typedDecision.primary_intent, 'DEBUG');
   assert.equal(typedDecision.execution_strategy, 'RUN_DEBUG_LOOP');
+  assert.equal(typedDecision.lifecycle_mode, 'DEBUG_LOOP_MODE');
+  assert.equal(typedDecision.auto_debug_policy, 'runner_signal');
   assert.ok(typedDecision.target_files.includes('index.html'));
   assert.ok(typedDecision.target_files.includes('src/main.tsx'));
   assert.equal(gated.requiresPreviewRebuild, true);
