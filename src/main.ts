@@ -63,6 +63,110 @@ function init() {
         }, 3000);
     }
 
+    function installMarketingEnhancements() {
+        const path = window.location.pathname;
+        const isProductShell = /\/(builder|dashboard|auth)\.html$/.test(path);
+        if (isProductShell) return;
+
+        const navbar = document.querySelector('.navbar');
+        if (navbar && path !== '/' && path !== '/index.html' && !document.querySelector('.back-home-link')) {
+            const back = document.createElement('a');
+            back.className = 'back-home-link';
+            back.href = '/';
+            back.setAttribute('aria-label', 'Back to Huggy home');
+            back.innerHTML = `
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M19 12H5"></path>
+                    <path d="M12 19l-7-7 7-7"></path>
+                </svg>
+                <span>Back</span>
+            `;
+            navbar.insertAdjacentElement('afterend', back);
+        }
+
+        const pageContent = document.querySelector('.page-content');
+        if (pageContent && !document.querySelector('.page-proof-grid')) {
+            const title = document.querySelector('.page-hero h1')?.textContent?.trim() || 'Huggy';
+            const proof = document.createElement('section');
+            proof.className = 'page-proof-grid reveal';
+            proof.innerHTML = `
+                <article>
+                    <span>01</span>
+                    <h3>Clear next step</h3>
+                    <p>${title} is designed to help visitors understand what Huggy does and where to go next without hunting through the page.</p>
+                </article>
+                <article>
+                    <span>02</span>
+                    <h3>Builder-first path</h3>
+                    <p>Every public page now leads back to the same core action: describe an app, open the builder and keep momentum.</p>
+                </article>
+                <article>
+                    <span>03</span>
+                    <h3>Trust before action</h3>
+                    <p>Visitors see the product promise, the workflow and the launch path before being asked to sign in or upgrade.</p>
+                </article>
+            `;
+            pageContent.insertAdjacentElement('afterend', proof);
+        }
+
+        const footer = document.querySelector('.footer');
+        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section');
+        if (footer && !alreadyHasPrompt) {
+            const prompt = document.createElement('section');
+            prompt.className = 'marketing-prompt-section reveal';
+            prompt.innerHTML = `
+                <div class="marketing-prompt-copy">
+                    <span class="marketing-kicker">Start from a prompt</span>
+                    <h2>Turn the next idea into a working app.</h2>
+                    <p>Describe the product, workflow or landing page you want. Huggy will open a builder workspace and keep your draft moving from idea to preview.</p>
+                </div>
+                <div class="input-wrapper marketing-prompt-card">
+                    <textarea rows="3" placeholder="Example: Build a client portal with login, projects, invoices and a clean dashboard."></textarea>
+                    <div class="input-actions">
+                        <div class="actions-left">
+                            <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="actions-right">
+                            <div class="prompt-mode" data-prompt-mode="auto">
+                                <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
+                                    <span class="prompt-mode-label">Auto</span>
+                                    <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                                </button>
+                                <div class="prompt-mode-menu" role="menu">
+                                    <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active"><span>Auto</span><small>Let Huggy decide</small></button>
+                                    <button type="button" data-prompt-mode-option="build" role="menuitem"><span>Build</span><small>Create or edit the app</small></button>
+                                    <button type="button" data-prompt-mode-option="plan" role="menuitem"><span>Plan</span><small>Think first</small></button>
+                                </div>
+                            </div>
+                            <button class="submit-btn" title="Open builder" type="button">
+                                <span>Open builder</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                                    <polyline points="5 12 12 5 19 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            footer.insertAdjacentElement('beforebegin', prompt);
+        }
+    }
+
+    installMarketingEnhancements();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
 
