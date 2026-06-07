@@ -116,6 +116,11 @@ import {
   buildTypedIntentDecision,
   type TypedIntentDecision,
 } from './src/services/typed-intent-router.ts';
+import {
+  applyExecutionContractToDecision,
+  buildExecutionContract,
+  type ExecutionContract,
+} from './src/services/execution-contract.ts';
 import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 import {
   buildHuggyCloudSchemaName,
@@ -963,6 +968,7 @@ type IntentDecision = {
   selectedModelPolicy?: 'auto' | 'economy' | 'balanced' | 'premium';
   routingSource?: 'heuristic' | 'ai' | 'fallback';
   typedDecision?: TypedIntentDecision;
+  executionContract?: ExecutionContract;
   clarification?: {
     question: string;
     choices: string[];
@@ -979,24 +985,38 @@ type ReliabilityDecision = {
   quality_gate_level: 'conversation' | 'advisory' | 'critical';
   reason: string;
   typed_decision?: TypedIntentDecision;
+  execution_contract?: ExecutionContract;
 };
 
 function buildReliabilityDecision(decision: IntentDecision): ReliabilityDecision {
-  const shouldMutate = Boolean(decision.requiresFileChanges);
-  const shouldTouchPreview = Boolean(decision.requiresPreviewRebuild);
+  const contract = decision.executionContract;
+  const shouldMutate = contract ? Boolean(contract.can_mutate_files) : Boolean(decision.requiresFileChanges);
+  const shouldTouchPreview = contract ? Boolean(contract.should_touch_preview) : Boolean(decision.requiresPreviewRebuild);
+  const requiresRunner = contract ? Boolean(contract.requires_runner) : shouldMutate;
+  const requiresClarification = contract
+    ? contract.mode === 'clarify' || contract.mode === 'critical_action'
+    : decision.intent === 'clarification_required';
+  const qualityGateLevel = contract
+    ? contract.quality_gate === 'blocking'
+      ? 'critical'
+      : contract.quality_gate === 'advisory'
+        ? 'advisory'
+        : 'conversation'
+    : shouldMutate
+      ? 'critical'
+      : decision.intent === 'plan' || decision.intent === 'verify'
+        ? 'advisory'
+        : 'conversation';
   return {
     intent: decision.intent,
     should_mutate_files: shouldMutate,
     should_touch_preview: shouldTouchPreview,
-    requires_runner: shouldMutate,
-    requires_clarification: decision.intent === 'clarification_required',
-    quality_gate_level: shouldMutate
-      ? 'critical'
-      : decision.intent === 'plan' || decision.intent === 'verify'
-        ? 'advisory'
-        : 'conversation',
-    reason: decision.userVisibleReason || decision.reason || decision.intentUnderstanding?.reason || 'Huggy selected the safest next action.',
+    requires_runner: requiresRunner,
+    requires_clarification: requiresClarification,
+    quality_gate_level: qualityGateLevel,
+    reason: contract?.user_visible_reason || decision.userVisibleReason || decision.reason || decision.intentUnderstanding?.reason || 'Huggy selected the safest next action.',
     typed_decision: decision.typedDecision,
+    execution_contract: contract,
   };
 }
 
@@ -3089,7 +3109,7 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
   return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
 
-function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: string; hasFiles: boolean }, decision: IntentDecision): IntentDecision {
+function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }, decision: IntentDecision): IntentDecision {
   const typedDecision = buildTypedIntentDecision({
     prompt: input.prompt,
     hasFiles: input.hasFiles,
@@ -3097,10 +3117,21 @@ function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: stri
     decision,
   });
   const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
-  return {
+  const executionContract = buildExecutionContract({
+    prompt: input.prompt,
+    requestedMode: input.requestedMode,
+    hasFiles: input.hasFiles,
+    hasLastPlan: Boolean(input.lastPlan),
+    legacyDecision: {
+      ...gatedDecision,
+      typedDecision,
+    } as IntentDecision,
+  });
+  const contractedDecision = applyExecutionContractToDecision({
     ...gatedDecision,
     typedDecision,
-  };
+  }, executionContract) as IntentDecision;
+  return contractedDecision;
 }
 
 async function resolveAgentDecision(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }) {

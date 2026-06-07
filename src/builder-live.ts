@@ -12,6 +12,7 @@ import { providerIconSvg } from './model-provider-icons';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
+import { buildExecutionContract } from './services/execution-contract';
 import {
   DESIGN_WORKSHOP_OPTIONS,
   designWorkshopOptionLabel,
@@ -1986,30 +1987,35 @@ function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext
   const normalized = normalizePromptIntentText(value);
   if (!normalized) return 'chat_simple';
   if (activeWorkshop !== 'chat') return 'project_mission';
-  if (mode === 'build') return 'project_mission';
-  if (mode === 'plan') return 'planning_only';
-
-  const criticalAction = /^(publish|publie|publier|deploy|deploie|d[ée]ploie|rollback|restore|restaure|supprime|delete|efface|connecte domaine|custom domain|mets en ligne|met en ligne)\b/i;
-  if (criticalAction.test(normalized)) return 'critical_action';
-
-  if (isQuickConversationPrompt(value, mode)) return 'chat_simple';
-
-  const existingProjectShortIteration = /\b(fais ca mieux|fais ça mieux|change ca|change ça|corrige tout|corrige l ensemble|ameliore tout|améliore tout|continue et corrige|continue corrige)\b/i;
-  if (currentFiles.length && existingProjectShortIteration.test(normalized)) return 'project_mission';
-
-  const adviceOrExplanation = /\b(dis moi|dit moi|explique|comment peut on|comment peut-on|comment peux tu|comment peux-tu|comment faire|pourquoi|que faut il|que faut-il|conseille|recommande|compare|analyse|audit|note mon|qu est ce que|qu'est-ce que|what is|how can|how should|why)\b/i;
-  const explicitApplySignal = /\b(applique|implemente|impl[ée]mente|corrige dans|modifie dans|change dans|remplace dans|mets a jour|mets à jour|ajoute a|ajoute à|pousse|push|commit)\b/i;
-  const planningOnly = /\b(plan|roadmap|strategie|strat[ée]gie|architecture|audit|analyse|compare|conseil|recommandation|prompt|design direction|direction creative|explique)\b/i;
-  const explicitMutation = /\b(create|build|generate|make|add|edit|change|modify|fix|debug|deploy|publish|implement|cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|d[ée]ploie|deploie|publie|supprime|remplace|impl[ée]mente|applique|refais|ameliore|am[ée]liore)\b[\s\S]{0,120}\b(app|application|site|page|component|composant|api|database|base de donnees|interface|dashboard|builder|projet|code|bug|auth|login|supabase|vercel|railway|button|bouton|couleur|color|texte|text|footer|header|pricing|settings|publish|fichier|file|design|ui|ux|saas|agent)\b/i;
-  if (adviceOrExplanation.test(normalized) && !explicitApplySignal.test(normalized)) return planningOnly.test(normalized) ? 'planning_only' : 'chat_simple';
-  if (planningOnly.test(normalized) && !explicitMutation.test(normalized)) return 'planning_only';
-  if (explicitMutation.test(normalized)) return 'project_mission';
-
-  const bareAction = /^(cr[ée]e|creer|g[ée]n[èe]re|genere|ajoute|modifie|corrige|ameliore|am[ée]liore|refais|implemente|impl[ée]mente|applique|fais)\b.{0,90}$/i;
+  const bareAction = /^(cr[ée]e|creer|g[ée]n[èe]re|genere|create|build|make|ajoute|modifie|corrige|ameliore|am[ée]liore|refais|implemente|impl[ée]mente|applique|fais)(\s+(app|site|application|ca|ça|tout|cela))?$/i;
   if (bareAction.test(normalized)) return 'clarification_only';
-
-  const projectContext = /\b(ce projet|cette app|mon app|mon application|preview|fichiers|code|bug|erreur|error|dashboard|builder|settings|publish|supabase|auth|database|api)\b/i;
-  return projectContext.test(normalized) ? 'project_mission' : 'chat_simple';
+  const legacyIntent = isQuickConversationPrompt(value, mode)
+    ? 'conversation'
+    : mode === 'plan'
+      ? 'plan'
+      : mode === 'build'
+        ? currentFiles.length ? 'edit' : 'build'
+        : 'conversation';
+  const contract = buildExecutionContract({
+    prompt: value,
+    requestedMode: mode,
+    hasFiles: currentFiles.length > 0,
+    hasLastPlan: Boolean(lastPlan),
+    legacyDecision: {
+      intent: legacyIntent,
+      confidence: 0.8,
+      requestedMode: mode,
+      requiresFileChanges: legacyIntent === 'build' || legacyIntent === 'edit',
+      requiresPreviewRebuild: legacyIntent === 'build' || legacyIntent === 'edit',
+      requiresCredits: legacyIntent !== 'conversation',
+      userVisibleReason: 'Local builder gate',
+    },
+  });
+  if (contract.mode === 'chat' || contract.mode === 'discuss_first') return 'chat_simple';
+  if (contract.mode === 'clarify' || contract.mode === 'blocked') return 'clarification_only';
+  if (contract.mode === 'plan' || contract.mode === 'verify') return 'planning_only';
+  if (contract.mode === 'critical_action') return 'critical_action';
+  return 'project_mission';
 }
 
 function buildSimpleConversationReply(prompt: string, speaksFrench: boolean) {
