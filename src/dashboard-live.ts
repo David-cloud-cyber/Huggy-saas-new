@@ -23,6 +23,8 @@ type ProjectListResponse = {
   }>;
 };
 
+type DashboardProject = ProjectListResponse['projects'][number];
+
 type UserWorkspaceState = {
   last_project_id?: string;
   dashboard_draft_prompt?: string;
@@ -251,15 +253,385 @@ function projectAccent(index: number) {
   return colors[index % colors.length];
 }
 
-function projectDescription(project: ProjectListResponse['projects'][number]) {
+function projectDescription(project: DashboardProject) {
   return project.prompt || 'Open the builder to plan, generate and preview this project.';
 }
 
-function renderLiveProjects(projects: ProjectListResponse['projects']) {
+function projectState(project: DashboardProject): 'draft' | 'ready' | 'published' | 'building' | 'needs-fix' {
+  const raw = `${project.status || ''} ${project.preview_status || ''}`.toLowerCase();
+  if (raw.includes('publish') || raw.includes('deploy') || raw.includes('live')) return 'published';
+  if (raw.includes('error') || raw.includes('fail') || raw.includes('blocked') || raw.includes('needs')) return 'needs-fix';
+  if (raw.includes('build') || raw.includes('generat') || raw.includes('running') || raw.includes('pending')) return 'building';
+  if (raw.includes('ready') || raw.includes('preview') || raw.includes('ok')) return 'ready';
+  return 'draft';
+}
+
+function projectStateLabel(state: ReturnType<typeof projectState>) {
+  const labels: Record<ReturnType<typeof projectState>, string> = {
+    draft: 'Draft',
+    ready: 'Preview ready',
+    published: 'Published',
+    building: 'Building',
+    'needs-fix': 'Needs attention',
+  };
+  return labels[state];
+}
+
+function projectKind(project: DashboardProject) {
+  const template = String(project.template || '').toLowerCase();
+  if (template.includes('media')) return 'Media';
+  if (template.includes('deck') || template.includes('pitch')) return 'Deck';
+  if (template.includes('design')) return 'Design';
+  if (template.includes('ecommerce')) return 'E-commerce';
+  if (template.includes('saas')) return 'SaaS';
+  return 'Web app';
+}
+
+function projectInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  return (parts.map(part => part.charAt(0)).join('') || 'H').toUpperCase();
+}
+
+function isRecentProject(project: DashboardProject) {
+  const raw = project.updated_at || project.created_at;
+  if (!raw) return false;
+  const time = new Date(raw).getTime();
+  return Number.isFinite(time) && Date.now() - time < 1000 * 60 * 60 * 24 * 7;
+}
+
+function installDashboardUxPolish() {
+  if (document.getElementById('huggy-dashboard-ux-polish')) return;
+  const style = document.createElement('style');
+  style.id = 'huggy-dashboard-ux-polish';
+  style.textContent = `
+    .dashboard-overview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0 18px;
+    }
+
+    .dashboard-overview-card {
+      min-height: 92px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+      box-shadow: 0 12px 34px rgba(18, 22, 32, 0.06);
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .dashboard-overview-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-focus);
+      background: var(--bg-surface);
+    }
+
+    .dashboard-overview-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 780;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .dashboard-overview-value {
+      margin-top: 10px;
+      color: var(--text);
+      font-size: 26px;
+      font-weight: 880;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    .dashboard-overview-note {
+      margin-top: 8px;
+      color: var(--text-sub);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .project-filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+
+    .project-filter-pill {
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+    }
+
+    .project-filter-pill:hover,
+    .project-filter-pill.active {
+      transform: translateY(-1px);
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+      color: var(--text);
+    }
+
+    .project-card {
+      position: relative;
+      overflow: hidden;
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .project-card[hidden] {
+      display: none !important;
+    }
+
+    .project-preview-thumb {
+      display: flex;
+      min-height: 104px;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--project-accent) 34%, transparent), transparent 34%),
+        linear-gradient(135deg, color-mix(in srgb, var(--project-accent) 16%, var(--bg-elevated)), var(--bg-surface));
+    }
+
+    .project-thumb-initials {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--project-accent) 20%, var(--bg-surface));
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 880;
+      letter-spacing: 0.06em;
+    }
+
+    .project-kind-pill,
+    .project-status {
+      display: inline-flex;
+      min-height: 24px;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .project-kind-pill {
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+      color: var(--text-muted);
+    }
+
+    .project-status.draft { border-color: var(--border); background: var(--bg-elevated); color: var(--text-muted); }
+    .project-status.ready { border-color: rgba(59, 130, 246, 0.22); background: rgba(59, 130, 246, 0.10); color: var(--accent); }
+    .project-status.published { border-color: rgba(34, 197, 94, 0.22); background: rgba(34, 197, 94, 0.10); color: var(--success); }
+    .project-status.building { border-color: rgba(245, 158, 11, 0.22); background: rgba(245, 158, 11, 0.10); color: #d97706; }
+    .project-status.needs-fix { border-color: rgba(248, 113, 113, 0.26); background: rgba(248, 113, 113, 0.10); color: #ef4444; }
+
+    .project-card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .dashboard-activity-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .dashboard-activity-item:hover {
+      transform: translateY(-1px);
+      border-color: var(--border-focus);
+      background: var(--bg-surface);
+    }
+
+    .dashboard-activity-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--activity-accent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--activity-accent) 14%, transparent);
+    }
+
+    .dashboard-activity-title {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .dashboard-activity-meta,
+    .dashboard-activity-time {
+      color: var(--text-sub);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 980px) {
+      .dashboard-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .dashboard-overview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .project-preview-thumb {
+        min-height: 86px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .dashboard-overview-card,
+      .project-filter-pill,
+      .project-card,
+      .dashboard-activity-item {
+        transition: none;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function renderDashboardOverview(projects: DashboardProject[]) {
+  const grid = document.querySelector('.projects-grid') as HTMLElement | null;
+  const parent = grid?.parentElement;
+  if (!grid || !parent) return;
+  let overview = document.getElementById('dashboard-overview-grid');
+  if (!overview) {
+    overview = document.createElement('div');
+    overview.id = 'dashboard-overview-grid';
+    overview.className = 'dashboard-overview-grid';
+    parent.insertBefore(overview, grid);
+  }
+  const states = projects.map(projectState);
+  const published = states.filter(state => state === 'published').length;
+  const ready = states.filter(state => state === 'ready' || state === 'published').length;
+  const needsAttention = states.filter(state => state === 'needs-fix').length;
+  const recent = projects.filter(isRecentProject).length;
+  overview.innerHTML = [
+    ['Projects', projects.length, 'Everything created in this workspace.'],
+    ['Ready', ready, 'Previews or published apps available.'],
+    ['Live', published, 'Projects that reached publish status.'],
+    ['Recent', recent, needsAttention ? `${needsAttention} need attention.` : 'Updated in the last 7 days.'],
+  ].map(([label, value, note]) => `
+    <div class="dashboard-overview-card">
+      <div class="dashboard-overview-label">${escapeHtml(String(label))}</div>
+      <div class="dashboard-overview-value">${escapeHtml(String(value))}</div>
+      <div class="dashboard-overview-note">${escapeHtml(String(note))}</div>
+    </div>
+  `).join('');
+}
+
+function renderProjectFilters(projects: DashboardProject[]) {
+  const grid = document.querySelector('.projects-grid') as HTMLElement | null;
+  const parent = grid?.parentElement;
+  if (!grid || !parent) return;
+  let filters = document.getElementById('project-filter-row');
+  if (!projects.length) {
+    filters?.remove();
+    return;
+  }
+  if (!filters) {
+    filters = document.createElement('div');
+    filters.id = 'project-filter-row';
+    filters.className = 'project-filter-row';
+    parent.insertBefore(filters, grid);
+  }
+  const items = [
+    ['all', 'All'],
+    ['ready', 'Ready'],
+    ['published', 'Published'],
+    ['needs-fix', 'Needs attention'],
+    ['recent', 'Recent'],
+  ];
+  filters.innerHTML = items.map(([key, label], index) => `
+    <button class="project-filter-pill${index === 0 ? ' active' : ''}" type="button" data-project-filter="${escapeHtml(key)}">${escapeHtml(label)}</button>
+  `).join('');
+  filters.querySelectorAll<HTMLButtonElement>('[data-project-filter]').forEach(button => {
+    button.addEventListener('click', () => {
+      const filter = button.dataset.projectFilter || 'all';
+      filters?.querySelectorAll('.project-filter-pill').forEach(item => item.classList.toggle('active', item === button));
+      grid.querySelectorAll<HTMLElement>('.project-card').forEach(card => {
+        const state = card.dataset.projectState || 'draft';
+        const recent = card.dataset.projectRecent === 'true';
+        const visible = filter === 'all'
+          || state === filter
+          || (filter === 'ready' && (state === 'ready' || state === 'published'))
+          || (filter === 'recent' && recent);
+        card.hidden = !visible;
+      });
+    });
+  });
+}
+
+function renderRecentDashboardActivity(projects: DashboardProject[]) {
+  const list = document.querySelector('.activity-list') as HTMLElement | null;
+  if (!list) return;
+  const latest = [...projects]
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())
+    .slice(0, 5);
+  if (!latest.length) {
+    list.innerHTML = `
+      <div class="empty-state" style="padding:16px;">
+        <h3 class="empty-title">No recent activity yet</h3>
+        <p class="empty-desc">Create or open a project and Huggy will keep this area useful.</p>
+      </div>
+    `;
+    return;
+  }
+  list.innerHTML = latest.map((project, index) => {
+    const state = projectState(project);
+    return `
+      <button class="dashboard-activity-item" type="button" data-id="${escapeHtml(project.id)}" style="--activity-accent:${projectAccent(index)}">
+        <span class="dashboard-activity-dot" aria-hidden="true"></span>
+        <span>
+          <span class="dashboard-activity-title">${escapeHtml(project.name)}</span>
+          <span class="dashboard-activity-meta">${escapeHtml(projectKind(project))} &middot; ${escapeHtml(projectStateLabel(state))}</span>
+        </span>
+        <span class="dashboard-activity-time">${escapeHtml(relativeTime(project.updated_at || project.created_at))}</span>
+      </button>
+    `;
+  }).join('');
+  list.querySelectorAll<HTMLButtonElement>('[data-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      const id = button.dataset.id;
+      if (id) window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+    });
+  });
+}
+
+function renderLiveProjects(projects: DashboardProject[]) {
   const grid = document.querySelector('.projects-grid') as HTMLElement | null;
   const sidebarList = document.getElementById('sidebar-projects-list');
   const countLabel = document.querySelector('.section-label span');
   if (countLabel) countLabel.textContent = `(${projects.length})`;
+  renderDashboardOverview(projects);
+  renderProjectFilters(projects);
+  renderRecentDashboardActivity(projects);
 
   if (sidebarList) {
     sidebarList.innerHTML = projects.length
@@ -297,22 +669,27 @@ function renderLiveProjects(projects: ProjectListResponse['projects']) {
   }
 
   grid.innerHTML = projects.map((project, index) => {
-    const status = project.preview_status || project.status || 'ready';
+    const state = projectState(project);
+    const accent = projectAccent(index);
     return `
-      <div class="project-card" data-id="${escapeHtml(project.id)}">
+      <div class="project-card" data-id="${escapeHtml(project.id)}" data-project-state="${state}" data-project-recent="${isRecentProject(project) ? 'true' : 'false'}" style="--project-accent:${accent}">
+        <div class="project-preview-thumb">
+          <span class="project-thumb-initials">${escapeHtml(projectInitials(project.name))}</span>
+          <span class="project-kind-pill">${escapeHtml(projectKind(project))}</span>
+        </div>
         <div class="card-header">
           <div class="card-title-row">
-            <div class="project-dot" style="background:${projectAccent(index)}"></div>
+            <div class="project-dot" style="background:${accent}"></div>
             <span class="card-name">${escapeHtml(project.name)}</span>
           </div>
-          <span class="status-badge" style="background:var(--success-dim);color:var(--success);border:1px solid rgba(74,222,128,0.2);">${escapeHtml(status)}</span>
+          <span class="status-badge project-status ${state}">${escapeHtml(projectStateLabel(state))}</span>
         </div>
         <p class="card-desc">${escapeHtml(projectDescription(project))}</p>
         <div class="card-stats">
           <span class="score-badge meta" style="background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border);">${escapeHtml(project.model_id || 'Auto')}</span>
           <span class="score-badge meta" style="background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border);">Updated ${relativeTime(project.updated_at || project.created_at)}</span>
         </div>
-        <div class="card-footer">
+        <div class="card-footer project-card-actions">
           <span class="card-meta">${escapeHtml(project.slug || project.id.slice(0, 8))}</span>
           <button class="btn-open-project" type="button" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;color:var(--text);">Open Builder</button>
         </div>
@@ -543,6 +920,7 @@ function bindAiUsageSettings() {
 function initDashboardChrome() {
   if (dashboardChromeInitialized) return;
   dashboardChromeInitialized = true;
+  installDashboardUxPolish();
   initHuggyMotion();
   ensureSettingsPanel();
   normalizeAiChatInputs();

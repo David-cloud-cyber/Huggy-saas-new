@@ -719,6 +719,174 @@
                 display: none;
             }
         }
+
+        /* Minimal auth experience: keep src/auth.ts as the single source of truth. */
+        body {
+            padding: clamp(18px, 4vw, 34px);
+            justify-content: center;
+            background:
+                radial-gradient(circle at 50% 0%, rgba(18, 63, 150, 0.06), transparent 34%),
+                linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+        }
+
+        [data-theme="dark"] body {
+            background:
+                radial-gradient(circle at 50% 0%, rgba(147, 197, 253, 0.10), transparent 34%),
+                linear-gradient(180deg, #171613 0%, #11110f 100%);
+        }
+
+        .auth-container {
+            width: min(100%, 448px);
+            max-width: 448px;
+            min-height: auto;
+            display: block;
+            overflow: visible;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .auth-panel {
+            padding: 0;
+            background: transparent;
+        }
+
+        .auth-panel .logo-area {
+            margin: 0 0 18px;
+            text-align: center;
+        }
+
+        .auth-brand-row {
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .auth-brand-row .logo-mark {
+            width: 42px;
+            height: 42px;
+            margin: 0;
+        }
+
+        .auth-card {
+            padding: clamp(24px, 5vw, 32px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+            box-shadow:
+                0 24px 70px rgba(12, 36, 90, 0.10),
+                0 1px 0 rgba(255, 255, 255, 0.74) inset;
+            animation: authCardIn 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        [data-theme="dark"] .auth-card {
+            background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+            box-shadow:
+                0 24px 70px rgba(0, 0, 0, 0.34),
+                0 1px 0 rgba(255, 255, 255, 0.06) inset;
+        }
+
+        .auth-header {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .auth-title {
+            font-size: clamp(30px, 6vw, 38px);
+            letter-spacing: 0;
+            line-height: 1.04;
+        }
+
+        .auth-subtitle {
+            max-width: 340px;
+            margin-inline: auto;
+            color: var(--text-muted);
+        }
+
+        .auth-progress {
+            display: none;
+        }
+
+        .tabs {
+            margin-bottom: 18px;
+            border-radius: 999px;
+            background: var(--bg-input);
+        }
+
+        .tab-btn {
+            border-radius: 999px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .input {
+            min-height: 46px;
+            border-radius: 14px;
+        }
+
+        .btn-submit,
+        .btn-social {
+            min-height: 46px;
+            border-radius: 14px;
+        }
+
+        .social-divider {
+            margin: 18px 0 14px;
+        }
+
+        .auth-trust-note {
+            margin: 14px auto 0;
+            max-width: 340px;
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .auth-showcase {
+            display: none !important;
+        }
+
+        .theme-toggle {
+            top: 18px;
+            right: 18px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+            backdrop-filter: blur(14px);
+        }
+
+        @keyframes authCardIn {
+            from { opacity: 0; transform: translateY(12px) scale(0.985); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @media (max-width: 520px) {
+            body {
+                min-height: 100vh;
+                padding: 18px;
+            }
+
+            .auth-container {
+                width: 100%;
+            }
+
+            .auth-card {
+                border-radius: 22px;
+            }
+
+            .theme-toggle {
+                top: 12px;
+                right: 12px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .auth-card {
+                animation: none;
+            }
+        }
     </style>
 </head>
 <body>
@@ -811,6 +979,7 @@
             <div class="auth-footer" id="auth-footer-text">
                 New to Huggy? <button type="button" data-auth-switch="signup">Create an account</button>
             </div>
+            <p class="auth-trust-note">Your projects, credits and published apps stay connected to this account.</p>
         </div>
         </section>
 
