@@ -79,7 +79,7 @@ import {
   runnerChecksToVerificationChecks,
   type RunnerResult,
 } from './src/services/project-runner.ts';
-import { runBrowserInteractionAuditDetailed } from './src/services/browser-interaction-runner.ts';
+import { runBrowserInteractionAuditDetailed, type BrowserTestResult } from './src/services/browser-interaction-runner.ts';
 import { inspectVisualPreview } from './src/services/visual-preview-inspector.ts';
 import { scanGeneratedSecurity } from './src/services/generated-security-scanner.ts';
 import {
@@ -5923,6 +5923,7 @@ function collectGenerationVerificationChecks(input: {
   uiPolicy: any;
   hasExistingFiles: boolean;
   runnerResult: RunnerResult | null;
+  browserResult?: BrowserTestResult | null;
 }) {
   return [
     ...verifyGeneratedProject({ projectName: input.projectName, files: input.files, previewHtml: input.previewHtml }),
@@ -5947,6 +5948,7 @@ function collectGenerationVerificationChecks(input: {
     }),
     ...scanGeneratedSecurity(input.files).checks,
     ...(input.runnerResult ? runnerChecksToVerificationChecks(input.runnerResult.checks) : []),
+    ...(input.browserResult && input.browserResult.status !== 'skipped' ? input.browserResult.checks : []),
   ];
 }
 
@@ -5976,6 +5978,11 @@ async function finalReliabilityAutoFix(input: {
   let pipeline = input.pipeline;
   let previewHtml = pipeline.html;
   let runnerResult = input.runnerResult;
+  let browserResult: BrowserTestResult | null = await runBrowserInteractionAuditDetailed({
+    files,
+    previewHtml,
+    timeoutMs: Math.min(DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs, 20_000),
+  });
   const previewPipelineChecks = () => pipeline.errors.map(error => ({
     key: 'preview_pipeline',
     status: 'fail' as const,
@@ -5992,6 +5999,7 @@ async function finalReliabilityAutoFix(input: {
       uiPolicy: input.uiPolicy,
       hasExistingFiles: input.hasExistingFiles,
       runnerResult,
+      browserResult,
     }),
   ];
   let verificationSummary = summarizeVerificationChecks(verificationChecks);
@@ -6018,6 +6026,12 @@ async function finalReliabilityAutoFix(input: {
       await saveAgentRunnerResults(input.project, input.userId, input.agentRunId, runnerResult);
     }
 
+    browserResult = await runBrowserInteractionAuditDetailed({
+      files,
+      previewHtml,
+      timeoutMs: Math.min(DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs, 20_000),
+    });
+
     verificationChecks = [
       ...previewPipelineChecks(),
       ...collectGenerationVerificationChecks({
@@ -6027,6 +6041,7 @@ async function finalReliabilityAutoFix(input: {
         uiPolicy: input.uiPolicy,
         hasExistingFiles: input.hasExistingFiles,
         runnerResult,
+        browserResult,
       }),
     ];
     verificationSummary = summarizeVerificationChecks(verificationChecks);
@@ -6039,6 +6054,7 @@ async function finalReliabilityAutoFix(input: {
     pipeline,
     previewHtml,
     runnerResult,
+    browserResult,
     verificationChecks,
     verificationSummary,
     reliabilitySummary,
@@ -9135,7 +9151,14 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
     const finalBalance = await helpers.updateWallet(userId, -finalCost.finalCredits);
     await helpers.addLedger(userId, 'usage', -finalCost.finalCredits, finalBalance, `Generated app files with ${generation.model}`, refId);
-    await updateAgentRunStatus(agentRunId, 'completed', { public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary } });
+    await updateAgentRunStatus(agentRunId, 'completed', {
+      public_payload: {
+        verification: verificationSummary,
+        reliability: reliabilitySummary,
+        quality: qualitySummary,
+        browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
+      },
+    });
 
     res.json({
       success: true,
@@ -10523,6 +10546,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     pipeline = finalGate.pipeline;
     previewHtml = finalGate.previewHtml;
     runnerResult = finalGate.runnerResult;
+    const browserResult = finalGate.browserResult;
     if (finalGate.autoFixPatch) autoFix = finalGate.autoFixPatch;
     const verificationChecks = finalGate.verificationChecks;
     const verificationSummary = finalGate.verificationSummary;
@@ -10677,6 +10701,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       auto_fix: autoFix,
       errors: pipeline.errors,
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
+      browser: browserResult ? { status: browserResult.status, findings: browserResult.findings, checks: browserResult.checks } : null,
       research: researchResult ? summarizeResearchForMemory(researchResult) : null,
       huggy_cloud: huggyCloudPlan
         ? {
@@ -10703,7 +10728,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     });
     await updateAgentRunStatus(agentRunId, 'completed', {
       duration_ms: Date.now() - streamStartedAt,
-      public_payload: { verification: verificationSummary, reliability: reliabilitySummary, quality: qualitySummary, runner: summarizeRunnerForMemory(runnerResult), research: summarizeResearchForMemory(researchResult) },
+      public_payload: {
+        verification: verificationSummary,
+        reliability: reliabilitySummary,
+        quality: qualitySummary,
+        runner: summarizeRunnerForMemory(runnerResult),
+        browser: browserResult ? { status: browserResult.status, finding_count: browserResult.findings.length } : null,
+        research: summarizeResearchForMemory(researchResult),
+      },
     });
     await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed' });
     endStream();
