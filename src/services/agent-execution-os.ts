@@ -1,5 +1,6 @@
 import type { ExecutionContract } from './execution-contract.ts';
 import { normalizeExecutionText } from './execution-contract.ts';
+import { buildExecutionSyncMatrix } from './execution-sync-matrix.ts';
 
 export type ExecutionPhase =
   | 'idle'
@@ -195,6 +196,7 @@ export function buildInternalExecutionPlan(input: {
   hasExistingFiles?: boolean;
 }) {
   const { contract } = input;
+  const syncMatrix = buildExecutionSyncMatrix(contract);
   const phases: ExecutionPhase[] = contract.can_mutate_files
     ? ['deciding', 'planning', 'executing', 'checking', 'fixing', 'ready']
     : contract.requires_clarification
@@ -212,6 +214,11 @@ export function buildInternalExecutionPlan(input: {
     evidence_required: contract.evidence_required,
     prohibited_outputs: contract.prohibited_outputs,
     quality_gate: contract.quality_gate,
+    sync_matrix: syncMatrix,
+    required_layers: syncMatrix.required_layers,
+    user_visible_surface: syncMatrix.user_visible_surface,
+    save_policy: syncMatrix.save_policy,
+    recovery_policy: syncMatrix.recovery_policy,
     user_visible: false,
   };
 }
