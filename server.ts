@@ -4202,13 +4202,30 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
     if (/from\s+['"][^'"]+['"]/.test(file.content) && /__missing_import__|missing-module/i.test(file.content)) {
       errors.push({ file: file.path, message: 'Missing import detected.', severity: 'medium' });
     }
+    if (/__HUGGY_FORCE_ERROR__/i.test(file.content)) {
+      errors.push({
+        file: file.path,
+        message: 'Preview contains a known forced runtime failure marker.',
+        severity: 'high',
+        diagnostic_code: 'FORCED_RUNTIME_FAILURE_MARKER',
+        suggested_action: 'auto_fix_generated_runtime_marker',
+      });
+    }
   }
   const supabaseAuthIssue = detectGeneratedSupabaseAuthIssue(files);
   if (supabaseAuthIssue) errors.push(supabaseAuthIssue);
 
   const html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
-  if (!html.trim() || /__HUGGY_FORCE_ERROR__/i.test(html)) {
-    errors.push({ file: 'index.html', message: 'Preview HTML is empty or intentionally failing.', severity: 'high' });
+  if (!html.trim()) {
+    errors.push({ file: 'index.html', message: 'Preview HTML is empty.', severity: 'high' });
+  } else if (/__HUGGY_FORCE_ERROR__/i.test(html) && !errors.some(error => error?.diagnostic_code === 'FORCED_RUNTIME_FAILURE_MARKER')) {
+    errors.push({
+      file: 'index.html',
+      message: 'Preview contains a known forced runtime failure marker.',
+      severity: 'high',
+      diagnostic_code: 'FORCED_RUNTIME_FAILURE_MARKER',
+      suggested_action: 'auto_fix_generated_runtime_marker',
+    });
   }
 
   return {
@@ -4250,6 +4267,24 @@ function setGeneratedFile(
   return true;
 }
 
+function cleanGeneratedBlockingMarkers(files: GeneratedFile[], summaries: string[] = []) {
+  let changed = false;
+  const cleaned = files.map(file => {
+    const source = String(file.content || '');
+    let content = source
+      .replace(/^\s*throw\s+new\s+Error\(\s*['"`]__HUGGY_FORCE_ERROR__['"`]\s*\);\s*$/gim, '')
+      .replace(/throw\s+new\s+Error\(\s*['"`]__HUGGY_FORCE_ERROR__['"`]\s*\);?/gi, '')
+      .replace(/__HUGGY_FORCE_ERROR__/g, '')
+      .replace(/import\s+[^;\n]+from\s+['"]__missing_import__['"];?\s*/gi, '')
+      .replace(/from\s+['"]__missing_import__['"];?/gi, '');
+    if (content === source) return file;
+    changed = true;
+    summaries.push(`Removed generated runtime blocker from ${generatedPath(file.path)}.`);
+    return { ...file, content, updated_at: new Date().toISOString() };
+  });
+  return { files: cleaned, changed };
+}
+
 function createAutoFixViteIndexHtml(projectName = 'Huggy App', prompt = '') {
   return [
     '<!doctype html>',
@@ -4289,22 +4324,37 @@ function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
   const isTodo = /\b(todo|to do|to-do|tache|taches|task|tasks)\b/i.test(`${projectName} ${prompt}`);
   if (isTodo) {
     return [
-      "import { FormEvent, useMemo, useState } from 'react';",
+      "import { FormEvent, useEffect, useMemo, useState } from 'react';",
       "import './index.css';",
       '',
       "type Filter = 'all' | 'active' | 'completed';",
       'type Todo = { id: number; title: string; completed: boolean };',
+      "const STORAGE_KEY = 'huggy-todo-items';",
       '',
       'const initialTodos: Todo[] = [',
       "  { id: 1, title: 'Plan the first release', completed: true },",
       "  { id: 2, title: 'Test the preview', completed: false },",
       '];',
       '',
+      'function readTodos(): Todo[] {',
+      '  if (typeof window === "undefined") return initialTodos;',
+      '  try {',
+      '    const raw = window.localStorage.getItem(STORAGE_KEY);',
+      '    const parsed = raw ? JSON.parse(raw) : null;',
+      '    return Array.isArray(parsed) ? parsed : initialTodos;',
+      '  } catch {',
+      '    return initialTodos;',
+      '  }',
+      '}',
+      '',
       'export default function App() {',
-      "  const [todos, setTodos] = useState<Todo[]>(initialTodos);",
+      "  const [todos, setTodos] = useState<Todo[]>(() => readTodos());",
       "  const [title, setTitle] = useState('');",
       "  const [filter, setFilter] = useState<Filter>('all');",
       "  const [feedback, setFeedback] = useState('');",
+      '  useEffect(() => {',
+      '    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));',
+      '  }, [todos]);',
       '  const visibleTodos = useMemo(() => todos.filter((todo) => filter === "all" || (filter === "completed" ? todo.completed : !todo.completed)), [todos, filter]);',
       '  const completedCount = todos.filter((todo) => todo.completed).length;',
       '',
@@ -4474,14 +4524,16 @@ function applyGeneratedDestructiveSafety(files: GeneratedFile[], summaries: stri
 
 function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], errors: any[]): AutoFixEngineResult {
   const reasonText = errors.map(error => `${error?.key || ''} ${error?.message || ''} ${error?.file || ''}`).join('\n');
-  const shouldForceModernVite = !isModernFrontendProject(files)
-    || /index\.html should load \/src\/main\.tsx as a module|vite_main_script|missing.*main\.tsx|missing.*app\.tsx|blank preview|preview.*empty|technical build score|runner/i.test(reasonText);
-  const shouldFixDestructive = /destructive.*confirmation|destructive.*undo|clear feedback|delete\/remove|visual_destructive_confirmation|destructive_action_safety/i.test(reasonText);
   const summaries: string[] = [];
-  if (!shouldForceModernVite && !shouldFixDestructive) {
+  const markerClean = cleanGeneratedBlockingMarkers(files.map(file => ({ ...file })), summaries);
+  let working = markerClean.files;
+  const shouldForceModernVite = !isModernFrontendProject(files)
+    || /index\.html should load \/src\/main\.tsx as a module|vite_main_script|missing.*main\.tsx|missing.*app\.tsx|blank preview|preview.*empty|technical build score|runner|forced runtime failure marker|__HUGGY_FORCE_ERROR__/i.test(reasonText);
+  const shouldFixDestructive = /destructive.*confirmation|destructive.*undo|clear feedback|delete\/remove|visual_destructive_confirmation|destructive_action_safety/i.test(reasonText);
+  if (!shouldForceModernVite && !shouldFixDestructive && !markerClean.changed) {
     return { files, changed: false, changedPaths: [], summaries: [] };
   }
-  let working = shouldForceModernVite ? ensureModernFrontendProject(files, project.name, project.prompt || project.name) : files.map(file => ({ ...file }));
+  working = shouldForceModernVite ? ensureModernFrontendProject(working, project.name, project.prompt || project.name) : working;
   const byPath = new Map(working.map(file => [generatedPath(file.path), { ...file, path: generatedPath(file.path) }]));
 
   if (shouldForceModernVite || !byPath.has('index.html')) {
@@ -4803,11 +4855,12 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
 
   const appContent = isTodo
     ? [
-        "import { useMemo, useState } from 'react';",
+        "import { useEffect, useMemo, useState } from 'react';",
         "import './index.css';",
         '',
         "type TodoFilter = 'all' | 'active' | 'completed';",
         'type TodoItem = { id: number; title: string; completed: boolean };',
+        "const STORAGE_KEY = 'huggy-generated-todos';",
         '',
         'const starterTodos: TodoItem[] = [',
         "  { id: 1, title: 'Plan the first useful version', completed: true },",
@@ -4815,10 +4868,26 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
         "  { id: 3, title: 'Test the responsive preview', completed: false },",
         '];',
         '',
+        'function readTodos(): TodoItem[] {',
+        '  if (typeof window === "undefined") return starterTodos;',
+        '  try {',
+        '    const raw = window.localStorage.getItem(STORAGE_KEY);',
+        '    const parsed = raw ? JSON.parse(raw) : null;',
+        '    return Array.isArray(parsed) ? parsed : starterTodos;',
+        '  } catch {',
+        '    return starterTodos;',
+        '  }',
+        '}',
+        '',
         'export default function App() {',
-        '  const [todos, setTodos] = useState<TodoItem[]>(starterTodos);',
+        '  const [todos, setTodos] = useState<TodoItem[]>(() => readTodos());',
         "  const [filter, setFilter] = useState<TodoFilter>('all');",
         "  const [draft, setDraft] = useState('');",
+        "  const [feedback, setFeedback] = useState('');",
+        '',
+        '  useEffect(() => {',
+        '    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));',
+        '  }, [todos]);',
         '',
         '  const visibleTodos = useMemo(() => {',
         "    if (filter === 'active') return todos.filter(todo => !todo.completed);",
@@ -4832,19 +4901,22 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
         '  function addTodo(event: { preventDefault: () => void }) {',
         '    event.preventDefault();',
         '    const title = draft.trim();',
-        '    if (!title) return;',
+        "    if (!title) { setFeedback('Ajoute un nom de tache avant de valider.'); return; }",
         '    setTodos(current => [{ id: Date.now(), title, completed: false }, ...current]);',
         "    setDraft('');",
+        "    setFeedback('Tache ajoutee et sauvegardee localement.');",
         '  }',
         '',
         '  function toggleTodo(id: number) {',
         '    setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));',
+        "    setFeedback('Statut mis a jour.');",
         '  }',
         '',
         '  function deleteTodo(id: number) {',
         '    const todo = todos.find(item => item.id === id);',
         '    if (todo && !window.confirm(`Delete "${todo.title}"?`)) return;',
         '    setTodos(current => current.filter(todo => todo.id !== id));',
+        "    setFeedback('Tache supprimee.');",
         '  }',
         '',
         '  return (',
@@ -4884,6 +4956,8 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
         '            </button>',
         '          ))}',
         '        </div>',
+        '',
+        '        {feedback ? <p className="feedback" role="status">{feedback}</p> : null}',
         '',
         '        <div className="todo-list">',
         '          {visibleTodos.length ? visibleTodos.map(todo => (',
@@ -4958,6 +5032,7 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
     'button { min-height: 44px; border: 0; border-radius: 999px; padding: 12px 18px; background: var(--color-text); color: #fff; font-weight: 800; cursor: pointer; transition: transform .18s ease, opacity .18s ease; }',
     'button:hover { transform: translateY(-1px); }',
     'button:disabled { opacity: .45; cursor: not-allowed; transform: none; }',
+    '.feedback { margin: 0; border: 1px solid rgba(49,95,220,.18); border-radius: 16px; background: rgba(49,95,220,.08); color: #214aab; padding: 12px 14px; }',
     '.filters { display: flex; flex-wrap: wrap; gap: 8px; }',
     '.filters button { background: #f7f4ed; color: var(--color-text); border: 1px solid var(--color-border); }',
     '.filters button.selected { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }',
@@ -4989,7 +5064,7 @@ function parseGeneratedOutput(
   options: { hasExistingFiles?: boolean } = {},
 ) {
   const isStandaloneHtml = looksLikeStandaloneHtml(rawText);
-  const parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
+  let parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
     isStandaloneHtml
       ? {
           summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
@@ -5001,11 +5076,18 @@ function parseGeneratedOutput(
     throw new GeneratedOutputParseError();
   }
 
-  const rawFiles = parsed.files || (parsed.html
+  let rawFiles = parsed.files || (parsed.html
     ? [{ path: 'index.html', content: String(parsed.html), language: 'html' }]
     : null);
-  if (!rawFiles) {
-    throw new GeneratedOutputParseError('Huggy could not find generated files in the AI output, so the existing app was kept unchanged.');
+  if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length === 0) {
+    const fallback = buildDeterministicFallbackGeneratedOutput(projectName, promptOrDescription);
+    parsed = {
+      ...fallback,
+      summary: parsed?.plan || parsed?.steps
+        ? 'The model returned a plan without files, so Huggy generated a safe React/Vite app instead.'
+        : fallback.summary,
+    };
+    rawFiles = parsed.files;
   }
 
   const normalizedFiles = withProjectSeoSupport(
