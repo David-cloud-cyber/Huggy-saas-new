@@ -416,14 +416,25 @@ function getAuthenticatedUserOrThrow(req: any, requestId?: string) {
   return getRequiredAuth(req, requestId).user;
 }
 
-app.get('/api/auth/me', requireAuth, (req: any, res) => {
+app.get('/api/auth/me', requireAuth, async (req: any, res) => {
   const auth = getRequiredAuth(req);
+  let planKey = 'free';
+  try {
+    planKey = normalizePlanKey(await getOrganizationPlan(auth.userId).catch(() => 'free')) || 'free';
+  } catch {
+    planKey = 'free';
+  }
+  const plan = getPlanConfig(planKey) || SAAS_PLANS.free;
   res.json({
     success: true,
     user: {
       id: auth.userId,
       email: auth.email,
       role: auth.user.role,
+    },
+    plan: {
+      key: plan.key,
+      label: plan.name || plan.key,
     },
   });
 });
@@ -1068,6 +1079,8 @@ function studioContextInstruction(value: any) {
       '- This is a creative media request, not a request to build a web app, unless the user explicitly asks to use the generated asset inside the current app.',
       '- Keep Huggy as one assistant with one input. Use compact media controls only as context, never a heavy editor.',
       '- Prefer Auto model routing. The user should not need to know Seedance, Veo, Sora, Kling, Flux, or OpenAI Image.',
+      '- If the product, platform, or format is missing, do not write a long menu of possibilities. Pick a sensible default for quick work: vertical 15s TikTok/Reels UGC ad with a dynamic hook, then ask one short question only if the product or offer is unknown.',
+      '- Media replies must stay compact: one useful direction, one concrete default, one next action. Avoid "Super, je peux..." filler and avoid listing every possible deliverable.',
       '- If a media provider is unavailable, return a useful campaign brief, storyboard, prompt and next action without pretending a real asset was rendered.',
       '- Never expose fal.ai costs, provider invoices, raw provider payloads, or internal margins to the user.',
       `- Current media settings: ${mediaSettingsSummary(settings)}.`,

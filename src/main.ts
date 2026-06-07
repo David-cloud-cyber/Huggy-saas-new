@@ -69,6 +69,17 @@ function init() {
         if (isProductShell) return;
 
         const navbar = document.querySelector('.navbar');
+        const navbarLine = document.querySelector('.navbar-line');
+        if (navbar) {
+            const updateNavbarSurface = () => {
+                const transparent = window.scrollY > 10;
+                navbar.classList.toggle('navbar-transparent-on-scroll', transparent);
+                navbarLine?.classList.toggle('navbar-transparent-on-scroll', transparent);
+            };
+            updateNavbarSurface();
+            window.addEventListener('scroll', updateNavbarSurface, { passive: true });
+        }
+
         if (navbar && path !== '/' && path !== '/index.html' && !document.querySelector('.back-home-link')) {
             const back = document.createElement('a');
             back.className = 'back-home-link';

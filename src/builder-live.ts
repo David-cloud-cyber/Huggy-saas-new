@@ -323,7 +323,7 @@ const WORKSHOP_CONFIG: Record<StudioWorkshop, {
     shortLabel: 'Media',
     placeholder: 'Describe the launch kit, post, ad, visual or media asset you want',
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 10h5"></path><path d="M3 14h5"></path><path d="M16 14h5"></path>',
-    promptPrefix: 'Huggy Media workspace: treat this as a creative marketing media request for images, videos, UGC ads, product storytelling, thumbnails, social creatives, app teasers, or campaign assets. Do not build a web app unless the user explicitly asks to use the asset inside the app. Choose media format and model intelligently from the compact settings, keep the result in Preview, and never expose provider costs.',
+    promptPrefix: 'Huggy Media workspace: treat this as a creative marketing media request for images, videos, UGC ads, product storytelling, thumbnails, social creatives, app teasers, or campaign assets. Do not build a web app unless the user explicitly asks to use the asset inside the app. Choose media format and model intelligently from the compact settings, keep the result in Preview, and never expose provider costs. If details are missing, use the default vertical 15s TikTok/Reels UGC ad direction and ask at most one short product/offer question instead of listing every possible output.',
   },
 };
 
