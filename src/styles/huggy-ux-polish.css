@@ -1,0 +1,250 @@
+:root {
+  --huggy-motion-instant: 90ms;
+  --huggy-motion-fast: 140ms;
+  --huggy-motion-medium: 220ms;
+  --huggy-motion-slow: 360ms;
+  --huggy-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --huggy-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --huggy-shadow-soft-blue: 0 0 0 4px var(--huggy-blue-soft, rgba(47, 109, 246, 0.1));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+}
+
+:where(
+  .navbar,
+  .hero-content,
+  .hero-visual,
+  .feature-card,
+  .pricing-card,
+  .testimonial-card,
+  .faq-item,
+  .project-card,
+  .create-section,
+  .activity-list,
+  .settings-panel,
+  .modal-content,
+  .auth-card,
+  .seo-card,
+  .seo-panel
+) {
+  animation: huggy-panel-reveal var(--huggy-motion-slow) var(--huggy-ease-enter) both;
+}
+
+:where(.feature-card, .pricing-card, .testimonial-card, .project-card, .seo-card, .seo-panel, .create-section) {
+  will-change: transform;
+}
+
+:where(.feature-card, .pricing-card, .testimonial-card, .project-card, .seo-card, .seo-panel, .create-section):hover {
+  transform: translateY(-2px);
+}
+
+:where(
+  button,
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-solid,
+  .btn-upgrade,
+  .btn-deploy,
+  .btn-create-top,
+  .submit-btn,
+  .icon-btn,
+  .tab-btn,
+  .sub-tab,
+  .model-select,
+  .prompt-mode-btn,
+  .nav-link-item,
+  .chip,
+  .badge
+) {
+  transition:
+    transform var(--huggy-motion-fast) var(--huggy-ease-standard),
+    opacity var(--huggy-motion-fast) var(--huggy-ease-standard),
+    color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    border-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    background-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    box-shadow var(--huggy-motion-fast) var(--huggy-ease-standard);
+}
+
+:where(
+  button,
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-solid,
+  .btn-upgrade,
+  .btn-deploy,
+  .btn-create-top,
+  .submit-btn,
+  .icon-btn,
+  .tab-btn,
+  .sub-tab,
+  .model-select,
+  .prompt-mode-btn
+):hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+:where(
+  button,
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-solid,
+  .btn-upgrade,
+  .btn-deploy,
+  .btn-create-top,
+  .submit-btn,
+  .icon-btn,
+  .tab-btn,
+  .sub-tab,
+  .model-select,
+  .prompt-mode-btn
+):active:not(:disabled) {
+  transform: scale(0.985);
+  transition-duration: var(--huggy-motion-instant);
+}
+
+:where(input, textarea, select, .input-wrapper, .huggy-ai-input, .chat-input-area) {
+  transition:
+    border-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    box-shadow var(--huggy-motion-medium) var(--huggy-ease-standard),
+    background-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    transform var(--huggy-motion-medium) var(--huggy-ease-standard);
+}
+
+:where(.input-wrapper, .huggy-ai-input, .chat-input-area):focus-within {
+  box-shadow: var(--huggy-shadow-soft-blue);
+}
+
+:where(.dropdown, .project-menu-panel, .huggy-model-dropdown, .model-provider-panel, .prompt-mode-menu, #chat-mode-menu) {
+  animation: huggy-popover-in var(--huggy-motion-medium) var(--huggy-ease-enter) both;
+  transform-origin: top center;
+}
+
+:where(.toast, .attachment-chip, .prompt-attachment-chip, .feedback-modal, .publish-popover) {
+  animation: huggy-soft-rise var(--huggy-motion-medium) var(--huggy-ease-enter) both;
+}
+
+:where(.preview-frame-wrapper, .preview-content, .preview-empty, .web-preview, .artifact-preview) {
+  transition:
+    opacity var(--huggy-motion-medium) var(--huggy-ease-standard),
+    transform var(--huggy-motion-medium) var(--huggy-ease-standard),
+    border-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    background-color var(--huggy-motion-fast) var(--huggy-ease-standard);
+}
+
+:where(.preview-frame-wrapper, .web-preview, .artifact-preview)[data-loading="true"],
+:where(.preview-frame-wrapper.is-loading, .web-preview.is-loading, .artifact-preview.is-loading) {
+  opacity: 0.92;
+}
+
+:where(.skeleton, .analysis-skeleton, .preview-skeleton, .shimmer, .huggy-shimmer) {
+  background-size: 220% 100%;
+  animation: huggy-premium-shimmer 1.35s var(--huggy-ease-standard) infinite;
+}
+
+:where(.huggy-message, .huggy-codex-journal-line, .huggy-codex-file-edit, .huggy-codex-command-line) {
+  animation: huggy-soft-rise var(--huggy-motion-medium) var(--huggy-ease-enter) both;
+}
+
+:where(.huggy-message-content) {
+  transition:
+    background-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    border-color var(--huggy-motion-fast) var(--huggy-ease-standard),
+    box-shadow var(--huggy-motion-fast) var(--huggy-ease-standard),
+    transform var(--huggy-motion-fast) var(--huggy-ease-standard);
+}
+
+:where(.huggy-message-content):hover {
+  transform: translateY(-1px);
+}
+
+@keyframes huggy-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes huggy-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes huggy-soft-rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes huggy-premium-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  :where(
+    button,
+    .btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-solid,
+    .btn-upgrade,
+    .btn-deploy,
+    .btn-create-top,
+    .submit-btn,
+    .icon-btn,
+    .tab-btn,
+    .sub-tab,
+    .model-select,
+    .prompt-mode-btn,
+    .feature-card,
+    .pricing-card,
+    .testimonial-card,
+    .project-card,
+    .seo-card,
+    .seo-panel,
+    .create-section,
+    .huggy-message-content
+  ):hover {
+    transform: none !important;
+  }
+}

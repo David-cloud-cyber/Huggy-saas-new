@@ -44,7 +44,8 @@ const CONFIRM_RE = /\b(confirm\(|dialog|modal|undo|annuler|confirmation|are you 
 const UNIMPLEMENTED_RE = /\b(coming soon|not implemented|not wired|TODO:|wire this later|backend coming|placeholder action|fake data only)\b/i;
 const DEAD_NAV_RE = /href=["']#["']|href=["']javascript:void\(0\)["']|onClick=\{\s*\(\)\s*=>\s*\{\s*\}\s*\}/i;
 const TODO_APP_RE = /\b(todo|to-do|task manager|checklist|kanban|tasks?|taches?|tâches?)\b/i;
-const ECOMMERCE_APP_RE = /\b(ecommerce|e-commerce|shop|store|cart|checkout|product|catalog|panier|boutique|commande)\b/i;
+const TIMER_APP_RE = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|focus session|session de travail)\b/i;
+const ECOMMERCE_APP_RE = /\b(ecommerce|e-commerce|shop|store|cart|checkout|product|catalog|panier|boutique|paiement|customer orders|order management|commandes clients|gestion commandes)\b/i;
 const RESTAURANT_APP_RE = /\b(restaurant|menu|reservation|réservation|booking|hours|horaires|table)\b/i;
 const AUTH_APP_RE = /\b(login|signup|sign in|sign up|auth|password|forgot|register|connexion|inscription)\b/i;
 const OPERATIONAL_APP_RE = /\b(dashboard|admin|crm|erp|analytics|kpi|table|pipeline|invoice|inventory|settings)\b/i;
@@ -335,7 +336,8 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     'Generated UI contains unfinished behavior such as coming soon, not implemented, or placeholder actions.',
   ));
 
-  if (TODO_APP_RE.test(source)) {
+  const isTimerApp = TIMER_APP_RE.test(source);
+  if (TODO_APP_RE.test(source) && !isTimerApp) {
     const hasTaskState = /\b(useState|setTasks|setTodos|setItems)\b/i.test(code);
     const canCreate = hasTaskState && /\b(onSubmit|addTask|handleAdd|setTasks\([\s\S]*(\.\.\.|concat\(|completed\s*:))/i.test(code);
     const canComplete = hasTaskState && /\b(toggleTask|handleToggle|checked=|onChange=\{[\s\S]*toggle|completed\s*:\s*!)/i.test(code);
@@ -358,7 +360,7 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
   }
 
   const isExplicitCommerce = platform === 'ecommerce'
-    || (platform === 'generic_web_app' && /\b(ecommerce|e-commerce|shop|storefront|cart|checkout|panier|boutique)\b/i.test(source));
+    || (platform === 'generic_web_app' && ECOMMERCE_APP_RE.test(source));
   if (isExplicitCommerce) {
     const hasCart = /\b(cart|basket|panier|addToCart|setCart|checkoutItems)\b/i.test(code);
     const hasQuantity = /\b(quantity|qty|increment|decrement|setQuantity|stock|variant)\b/i.test(code);

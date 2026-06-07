@@ -2798,7 +2798,7 @@ class AgentOrchestrator {
         requiresPreviewRebuild: true,
         requiresCredits: true,
         nextAction: wantsComplexWork ? 'plan_then_build' : 'build',
-        autoPlanRequired: wantsComplexWork || !input.hasFiles,
+        autoPlanRequired: wantsComplexWork && input.hasFiles,
         selectedModelPolicy: wantsComplexWork ? 'balanced' : 'economy',
         userVisibleReason: input.hasFiles
           ? 'The user explicitly asked for a new app, so Huggy will generate a new build instead of treating the prompt as a bug fix.'
@@ -2871,7 +2871,7 @@ class AgentOrchestrator {
         requiresPreviewRebuild: true,
         requiresCredits: true,
         nextAction: wantsComplexWork ? 'plan_then_build' : (input.hasFiles ? 'edit' : 'build'),
-        autoPlanRequired: wantsComplexWork || !input.hasFiles,
+        autoPlanRequired: wantsComplexWork && input.hasFiles,
         selectedModelPolicy: wantsComplexWork ? 'balanced' : 'economy',
         userVisibleReason: wantsComplexWork || !input.hasFiles
           ? 'Huggy will plan the safest app structure before building.'
@@ -4320,7 +4320,118 @@ function createAutoFixMainTsx() {
   ].join('\n');
 }
 
+function createPomodoroAppTsx(projectName = 'Pomodoro Focus', prompt = '') {
+  return [
+    "import { useEffect, useMemo, useState } from 'react';",
+    "import './index.css';",
+    '',
+    "type Mode = 'work' | 'short' | 'long';",
+    'const durations: Record<Mode, number> = { work: 25 * 60, short: 5 * 60, long: 15 * 60 };',
+    "const labels: Record<Mode, string> = { work: 'Travail', short: 'Pause courte', long: 'Pause longue' };",
+    '',
+    'function formatTime(totalSeconds: number) {',
+    '  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");',
+    '  const seconds = Math.max(0, totalSeconds % 60).toString().padStart(2, "0");',
+    '  return `${minutes}:${seconds}`;',
+    '}',
+    '',
+    'function playSoftBeep() {',
+    '  try {',
+    '    const audio = new AudioContext();',
+    '    const oscillator = audio.createOscillator();',
+    '    const gain = audio.createGain();',
+    '    oscillator.frequency.value = 720;',
+    '    gain.gain.setValueAtTime(0.001, audio.currentTime);',
+    '    gain.gain.exponentialRampToValueAtTime(0.08, audio.currentTime + 0.02);',
+    '    gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.28);',
+    '    oscillator.connect(gain);',
+    '    gain.connect(audio.destination);',
+    '    oscillator.start();',
+    '    oscillator.stop(audio.currentTime + 0.3);',
+    '  } catch {',
+    '    // Audio can be blocked until the user interacts with the page.',
+    '  }',
+    '}',
+    '',
+    'export default function App() {',
+    "  const [mode, setMode] = useState<Mode>('work');",
+    '  const [secondsLeft, setSecondsLeft] = useState(durations.work);',
+    '  const [isRunning, setIsRunning] = useState(false);',
+    '  const [cycles, setCycles] = useState(0);',
+    '  const [dark, setDark] = useState(true);',
+    "  const [alert, setAlert] = useState('Pret a commencer.');",
+    '',
+    '  useEffect(() => {',
+    '    if (!isRunning) return;',
+    '    const timer = window.setInterval(() => {',
+    '      setSecondsLeft(current => {',
+    '        if (current > 1) return current - 1;',
+    '        window.clearInterval(timer);',
+    '        setIsRunning(false);',
+    '        setAlert(mode === "work" ? "Session terminee. Respire un instant." : "Pause terminee. Reviens doucement.");',
+    '        if (mode === "work") setCycles(value => value + 1);',
+    '        playSoftBeep();',
+    '        return 0;',
+    '      });',
+    '    }, 1000);',
+    '    return () => window.clearInterval(timer);',
+    '  }, [isRunning, mode]);',
+    '',
+    '  const progress = useMemo(() => 1 - secondsLeft / durations[mode], [mode, secondsLeft]);',
+    '  const progressPercent = Math.round(progress * 100);',
+    '',
+    '  function changeMode(nextMode: Mode) {',
+    '    setMode(nextMode);',
+    '    setSecondsLeft(durations[nextMode]);',
+    '    setIsRunning(false);',
+    '    setAlert(`${labels[nextMode]} selectionne.`);',
+    '  }',
+    '',
+    '  function resetTimer() {',
+    '    setSecondsLeft(durations[mode]);',
+    '    setIsRunning(false);',
+    '    setAlert("Minuteur reinitialise.");',
+    '  }',
+    '',
+    '  return (',
+    '    <main className={dark ? "pomodoro-app dark" : "pomodoro-app"}>',
+    '      <section className="pomodoro-card" aria-label="Application Pomodoro">',
+    '        <div className="pomodoro-topbar">',
+    '          <span>Focus timer</span>',
+    '          <button type="button" onClick={() => setDark(value => !value)}>{dark ? "Theme clair" : "Theme sombre"}</button>',
+    '        </div>',
+    `        <h1>${escapeHtml(projectName || 'Pomodoro Focus')}</h1>`,
+    `        <p>${escapeHtml(summarizeForMeta(prompt || 'Minuteur Pomodoro interactif avec cycles, alertes et themes.', 'Minuteur Pomodoro interactif avec cycles, alertes et themes.'))}</p>`,
+    '        <div className="mode-tabs" role="tablist" aria-label="Modes Pomodoro">',
+    "          {(['work', 'short', 'long'] as Mode[]).map(item => (",
+    '            <button key={item} type="button" className={mode === item ? "active" : ""} onClick={() => changeMode(item)}>{labels[item]}</button>',
+    '          ))}',
+    '        </div>',
+    '        <div className={secondsLeft === 0 ? "timer-ring done" : "timer-ring"} style={{ "--progress": `${progressPercent}%` } as Record<string, string>}>',
+    '          <strong>{formatTime(secondsLeft)}</strong>',
+    '          <span>{labels[mode]}</span>',
+    '        </div>',
+    '        <div className="pomodoro-actions">',
+    '          <button type="button" onClick={() => { setIsRunning(true); setAlert("Minuteur lance."); }}>Demarrer</button>',
+    '          <button type="button" onClick={() => { setIsRunning(false); setAlert("Minuteur en pause."); }}>Pause</button>',
+    '          <button type="button" onClick={resetTimer}>Reinitialiser</button>',
+    '        </div>',
+    '        <p className="feedback" role="status">{alert}</p>',
+    '        <div className="cycle-row" aria-label="Cycles termines">',
+    '          {Array.from({ length: 8 }).map((_, index) => <span key={index} className={index < cycles ? "filled" : ""} />)}',
+    '        </div>',
+    '      </section>',
+    '    </main>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
 function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
+  const isPomodoro = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${prompt}`);
+  if (isPomodoro) return createPomodoroAppTsx(projectName, prompt);
+
   const isTodo = /\b(todo|to do|to-do|tache|taches|task|tasks)\b/i.test(`${projectName} ${prompt}`);
   if (isTodo) {
     return [
@@ -4849,11 +4960,14 @@ function buildGenerationMessages(input: {
 function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOrDescription = '') {
   const prompt = String(promptOrDescription || projectName || '').trim();
   const normalized = normalizePromptIntentText(prompt);
+  const isPomodoro = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${normalized}`);
   const isTodo = /\b(todo|to do|to-do|task|tasks|tache|taches|tâche|tâches)\b/i.test(normalized);
   const safeName = JSON.stringify(projectName || 'Huggy App');
   const safePrompt = JSON.stringify(prompt || 'A useful generated application.');
 
-  const appContent = isTodo
+  const appContent = isPomodoro
+    ? createPomodoroAppTsx(projectName || 'Pomodoro Focus', prompt)
+    : isTodo
     ? [
         "import { useEffect, useMemo, useState } from 'react';",
         "import './index.css';",
@@ -10189,10 +10303,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         };
         const planned = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: requestedModelSelection, userCredits: walletForRouting, researchContext, allowLocalFallback: requestedModelSelection === 'auto' });
         executionPlan = planned.text;
-        await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true });
+        await send('plan_ready', streamCopy('Plan interne pret, generation directe.', 'Internal plan ready, generating directly.'), { auto_plan_required: true, internal_only: true });
       } catch (error) {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
-        await send('plan_ready', executionPlan, { text: executionPlan, auto_plan_required: true, fallback: normalizeProviderError(error) });
+        await send('plan_ready', streamCopy('Plan interne pret, generation directe.', 'Internal plan ready, generating directly.'), { auto_plan_required: true, internal_only: true, fallback: normalizeProviderError(error) });
       }
     }
 

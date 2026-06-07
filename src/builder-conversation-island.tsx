@@ -157,7 +157,7 @@ function ensureConversationStyles() {
     .huggy-message {
       display: flex;
       width: 100%;
-      animation: huggy-message-in 180ms cubic-bezier(.22,1,.36,1) both;
+      animation: huggy-message-in 220ms cubic-bezier(.16,1,.3,1) both;
     }
 
     .huggy-message-user {
@@ -183,6 +183,15 @@ function ensureConversationStyles() {
       color: var(--text);
       background: var(--bg-surface);
       box-shadow: 0 1px 0 rgba(9,9,11,.03) inset;
+      transition:
+        transform 160ms cubic-bezier(.22,1,.36,1),
+        border-color 160ms cubic-bezier(.22,1,.36,1),
+        background-color 160ms cubic-bezier(.22,1,.36,1),
+        box-shadow 180ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-message-content:hover {
+      transform: translateY(-1px);
     }
 
     .huggy-message-plain {
@@ -398,10 +407,15 @@ function ensureConversationStyles() {
       padding: 2px 0;
     }
 
+    .huggy-message-content-trace:hover {
+      transform: none;
+    }
+
     .huggy-message-user .huggy-message-content {
       color: var(--bg);
       background: var(--text);
       border-color: transparent;
+      box-shadow: 0 10px 28px rgba(0,0,0,.10);
     }
 
     .huggy-message-system .huggy-message-content {
@@ -1042,7 +1056,7 @@ function ensureConversationStyles() {
     }
 
     @keyframes huggy-message-in {
-      from { opacity: 0; transform: translateY(6px) scale(.99); }
+      from { opacity: 0; transform: translateY(7px) scale(.992); }
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
