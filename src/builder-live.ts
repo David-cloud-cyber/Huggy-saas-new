@@ -1868,21 +1868,21 @@ function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock
   }
 }
 
-type CodexJournalBlock = Extract<HuggyConversationBlock, { type: 'work_journal' }>;
-type CodexJournalEntry = CodexJournalBlock['entries'][number];
+type HuggyWorklineBlock = Extract<HuggyConversationBlock, { type: 'work_journal' }>;
+type HuggyWorklineEntry = HuggyWorklineBlock['entries'][number];
 
-function createCodexJournalBlock(): CodexJournalBlock {
+function createHuggyWorklineBlock(): HuggyWorklineBlock {
   return {
     type: 'work_journal',
     status: 'active',
     startedAt: new Date().toISOString(),
     elapsed: '0m 00s',
     entries: [],
-    activeText: 'En réflexion',
+    activeText: 'Huggy prépare le travail',
   };
 }
 
-function setWorkJournalBlock(card: HTMLElement | null, journal: CodexJournalBlock | null) {
+function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
   if (!card || !journal) return;
   setMessageBlock(card, {
     ...journal,
@@ -3990,7 +3990,7 @@ async function loadProject() {
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     syncWorkshopPreview();
     removeMessage(loading);
-    void restoreLatestCodexJournalFromRunHistory(payload);
+    void restoreLatestWorklineFromRunHistory(payload);
     if (!payload.messages?.length) {
       showTransientNotice('Ready when you are.', 1600);
     }
@@ -4016,12 +4016,12 @@ function restoreMessages(payload: ProjectPayload) {
     });
 }
 
-function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): CodexJournalBlock | null {
+function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyWorklineBlock | null {
   const relevant = steps
     .slice()
     .sort((a, b) => Number(a.sequence_number || 0) - Number(b.sequence_number || 0))
     .filter(step => step?.event_type);
-  const hasMissionJournal = relevant.some(step => [
+  const hasWorklineEvents = relevant.some(step => [
     'narration',
     'thinking',
     'file_edit',
@@ -4037,9 +4037,9 @@ function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary
     'error',
     'cancelled',
   ].includes(step.event_type));
-  if (!hasMissionJournal) return null;
+  if (!hasWorklineEvents) return null;
 
-  const journal = createCodexJournalBlock();
+  const journal = createHuggyWorklineBlock();
   journal.status = run?.status === 'failed'
     ? 'failed'
     : run?.status === 'cancelled'
@@ -4048,8 +4048,8 @@ function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary
         ? 'done'
         : 'active';
   journal.elapsed = run?.duration_ms ? formatWorkingDuration(Number(run.duration_ms || 0)) : undefined;
-  journal.activeText = journal.status === 'active' ? 'En reflexion' : '';
-  const fileEntries = new Map<string, CodexJournalEntry>();
+  journal.activeText = journal.status === 'active' ? 'Huggy reprend le travail' : '';
+  const fileEntries = new Map<string, HuggyWorklineEntry>();
   const commandItems: string[] = [];
   const checkItems: string[] = [];
   let finalText = '';
@@ -4140,16 +4140,16 @@ function buildCodexJournalFromSteps(steps: AgentRunStep[], run?: AgentRunSummary
   return journal.entries.length || journal.finalText ? journal : null;
 }
 
-async function restoreLatestCodexJournalFromRunHistory(payload: ProjectPayload) {
+async function restoreLatestWorklineFromRunHistory(payload: ProjectPayload) {
   const scroll = chatScroll();
-  if (!scroll || scroll.dataset.codexJournalRestored === 'true' || !currentProjectId) return;
-  scroll.dataset.codexJournalRestored = 'true';
+  if (!scroll || scroll.dataset.worklineRestored === 'true' || !currentProjectId) return;
+  scroll.dataset.worklineRestored = 'true';
   try {
     const runsPayload = await apiFetch<{ success: boolean; runs: AgentRunSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs?limit=1`);
     const run = runsPayload.runs?.[0];
     if (!run?.id) return;
     const details = await apiFetch<{ success: boolean; run: AgentRunSummary; steps: AgentRunStep[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs/${encodeURIComponent(run.id)}`);
-    const journal = buildCodexJournalFromSteps(details.steps || [], details.run || run);
+    const journal = buildHuggyWorklineFromSteps(details.steps || [], details.run || run);
     if (!journal) return;
     const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
     if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
@@ -4158,7 +4158,7 @@ async function restoreLatestCodexJournalFromRunHistory(payload: ProjectPayload) 
     const card = appendMessage('assistant', '');
     setWorkJournalBlock(card, journal);
   } catch (error) {
-    console.warn('[huggy] Unable to restore work journal.', error);
+    console.warn('[huggy] Unable to restore workline.', error);
   }
 }
 
@@ -4311,7 +4311,7 @@ function normalizedFileEditPayload(payload: Record<string, any>) {
   };
 }
 
-function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): CodexJournalEntry | null {
+function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): HuggyWorklineEntry | null {
   const edit = normalizedFileEditPayload(payload);
   if (!edit) return null;
   return {
@@ -4392,10 +4392,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let plainResponseMode = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   let responseCard: HTMLElement | null = status;
-  const journal = createCodexJournalBlock();
-  const journalGroups = new Map<string, CodexJournalEntry>();
-  const fileEditEntries = new Map<string, CodexJournalEntry>();
-  const runningCommandEntries = new Map<string, CodexJournalEntry>();
+  const journal = createHuggyWorklineBlock();
+  const journalGroups = new Map<string, HuggyWorklineEntry>();
+  const fileEditEntries = new Map<string, HuggyWorklineEntry>();
+  const runningCommandEntries = new Map<string, HuggyWorklineEntry>();
   const seenJournalKeys = new Set<string>();
   let journalFrame = 0;
   let lastWorkingTickAt = 0;
@@ -4421,7 +4421,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.finalText = '';
     setMessageBlock(status, null);
   };
-  const addJournalLine = (text: string, detail = '', key = '', entryStatus: CodexJournalEntry['status'] = 'done') => {
+  const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyWorklineEntry['status'] = 'done') => {
     const clean = redactSecrets(text).trim();
     if (!clean) return;
     const dedupeKey = key || clean;
@@ -4443,7 +4443,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.entries.push({ id: journalEntryId('divider'), kind: 'divider', text });
     scheduleJournal();
   };
-  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: CodexJournalEntry['status'] = 'done') => {
+  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyWorklineEntry['status'] = 'done') => {
     const cleanItem = redactSecrets(item).trim();
     if (!cleanItem) return;
     let group = journalGroups.get(id);
@@ -4699,7 +4699,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const now = Date.now();
         if (now - lastWorkingTickAt > 2800) {
           lastWorkingTickAt = now;
-          setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('En réflexion', 'Thinking')));
+          setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('Huggy avance', 'Huggy is moving')));
         }
         return;
       }

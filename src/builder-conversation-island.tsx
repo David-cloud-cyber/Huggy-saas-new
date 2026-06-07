@@ -37,7 +37,7 @@ export type HuggyAgentTrace = {
   steps?: HuggyAgentTraceStep[];
 };
 
-export type HuggyWorkJournalEntry = {
+export type HuggyWorklineEntry = {
   id: string;
   kind: "update" | "group" | "divider" | "summary" | "narration" | "thinking" | "file_edit" | "command";
   text: string;
@@ -57,7 +57,7 @@ export type HuggyConversationBlock =
       status: "active" | "done" | "failed" | "cancelled";
       startedAt?: string;
       elapsed?: string;
-      entries: HuggyWorkJournalEntry[];
+      entries: HuggyWorklineEntry[];
       activeText?: string;
       finalText?: string;
     }
@@ -1239,25 +1239,35 @@ function renderStandardMessageContent(message: HuggyConversationMessage) {
 
 function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
   const statusLabel = block.status === "done"
-    ? "Traitement terminé"
+    ? "Prêt à tester"
     : block.status === "failed"
-      ? "Traitement interrompu"
+      ? "Draft à corriger"
       : block.status === "cancelled"
-        ? "Traitement annulé"
-        : "Traitement en cours";
-  const elapsed = block.elapsed ? ` depuis ${block.elapsed}` : "";
+        ? "Arrêté"
+        : "En cours";
+  const elapsed = block.elapsed ? block.elapsed : "";
+  const visibleEntries = block.entries.slice(-18);
+  const currentLine = block.status === "active"
+    ? block.activeText || "Huggy prépare la suite"
+    : block.finalText || statusLabel;
 
   return (
-    <div className="huggy-codex-journal" data-status={block.status}>
-      <div className="huggy-codex-journal-head">
-        <span>{statusLabel}{elapsed}</span>
+    <div className="huggy-workline" data-status={block.status}>
+      <div className="huggy-workline-rail" aria-hidden="true">
+        <span />
       </div>
-      <div className="huggy-codex-journal-rule" />
-      <div className="huggy-codex-journal-feed">
-        {block.entries.map(entry => {
+      <div className="huggy-workline-body">
+        <div className="huggy-workline-head">
+          <span>Huggy Workline</span>
+          <strong>{statusLabel}</strong>
+          {elapsed ? <em>{elapsed}</em> : null}
+        </div>
+        <p className="huggy-workline-current">{currentLine}</p>
+        <div className="huggy-workline-feed">
+          {visibleEntries.map(entry => {
           if (entry.kind === "divider") {
             return (
-              <div className="huggy-codex-journal-divider" key={entry.id}>
+              <div className="huggy-workline-divider" key={entry.id}>
                 <span>{entry.text}</span>
               </div>
             );
@@ -1270,20 +1280,20 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
                 ? "Suppression de"
                 : "Modification de";
             return (
-              <p className="huggy-codex-file-edit" data-status={entry.status || "done"} key={entry.id}>
+              <p className="huggy-workline-file" data-status={entry.status || "done"} key={entry.id}>
                 <Pencil size={16} aria-hidden="true" />
                 <span>{actionLabel}</span>
                 <code>{entry.path || entry.text}</code>
-                <span className="huggy-codex-diff-add">+{Math.max(0, Number(entry.additions || 0))}</span>
-                <span className="huggy-codex-diff-del">-{Math.max(0, Number(entry.deletions || 0))}</span>
+                <span className="huggy-workline-diff-add">+{Math.max(0, Number(entry.additions || 0))}</span>
+                <span className="huggy-workline-diff-del">-{Math.max(0, Number(entry.deletions || 0))}</span>
               </p>
             );
           }
 
           if (entry.kind === "command") {
             return (
-              <p className="huggy-codex-command-line" data-status={entry.status || "active"} key={entry.id}>
-                <span className="huggy-codex-terminal-icon" aria-hidden="true">›_</span>
+              <p className="huggy-workline-command" data-status={entry.status || "active"} key={entry.id}>
+                <span className="huggy-workline-icon" aria-hidden="true">›</span>
                 <span>{entry.text}</span>
                 {entry.command ? <code>{entry.command}</code> : null}
               </p>
@@ -1293,9 +1303,9 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
           if (entry.kind === "group") {
             const count = entry.items?.length || 0;
             return (
-              <details className="huggy-codex-journal-group" key={entry.id}>
+              <details className="huggy-workline-group" key={entry.id}>
                 <summary>
-                  <span className="huggy-codex-terminal-icon" aria-hidden="true">⌁</span>
+                  <span className="huggy-workline-icon" aria-hidden="true">⌁</span>
                   <span>{count ? `${count} ${entry.text}` : entry.text}</span>
                 </summary>
                 {count ? (
@@ -1310,21 +1320,22 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
           }
 
           return (
-            <p className="huggy-codex-journal-line" data-status={entry.status || "done"} key={entry.id}>
+            <p className="huggy-workline-note" data-status={entry.status || "done"} key={entry.id}>
               {entry.text}
               {entry.detail ? <span>{entry.detail}</span> : null}
             </p>
           );
         })}
-        {block.status === "active" ? (
-          <p className="huggy-codex-journal-live">
-            <span className="huggy-codex-live-dot" aria-hidden="true" />
-            <span>{block.activeText || "En réflexion"}</span>
-          </p>
-        ) : null}
-        {block.finalText ? (
-          <p className="huggy-codex-journal-final">{block.finalText}</p>
-        ) : null}
+          {block.status === "active" ? (
+            <p className="huggy-workline-live">
+              <span className="huggy-workline-live-dot" aria-hidden="true" />
+              <span>{block.activeText || "Huggy avance"}</span>
+            </p>
+          ) : null}
+          {block.finalText ? (
+            <p className="huggy-workline-final">{block.finalText}</p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -1348,9 +1359,9 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   }
 
   return (
-    <div className="huggy-codex-confirm" data-state={block.state}>
+    <div className="huggy-confirm" data-state={block.state}>
       <p>{block.body}</p>
-      <div className="huggy-codex-confirm-actions">
+      <div className="huggy-confirm-actions">
         {message.actions?.length ? message.actions.map(action => (
           <button key={action.id} type="button" onClick={action.onClick}>
             {action.label}
@@ -1379,7 +1390,7 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
 
 function renderAgentTrace(message: HuggyConversationMessage) {
   // Legacy traces are intentionally not rendered anymore.
-  // Project work is now shown through the Codex-like work journal, and
+  // Project work is now shown through the Huggy Workline, and
   // simple conversation is shown through ChatStream. Keeping this as a no-op
   // preserves the old API surface while preventing duplicated streaming UIs.
   void message;

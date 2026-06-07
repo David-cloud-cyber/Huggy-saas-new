@@ -232,7 +232,7 @@ const HUGGY_PRODUCTION_READINESS_POLICY = [
 
 const HUGGY_AI_CONNECTOR_POLICY = [
   'Built-in AI Connector policy:',
-  'Separate two concepts: Huggy editor progress is a Codex-like execution journal, while generated-app AI streaming is product code inside the user app.',
+  'Separate two concepts: Huggy editor progress is the compact Huggy Workline, while generated-app AI streaming is product code inside the user app.',
   'When a generated app needs an AI assistant, chatbot, summarizer, prompt workspace, agent output, or token-by-token response, create a server-side AI connector. Do not call OpenAI, Anthropic, Gemini, DeepSeek, fal.ai, or other provider APIs directly from frontend files.',
   'Default connector shape: Supabase Edge Function at `supabase/functions/ai-stream/index.ts`, browser-safe client at `src/lib/aiStream.ts`, frontend UI consuming Server-Sent Events or a ReadableStream, and all provider keys read only from server environment variables.',
   'The frontend may call Huggy Cloud or `/functions/v1/ai-stream`, pass the user prompt/messages, consume streamed chunks, and expose cancel/retry/error states with AbortController. It must never contain provider API keys, service role keys, raw Authorization bearer secrets, or provider SDK initialization.',

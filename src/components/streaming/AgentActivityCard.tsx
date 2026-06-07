@@ -30,8 +30,8 @@ export function AgentActivityCard({ state }: AgentActivityCardProps) {
   const meta = [fileLabel, checkLabel, previewLabel].filter(Boolean).join(" · ");
 
   return (
-    <div className="huggy-codex-journal-fallback" data-status={state.status}>
-      <p>{state.headline || "En reflexion"}</p>
+    <div className="huggy-workline-fallback" data-status={state.status}>
+      <p>{state.headline || "Huggy avance"}</p>
       {state.detail ? <p>{state.detail}</p> : null}
       {meta ? <small>{meta}</small> : null}
     </div>

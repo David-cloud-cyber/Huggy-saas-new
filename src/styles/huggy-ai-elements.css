@@ -2,34 +2,118 @@
   width: 100%;
 }
 
-.huggy-codex-journal {
+.huggy-workline {
   width: min(760px, 100%);
   display: grid;
   gap: 14px;
   color: var(--text, #201d17);
-  animation: huggy-codex-journal-in 180ms cubic-bezier(.22, 1, .36, 1) both;
+  grid-template-columns: 18px minmax(0, 1fr);
+  animation: huggy-workline-in 180ms cubic-bezier(.22, 1, .36, 1) both;
 }
 
-.huggy-codex-journal-head {
+.huggy-workline-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 9px;
+}
+
+.huggy-workline-rail::after {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 2px;
+  width: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent-blue, #2f6df6) 48%, transparent),
+    color-mix(in srgb, var(--border, #e8e2d6) 62%, transparent)
+  );
+}
+
+.huggy-workline-rail span {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent-blue, #2f6df6);
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--accent-blue, #2f6df6) 12%, transparent),
+    0 0 24px color-mix(in srgb, var(--accent-blue, #2f6df6) 28%, transparent);
+  animation: huggy-workline-pulse 1.55s ease-in-out infinite;
+}
+
+.huggy-workline[data-status="done"] .huggy-workline-rail span {
+  background: #16a163;
+  box-shadow: 0 0 0 5px color-mix(in srgb, #16a163 12%, transparent);
+  animation: none;
+}
+
+.huggy-workline[data-status="failed"] .huggy-workline-rail span {
+  background: #b42318;
+  box-shadow: 0 0 0 5px color-mix(in srgb, #b42318 12%, transparent);
+  animation: none;
+}
+
+.huggy-workline-body {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.huggy-workline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
   color: color-mix(in srgb, var(--text, #201d17) 54%, transparent);
   font-size: 13px;
   font-weight: 520;
 }
 
-.huggy-codex-journal-rule {
+.huggy-workline-head span {
+  color: var(--text, #201d17);
+  font-weight: 680;
+}
+
+.huggy-workline-head strong,
+.huggy-workline-head em {
+  color: color-mix(in srgb, var(--text, #201d17) 48%, transparent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 620;
+}
+
+.huggy-workline-current {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--border, #e8e2d6) 72%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-surface, #fffdf8) 52%, transparent);
+  color: color-mix(in srgb, var(--text, #201d17) 76%, transparent);
+  padding: 8px 11px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.huggy-workline-rule {
   height: 1px;
   width: 100%;
   background: color-mix(in srgb, var(--border, #e8e2d6) 84%, transparent);
 }
 
-.huggy-codex-journal-feed {
+.huggy-workline-feed {
   display: grid;
   gap: 14px;
 }
 
-.huggy-codex-journal-line,
-.huggy-codex-journal-final,
-.huggy-codex-journal-live {
+.huggy-workline-note,
+.huggy-workline-final,
+.huggy-workline-live {
   margin: 0;
   color: var(--text, #201d17);
   font-size: 14px;
@@ -37,15 +121,15 @@
   letter-spacing: 0;
 }
 
-.huggy-codex-journal-line span {
+.huggy-workline-note span {
   display: block;
   margin-top: 4px;
   color: color-mix(in srgb, var(--text, #201d17) 52%, transparent);
   font-size: 12px;
 }
 
-.huggy-codex-file-edit,
-.huggy-codex-command-line {
+.huggy-workline-file,
+.huggy-workline-command {
   margin: 0;
   display: flex;
   flex-wrap: wrap;
@@ -56,13 +140,13 @@
   line-height: 1.55;
 }
 
-.huggy-codex-file-edit svg {
+.huggy-workline-file svg {
   color: color-mix(in srgb, var(--text, #201d17) 46%, transparent);
   flex: 0 0 auto;
 }
 
-.huggy-codex-file-edit code,
-.huggy-codex-command-line code {
+.huggy-workline-file code,
+.huggy-workline-command code {
   border: 0;
   background: transparent;
   color: var(--accent-blue, #2f6df6);
@@ -72,56 +156,56 @@
   font-weight: 520;
 }
 
-.huggy-codex-diff-add {
+.huggy-workline-diff-add {
   color: #16a163;
   font-weight: 620;
 }
 
-.huggy-codex-diff-del {
+.huggy-workline-diff-del {
   color: #e04444;
   font-weight: 620;
 }
 
-.huggy-codex-command-line[data-status="active"] {
+.huggy-workline-command[data-status="active"] {
   color: color-mix(in srgb, var(--text, #201d17) 46%, transparent);
 }
 
-.huggy-codex-command-line[data-status="failed"],
-.huggy-codex-file-edit[data-status="failed"] {
+.huggy-workline-command[data-status="failed"],
+.huggy-workline-file[data-status="failed"] {
   color: #b42318;
 }
 
-.huggy-codex-journal-line[data-status="muted"] {
+.huggy-workline-note[data-status="muted"] {
   color: color-mix(in srgb, var(--text, #201d17) 52%, transparent);
 }
 
-.huggy-codex-journal-line[data-status="failed"],
-.huggy-codex-journal[data-status="failed"] .huggy-codex-journal-head {
+.huggy-workline-note[data-status="failed"],
+.huggy-workline[data-status="failed"] .huggy-workline-head {
   color: #b42318;
 }
 
-.huggy-codex-journal-final {
+.huggy-workline-final {
   padding-top: 2px;
   white-space: pre-wrap;
 }
 
-.huggy-codex-journal-live {
+.huggy-workline-live {
   display: inline-flex;
   align-items: center;
   gap: 9px;
   color: color-mix(in srgb, var(--text, #201d17) 48%, transparent);
 }
 
-.huggy-codex-live-dot {
+.huggy-workline-live-dot {
   width: 7px;
   height: 7px;
   border-radius: 999px;
   background: var(--accent-blue, #2f6df6);
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-blue, #2f6df6) 13%, transparent);
-  animation: huggy-codex-dot 1.45s ease-in-out infinite;
+  animation: huggy-workline-pulse 1.45s ease-in-out infinite;
 }
 
-.huggy-codex-journal-divider {
+.huggy-workline-divider {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -130,19 +214,19 @@
   font-size: 12px;
 }
 
-.huggy-codex-journal-divider::before,
-.huggy-codex-journal-divider::after {
+.huggy-workline-divider::before,
+.huggy-workline-divider::after {
   content: "";
   height: 1px;
   background: color-mix(in srgb, var(--border, #e8e2d6) 70%, transparent);
 }
 
-.huggy-codex-journal-group {
+.huggy-workline-group {
   color: color-mix(in srgb, var(--text, #201d17) 52%, transparent);
   font-size: 13px;
 }
 
-.huggy-codex-journal-group summary {
+.huggy-workline-group summary {
   width: fit-content;
   display: inline-flex;
   align-items: center;
@@ -152,11 +236,11 @@
   user-select: none;
 }
 
-.huggy-codex-journal-group summary::-webkit-details-marker {
+.huggy-workline-group summary::-webkit-details-marker {
   display: none;
 }
 
-.huggy-codex-terminal-icon {
+.huggy-workline-icon {
   width: 17px;
   height: 17px;
   display: inline-grid;
@@ -168,19 +252,19 @@
   line-height: 1;
 }
 
-.huggy-codex-journal-group ul {
+.huggy-workline-group ul {
   display: grid;
   gap: 7px;
   margin: 10px 0 0 25px;
   padding: 0;
 }
 
-.huggy-codex-journal-group li {
+.huggy-workline-group li {
   color: color-mix(in srgb, var(--text, #201d17) 58%, transparent);
   overflow-wrap: anywhere;
 }
 
-.huggy-codex-confirm {
+.huggy-confirm {
   display: grid;
   gap: 10px;
   color: var(--text, #201d17);
@@ -188,18 +272,18 @@
   line-height: 1.55;
 }
 
-.huggy-codex-confirm p {
+.huggy-confirm p {
   margin: 0;
   white-space: pre-wrap;
 }
 
-.huggy-codex-confirm-actions {
+.huggy-confirm-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.huggy-codex-confirm-actions button {
+.huggy-confirm-actions button {
   border: 1px solid color-mix(in srgb, var(--border, #e8e2d6) 88%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-surface, #fffdf8) 88%, transparent);
@@ -212,11 +296,11 @@
   cursor: pointer;
 }
 
-.huggy-codex-confirm-actions button:hover {
+.huggy-confirm-actions button:hover {
   border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 42%, var(--border, #e8e2d6));
 }
 
-@keyframes huggy-codex-journal-in {
+@keyframes huggy-workline-in {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -227,7 +311,7 @@
   }
 }
 
-@keyframes huggy-codex-dot {
+@keyframes huggy-workline-pulse {
   0%, 100% {
     opacity: .48;
     transform: scale(.92);
@@ -611,8 +695,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .huggy-shimmer,
-  .huggy-codex-journal,
-  .huggy-codex-live-dot,
+  .huggy-workline,
+  .huggy-workline-rail span,
+  .huggy-workline-live-dot,
   .huggy-mission-stream,
   .huggy-web-preview-skeleton span {
     animation: none !important;

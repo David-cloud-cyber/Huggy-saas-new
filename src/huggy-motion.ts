@@ -59,9 +59,9 @@ export function initHuggyMotion(root: ParentNode = document) {
       .huggy-motion-ready .usage-row,
       .huggy-motion-ready .model-rate-row,
       .huggy-motion-ready .message-row,
-      .huggy-motion-ready .huggy-codex-journal-line,
-      .huggy-motion-ready .huggy-codex-file-edit,
-      .huggy-motion-ready .huggy-codex-command-line {
+      .huggy-motion-ready .huggy-workline-note,
+      .huggy-motion-ready .huggy-workline-file,
+      .huggy-motion-ready .huggy-workline-command {
         animation: huggy-soft-enter var(--motion-panel) var(--ease-huggy) both;
       }
 

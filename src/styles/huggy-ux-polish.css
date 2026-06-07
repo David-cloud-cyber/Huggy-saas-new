@@ -150,7 +150,7 @@ body {
   animation: huggy-premium-shimmer 1.35s var(--huggy-ease-standard) infinite;
 }
 
-:where(.huggy-message, .huggy-codex-journal-line, .huggy-codex-file-edit, .huggy-codex-command-line) {
+:where(.huggy-message, .huggy-workline-note, .huggy-workline-file, .huggy-workline-command) {
   animation: huggy-soft-rise var(--huggy-motion-medium) var(--huggy-ease-enter) both;
 }
 
