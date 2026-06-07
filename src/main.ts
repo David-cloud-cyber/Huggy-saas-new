@@ -72,7 +72,7 @@ function init() {
         const navbarLine = document.querySelector('.navbar-line');
         if (navbar) {
             const updateNavbarSurface = () => {
-                const transparent = window.scrollY > 10;
+                const transparent = window.scrollY <= 10;
                 navbar.classList.toggle('navbar-transparent-on-scroll', transparent);
                 navbarLine?.classList.toggle('navbar-transparent-on-scroll', transparent);
             };
@@ -180,6 +180,74 @@ function init() {
     installMarketingEnhancements();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
+
+    type PublicAuthState = 'unknown' | 'signed-in' | 'signed-out';
+    let publicAuthState: PublicAuthState = 'unknown';
+    let publicAuthCheckPromise: Promise<PublicAuthState> | null = null;
+
+    function setPublicAuthCtaState(state: PublicAuthState) {
+        const signedIn = state === 'signed-in';
+        document.querySelectorAll<HTMLElement>('.sign-in-btn').forEach(button => {
+            button.textContent = signedIn ? 'Dashboard' : 'Sign In';
+            button.dataset.authState = state;
+            button.setAttribute('aria-label', signedIn ? 'Open your Huggy dashboard' : 'Sign in to Huggy');
+            button.classList.toggle('is-authenticated', signedIn);
+        });
+
+        const stickyCta = document.getElementById('sticky-cta') as HTMLAnchorElement | null;
+        if (stickyCta) {
+            stickyCta.href = signedIn ? '/dashboard.html' : '/auth.html';
+            const textNode = Array.from(stickyCta.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
+            if (textNode) textNode.textContent = signedIn ? 'Continue in Huggy ' : 'Build with Huggy ';
+            stickyCta.setAttribute('aria-label', signedIn ? 'Continue in Huggy dashboard' : 'Build with Huggy');
+        }
+    }
+
+    async function resolvePublicAuthState(force = false): Promise<PublicAuthState> {
+        if (!force && publicAuthState !== 'unknown') return publicAuthState;
+        if (!force && publicAuthCheckPromise) return publicAuthCheckPromise;
+
+        publicAuthCheckPromise = (async () => {
+            try {
+                const { getVerifiedSession, supabase } = await import('./lib/supabase-browser');
+                const verified = await getVerifiedSession({ allowRefresh: true });
+                const nextState: PublicAuthState = verified?.user ? 'signed-in' : 'signed-out';
+                publicAuthState = nextState;
+                setPublicAuthCtaState(nextState);
+
+                supabase.auth.onAuthStateChange((_event, session) => {
+                    const state: PublicAuthState = session?.user ? 'signed-in' : 'signed-out';
+                    publicAuthState = state;
+                    setPublicAuthCtaState(state);
+                });
+
+                return nextState;
+            } catch {
+                publicAuthState = 'signed-out';
+                setPublicAuthCtaState('signed-out');
+                return 'signed-out';
+            } finally {
+                publicAuthCheckPromise = null;
+            }
+        })();
+
+        return publicAuthCheckPromise;
+    }
+
+    function navigateWithCurtain(url: string) {
+        if (curtain && !curtainBusy) {
+            curtainBusy = true;
+            curtain.style.transformOrigin = 'top';
+            curtain.classList.add('falling');
+            setTimeout(() => {
+                window.location.href = url;
+            }, 600);
+        } else {
+            window.location.href = url;
+        }
+    }
+
+    void resolvePublicAuthState();
 
     // 1. Refactored Input Wrappers Logic (supports multiple instances)
     const wrappers = document.querySelectorAll('.input-wrapper');
@@ -764,20 +832,12 @@ function init() {
 
     // Sign in flow
     document.querySelectorAll('.sign-in-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            // Prevent if it's a direct HTML link already handled by index.html onclick
-            // but for safety we redirect here too if JS takes over
+        btn.addEventListener('click', async (e) => {
             e.preventDefault();
-            if (curtain) {
-                curtain.style.transformOrigin = 'top';
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = '/auth.html';
-                }, 600);
-            } else {
-                window.location.href = '/auth.html';
-            }
-        });
+            e.stopImmediatePropagation();
+            const state = await resolvePublicAuthState();
+            navigateWithCurtain(state === 'signed-in' ? '/dashboard.html' : '/auth.html');
+        }, { capture: true });
     });
 
     // Sticky CTA Visibility
