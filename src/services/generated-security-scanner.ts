@@ -29,6 +29,10 @@ function fileByPath(files: AgentGeneratedFile[], target: string) {
   return files.find(file => normalizePath(file.path).toLowerCase() === normalized);
 }
 
+function escapeRegExp(value: string) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function isFrontendFile(file: AgentGeneratedFile) {
   const path = normalizePath(file.path).toLowerCase();
   return (
@@ -71,6 +75,16 @@ export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScan
       ? pass('security_rls_enabled', 'RLS is enabled in the generated schema.', 'supabase/schema.sql')
       : fail('security_rls_enabled', 'Every user table needs RLS enabled.', 'supabase/schema.sql'));
 
+    if (createTables.length) {
+      const missingRlsTables = createTables.filter((tableName) => {
+        const table = escapeRegExp(tableName || '');
+        return !new RegExp(`alter\\s+table\\s+(?:if\\s+exists\\s+)?(?:public\\.)?${table}\\s+enable\\s+row\\s+level\\s+security`, 'i').test(schema);
+      });
+      findings.push(missingRlsTables.length
+        ? fail('security_all_private_tables_rls', `RLS must be enabled per table. Missing: ${missingRlsTables.slice(0, 8).join(', ')}.`, 'supabase/schema.sql', { missing_tables: missingRlsTables })
+        : pass('security_all_private_tables_rls', 'Every generated table enables RLS explicitly.', 'supabase/schema.sql'));
+    }
+
     findings.push(/create\s+policy/i.test(schema)
       ? pass('security_rls_policies', 'RLS policies are present.', 'supabase/schema.sql')
       : fail('security_rls_policies', 'Generated schema needs explicit RLS policies.', 'supabase/schema.sql'));
@@ -78,6 +92,14 @@ export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScan
     findings.push(/owner_id|organization_id|org_id/i.test(schema)
       ? pass('security_owner_scope', 'Owner or organization scoping is present.', 'supabase/schema.sql')
       : fail('security_owner_scope', 'Private tables need owner_id or organization_id scoping.', 'supabase/schema.sql'));
+
+    findings.push(!/\b(raw_user_meta_data|user_metadata)\b/i.test(schema)
+      ? pass('security_no_user_metadata_authz', 'RLS policies do not rely on user-editable metadata.', 'supabase/schema.sql')
+      : fail('security_no_user_metadata_authz', 'RLS policies must not rely on user_metadata or raw_user_meta_data for authorization.', 'supabase/schema.sql'));
+
+    findings.push(!/create\s+(?:or\s+replace\s+)?function\s+public\.[\w_]+[\s\S]*?security\s+definer/i.test(schema)
+      ? pass('security_no_public_security_definer', 'No public security definer function is generated.', 'supabase/schema.sql')
+      : fail('security_no_public_security_definer', 'Security definer functions must not be created in the exposed public schema.', 'supabase/schema.sql'));
   }
 
   const hasValidation = paths.includes('src/lib/validation.ts') || /\bzod\b|z\.object\(|safe[A-Z]\w+Schema/i.test(source);

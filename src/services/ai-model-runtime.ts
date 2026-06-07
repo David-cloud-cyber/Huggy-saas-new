@@ -332,13 +332,13 @@ export function buildAIModelRuntimeConfig(input: {
 
 export function publicRuntimeErrorMessage(diagnosticCode: string) {
   if (/QUOTA|BILLING/i.test(diagnosticCode)) {
-    return 'Ce modèle manque temporairement de quota. Huggy peut continuer avec Auto ou un modèle compatible.';
+    return 'Ce modele manque temporairement de quota. Huggy peut continuer avec Auto ou un modele compatible.';
   }
   if (/TIMEOUT|UNAVAILABLE|CIRCUIT/i.test(diagnosticCode)) {
-    return 'Ce modèle est temporairement indisponible. Huggy essaie un modèle compatible pour continuer.';
+    return 'Ce modele est temporairement indisponible. Huggy essaie un modele compatible pour continuer.';
   }
   if (/BAD_REQUEST|UNSUPPORTED/i.test(diagnosticCode)) {
-    return 'Ce modèle a refusé la configuration demandée. Huggy réduit les options avancées et réessaie proprement.';
+    return 'Ce modele a refuse la configuration demandee. Huggy reduit les options avancees et reessaie proprement.';
   }
-  return 'Le modèle IA a rencontré un problème. Huggy garde l’erreur propre et peut réessayer avec Auto.';
+  return "Le modele IA a rencontre un probleme. Huggy garde l'erreur propre et peut reessayer avec Auto.";
 }

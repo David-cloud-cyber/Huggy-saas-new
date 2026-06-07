@@ -32,6 +32,15 @@ type PlaywrightModule = {
 
 const CONTROL_SELECTOR = 'button, [role="button"], input, select, textarea, a[href]';
 
+type BrowserControlProbe = {
+  index: number;
+  tag: string;
+  type: string;
+  href: string;
+  label: string;
+  disabled: boolean;
+};
+
 export async function runBrowserInteractionAudit(input: BrowserInteractionAuditInput): Promise<AgentVerificationCheck[]> {
   return (await runBrowserInteractionAuditDetailed(input)).checks;
 }
@@ -80,13 +89,20 @@ export async function runBrowserInteractionAuditDetailed(input: BrowserInteracti
       height: document.documentElement?.scrollHeight || 0,
       viewportWidth: window.innerWidth,
       bodyRectCount: document.body ? document.body.getClientRects().length : 0,
+      formCount: document.querySelectorAll('form').length,
+      feedbackMarkers: document.querySelectorAll('[role="status"], [aria-live], .feedback, .toast, .alert, .error, .success, [data-feedback]').length,
+      hasDialog: Boolean(document.querySelector('[role="dialog"], dialog, [aria-modal="true"]')),
     }));
 
     if (!before.text.trim() || before.htmlLength < 80 || before.bodyRectCount === 0) {
       findings.push(finding('browser_blank_preview', 'high', 'Browser rendered an empty or nearly empty preview.', undefined, 'desktop'));
     }
 
-    const controls = await page.evaluate((selector: string) => {
+    if (before.formCount > 0 && before.feedbackMarkers === 0 && !/\b(error|success|saved|invalid|required|feedback|chargement|enregistre|erreur|valide)\b/i.test(before.text)) {
+      findings.push(finding('browser_form_feedback_missing', 'medium', 'Forms need visible success, error, loading, or validation feedback.', undefined, 'desktop', { form_count: before.formCount }));
+    }
+
+    const controls: BrowserControlProbe[] = await page.evaluate((selector: string): BrowserControlProbe[] => {
       return Array.from(document.querySelectorAll(selector)).map((element, index) => {
         element.setAttribute('data-huggy-probe', String(index));
         const tag = element.tagName.toLowerCase();
@@ -130,6 +146,13 @@ export async function runBrowserInteractionAuditDetailed(input: BrowserInteracti
 
     if (controls.length > 0 && changedControls === 0) {
       findings.push(finding('browser_actions_change_state', 'medium', 'Browser interactions did not visibly change the page; primary controls need feedback or state changes.', undefined, 'desktop'));
+    }
+
+    const destructiveControls = controls.filter(control => /\b(delete|remove|reset|clear|destroy|supprimer|effacer|vider|retirer)\b/i.test(control.label));
+    if (destructiveControls.length && before.feedbackMarkers === 0 && !before.hasDialog && !/\b(confirm|confirmation|undo|annuler|cancel|restore|rollback|deleted|supprim|feedback)\b/i.test(before.text)) {
+      findings.push(finding('browser_destructive_feedback_missing', 'medium', 'Destructive controls need confirmation, undo, cancel, or visible feedback.', undefined, 'desktop', {
+        controls: destructiveControls.slice(0, 4).map(control => control.label || control.tag),
+      }));
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
