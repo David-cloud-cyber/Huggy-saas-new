@@ -5,6 +5,7 @@ import {
   safeRedirectTarget,
   supabase,
 } from './lib/supabase-browser';
+import { installSmartBackNavigation } from './public-page-enhancements';
 
 type AuthMode = 'login' | 'signup';
 type StatusTone = 'info' | 'error' | 'success';
@@ -22,6 +23,8 @@ const modeTitle = document.getElementById('auth-title') as HTMLElement | null;
 const modeSubtitle = document.getElementById('auth-subtitle') as HTMLElement | null;
 const footerText = document.getElementById('auth-footer-text') as HTMLElement | null;
 const socialButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-provider]'));
+
+installSmartBackNavigation({ backFallback: '/' });
 
 let mode: AuthMode = new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'login';
 let redirecting = false;

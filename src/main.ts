@@ -6,6 +6,7 @@ import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions, storePendingPromptAttachments, type PendingPromptAttachment } from './prompt-input-actions';
 import { startCreateProjectFlow } from './services/create-project-flow';
 import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
+import { installPublicPageEnhancements } from './public-page-enhancements';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -78,21 +79,6 @@ function init() {
             };
             updateNavbarSurface();
             window.addEventListener('scroll', updateNavbarSurface, { passive: true });
-        }
-
-        if (navbar && path !== '/' && path !== '/index.html' && !document.querySelector('.back-home-link')) {
-            const back = document.createElement('a');
-            back.className = 'back-home-link';
-            back.href = '/';
-            back.setAttribute('aria-label', 'Back to Huggy home');
-            back.innerHTML = `
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M19 12H5"></path>
-                    <path d="M12 19l-7-7 7-7"></path>
-                </svg>
-                <span>Back</span>
-            `;
-            navbar.insertAdjacentElement('afterend', back);
         }
 
         const pageContent = document.querySelector('.page-content');
@@ -178,6 +164,7 @@ function init() {
     }
 
     installMarketingEnhancements();
+    installPublicPageEnhancements();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
 

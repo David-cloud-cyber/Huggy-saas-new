@@ -1,4 +1,5 @@
 import './seo-pages.css';
+import { installPublicPageEnhancements } from './public-page-enhancements';
 
 type RequestedMode = 'auto' | 'build' | 'plan';
 
@@ -53,6 +54,7 @@ function initRecipeButtons() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  installPublicPageEnhancements();
   initSeoPromptForms();
   initRecipeButtons();
 });
