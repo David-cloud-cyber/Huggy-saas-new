@@ -121,6 +121,12 @@ import {
   buildExecutionContract,
   type ExecutionContract,
 } from './src/services/execution-contract.ts';
+import {
+  buildRecoverableDraftMessage,
+  sanitizeAssistantOutput,
+  shouldDeliverRecoverableDraft,
+  validateExecutionOutputContract,
+} from './src/services/agent-execution-os.ts';
 import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 import {
   buildHuggyCloudSchemaName,
@@ -3519,8 +3525,9 @@ async function createAgentTextResponse(input: {
   allowLocalFallback?: boolean;
 }): Promise<{ text: string; model: string; cost_usd: number }> {
   const { project, prompt, files, decision, researchContext } = input;
+  const executionContract = (decision as any).executionContract as ExecutionContract | undefined;
   if (decision.intent === 'clarification_required') {
-    return { text: createClarificationContent(decision), model: 'auto', cost_usd: 0 };
+    return { text: sanitizeAssistantOutput({ text: createClarificationContent(decision), prompt, contract: executionContract, intent: decision.intent }), model: 'auto', cost_usd: 0 };
   }
   if (decision.intent === 'verify') {
     const pipeline = runPreviewPipeline(project, files);
@@ -3571,7 +3578,12 @@ async function createAgentTextResponse(input: {
     );
 
     return {
-      text: result.text.trim() || (decision.intent === 'plan' ? createPlanResponse(project, prompt, files) : createConversationResponse(project, prompt)),
+      text: sanitizeAssistantOutput({
+        text: result.text.trim() || (decision.intent === 'plan' ? createPlanResponse(project, prompt, files) : createConversationResponse(project, prompt)),
+        prompt,
+        contract: executionContract,
+        intent: decision.intent,
+      }),
       model: result.model,
       cost_usd: result.cost_usd,
     };
@@ -3603,8 +3615,9 @@ async function streamAgentTextResponse(input: {
   onToken?: (chunk: string, meta: { index: number; model: string }) => Promise<void> | void;
 }): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
   const { project, prompt, files, decision, researchContext, onToken } = input;
+  const executionContract = (decision as any).executionContract as ExecutionContract | undefined;
   if (decision.intent === 'clarification_required') {
-    return { text: createClarificationContent(decision), model: 'auto', cost_usd: 0, streamed: false };
+    return { text: sanitizeAssistantOutput({ text: createClarificationContent(decision), prompt, contract: executionContract, intent: decision.intent }), model: 'auto', cost_usd: 0, streamed: false };
   }
   if (decision.intent === 'verify') {
     const pipeline = runPreviewPipeline(project, files);
@@ -3652,6 +3665,7 @@ async function streamAgentTextResponse(input: {
   let cost_usd = 0;
   let index = 0;
   let streamed = false;
+  const shouldForwardLiveTokens = decision.intent !== 'plan' && !executionContract?.can_mutate_files;
 
   try {
     for await (const event of providerGateway.streamChat(
@@ -3664,9 +3678,11 @@ async function streamAgentTextResponse(input: {
         if (!chunk) continue;
         text += chunk;
         model = event.model || model;
-        streamed = true;
-        await onToken?.(chunk, { index, model });
-        index += 1;
+        if (shouldForwardLiveTokens) {
+          streamed = true;
+          await onToken?.(chunk, { index, model });
+          index += 1;
+        }
       } else if (event.type === 'usage') {
         model = event.model || model;
         cost_usd = Number(event.cost_usd || 0);
@@ -3676,7 +3692,13 @@ async function streamAgentTextResponse(input: {
     const fallback = decision.intent === 'plan'
       ? createPlanResponse(project, prompt, files)
       : createConversationResponse(project, prompt);
-    return { text: text.trim() || fallback, model, cost_usd, streamed };
+    const sanitized = sanitizeAssistantOutput({
+      text: text.trim() || fallback,
+      prompt,
+      contract: executionContract,
+      intent: decision.intent,
+    });
+    return { text: sanitized, model, cost_usd, streamed };
   } catch (error) {
     if (decision.intent === 'plan') {
       return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
@@ -9330,7 +9352,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const reliabilitySummary = finalGate.reliabilitySummary;
     const qualitySummary = finalGate.qualitySummary;
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
-    if (reliabilitySummary.status === 'failed') {
+    if (shouldDeliverRecoverableDraft(reliabilitySummary)) {
       const recoverableProject: GeneratedProject = {
         ...project,
         prompt,
@@ -9343,7 +9365,80 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       await saveProject(recoverableProject, finalFiles).catch(error => {
         console.warn('[huggy:needs_fix_draft_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
       });
-      throw new ReliabilityGateError(reliabilitySummary);
+      const diff = diffFiles(existingFiles, finalFiles);
+      await createProjectVersion(recoverableProject, finalFiles, prompt, {
+        ...diff,
+        verification: verificationSummary,
+        reliability: reliabilitySummary,
+        needs_fix: true,
+        agent_run_id: agentRunId || null,
+      }).catch(error => {
+        console.warn('[huggy:needs_fix_version_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      if (autoFix) await saveProjectPatch(recoverableProject, autoFix).catch(error => {
+        console.warn('[huggy:needs_fix_patch_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      const blockingCount = Number(reliabilitySummary.blocking?.length || (reliabilitySummary as any).failed?.length || 1);
+      const summary = buildRecoverableDraftMessage({ prompt, reliabilitySummary, blockingCount });
+      const outputContract = validateExecutionOutputContract({
+        contract: (decision as any).executionContract as ExecutionContract | undefined,
+        hasFiles: finalFiles.length > 0,
+        previewReady: false,
+        runnerChecked: Boolean(runnerResult),
+        reliabilityStatus: reliabilitySummary.status,
+        draftSaved: true,
+        assistantText: summary,
+      });
+      await saveProjectMessage({
+        organization_id: recoverableProject.organization_id,
+        project_id: recoverableProject.id,
+        user_id: userId,
+        role: 'assistant',
+        content: summary,
+        intent: decision.intent,
+        requested_mode: decision.requestedMode,
+      }).catch(error => {
+        console.warn('[huggy:needs_fix_message_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      await recordAgentImprovementSignal(recoverableProject, userId, {
+        prompt,
+        decision,
+        outcome: 'failed',
+        previewChanged: true,
+        qualityStatus: 'needs_fix',
+        issueCount: blockingCount,
+      }).catch(() => null);
+      await updateAgentRunStatus(agentRunId, 'completed', {
+        public_payload: {
+          needs_fix: true,
+          verification: verificationSummary,
+          reliability: reliabilitySummary,
+          quality: qualitySummary,
+          output_contract: outputContract,
+          browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
+        },
+      }).catch(() => null);
+      return res.json({
+        success: true,
+        needs_fix: true,
+        intent: decision,
+        project: recoverableProject,
+        files: finalFiles,
+        summary,
+        model: generation.model,
+        diff,
+        auto_fix: autoFix,
+        errors: pipeline.errors,
+        verification: verificationSummary,
+        reliability,
+        reliability_summary: reliabilitySummary,
+        output_contract: outputContract,
+        runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
+        preview: {
+          status: 'needs_fix',
+          html: previewHtml,
+        },
+      });
     }
     const updatedProject: GeneratedProject = {
       ...project,
@@ -10834,7 +10929,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       { quality: qualitySummary, summary: verificationSummary, reliability: reliabilitySummary },
     );
 
-    if (reliabilitySummary.status === 'failed') {
+    if (shouldDeliverRecoverableDraft(reliabilitySummary)) {
       const recoverableProject: GeneratedProject = {
         ...project,
         prompt,
@@ -10847,7 +10942,96 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       await saveProject(recoverableProject, files).catch(error => {
         console.warn('[huggy:needs_fix_draft_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
       });
-      throw new ReliabilityGateError(reliabilitySummary);
+      const diff = diffFiles(existingFiles, files);
+      await sendFileEditEvents(diff, 'needs_fix_diff');
+      await createProjectVersion(recoverableProject, files, prompt, {
+        ...diff,
+        verification: verificationSummary,
+        reliability: reliabilitySummary,
+        needs_fix: true,
+        agent_run_id: agentRunId || null,
+      }).catch(error => {
+        console.warn('[huggy:needs_fix_version_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      if (autoFix) await saveProjectPatch(recoverableProject, autoFix).catch(error => {
+        console.warn('[huggy:needs_fix_patch_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      const blockingCount = Number(reliabilitySummary.blocking?.length || (reliabilitySummary as any).failed?.length || 1);
+      const summary = buildRecoverableDraftMessage({ prompt, reliabilitySummary, blockingCount });
+      const outputContract = validateExecutionOutputContract({
+        contract: (decision as any).executionContract as ExecutionContract | undefined,
+        hasFiles: files.length > 0,
+        previewReady: false,
+        runnerChecked: Boolean(runnerResult || browserResult),
+        reliabilityStatus: reliabilitySummary.status,
+        draftSaved: true,
+        assistantText: summary,
+      });
+      await saveProjectMessage({
+        organization_id: recoverableProject.organization_id,
+        project_id: recoverableProject.id,
+        user_id: userId,
+        role: 'assistant',
+        content: summary,
+        intent: decision.intent,
+        requested_mode: decision.requestedMode,
+      }).catch(error => {
+        console.warn('[huggy:needs_fix_message_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
+      });
+      await recordAgentImprovementSignal(recoverableProject, userId, {
+        prompt,
+        decision,
+        outcome: 'failed',
+        previewChanged: true,
+        qualityStatus: 'needs_fix',
+        issueCount: blockingCount,
+      }).catch(() => null);
+      await updateBuildSessionStatus(buildSessionId, 'completed').catch(() => null);
+      await send('draft_saved', summary, {
+        project: recoverableProject,
+        files,
+        preview: { status: 'needs_fix', html: previewHtml },
+        diff,
+        auto_fix: autoFix,
+        errors: pipeline.errors,
+        verification: verificationSummary,
+        reliability: reliabilitySummary,
+        quality: qualitySummary,
+        output_contract: outputContract,
+        step_label: streamCopy('Draft sauvegardee.', 'Draft saved.'),
+        step_detail: streamCopy('Je garde le travail recuperable sans annoncer une fausse preview prete.', 'I keep the work recoverable without claiming a false ready preview.'),
+      });
+      await send('final_summary', summary, {
+        status: 'needs_fix',
+        project: recoverableProject,
+        files,
+        diff,
+        reliability: reliabilitySummary,
+        quality: qualitySummary,
+        output_contract: outputContract,
+        next_action: 'fix_remaining_blocker',
+      });
+      await send('done', streamCopy('Draft sauvegardee pour correction.', 'Draft saved for repair.'), {
+        needs_fix: true,
+        step_label: streamCopy('Draft recuperable.', 'Recoverable draft.'),
+        step_detail: streamCopy('Le prochain message peut reprendre depuis cette version.', 'The next message can continue from this version.'),
+      });
+      await updateAgentRunStatus(agentRunId, 'completed', {
+        duration_ms: Date.now() - streamStartedAt,
+        public_payload: {
+          needs_fix: true,
+          verification: verificationSummary,
+          reliability: reliabilitySummary,
+          quality: qualitySummary,
+          output_contract: outputContract,
+          runner: summarizeRunnerForMemory(runnerResult),
+          browser: browserResult ? { status: browserResult.status, finding_count: browserResult.findings.length } : null,
+          research: summarizeResearchForMemory(researchResult),
+        },
+      }).catch(() => null);
+      await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed', needs_fix: true });
+      endStream();
+      return;
     }
 
     const updatedProject: GeneratedProject = {
