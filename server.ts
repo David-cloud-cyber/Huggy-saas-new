@@ -8467,37 +8467,48 @@ app.get('/api/admin/feature-flags', async (req: any, res) => {
 app.get('/api/admin/billing/margins', async (req: any, res) => {
   if (!requirePlatformAdmin(req, res)) return;
   const client = requireSupabase('Admin billing margins');
-  const { data, error } = await client
-    .from('ai_request_usage')
-    .select('id,request_id,provider_cost_usd,platform_cost_usd,final_cost_credits,status,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
-  if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, rows: data || [], guardrails: PLAN_ECONOMICS_GUARDRAILS });
+  const result = await adminRows(
+    client,
+    'ai_request_usage',
+    'id,request_id,provider_cost_usd,platform_cost_usd,final_cost_credits,status,created_at',
+    { limit: 100, order: 'created_at' },
+  );
+  res.json({
+    success: true,
+    rows: result.rows,
+    guardrails: PLAN_ECONOMICS_GUARDRAILS,
+    availability: { ai_request_usage: result.available },
+    error: result.error,
+  });
 });
 
 app.get('/api/admin/ai-costs', async (req: any, res) => {
   if (!requirePlatformAdmin(req, res)) return;
   const client = requireSupabase('Admin AI costs');
-  const { data, error } = await client
-    .from('ai_requests')
-    .select('id,organization_id,project_id,model_id,request_type,status,created_at')
-    .order('created_at', { ascending: false })
-    .limit(100);
-  if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, rows: data || [] });
+  const result = await adminRows(
+    client,
+    'ai_requests',
+    'id,organization_id,project_id,model_id,request_type,status,created_at',
+    { limit: 100, order: 'created_at' },
+  );
+  res.json({
+    success: true,
+    rows: result.rows,
+    availability: { ai_requests: result.available },
+    error: result.error,
+  });
 });
 
 app.get('/api/admin/provider-usage', async (req: any, res) => {
   if (!requirePlatformAdmin(req, res)) return;
   const client = requireSupabase('Admin provider usage');
-  const { data, error } = await client
-    .from('provider_usage')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(100);
-  if (error) return res.status(500).json({ success: false, error: error.message });
-  res.json({ success: true, rows: data || [] });
+  const result = await adminRows(client, 'provider_usage', '*', { limit: 100, order: 'created_at' });
+  res.json({
+    success: true,
+    rows: result.rows,
+    availability: { provider_usage: result.available },
+    error: result.error,
+  });
 });
 
 app.get('/api/admin/agent-observability', async (req: any, res) => {

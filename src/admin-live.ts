@@ -85,6 +85,23 @@ function skeleton(rows = 5) {
   return `<div class="admin-skeleton" aria-label="Loading">${Array.from({ length: rows }, () => '<div class="admin-skeleton-line"></div>').join('')}</div>`;
 }
 
+async function safeAdminFetch<T extends JsonRecord>(path: string, fallback: T): Promise<T> {
+  try {
+    return await apiFetch<T>(path);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Admin data unavailable.';
+    return {
+      ...fallback,
+      success: false,
+      error: message,
+      availability: {
+        ...(fallback.availability || {}),
+        endpoint: false,
+      },
+    };
+  }
+}
+
 function metric(label: string, value: unknown, note = '') {
   return `
     <article class="admin-card clickable" data-drawer-type="metric" data-drawer-id="${escapeHtml(label)}">
@@ -412,17 +429,17 @@ async function loadAdminData() {
     const liveStatus = qs('#admin-live-status');
     if (liveStatus) liveStatus.textContent = 'Refreshing live data';
     const [overview, users, projects, runs, errors, costs, providers, margins, publish, security, flags] = await Promise.all([
-      apiFetch<JsonRecord>('/api/admin/overview'),
-      apiFetch<JsonRecord>('/api/admin/users'),
-      apiFetch<JsonRecord>('/api/admin/projects'),
-      apiFetch<JsonRecord>('/api/admin/runs'),
-      apiFetch<JsonRecord>('/api/admin/errors'),
-      apiFetch<JsonRecord>('/api/admin/ai-costs'),
-      apiFetch<JsonRecord>('/api/admin/provider-usage'),
-      apiFetch<JsonRecord>('/api/admin/billing/margins'),
-      apiFetch<JsonRecord>('/api/admin/publish'),
-      apiFetch<JsonRecord>('/api/admin/security'),
-      apiFetch<JsonRecord>('/api/admin/feature-flags'),
+      safeAdminFetch('/api/admin/overview', { metrics: {}, health: [], availability: {}, distributions: {}, recent: { failed_runs: [] } }),
+      safeAdminFetch('/api/admin/users', { users: [], availability: {} }),
+      safeAdminFetch('/api/admin/projects', { projects: [], availability: {} }),
+      safeAdminFetch('/api/admin/runs', { runs: [], distributions: {}, availability: {} }),
+      safeAdminFetch('/api/admin/errors', { errors: { failed_runs: [], runner_failures: [] }, grouped: {}, availability: {} }),
+      safeAdminFetch('/api/admin/ai-costs', { rows: [], availability: {} }),
+      safeAdminFetch('/api/admin/provider-usage', { rows: [], availability: {} }),
+      safeAdminFetch('/api/admin/billing/margins', { rows: [], guardrails: {}, availability: {} }),
+      safeAdminFetch('/api/admin/publish', { deployments: [], domains: [], availability: {}, grouped: {} }),
+      safeAdminFetch('/api/admin/security', { summary: {}, checklist: [], findings: [], availability: {} }),
+      safeAdminFetch('/api/admin/feature-flags', { flags: [], availability: {} }),
     ]);
     state.overview = overview;
     allUsers = users.users || [];
