@@ -4934,13 +4934,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       });
       return;
     }
-    let previewReadyPayload: any = null;
-    let finalPayload: any = null;
-    let answerBuffer = '';
-    let streamFinalText = '';
-    let pendingPlanText = '';
-    let externalRequirements: any[] = [];
-    const streamBody = {
+    const requestBody = {
       prompt: safePrompt,
       requestedMode,
       useLastPlan,
@@ -4948,267 +4942,77 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       ...effectiveExtra,
     };
 
-    await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, streamBody, (eventType, eventData) => {
-      const eventPayload = redactInternalModelFields(eventData?.payload || {});
-      const rawEventMessage = repairTextEncoding(redactSecrets(String(eventData?.message || ''))).trim();
-      const eventMessage = cleanPublicJournalText(rawEventMessage, speaksFrench) || rawEventMessage;
-      const detail = journalDetailFromPayload(eventPayload, eventMessage);
-      if (eventPayload.build_session_id) lastBuildSessionId = String(eventPayload.build_session_id);
-      if (eventPayload.agent_run_id) lastAgentRunId = String(eventPayload.agent_run_id);
+    if (requestedMode === 'build' || requestedMode === 'auto') {
+      generationTouchesPreview = true;
+      activeGenerationTouchesPreview = true;
+      activateBuilderView('preview');
+      setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
+    }
 
-      if (eventType === 'narration') {
-        const text = cleanPublicJournalText(eventPayload.text || eventMessage || '', speaksFrench);
-        addJournalLine(text, detail, `narration:${journalTextKey(text)}`, 'done');
-        return;
-      }
+    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+      method: 'POST',
+      signal: activeAbort.signal,
+      body: JSON.stringify(requestBody),
+    });
 
-      if (eventType === 'thinking') {
-        setJournalActive(String(eventPayload.text || eventMessage || say('En réflexion', 'Thinking')));
-        return;
-      }
+    const responsePayload = redactInternalModelFields(payload || {});
+    if (responsePayload.project?.id) {
+      currentProjectId = String(responsePayload.project.id);
+      setCurrentBuilderProjectId(currentProjectId);
+      if (responsePayload.project.name) setProjectNameDisplay(String(responsePayload.project.name));
+    }
+    if (Array.isArray(responsePayload.files)) renderFiles(responsePayload.files);
 
-      if (eventType === 'file_edit') {
-        upsertFileEditEntry(eventPayload);
-        return;
-      }
+    const previewHtml = String(responsePayload.preview?.html || responsePayload.project?.preview_html || '').trim();
+    const previewStatus = String(responsePayload.preview?.status || responsePayload.project?.preview_status || 'ready');
+    if (previewHtml) {
+      generationTouchesPreview = true;
+      activeGenerationTouchesPreview = true;
+      activateBuilderView('preview');
+      setPreview(previewHtml, previewStatus);
+    }
 
-      if (eventType === 'command_started') {
-        setRunningCommand(eventPayload);
-        setJournalActive(String(eventPayload.label || eventMessage || say('Commande en cours', 'Command running')));
-        return;
-      }
+    if (responsePayload.plan?.title || responsePayload.plan?.steps) {
+      lastPlan = JSON.stringify(responsePayload.plan, null, 2);
+    }
 
-      if (eventType === 'command_completed') {
-        completeRunningCommand(eventPayload, eventMessage);
-        return;
-      }
-
-      if (eventType === 'tool_group') {
-        const items = Array.isArray(eventPayload.items)
-          ? eventPayload.items.map((item: any) => redactSecrets(String(item || '')).trim()).filter(Boolean)
-          : [];
-        if (items.length) {
-          let group = journalGroups.get('commands');
-          if (!group) {
-            group = { id: 'commands', kind: 'group', text: speaksFrench ? 'commandes exécutées' : 'commands executed', items: [], status: 'done' };
-            journalGroups.set('commands', group);
-            journal.entries.push(group);
-          }
-          group.text = speaksFrench ? 'commandes exécutées' : 'commands executed';
-          group.status = eventPayload.status === 'failed' ? 'failed' : 'done';
-          group.items = items.slice(-32);
-          scheduleJournal();
-        }
-        return;
-      }
-
-      if (eventType === 'check_started' || eventType === 'check_running') {
-        setJournalActive(String(eventPayload.label || eventMessage || say('Verification en cours', 'Check running')));
-        return;
-      }
-
-      if (eventType === 'check_completed' || eventType === 'check_done') {
-        seenJournalKeys.add('new_check_protocol');
-        const checkType = String(eventPayload.check_type || 'check').trim();
-        const status = String(eventPayload.status || '').trim();
-        const summary = String(eventPayload.summary || eventMessage || '').trim();
-        const item = [checkType, status, summary].filter(Boolean).join(' — ');
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications terminées' : 'checks completed', item, status === 'failed' ? 'failed' : 'done');
-        return;
-      }
-
-      if (eventType === 'final_summary') {
-        streamFinalText = cleanPublicJournalText(eventPayload.text || eventMessage || streamFinalText || '', speaksFrench);
-        journal.finalText = streamFinalText;
-        scheduleJournal(true);
-        return;
-      }
-
-      if (eventType === 'working_tick') {
-        const now = Date.now();
-        if (now - lastWorkingTickAt > 3400) {
-          lastWorkingTickAt = now;
-          setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('Huggy avance', 'Huggy is moving')));
-        }
-        return;
-      }
-
-      if (eventType === 'answer_token') {
-        answerBuffer += String(eventPayload.text_delta || eventMessage || '');
-        switchToPlainResponse();
-        updateMessage(status, answerBuffer.trimStart());
-        return;
-      }
-
-      if (eventType === 'model_streaming') {
-        setJournalActive(say('Je travaille sur les fichiers', 'Working on the files'));
-        return;
-      }
-
-      if ((eventType === 'diff_ready' || eventType === 'files_changed') && Array.isArray(eventPayload.diff?.file_stats) && eventPayload.diff.file_stats.length) {
-        setJournalActive(say('Je garde le diff lisible', 'Keeping the diff readable'));
-        return;
-      }
-
-      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
-        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
-        return;
-      }
-
-      if ((eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') && seenJournalKeys.has('new_check_protocol')) {
-        return;
-      }
-
-      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
-        const path = String(eventPayload.path || '').trim();
-        if (path) setJournalActive(journalFileLabel(path, String(eventPayload.status || '')));
-        if (eventType === 'file_stream_completed') setJournalActive(say('Je prepare le diff', 'Preparing the diff'));
-        return;
-      }
-
-      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
-        const path = String(eventPayload.path || '').trim();
-        if (path) {
-          upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', journalFileLabel(path, String(eventPayload.status || '')));
-        }
-        if (eventType === 'file_stream_completed') setJournalActive(say('Je prépare le diff', 'Preparing the diff'));
-        return;
-      }
-
-      if (eventType === 'diff_ready' || eventType === 'files_changed') {
-        const diffFiles = filesFromDiff(eventPayload.diff);
-        diffFiles.forEach(file => upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', file));
-      }
-
-      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications lancées' : 'checks started', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), 'active');
-      }
-
-      if (eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') {
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications effectuées' : 'checks completed', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), eventType.includes('failed') ? 'failed' : 'done');
-      }
-
-      if (eventType === 'patch_applied') {
-        upsertJournalGroup('fixes', speaksFrench ? 'corrections appliquées' : 'fixes applied', String(eventPayload.patch?.summary || eventMessage || journalEventText(eventType, eventMessage, eventPayload, speaksFrench)));
-      }
-
-      if (eventType === 'plan_ready') {
-        pendingPlanText = String(eventPayload.text || eventMessage || '').trim();
-        if (pendingPlanText) lastPlan = pendingPlanText;
-      }
-
-      if (eventType === 'external_api_keys_required') {
-        externalRequirements = Array.isArray(eventPayload.requirements) ? eventPayload.requirements : [];
-        streamFinalText = eventMessage || (speaksFrench
-          ? 'Cette app peut utiliser des clés API externes avant de continuer.'
-          : 'This app can use external API keys before continuing.');
-      }
-
-      if (eventType === 'preview_skeleton_started' || eventType === 'preview_building') {
-        promoteToPreviewWork(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
-      }
-
-      if (eventType === 'preview_ready') {
-        previewReadyPayload = eventPayload;
-        finalPayload = eventPayload;
-        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench), true);
-        if (eventPayload.project?.id) {
-          currentProjectId = String(eventPayload.project.id);
-          setCurrentBuilderProjectId(currentProjectId);
-          if (eventPayload.project.name) setProjectNameDisplay(String(eventPayload.project.name));
-        }
-        if (Array.isArray(eventPayload.files)) renderFiles(eventPayload.files);
-        if (eventPayload.preview?.html) {
-          generationTouchesPreview = true;
-          activeGenerationTouchesPreview = true;
-          activateBuilderView('preview');
-          setPreview(String(eventPayload.preview.html), String(eventPayload.preview.status || 'ready'));
-        }
-      }
-
-      if (eventType === 'answering' || eventType === 'clarification_required' || eventType === 'plan_ready' || eventType === 'preview_ready') {
-        const rawEventText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
-        const safeEventText = safeAssistantDisplayText(rawEventText, speaksFrench, '');
-        const blockedRawCode = rawEventText && !safeEventText && looksLikeGeneratedSourceDump(rawEventText);
-        if (safeEventText) {
-          streamFinalText = safeEventText;
-        } else if (blockedRawCode && (eventType === 'answering' || eventType === 'clarification_required')) {
-          streamFinalText = generatedCodeBlockedText(speaksFrench);
-        }
-        if ((eventType === 'answering' || eventType === 'clarification_required') && !previewReadyPayload?.preview?.html) {
-          switchToPlainResponse();
-          if (streamFinalText) updateMessage(status, streamFinalText);
-        }
-      }
-
-      if (eventType === 'done') {
-        finalPayload ||= eventPayload;
-        if (plainResponseMode) return;
-      }
-
-      if (eventType === 'error') {
-        journal.status = 'failed';
-        journal.activeText = '';
-        addJournalLine(eventMessage || say('Le run a échoué.', 'The run failed.'), detail, `event:${eventType}:${journalTextKey(eventMessage)}`, 'failed');
-        scheduleJournal(true);
-        return;
-      }
-
-      if (eventType === 'cancelled') {
-        journal.status = 'cancelled';
-        journal.activeText = '';
-        addJournalLine(eventMessage || say('Travail annulé.', 'Work cancelled.'), detail, `event:${eventType}`, 'cancelled');
-        scheduleJournal(true);
-        return;
-      }
-
-      const publicText = journalEventText(eventType, eventMessage, eventPayload, speaksFrench);
-      const shouldShowLine = ![
-        'queued',
-        'routing',
-        'answer_stream_started',
-        'done',
-      ].includes(eventType) && publicText;
-      if (shouldShowLine) {
-        addJournalLine(publicText, detail, `event:${eventType}`, eventType.includes('failed') || eventType === 'error_detected' ? 'failed' : 'done');
-      }
-    }, activeAbort.signal);
-
-    const diffSummary = String(previewReadyPayload?.diff?.summary || finalPayload?.diff?.summary || '').trim();
-    const verificationMessage = String(previewReadyPayload?.reliability_summary?.message || previewReadyPayload?.verification?.message || '').trim();
-    const safeStreamFinalText = safeAssistantDisplayText(streamFinalText, speaksFrench, '');
-    const safeAnswerBuffer = safeAssistantDisplayText(answerBuffer.trim(), speaksFrench, '');
-    const finalText = safeStreamFinalText
-      || safeAnswerBuffer
-      || (previewReadyPayload?.preview?.html
+    const diffSummary = String(responsePayload.diff?.summary || '').trim();
+    const verificationMessage = String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
+    const rawText = String(responsePayload.summary || responsePayload.text || responsePayload.message || '').trim();
+    const finalText = safeAssistantDisplayText(
+      rawText,
+      speaksFrench,
+      previewHtml
         ? generationReadyText(speaksFrench)
-        : (speaksFrench
-          ? 'J’ai gardé le travail en attente de correction. La preview ne sera marquée prête qu’après vérification.'
-          : 'I kept the work waiting for a fix. The preview will only be marked ready after verification.'));
+        : responsePayload.needs_fix
+          ? (speaksFrench
+            ? 'J ai sauvegarde une draft recuperable. La preview sera marquee prete apres correction du blocage restant.'
+            : 'I saved a recoverable draft. The preview will be marked ready after the remaining blocker is fixed.')
+          : (speaksFrench ? 'Termine.' : 'Done.'),
+    );
+
+    clearMessageShimmer(status);
     const target = commitAssistantText([
       finalText,
       diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
-      verificationMessage ? `${speaksFrench ? 'Vérification' : 'Checks'}: ${verificationMessage}` : '',
-    ].filter(Boolean).join('\n'), 'Done.', previewReadyPayload?.preview?.html ? say('Preview prête', 'Preview ready') : say('Terminé', 'Completed'));
+      verificationMessage ? `${speaksFrench ? 'Verification' : 'Checks'}: ${verificationMessage}` : '',
+    ].filter(Boolean).join('\n'), 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
 
-    if (externalRequirements.length) {
-      addInlineAction(target, speaksFrench ? 'Connecter les clés' : 'Connect keys', () => showApiKeyModal(externalRequirements));
-      addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => void generateFromPrompt('Continue with safe placeholders', 'build', false, { skipExternalKeys: true }));
-    }
-    if (previewReadyPayload?.intent?.intent === 'clarification_required') {
+    if (responsePayload.intent?.intent === 'clarification_required') {
       setMessageBlock(target, {
         type: 'confirmation',
-        title: speaksFrench ? 'Clarification nécessaire' : 'Clarification needed',
+        title: speaksFrench ? 'Clarification necessaire' : 'Clarification needed',
         body: finalText,
         state: 'approval-requested',
-        approveLabel: speaksFrench ? 'Répondre' : 'Answer',
+        approveLabel: speaksFrench ? 'Repondre' : 'Answer',
         rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
       });
     }
-    if (previewReadyPayload?.preview?.html) {
+
+    if (previewHtml) {
       addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
         void recordAgentFeedback('keep');
-        appendMessage('system', speaksFrench ? 'Version gardée comme preview actuelle.' : 'Kept as the current preview.');
+        appendMessage('system', speaksFrench ? 'Version gardee comme preview actuelle.' : 'Kept as the current preview.');
       });
       addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
         void recordAgentFeedback('modify');
@@ -5216,7 +5020,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         promptInput?.focus();
         if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
       });
-      addInlineAction(target, speaksFrench ? 'Regénérer' : 'Regenerate', () => {
+      addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
         void recordAgentFeedback('regenerate');
         void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
       });
@@ -5226,19 +5030,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       });
       addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
     }
-    if (Array.isArray(previewReadyPayload?.errors) && previewReadyPayload.errors.length) showFixBugBox(previewReadyPayload.errors);
-    if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
-    return;
 
+    if (Array.isArray(responsePayload.errors) && responsePayload.errors.length) showFixBugBox(responsePayload.errors);
+    if (generationTouchesPreview && !previewHtml) setEmptyPreviewState('idle', 'Ready when you are');
+    return;
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       const stoppedText = stopRequested
         ? (speaksFrench ? 'Génération arrêtée.' : 'Generation stopped.')
         : (speaksFrench ? 'Build annulé.' : 'Build cancelled.');
-      journal.status = 'cancelled';
-      journal.activeText = '';
-      journal.finalText = stoppedText;
-      scheduleJournal();
+      clearMessageShimmer(status);
+      updateMessage(status, stoppedText);
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
@@ -5253,7 +5055,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (journalTimer !== null) window.clearInterval(journalTimer);
     if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);
-    flushJournal();
+    clearMessageShimmer(status);
     setBusy(false);
     activeAbort = null;
     stopRequested = false;
