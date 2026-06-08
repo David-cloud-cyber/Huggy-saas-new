@@ -1160,6 +1160,27 @@
       background: rgba(255, 255, 255, 0.56);
     }
 
+    .flag-meta {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: rgba(32, 32, 29, 0.54);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .flag-meta > span {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border: 1px solid rgba(32, 32, 29, 0.08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.52);
+    }
+
     .status-pill {
       border-color: rgba(32, 32, 29, 0.08);
       background: rgba(255, 255, 255, 0.66);
@@ -1419,7 +1440,7 @@
 
   <div id="admin-drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
   <aside id="admin-drawer" class="admin-drawer" aria-live="polite" aria-label="Admin details panel">
-    <button class="drawer-close" id="admin-drawer-close" type="button" aria-label="Close">×</button>
+    <button class="drawer-close" id="admin-drawer-close" type="button" aria-label="Close">x</button>
     <div id="admin-drawer-content"></div>
   </aside>
 
