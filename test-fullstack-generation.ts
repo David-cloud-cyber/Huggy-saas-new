@@ -47,6 +47,9 @@ const byPath = new Map(files.map(file => [file.path, file.content]));
 assert.ok(byPath.has('src/lib/huggyCloud.ts'));
 assert.ok(byPath.has('src/lib/appData.ts'));
 assert.ok(byPath.has('src/lib/validation.ts'));
+assert.ok(byPath.has('src/lib/authGuard.ts'));
+assert.ok(byPath.has('huggy/backend-plan.json'));
+assert.ok(byPath.has('supabase/migrations/0001_huggy_fullstack.sql'));
 assert.ok(byPath.has('supabase/functions/_shared/security.ts'));
 assert.ok(byPath.has('supabase/schema.sql'));
 assert.ok(byPath.has('src/fullstack.test.ts'));
@@ -61,8 +64,12 @@ assert.match(byPath.get('supabase/schema.sql') || '', /create table if not exist
 assert.match(byPath.get('supabase/schema.sql') || '', /create table if not exists public\.app_audit_logs/i);
 assert.match(byPath.get('supabase/schema.sql') || '', /alter table public\.app_contacts enable row level security/i);
 assert.match(byPath.get('supabase/schema.sql') || '', /create policy "Members can read app_contacts"/i);
+assert.match(byPath.get('supabase/schema.sql') || '', /storage\.buckets/i);
+assert.match(byPath.get('supabase/schema.sql') || '', /storage\.objects/i);
 assert.match(byPath.get('src/lib/appData.ts') || '', /isPreviewRuntime/);
 assert.match(byPath.get('src/lib/validation.ts') || '', /z\.object/);
+assert.match(byPath.get('src/lib/authGuard.ts') || '', /requireAppUser/);
+assert.match(byPath.get('huggy/backend-plan.json') || '', /"migrations_require_confirmation": true/);
 assert.match(byPath.get('supabase/functions/_shared/security.ts') || '', /assertRateLimit/);
 assert.match(byPath.get('supabase/functions/_shared/security.ts') || '', /assertWebhookSignature/);
 assert.doesNotMatch(files.map(file => file.content).join('\n'), /service[_-]?role|SUPABASE_SERVICE_ROLE|sbp_|secret eyJ/i);
@@ -75,11 +82,33 @@ assert.ok(checks.some(check => check.key === 'fullstack_data_api_grants'));
 assert.ok(checks.some(check => check.key === 'fullstack_all_private_tables_rls'));
 assert.ok(checks.some(check => check.key === 'fullstack_zod_validation'));
 assert.ok(checks.some(check => check.key === 'fullstack_rate_limit_helper'));
+assert.ok(checks.some(check => check.key === 'fullstack_auth_guard_present'));
+assert.ok(checks.some(check => check.key === 'fullstack_backend_plan_present'));
+assert.ok(checks.some(check => check.key === 'fullstack_versioned_migration_present'));
+assert.ok(checks.some(check => check.key === 'fullstack_storage_policies'));
 
 const marketplace = inferProductionBlueprint('Build a marketplace with sellers products orders payments and reviews');
 assert.equal(marketplace.type, 'marketplace');
 assert.ok(marketplace.tables.some(table => table.name === 'app_sellers'));
 assert.ok(marketplace.tables.some(table => table.name === 'app_orders'));
 assert.ok(marketplace.backend.requiresBilling);
+
+const marketplaceRequirement = detectHuggyCloudRequirements('Build a marketplace with sellers products orders payments storage and Stripe checkout');
+const marketplaceFiles = applyHuggyFullstackKit({
+  files: baseFiles,
+  projectName: 'Marketplace',
+  prompt: 'Build a marketplace with sellers products orders payments storage and Stripe checkout',
+  requirement: marketplaceRequirement,
+});
+const marketplaceByPath = new Map(marketplaceFiles.map(file => [file.path, file.content]));
+assert.ok(marketplaceByPath.has('src/lib/paymentActions.ts'));
+assert.ok(marketplaceByPath.has('supabase/functions/stripe-webhook/index.ts'));
+assert.match(marketplaceByPath.get('src/lib/paymentActions.ts') || '', /createCheckoutSession/);
+assert.match(marketplaceByPath.get('supabase/functions/stripe-webhook/index.ts') || '', /STRIPE_WEBHOOK_SECRET/);
+assert.match(marketplaceByPath.get('supabase/functions/stripe-webhook/index.ts') || '', /assertWebhookSignature/);
+const marketplaceChecks = validateHuggyFullstackFiles(marketplaceFiles, marketplaceRequirement);
+assert.equal(marketplaceChecks.filter(check => check.status === 'fail').length, 0, marketplaceChecks.map(check => `${check.key}: ${check.message}`).join('\n'));
+assert.ok(marketplaceChecks.some(check => check.key === 'fullstack_payment_actions_present'));
+assert.ok(marketplaceChecks.some(check => check.key === 'fullstack_stripe_webhook_signature'));
 
 console.log('test-fullstack-generation passed');

@@ -34,6 +34,11 @@ export type FullstackValidationCheck = {
 const FULLSTACK_MARKER = 'HUGGY_FULLSTACK_READY';
 const AI_STREAM_FUNCTION_PATH = 'supabase/functions/ai-stream/index.ts';
 const AI_STREAM_CLIENT_PATH = 'src/lib/aiStream.ts';
+const BACKEND_PLAN_PATH = 'huggy/backend-plan.json';
+const AUTH_GUARD_PATH = 'src/lib/authGuard.ts';
+const PAYMENT_ACTIONS_PATH = 'src/lib/paymentActions.ts';
+const STRIPE_WEBHOOK_FUNCTION_PATH = 'supabase/functions/stripe-webhook/index.ts';
+const VERSIONED_MIGRATION_PATH = 'supabase/migrations/0001_huggy_fullstack.sql';
 
 function normalizePath(value: string) {
   return String(value || '').replace(/\\/g, '/').replace(/^\.\/+/, '');
@@ -161,6 +166,109 @@ function buildHuggyCloudClient() {
     "    message: isHuggyCloudConfigured ? 'Huggy Cloud is connected.' : 'Preview mode: Huggy Cloud is not connected yet.',",
     '  };',
     '}',
+    '',
+  ].join('\n');
+}
+
+function buildAuthGuard(blueprint: ProductionBlueprint) {
+  return [
+    "import { getHuggyCloudClient, isHuggyCloudConfigured } from './huggyCloud';",
+    '',
+    "export type AppRole = 'owner' | 'admin' | 'member' | 'viewer';",
+    '',
+    'export type AuthenticatedAppUser = {',
+    '  id: string;',
+    '  email?: string;',
+    '  role: AppRole;',
+    '};',
+    '',
+    'export class AuthRequiredError extends Error {',
+    '  constructor() {',
+    "    super('Sign in to continue.');",
+    "    this.name = 'AuthRequiredError';",
+    '  }',
+    '}',
+    '',
+    'export class PermissionDeniedError extends Error {',
+    '  constructor() {',
+    "    super('You do not have permission to perform this action.');",
+    "    this.name = 'PermissionDeniedError';",
+    '  }',
+    '}',
+    '',
+    "const ROLE_RANK: Record<AppRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };",
+    '',
+    'export async function getCurrentAppUser(): Promise<AuthenticatedAppUser | null> {',
+    '  if (!isHuggyCloudConfigured) {',
+    "    return { id: 'preview-user', email: 'preview@huggy.local', role: 'owner' };",
+    '  }',
+    '  const client = getHuggyCloudClient();',
+    '  const { data, error } = await client.auth.getUser();',
+    '  if (error || !data.user) return null;',
+    '  const role = (data.user.app_metadata?.role || data.user.user_metadata?.role || "member") as AppRole;',
+    '  return { id: data.user.id, email: data.user.email || undefined, role: ROLE_RANK[role] >= 0 ? role : "member" };',
+    '}',
+    '',
+    'export async function requireAppUser(minRole: AppRole = "member") {',
+    '  const user = await getCurrentAppUser();',
+    '  if (!user) throw new AuthRequiredError();',
+    '  if (ROLE_RANK[user.role] < ROLE_RANK[minRole]) throw new PermissionDeniedError();',
+    '  return user;',
+    '}',
+    '',
+    'export async function canUseAppFeature(feature: string) {',
+    '  const user = await getCurrentAppUser();',
+    '  if (!user) return false;',
+    '  if (/admin|billing|settings|delete|export/i.test(feature)) return ROLE_RANK[user.role] >= ROLE_RANK.admin;',
+    '  return ROLE_RANK[user.role] >= ROLE_RANK.member;',
+    '}',
+    '',
+    'export const generatedAuthContract = {',
+    `  blueprint: ${JSON.stringify(blueprint.type)},`,
+    '  protectedRoutes: true,',
+    '  roleBasedAccess: true,',
+    '  previewUserOnlyWhenCloudMissing: true,',
+    '};',
+    '',
+  ].join('\n');
+}
+
+function buildPaymentActions(blueprint: ProductionBlueprint) {
+  return [
+    "import { requireAppUser } from './authGuard';",
+    '',
+    'export type CheckoutRequest = {',
+    '  priceId: string;',
+    '  quantity?: number;',
+    '  successUrl?: string;',
+    '  cancelUrl?: string;',
+    '};',
+    '',
+    "const CHECKOUT_FUNCTION_PATH = '/functions/v1/create-checkout-session';",
+    '',
+    'export async function createCheckoutSession(input: CheckoutRequest) {',
+    '  await requireAppUser("member");',
+    '  if (!input.priceId) throw new Error("PRICE_REQUIRED");',
+    '  const response = await fetch(CHECKOUT_FUNCTION_PATH, {',
+    '    method: "POST",',
+    '    headers: { "content-type": "application/json" },',
+    '    body: JSON.stringify({',
+    '      priceId: input.priceId,',
+    '      quantity: Math.max(1, input.quantity || 1),',
+    '      successUrl: input.successUrl || window.location.href,',
+    '      cancelUrl: input.cancelUrl || window.location.href,',
+    '    }),',
+    '  });',
+    '  if (!response.ok) throw new Error("CHECKOUT_UNAVAILABLE");',
+    '  return response.json() as Promise<{ url: string; id: string }>;',
+    '}',
+    '',
+    'export const generatedPaymentContract = {',
+    `  blueprint: ${JSON.stringify(blueprint.type)},`,
+    '  priceDecisionsServerSide: true,',
+    '  webhookSignatureRequired: true,',
+    '  frontendOnlyDemoCheckoutForbidden: true,',
+    '};',
     '',
   ].join('\n');
 }
@@ -332,6 +440,54 @@ function buildEdgeSecurityHelpers(blueprint: ProductionBlueprint) {
     '  rateLimitRequired: true,',
     `  stripeWebhookRequired: ${JSON.stringify(isPaymentBlueprint(blueprint))},`,
     `  storagePolicyRequired: ${JSON.stringify(isStorageBlueprint(blueprint))},`,
+    '};',
+    '',
+  ].join('\n');
+}
+
+function buildStripeWebhookFunction(blueprint: ProductionBlueprint) {
+  return [
+    "import { assertRateLimit, assertWebhookSignature } from '../_shared/security.ts';",
+    '',
+    'const corsHeaders = {',
+    '  "access-control-allow-origin": "*",',
+    '  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, stripe-signature",',
+    '  "access-control-allow-methods": "POST, OPTIONS",',
+    '};',
+    '',
+    'Deno.serve(async (request) => {',
+    '  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });',
+    '  if (request.method !== "POST") {',
+    '    return new Response(JSON.stringify({ error: "METHOD_NOT_ALLOWED" }), { status: 405, headers: { ...corsHeaders, "content-type": "application/json" } });',
+    '  }',
+    '',
+    '  try {',
+    '    assertRateLimit(request.headers.get("x-forwarded-for") || "stripe-webhook", 120, 60_000);',
+    '    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");',
+    '    const signature = assertWebhookSignature(request, webhookSecret);',
+    '    const rawBody = await request.text();',
+    '',
+    '    // Production note: verify the raw payload with Stripe SDK or a Huggy Cloud server primitive before mutating billing tables.',
+    '    // This generated function intentionally refuses to trust client-side checkout state.',
+    '    if (!signature || !rawBody) throw new Error("WEBHOOK_PAYLOAD_INVALID");',
+    '',
+    '    const event = JSON.parse(rawBody);',
+    '    const type = String(event?.type || "unknown");',
+    '    const allowed = ["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted", "invoice.payment_succeeded", "invoice.payment_failed"];',
+    '    if (!allowed.includes(type)) {',
+    '      return new Response(JSON.stringify({ received: true, ignored: type }), { headers: { ...corsHeaders, "content-type": "application/json" } });',
+    '    }',
+    '',
+    '    return new Response(JSON.stringify({ received: true, type }), { headers: { ...corsHeaders, "content-type": "application/json" } });',
+    '  } catch (_error) {',
+    '    return new Response(JSON.stringify({ error: "WEBHOOK_VERIFICATION_FAILED" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });',
+    '  }',
+    '});',
+    '',
+    'export const generatedStripeWebhookContract = {',
+    `  blueprint: ${JSON.stringify(blueprint.type)},`,
+    '  requiresSignature: true,',
+    '  mutatesBillingOnlyAfterServerVerification: true,',
     '};',
     '',
   ].join('\n');
@@ -527,6 +683,24 @@ function buildSchema(requirement: HuggyCloudRequirement, blueprint: ProductionBl
         '  for delete to authenticated using (owner_id = auth.uid());',
         '',
         'grant select, insert, update, delete on public.app_assets to authenticated;',
+        '',
+        '-- Supabase Storage bucket and policies for generated app assets.',
+        "insert into storage.buckets (id, name, public)",
+        "values ('app-assets', 'app-assets', false)",
+        'on conflict (id) do nothing;',
+        '',
+        'drop policy if exists "Users can read their storage assets" on storage.objects;',
+        'create policy "Users can read their storage assets" on storage.objects',
+        "  for select to authenticated using (bucket_id = 'app-assets' and owner = auth.uid());",
+        'drop policy if exists "Users can upload their storage assets" on storage.objects;',
+        'create policy "Users can upload their storage assets" on storage.objects',
+        "  for insert to authenticated with check (bucket_id = 'app-assets' and owner = auth.uid());",
+        'drop policy if exists "Users can update their storage assets" on storage.objects;',
+        'create policy "Users can update their storage assets" on storage.objects',
+        "  for update to authenticated using (bucket_id = 'app-assets' and owner = auth.uid()) with check (bucket_id = 'app-assets' and owner = auth.uid());",
+        'drop policy if exists "Users can delete their storage assets" on storage.objects;',
+        'create policy "Users can delete their storage assets" on storage.objects',
+        "  for delete to authenticated using (bucket_id = 'app-assets' and owner = auth.uid());",
       ].join('\n')
     : '';
 
@@ -632,6 +806,48 @@ function buildFullstackReadme(requirement: HuggyCloudRequirement, blueprint: Pro
     'Never place service role keys or provider secrets in frontend files.',
     '',
   ].join('\n');
+}
+
+function buildBackendPlan(input: FullstackKitInput, blueprint: ProductionBlueprint) {
+  return JSON.stringify({
+    marker: FULLSTACK_MARKER,
+    project_name: input.projectName,
+    blueprint: {
+      type: blueprint.type,
+      label: blueprint.label,
+      pages: blueprint.pages,
+      components: blueprint.components,
+      workflows: blueprint.workflows,
+      tests: blueprint.tests,
+      risks: blueprint.risks,
+      acceptance_criteria: blueprint.acceptanceCriteria,
+    },
+    backend: {
+      provider: blueprint.backend.provider,
+      features: blueprint.backend.features,
+      requires_auth: blueprint.backend.requiresAuth,
+      requires_database: blueprint.backend.requiresDatabase,
+      requires_storage: blueprint.backend.requiresStorage,
+      requires_billing: blueprint.backend.requiresBilling,
+      mode: input.requirement.recommended_mode,
+    },
+    tables: blueprint.tables.map(table => ({
+      name: table.name,
+      purpose: table.purpose,
+      access: table.access,
+      indexes: table.indexes,
+      sensitive: Boolean(table.sensitive),
+    })),
+    safety: {
+      migrations_require_confirmation: true,
+      privileged_keys_forbidden_in_client: true,
+      rls_required_on_private_tables: true,
+      webhook_signature_required: isPaymentBlueprint(blueprint),
+      storage_policy_required: isStorageBlueprint(blueprint),
+      local_storage_preview_only: true,
+    },
+    generated_at: new Date().toISOString(),
+  }, null, 2);
 }
 
 function buildFullstackTest() {
@@ -875,7 +1091,12 @@ export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGener
   upsertFile(byPath, 'src/lib/huggyCloud.ts', buildHuggyCloudClient(), 'ts');
   upsertFile(byPath, 'src/lib/appData.ts', buildAppDataLayer(input.requirement), 'ts');
   upsertFile(byPath, 'src/lib/validation.ts', buildValidationLayer(blueprint), 'ts');
+  upsertFile(byPath, AUTH_GUARD_PATH, buildAuthGuard(blueprint), 'ts');
   upsertFile(byPath, 'supabase/functions/_shared/security.ts', buildEdgeSecurityHelpers(blueprint), 'ts');
+  if (isPaymentBlueprint(blueprint)) {
+    upsertFile(byPath, PAYMENT_ACTIONS_PATH, buildPaymentActions(blueprint), 'ts');
+    upsertFile(byPath, STRIPE_WEBHOOK_FUNCTION_PATH, buildStripeWebhookFunction(blueprint), 'ts');
+  }
   if (blueprint.type === 'ai_tool') {
     upsertFile(byPath, AI_STREAM_CLIENT_PATH, buildAiStreamClient(), 'ts');
     upsertFile(byPath, AI_STREAM_FUNCTION_PATH, buildAiStreamEdgeFunction(), 'ts');
@@ -898,6 +1119,8 @@ export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGener
 
   const existingSchema = fileByPath(input.files, 'supabase/schema.sql')?.content || '';
   const generatedSchema = buildSchema(input.requirement, blueprint);
+  upsertFile(byPath, BACKEND_PLAN_PATH, buildBackendPlan(input, blueprint), 'json');
+  upsertFile(byPath, VERSIONED_MIGRATION_PATH, generatedSchema, 'sql');
   upsertFile(
     byPath,
     'supabase/schema.sql',
@@ -918,6 +1141,11 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   const client = fileByPath(files, 'src/lib/huggyCloud.ts');
   const data = fileByPath(files, 'src/lib/appData.ts');
   const validation = fileByPath(files, 'src/lib/validation.ts');
+  const authGuard = fileByPath(files, AUTH_GUARD_PATH);
+  const backendPlan = fileByPath(files, BACKEND_PLAN_PATH);
+  const versionedMigration = fileByPath(files, VERSIONED_MIGRATION_PATH);
+  const paymentActions = fileByPath(files, PAYMENT_ACTIONS_PATH);
+  const stripeWebhook = fileByPath(files, STRIPE_WEBHOOK_FUNCTION_PATH);
   const edgeSecurity = fileByPath(files, 'supabase/functions/_shared/security.ts');
   const aiStreamClient = fileByPath(files, AI_STREAM_CLIENT_PATH);
   const aiStreamFunction = fileByPath(files, AI_STREAM_FUNCTION_PATH);
@@ -930,6 +1158,9 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   checks.push(client ? pass('fullstack_client_present', 'Generated app includes a browser-safe Huggy Cloud client.', 'src/lib/huggyCloud.ts') : fail('fullstack_client_present', 'Missing src/lib/huggyCloud.ts browser-safe backend client.', 'src/lib/huggyCloud.ts'));
   checks.push(data ? pass('fullstack_data_layer_present', 'Generated app includes a CRUD data layer.', 'src/lib/appData.ts') : fail('fullstack_data_layer_present', 'Missing src/lib/appData.ts CRUD data layer.', 'src/lib/appData.ts'));
   checks.push(validation ? pass('fullstack_validation_present', 'Generated app includes Zod validation schemas.', 'src/lib/validation.ts') : fail('fullstack_validation_present', 'Missing src/lib/validation.ts validation schemas.', 'src/lib/validation.ts'));
+  checks.push(authGuard ? pass('fullstack_auth_guard_present', 'Generated app includes an auth and role guard helper.', AUTH_GUARD_PATH) : fail('fullstack_auth_guard_present', 'Missing auth and role guard helper.', AUTH_GUARD_PATH));
+  checks.push(backendPlan ? pass('fullstack_backend_plan_present', 'Generated app includes a backend plan contract.', BACKEND_PLAN_PATH) : fail('fullstack_backend_plan_present', 'Missing backend plan contract.', BACKEND_PLAN_PATH));
+  checks.push(versionedMigration ? pass('fullstack_versioned_migration_present', 'Generated app includes a versioned Supabase migration.', VERSIONED_MIGRATION_PATH) : fail('fullstack_versioned_migration_present', 'Missing versioned Supabase migration.', VERSIONED_MIGRATION_PATH));
   checks.push(edgeSecurity ? pass('fullstack_edge_security_present', 'Generated app includes Edge Function security helpers.', 'supabase/functions/_shared/security.ts') : fail('fullstack_edge_security_present', 'Missing Edge Function security helpers.', 'supabase/functions/_shared/security.ts'));
   checks.push(schema ? pass('fullstack_schema_present', 'Generated app includes a Supabase migration schema.', 'supabase/schema.sql') : fail('fullstack_schema_present', 'Missing supabase/schema.sql migration.', 'supabase/schema.sql'));
 
@@ -945,6 +1176,11 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
     checks.push(/owner_id|organization_id|org_id/i.test(schema.content) ? pass('fullstack_owner_or_org_scope', 'Schema includes owner or organization scoping.', schema.path) : fail('fullstack_owner_or_org_scope', 'Schema must include owner_id or organization_id for private data.', schema.path));
     if (blueprint.tables.some(table => table.sensitive)) {
       checks.push(/app_audit_logs|audit_logs/i.test(schema.content) ? pass('fullstack_audit_logs', 'Sensitive blueprint includes audit logs.', schema.path) : warn('fullstack_audit_logs', 'Sensitive apps should include audit logs.', schema.path));
+    }
+    if (blueprint.backend.requiresStorage || /app_assets|storage\.objects|storage\.buckets/i.test(schema.content)) {
+      checks.push(/storage\.buckets/i.test(schema.content) && /storage\.objects/i.test(schema.content)
+        ? pass('fullstack_storage_policies', 'Storage apps include bucket and object policies.', schema.path)
+        : fail('fullstack_storage_policies', 'Storage apps need bucket and storage.objects policies.', schema.path));
     }
   }
 
@@ -965,6 +1201,18 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   if (edgeSecurity) {
     checks.push(/assertRateLimit/i.test(edgeSecurity.content) ? pass('fullstack_rate_limit_helper', 'Edge security layer includes a rate limit helper.', edgeSecurity.path) : fail('fullstack_rate_limit_helper', 'Sensitive actions need rate limit helper.', edgeSecurity.path));
     checks.push(/assertWebhookSignature/i.test(edgeSecurity.content) ? pass('fullstack_webhook_signature_helper', 'Edge security layer includes webhook signature guard.', edgeSecurity.path) : warn('fullstack_webhook_signature_helper', 'Payment-capable apps should include webhook signature verification.', edgeSecurity.path));
+  }
+
+  if (isPaymentBlueprint(blueprint)) {
+    checks.push(paymentActions
+      ? pass('fullstack_payment_actions_present', 'Payment app includes a server-owned checkout action wrapper.', PAYMENT_ACTIONS_PATH)
+      : fail('fullstack_payment_actions_present', 'Payment apps need a checkout action wrapper.', PAYMENT_ACTIONS_PATH));
+    checks.push(stripeWebhook
+      ? pass('fullstack_stripe_webhook_present', 'Payment app includes a Stripe webhook edge function.', STRIPE_WEBHOOK_FUNCTION_PATH)
+      : fail('fullstack_stripe_webhook_present', 'Payment apps need a Stripe webhook edge function.', STRIPE_WEBHOOK_FUNCTION_PATH));
+    checks.push(/assertWebhookSignature|STRIPE_WEBHOOK_SECRET|stripe-signature/i.test(stripeWebhook?.content || '')
+      ? pass('fullstack_stripe_webhook_signature', 'Stripe webhook verifies server-side signature.', stripeWebhook?.path || STRIPE_WEBHOOK_FUNCTION_PATH)
+      : fail('fullstack_stripe_webhook_signature', 'Stripe webhook must verify server-side signature.', STRIPE_WEBHOOK_FUNCTION_PATH));
   }
 
   if (isAiToolProject) {
@@ -990,7 +1238,7 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
     : fail('fullstack_no_frontend_secrets', 'Generated fullstack files must not contain service role keys or secrets.'));
 
   if (requirement.needs_auth) {
-    checks.push(/auth:\s*\{|\.auth\b|getHuggyCloudClient/i.test(client?.content || allSource)
+    checks.push(/auth:\s*\{|\.auth\b|getHuggyCloudClient|requireAppUser/i.test(client?.content || allSource)
       ? pass('fullstack_auth_client_ready', 'Auth requests have an explicit Supabase client path.', client?.path || 'src/lib/huggyCloud.ts')
       : fail('fullstack_auth_client_ready', 'Auth app needs an explicit Supabase client path.', 'src/lib/huggyCloud.ts'));
   }
