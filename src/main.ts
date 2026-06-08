@@ -107,7 +107,7 @@ function init() {
         }
 
         const footer = document.querySelector('.footer');
-        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section');
+        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section, .final-cta-prompt');
         if (footer && !alreadyHasPrompt) {
             const prompt = document.createElement('section');
             prompt.className = 'marketing-prompt-section reveal';
@@ -161,6 +161,7 @@ function init() {
             `;
             footer.insertAdjacentElement('beforebegin', prompt);
         }
+
     }
 
     installMarketingEnhancements();

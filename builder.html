@@ -131,6 +131,12 @@
       flex-direction: column;
     }
 
+    @supports (height: 100dvh) {
+      body {
+        height: 100dvh;
+      }
+    }
+
     button {
       font-family: inherit;
       cursor: pointer;
@@ -141,6 +147,12 @@
       flex-direction: column;
       height: 100vh;
       background: var(--bg);
+    }
+
+    @supports (height: 100dvh) {
+      .app-workspace {
+        height: 100dvh;
+      }
     }
 
     /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
@@ -1179,21 +1191,28 @@
     }
 
     /* Message card collapsible styles */
+    .message-card {
+      transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+    }
+
     .message-card.collapsed > :not(.msg-header-line) {
       display: none !important;
     }
+
     .message-card.collapsed::after {
-      content: "Message content collapsed...";
+      content: "Message collapsed";
       font-size: 11px;
       color: var(--text-muted);
-      opacity: 0.5;
+      opacity: 0.68;
       font-style: italic;
-      padding-top: 2px;
-      padding-bottom: 2px;
+      padding: 2px 0 1px 28px;
+      letter-spacing: -0.01em;
     }
+
     .message-card.collapsed .btn-toggle-msg-card svg {
       transform: rotate(-90deg) !important;
     }
+
     .message-card .btn-toggle-msg-card svg {
       transition: transform 150ms ease;
     }
@@ -1516,7 +1535,14 @@
       cursor: pointer;
       display: flex;
       align-items: center;
-      transition: color 150ms;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      transition: color 150ms, background 150ms, border-color 150ms;
     }
 
     .collapse-sidebar-arrow svg {
@@ -1529,6 +1555,22 @@
 
     .collapse-sidebar-arrow:hover {
       color: var(--text-muted);
+      background: var(--bg-elevated);
+      border-color: var(--border);
+    }
+
+    .collapse-sidebar-arrow:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent-blue) 58%, transparent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .message-card,
+      .message-card .btn-toggle-msg-card svg,
+      .collapse-sidebar-arrow,
+      .collapse-sidebar-arrow svg {
+        transition: none !important;
+      }
     }
 
     .sub-nav-tabs {
@@ -2034,13 +2076,77 @@
     }
 
     @media (max-width: 760px) {
-      .app-shell {
-        padding-bottom: 58px;
+      body,
+      .app-workspace {
+        min-height: 100dvh;
+        overflow: hidden;
+      }
+
+      .brand-topbar {
+        height: 44px;
+        padding: 0 10px;
+        gap: 8px;
+      }
+
+      .brand-left {
+        min-width: 0;
+        flex: 1;
+        gap: 8px;
+      }
+
+      .brand-title {
+        min-width: 0;
+        gap: 7px !important;
+      }
+
+      .brand-title > span[style*="font-weight"] {
+        display: none;
+      }
+
+      .brand-sep {
+        display: none;
+      }
+
+      .project-selector {
+        min-width: 0;
+        max-width: 44vw;
+        font-size: 12px;
+      }
+
+      #project-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .brand-right {
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+
+      .btn-integration,
+      .btn-upgrade {
+        display: none;
+      }
+
+      .btn-publish {
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 9px;
+        font-size: 11px;
+      }
+
+      .avatar-circle {
+        width: 26px;
+        height: 26px;
       }
 
       .workspace-body {
         display: block;
+        flex: 0 0 auto;
+        height: calc(100dvh - 44px - 72px);
         min-height: 0;
+        overflow: hidden;
       }
 
       .workspace-body.sidebar-collapsed {
@@ -2054,6 +2160,20 @@
         width: 100%;
         height: 100%;
         border-right: 0;
+      }
+
+      .sidebar-pane {
+        min-height: 0;
+      }
+
+      .pane-header-row {
+        padding: 10px 12px 5px;
+      }
+
+      .sidebar-scroll-area {
+        padding: 16px 14px 14px;
+        gap: 14px;
+        overscroll-behavior: contain;
       }
 
       .workspace-body[data-mobile-view="chat"] .editor-pane,
@@ -2071,12 +2191,27 @@
       .workspace-body[data-mobile-view="code"] .editor-pane {
         display: flex;
         height: 100%;
-        padding-top: 38px;
+        padding-top: 42px;
       }
 
       .workspace-body[data-mobile-view="preview"] .sub-navbar,
       .workspace-body[data-mobile-view="code"] .sub-navbar {
         display: flex;
+      }
+
+      .sub-navbar {
+        height: 42px;
+        padding: 0 8px;
+        overflow-x: auto;
+        scrollbar-width: none !important;
+      }
+
+      .sub-navbar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .sub-nav-tabs {
+        min-width: max-content;
       }
 
       .workspace-body[data-mobile-view="chat"] .sub-navbar,
@@ -2089,36 +2224,48 @@
         position: fixed;
         left: 10px;
         right: 10px;
-        bottom: 10px;
+        bottom: max(10px, env(safe-area-inset-bottom));
         z-index: 900;
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 4px;
         padding: 6px;
         border: 1px solid var(--border);
-        border-radius: 16px;
+        border-radius: 18px;
         background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
         box-shadow: 0 18px 54px rgba(9,9,11,.18), 0 1px 0 rgba(255,255,255,.55) inset;
-        backdrop-filter: blur(14px);
+        backdrop-filter: blur(18px) saturate(140%);
       }
 
       .builder-mobile-nav button {
-        height: 38px;
+        height: 48px;
         border: 0;
         border-radius: 12px;
         background: transparent;
         color: var(--text-muted);
         display: inline-flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        font-size: 10px;
+        gap: 3px;
+        font-size: 9.5px;
         font-weight: 750;
+        letter-spacing: 0;
+        transition: transform 140ms cubic-bezier(0.22,1,0.36,1), background 140ms cubic-bezier(0.22,1,0.36,1), color 140ms cubic-bezier(0.22,1,0.36,1);
       }
 
       .builder-mobile-nav button svg {
-        width: 13px;
-        height: 13px;
+        width: 15px;
+        height: 15px;
+      }
+
+      .builder-mobile-nav button span {
+        display: block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 1;
       }
 
       .builder-mobile-nav button.active {
@@ -2127,7 +2274,90 @@
       }
 
       .chat-input-row {
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        padding: 10px 10px 12px;
+        border-top: 1px solid var(--border);
+        background: color-mix(in srgb, var(--bg-panel) 96%, transparent);
+      }
+
+      .chat-input-row .input-wrapper {
+        border-radius: 16px !important;
+        box-shadow: 0 1px 0 rgba(255,255,255,.62) inset, 0 14px 34px rgba(9,9,11,.12) !important;
+      }
+
+      .chat-input-textarea {
+        min-height: 42px !important;
+        max-height: 112px !important;
+        padding: 10px 12px 0 !important;
+        font-size: 13px !important;
+      }
+
+      .chat-input-row .input-actions {
+        padding: 6px 10px 10px !important;
+        gap: 8px;
+      }
+
+      .chat-input-row .actions-right {
+        gap: 6px !important;
+        min-width: 0;
+      }
+
+      .chat-input-row .model-label-prefix {
+        display: none;
+      }
+
+      #model-select-btn {
+        max-width: 104px !important;
+      }
+
+      #btn-chat-mode {
+        min-width: 54px !important;
+        padding: 0 7px !important;
+      }
+
+      .preview-screen-panel {
+        background: var(--bg);
+      }
+
+      .preview-address-row {
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        height: 30px;
+      }
+
+      .preview-address-glow {
+        max-width: 55%;
+        height: 28px;
+      }
+
+      .preview-device-toggle {
+        height: 30px;
+        padding: 3px;
+      }
+
+      .preview-device-btn {
+        width: 25px;
+        min-width: 25px;
+        height: 24px;
+      }
+
+      .preview-device-stage {
+        padding-top: 38px;
+      }
+
+      .preview-screen-panel[data-preview-device="mobile"] .preview-device-frame,
+      .preview-screen-panel[data-preview-device="tablet"] .preview-device-frame {
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .analysis-screen-panel {
+        padding: 16px;
       }
     }
 
@@ -2753,12 +2983,12 @@
       <!-- Control tab row for the right preview/code workspace -->
       <header class="sub-navbar">
           <div class="sub-nav-left">
-            <span class="collapse-sidebar-arrow" title="Collapse left sidebar">
+            <button class="collapse-sidebar-arrow" type="button" title="Collapse left sidebar" aria-label="Collapse left sidebar" aria-expanded="true">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="11 17 6 12 11 7"/>
                 <polyline points="18 17 13 12 18 7"/>
               </svg>
-            </span>
+            </button>
             
             <div class="sub-nav-tabs">
               <button class="sub-nav-tab active" id="tab-btn-preview">
@@ -2926,26 +3156,31 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
         </svg>
+        <span>Chat</span>
       </button>
       <button type="button" data-mobile-builder-view="preview" aria-label="Preview" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9"></circle><path d="M3.6 9h16.8"></path><path d="M3.6 15h16.8"></path><path d="M12 3a15 15 0 0 1 0 18"></path><path d="M12 3a15 15 0 0 0 0 18"></path>
         </svg>
+        <span>Preview</span>
       </button>
       <button type="button" data-mobile-builder-view="code" aria-label="Code" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="m8 18-6-6 6-6"></path><path d="m16 6 6 6-6 6"></path>
         </svg>
+        <span>Code</span>
       </button>
       <button type="button" data-mobile-builder-view="design" aria-label="Huggy Design" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M8 4v16"></path><path d="M3 9h18"></path>
         </svg>
+        <span>Studio</span>
       </button>
       <button type="button" data-mobile-builder-view="more" aria-label="More" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle>
         </svg>
+        <span>More</span>
       </button>
     </nav>
 

@@ -799,7 +799,58 @@
         <div class="final-cta-inner">
             <p class="section-kicker">Start small. Ship real.</p>
             <h2>Describe the app you want and let Huggy turn it into a working preview.</h2>
-            <button class="pricing-btn primary" onclick="navigate('/auth.html')">Start building</button>
+            <div class="input-wrapper final-cta-prompt" aria-label="Describe an app to build with Huggy">
+                <textarea rows="3" placeholder="Describe the app you want to build..."></textarea>
+                <div class="input-actions">
+                    <div class="actions-left">
+                        <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="actions-right">
+                        <div class="prompt-mode" data-prompt-mode="auto">
+                            <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
+                                <span class="prompt-mode-label">Auto</span>
+                                <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                            </button>
+                            <div class="prompt-mode-menu" role="menu">
+                                <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active">
+                                    <span>Auto</span>
+                                    <small>Let Huggy decide</small>
+                                </button>
+                                <button type="button" data-prompt-mode-option="build" role="menuitem">
+                                    <span>Build</span>
+                                    <small>Generate the app</small>
+                                </button>
+                                <button type="button" data-prompt-mode-option="plan" role="menuitem">
+                                    <span>Plan</span>
+                                    <small>Think first</small>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="submit-wrapper">
+                            <button class="submit-btn" title="Build now" type="button">
+                                <span>Build now</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                                    <polyline points="5 12 12 5 19 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 

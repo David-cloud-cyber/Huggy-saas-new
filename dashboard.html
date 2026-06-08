@@ -1239,11 +1239,90 @@
     .save-status { font-family: "JetBrains Mono"; font-size: 11px; color: var(--success); letter-spacing: 0.04em; }
     
     /* COMPONENTS */
-    .settings-block { display: flex; flex-direction: column; gap: 16px; }
+    .settings-block {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      transition: border-color 160ms ease, background 160ms ease, padding 160ms ease;
+    }
     .block-title {
       font-family: "JetBrains Mono"; font-size: 10px; font-weight: 500;
       letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-sub);
       padding-bottom: 8px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; cursor: pointer; user-select: none;
+      transition: color 160ms ease, border-color 160ms ease;
+    }
+
+    .dashboard-collapse-chev::after {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg);
+      transition: transform 160ms ease;
+      opacity: 0.72;
+      flex-shrink: 0;
+    }
+
+    .settings-block.is-collapsed {
+      gap: 0;
+      padding: 0;
+    }
+
+    .settings-block.is-collapsed > :not(.block-title) {
+      display: none !important;
+    }
+
+    .settings-block.is-collapsed .dashboard-collapse-chev::after,
+    .dashboard-collapse-label[aria-expanded="false"] .dashboard-collapse-chev::after,
+    .credits-header[aria-expanded="false"] .dashboard-collapse-chev::after {
+      transform: rotate(-45deg);
+    }
+
+    .block-title:focus-visible,
+    .dashboard-collapse-label:focus-visible,
+    .credits-header:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent-blue) 62%, transparent);
+      outline-offset: 3px;
+      border-radius: 8px;
+    }
+
+    .dashboard-collapse-label,
+    .credits-header {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .dashboard-collapse-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .dashboard-collapse-chev {
+      display: inline-flex;
+      color: currentColor;
+      margin-left: auto;
+    }
+
+    .sidebar-credits.is-collapsed .credits-value-row,
+    .sidebar-credits.is-collapsed .credits-track,
+    #sidebar-projects-list.is-collapsed {
+      display: none !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .settings-block,
+      .block-title,
+      .dashboard-collapse-chev::after {
+        transition: none !important;
+      }
     }
     
     .form-row { display: flex; flex-direction: column; gap: 8px; }
@@ -2750,23 +2829,126 @@
       }, 1000);
     });
 
+    const DASHBOARD_COLLAPSE_STATE_KEY = 'huggy-dashboard-collapse-state-v1';
+    const DASHBOARD_SIDEBAR_COLLAPSED_KEY = 'huggy-dashboard-sidebar-collapsed';
+
+    function readCollapseState() {
+      try {
+        return JSON.parse(localStorage.getItem(DASHBOARD_COLLAPSE_STATE_KEY) || '{}') || {};
+      } catch {
+        return {};
+      }
+    }
+
+    const dashboardCollapseState = readCollapseState();
+
+    function writeCollapseState() {
+      try {
+        localStorage.setItem(DASHBOARD_COLLAPSE_STATE_KEY, JSON.stringify(dashboardCollapseState));
+      } catch {
+        // Preference persistence is optional; the UI still works in-session.
+      }
+    }
+
+    function addCollapseChevron(control) {
+      if (!control || control.querySelector('.dashboard-collapse-chev')) return;
+      const chevron = document.createElement('span');
+      chevron.className = 'dashboard-collapse-chev';
+      chevron.setAttribute('aria-hidden', 'true');
+      control.appendChild(chevron);
+    }
+
+    function prepareCollapseControl(control, label) {
+      if (!control) return;
+      control.setAttribute('role', 'button');
+      control.setAttribute('tabindex', '0');
+      control.setAttribute('aria-label', label);
+      addCollapseChevron(control);
+    }
+
+    function bindCollapseControl(key, control, target, options = {}) {
+      if (!control || !target) return;
+      const initialCollapsed = key in dashboardCollapseState
+        ? Boolean(dashboardCollapseState[key])
+        : Boolean(options.defaultCollapsed);
+
+      prepareCollapseControl(control, options.label || 'Toggle section');
+
+      const setCollapsed = (collapsed, persist = true) => {
+        target.classList.toggle('is-collapsed', collapsed);
+        control.setAttribute('aria-expanded', String(!collapsed));
+        control.setAttribute('title', collapsed ? 'Expand section' : 'Collapse section');
+        if (persist) {
+          dashboardCollapseState[key] = collapsed;
+          writeCollapseState();
+        }
+      };
+
+      const toggle = () => setCollapsed(!target.classList.contains('is-collapsed'));
+
+      control.addEventListener('click', toggle);
+      control.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+      });
+
+      setCollapsed(initialCollapsed, false);
+    }
+
+    function enhanceDashboardCollapses() {
+      const creditsBlock = document.querySelector('.sidebar-credits');
+      const creditsHeader = creditsBlock?.querySelector('.credits-header');
+      bindCollapseControl('sidebar:credits', creditsHeader, creditsBlock, { label: 'Toggle plan and credits' });
+
+      const projectsLabel = Array.from(document.querySelectorAll('.nav-label')).find(label => label.textContent?.trim().toLowerCase() === 'projects');
+      const projectsList = document.getElementById('sidebar-projects-list');
+      if (projectsLabel) projectsLabel.classList.add('dashboard-collapse-label');
+      bindCollapseControl('sidebar:projects', projectsLabel, projectsList, { label: 'Toggle projects list' });
+
+      document.querySelectorAll('.settings-block').forEach((block, index) => {
+        const title = block.querySelector('.block-title');
+        const panel = block.closest('.tab-panel');
+        const titleText = title?.textContent?.trim().toLowerCase().replace(/\s+/g, '-') || `block-${index}`;
+        const panelId = panel?.id || 'settings';
+        bindCollapseControl(`settings:${panelId}:${titleText}`, title, block, { label: `Toggle ${title?.textContent?.trim() || 'settings section'}` });
+      });
+    }
+
+    enhanceDashboardCollapses();
+
     // Left panel collapse and expand logic
     const sidebar = document.querySelector('.sidebar');
     const btnCollapseSidebar = document.getElementById('btn-collapse-sidebar');
     const btnExpandSidebar = document.getElementById('btn-expand-sidebar');
 
+    function setSidebarCollapsed(collapsed) {
+      sidebar?.classList.toggle('collapsed', collapsed);
+      if (btnExpandSidebar) btnExpandSidebar.style.display = collapsed ? 'flex' : 'none';
+      btnCollapseSidebar?.setAttribute('aria-expanded', String(!collapsed));
+      try {
+        localStorage.setItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+      } catch {
+        // Non-critical preference.
+      }
+    }
+
     function collapseSidebar() {
-      sidebar?.classList.add('collapsed');
-      if (btnExpandSidebar) btnExpandSidebar.style.display = 'flex';
+      setSidebarCollapsed(true);
     }
 
     function expandSidebar() {
-      sidebar?.classList.remove('collapsed');
-      if (btnExpandSidebar) btnExpandSidebar.style.display = 'none';
+      setSidebarCollapsed(false);
     }
 
     btnCollapseSidebar?.addEventListener('click', collapseSidebar);
     btnExpandSidebar?.addEventListener('click', expandSidebar);
+
+    try {
+      setSidebarCollapsed(localStorage.getItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY) === '1');
+    } catch {
+      setSidebarCollapsed(false);
+    }
 
     // Save simulation triggered by Ctrl+S / Cmd+S
     function showSaveToast() {
