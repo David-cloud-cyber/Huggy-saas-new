@@ -3464,8 +3464,10 @@
             e.stopPropagation();
             const card = toggleMsgBtn.closest(".message-card");
             if (card) {
-              card.classList.toggle("collapsed");
-              toggleMsgBtn.setAttribute("title", card.classList.contains("collapsed") ? "Expand message" : "Collapse message");
+              const collapsed = !card.classList.contains("collapsed");
+              card.classList.toggle("collapsed", collapsed);
+              toggleMsgBtn.setAttribute("title", collapsed ? "Expand message" : "Collapse message");
+              toggleMsgBtn.setAttribute("aria-expanded", String(!collapsed));
             }
             return;
           }
@@ -3508,13 +3510,45 @@
       // Collapse / Expand Left Sidebar Pane logic
       const arrowCollapseSidebar = document.querySelector(".collapse-sidebar-arrow");
       const workspaceBody = document.querySelector(".workspace-body");
+      const BUILDER_SIDEBAR_COLLAPSED_KEY = "huggy-builder-sidebar-collapsed";
+      const BUILDER_EXPLORER_COLLAPSED_KEY = "huggy-builder-explorer-collapsed";
+
+      function persistUiPreference(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          // Preference persistence is optional.
+        }
+      }
+
+      function readUiPreference(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      }
+
+      function setSidebarCollapsed(collapsed) {
+        if (!workspaceBody) return;
+        workspaceBody.classList.toggle("sidebar-collapsed", collapsed);
+        arrowCollapseSidebar?.setAttribute("aria-expanded", String(!collapsed));
+        arrowCollapseSidebar?.setAttribute("title", collapsed ? "Expand left sidebar" : "Collapse left sidebar");
+        arrowCollapseSidebar?.setAttribute("aria-label", collapsed ? "Expand left sidebar" : "Collapse left sidebar");
+        persistUiPreference(BUILDER_SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+      }
 
       function toggleSidebarCollapse() {
-        workspaceBody.classList.toggle("sidebar-collapsed");
+        setSidebarCollapsed(!workspaceBody?.classList.contains("sidebar-collapsed"));
       }
 
       if (arrowCollapseSidebar) {
         arrowCollapseSidebar.addEventListener("click", toggleSidebarCollapse);
+        arrowCollapseSidebar.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          toggleSidebarCollapse();
+        });
       }
 
       // Collapse / Expand File Explorer column logic
@@ -3522,10 +3556,18 @@
       const btnToggleExplorerGlobal = document.getElementById("btn-toggle-explorer-global");
       const screenLayoutCode = document.getElementById("screen-layout-code");
 
+      function setExplorerCollapsed(collapsed) {
+        if (!screenLayoutCode) return;
+        screenLayoutCode.classList.toggle("explorer-collapsed", collapsed);
+        [btnCollapseExplorer, btnToggleExplorerGlobal].forEach((button) => {
+          button?.setAttribute("aria-expanded", String(!collapsed));
+          button?.setAttribute("title", collapsed ? "Show file explorer" : "Hide file explorer");
+        });
+        persistUiPreference(BUILDER_EXPLORER_COLLAPSED_KEY, collapsed ? "1" : "0");
+      }
+
       function toggleExplorerCollapse() {
-        if (screenLayoutCode) {
-          screenLayoutCode.classList.toggle("explorer-collapsed");
-        }
+        setExplorerCollapsed(!screenLayoutCode?.classList.contains("explorer-collapsed"));
       }
 
       if (btnCollapseExplorer) {
@@ -3534,6 +3576,9 @@
       if (btnToggleExplorerGlobal) {
         btnToggleExplorerGlobal.addEventListener("click", toggleExplorerCollapse);
       }
+
+      setSidebarCollapsed(readUiPreference(BUILDER_SIDEBAR_COLLAPSED_KEY) === "1");
+      setExplorerCollapsed(readUiPreference(BUILDER_EXPLORER_COLLAPSED_KEY) === "1");
 
       // Save simulation triggered by Ctrl+S / Cmd+S
       function showSaveToast() {
