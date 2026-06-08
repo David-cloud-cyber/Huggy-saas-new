@@ -375,29 +375,16 @@ function renderFlags() {
   if (!root) return;
   root.innerHTML = `
     <article class="admin-card full">
-      <div class="admin-panel-head">
-        <div>
-          <span class="panel-label">Feature flags</span>
-          <p class="metric-note">Read-only rollout map. Dangerous mutations stay disabled until audit logging is wired.</p>
-        </div>
-        ${pill(`${state.flags.filter(flag => flag.enabled).length} enabled`)}
-      </div>
+      <span class="panel-label">Feature flags</span>
       <div class="flag-list" style="margin-top:12px;">
         ${state.flags.map(flag => `
           <div class="flag-row">
-            <div>
-              <strong>${escapeHtml(flag.label)}</strong>
-              <br>
-              <span>${escapeHtml(flag.key)}</span>
-            </div>
-            <div class="flag-meta">
-              <span>${escapeHtml(flag.rollout || 'all')}</span>
-              <span>risk ${escapeHtml(flag.risk || 'medium')}</span>
-              ${pill(flag.enabled ? 'enabled' : 'disabled')}
-            </div>
+            <div><strong>${escapeHtml(flag.label)}</strong><br><span>${escapeHtml(flag.key)} · ${escapeHtml(flag.rollout)} · risk ${escapeHtml(flag.risk)}</span></div>
+            ${pill(flag.enabled ? 'enabled' : 'disabled')}
           </div>
         `).join('')}
       </div>
+      <p class="metric-note">Rollout mutation is intentionally read-only until dangerous admin actions are explicitly wired with audit logs.</p>
     </article>
   `;
 }
@@ -481,7 +468,7 @@ function bindNavigation() {
   document.querySelectorAll<HTMLButtonElement>('[data-admin-tab]').forEach(button => {
     button.addEventListener('click', () => {
       const tab = button.dataset.adminTab;
-      document.querySelectorAll<HTMLElement>('[data-admin-tab]').forEach(item => item.classList.toggle('active', item.dataset.adminTab === tab));
+      document.querySelectorAll('[data-admin-tab]').forEach(item => item.classList.toggle('active', item === button));
       document.querySelectorAll<HTMLElement>('[data-section]').forEach(section => section.classList.toggle('active', section.dataset.section === tab));
     });
   });
