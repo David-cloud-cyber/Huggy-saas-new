@@ -817,6 +817,19 @@ function init() {
         });
     });
 
+    document.querySelectorAll<HTMLButtonElement>('[data-build-prompt]').forEach(button => {
+        button.addEventListener('click', () => {
+            const prompt = button.dataset.buildPrompt?.trim();
+            const textarea = getElement<HTMLTextAreaElement>('ai-textarea');
+            if (!prompt || !textarea) return;
+            textarea.value = prompt;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.focus({ preventScroll: true });
+            textarea.closest('.input-wrapper')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showToast('Prompt ready');
+        });
+    });
+
     // Sign in flow
     document.querySelectorAll('.sign-in-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {

@@ -162,6 +162,12 @@ import {
   compileSeniorAgentContext,
   type SeniorAgentContext,
 } from './src/services/senior-agent-os.ts';
+import {
+  applyDeepReasoningToPrompt,
+  buildDeepReasoningContract,
+  deepReasoningPromptContext,
+  type DeepReasoningContract,
+} from './src/services/deep-reasoning.ts';
 import { buildAgentMoatIntelligence } from './src/services/agent-moat-intelligence.ts';
 import {
   designWorkshopInstructionLines,
@@ -4907,6 +4913,7 @@ async function generateFilesWithAi(input: {
   plan?: string;
   existingFiles: GeneratedFile[];
   seniorAgentContext?: SeniorAgentContext;
+  deepReasoningContract?: DeepReasoningContract;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(getOpenRouterApiKey());
   if (!hasLiveKey) {
@@ -4965,6 +4972,7 @@ async function generateFilesWithAi(input: {
         existingFilesContent,
         uiGenerationPolicy: uiPolicy.userContext,
         seniorAgentOS: input.seniorAgentContext || undefined,
+        deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
       }),
     },
   ], {
@@ -4995,6 +5003,7 @@ function buildGenerationMessages(input: {
   existingFiles: GeneratedFile[];
   researchContext?: string;
   seniorAgentContext?: SeniorAgentContext;
+  deepReasoningContract?: DeepReasoningContract;
 }) {
   const fileManifest = input.existingFiles
     .map(file => `${file.path} (${file.content.length} chars)`)
@@ -5023,6 +5032,7 @@ function buildGenerationMessages(input: {
         uiGenerationPolicy: uiPolicy.userContext,
         researchContext: input.researchContext || undefined,
         seniorAgentOS: input.seniorAgentContext || undefined,
+        deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
       }),
     },
   ];
@@ -9076,9 +9086,17 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     decision,
     importContext: preparedImportContext || undefined,
   });
+  const deepReasoningContract = buildDeepReasoningContract({
+    prompt: agentPrompt,
+    projectName: project.name,
+    files: existingFiles,
+    decision,
+    executionContract: decision.executionContract,
+    recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
+  });
   const agentPromptForText = decision.intent === 'conversation'
     ? agentPrompt
-    : applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext);
+    : applyDeepReasoningToPrompt(applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext), deepReasoningContract);
   const huggyCloudPlan = reliability.should_mutate_files
     ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
       console.warn('[huggy:cloud_requirement_generate_skipped]', { message: error?.message || String(error) });
@@ -9118,6 +9136,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       requestId,
       }),
       senior_agent_os: seniorAgentContext,
+      deep_reasoning_contract: deepReasoningContract,
     };
     agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack)).id;
   }
@@ -9236,6 +9255,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       userCredits: walletForRouting,
       existingFiles,
       seniorAgentContext,
+      deepReasoningContract,
     });
 
     const mergedByPath = new Map<string, GeneratedFile>();
@@ -10045,9 +10065,17 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     decision,
     importContext: preparedImportContext || undefined,
   });
+  const deepReasoningContract = buildDeepReasoningContract({
+    prompt: agentPrompt,
+    projectName: project.name,
+    files: existingFiles,
+    decision,
+    executionContract: decision.executionContract,
+    recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
+  });
   const agentPromptForText = decision.intent === 'conversation'
     ? agentPrompt
-    : applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext);
+    : applyDeepReasoningToPrompt(applySeniorAgentContextToPrompt(agentPrompt, seniorAgentContext), deepReasoningContract);
   const huggyCloudPlan = reliability.should_mutate_files
     ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
       console.warn('[huggy:cloud_requirement_stream_skipped]', { message: error?.message || String(error) });
@@ -10099,6 +10127,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         requestId,
       }),
       senior_agent_os: seniorAgentContext,
+      deep_reasoning_contract: deepReasoningContract,
     };
     const contextPack = AGENT_V3_ENABLED
       ? buildAgentV3Context({ baseContext: baseContextPack, runnerHistory, researchHistory, toolBudget: DEFAULT_AGENT_V3_BUDGET })
@@ -10463,7 +10492,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       });
       const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
-      const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext, seniorAgentContext });
+      const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext, seniorAgentContext, deepReasoningContract });
       const runtimeOptions = createProviderRuntimeOptions({
         model: selectedModel,
         prompt: effectivePrompt,
