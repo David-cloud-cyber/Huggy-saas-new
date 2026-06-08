@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
-import { WebResearchGateway, researchToPromptContext, shouldUseWebResearch } from './src/services/web-research-gateway.ts';
+import { WebResearchGateway, buildWebResearchPlan, researchToPromptContext, shouldUseWebResearch } from './src/services/web-research-gateway.ts';
 
 assert.equal(shouldUseWebResearch({ prompt: 'bonjour', intent: 'conversation' }), false);
 assert.equal(shouldUseWebResearch({ prompt: 'Check the latest Supabase auth docs', intent: 'build', requiresFileChanges: true }), true);
 assert.equal(shouldUseWebResearch({ prompt: 'Add Stripe billing integration', intent: 'build', requiresFileChanges: true }), true);
+assert.equal(shouldUseWebResearch({ prompt: 'crée une mini app pomodoro moderne', intent: 'build', requiresFileChanges: true }), false);
+assert.equal(shouldUseWebResearch({ prompt: 'corrige le bug du bouton publish', intent: 'debug', requiresFileChanges: true }), false);
+assert.equal(shouldUseWebResearch({ prompt: 'Recherche en ligne les dernières docs Vercel pour les domaines', intent: 'build', requiresFileChanges: true }), true);
+
+const urlPlan = buildWebResearchPlan({
+  prompt: 'Huggy import context:\nSource URL: firecrawl.dev\nUser request: analyse ce site web',
+  intent: 'build',
+  requiresFileChanges: true,
+});
+assert.equal(urlPlan.shouldResearch, true);
+assert.equal(urlPlan.action, 'scrape');
+assert.equal(urlPlan.query, 'https://firecrawl.dev');
 
 const gateway = new WebResearchGateway({});
 const skipped = await gateway.search('latest OpenRouter model availability');
@@ -44,6 +56,37 @@ assert.ok(calls.some(call => call.url.includes('/scrape')));
 const bareDomainScrape = await firecrawlGateway.scrape('firecrawl.dev');
 assert.equal(bareDomainScrape.status, 'completed');
 assert.equal(calls.at(-1)?.body.url, 'https://firecrawl.dev');
+
+const embeddedUrlScrape = await firecrawlGateway.search('Huggy import context:\nSource URL: firecrawl.dev\nUser request: analyse ce site web');
+assert.equal(embeddedUrlScrape.status, 'completed');
+assert.equal(embeddedUrlScrape.provider, 'firecrawl');
+assert.equal(calls.at(-1)?.body.url, 'https://firecrawl.dev');
+
+const fallbackCalls: Array<{ url: string; body?: any }> = [];
+const fallbackFetch: any = async (url: string, init: any) => {
+  fallbackCalls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
+  return {
+    ok: true,
+    status: 200,
+    async json() {
+      if (url.includes('firecrawl.dev')) return { data: [] };
+      return {
+        results: [{
+          url: 'https://docs.tavily.com',
+          title: 'Tavily Docs',
+          content: 'Tavily fallback result from current docs.',
+        }],
+      };
+    },
+  };
+};
+const fallbackGateway = new WebResearchGateway({ FIRECRAWL_API_KEY: 'fc-test', TAVILY_API_KEY: 'tv-test' }, fallbackFetch);
+const fallbackResult = await fallbackGateway.search('latest Tavily API documentation');
+assert.equal(fallbackResult.status, 'completed');
+assert.equal(fallbackResult.provider, 'tavily');
+assert.equal(fallbackResult.results[0]?.url, 'https://docs.tavily.com');
+assert.ok(fallbackCalls.some(call => call.url.includes('firecrawl.dev')));
+assert.ok(fallbackCalls.some(call => call.url.includes('tavily.com')));
 
 const context = researchToPromptContext({
   status: 'completed',

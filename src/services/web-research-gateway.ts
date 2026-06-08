@@ -20,6 +20,13 @@ export type ResearchResult = {
   results: ResearchResultItem[];
 };
 
+export type WebResearchPlan = {
+  shouldResearch: boolean;
+  action: 'search' | 'scrape';
+  query: string;
+  reason: string;
+};
+
 export class WebResearchGateway {
   private firecrawlKey: string;
   private tavilyKey: string;
@@ -38,7 +45,8 @@ export class WebResearchGateway {
   }
 
   async search(query: string, options: { maxResults?: number; timeoutMs?: number } = {}): Promise<ResearchResult> {
-    const normalizedQuery = sanitizeQuery(query);
+    const plan = buildWebResearchPlan({ prompt: query, requiresFileChanges: true });
+    const normalizedQuery = sanitizeQuery(plan.query || query);
     if (!normalizedQuery) {
       return skipped(query, 'WEB_RESEARCH_QUERY_EMPTY', 'No useful research query was available.');
     }
@@ -49,17 +57,19 @@ export class WebResearchGateway {
     const maxResults = Math.min(6, Math.max(1, options.maxResults || 4));
     if (this.firecrawlKey) {
       try {
-        if (looksLikeUrl(normalizedQuery)) {
+        if (plan.action === 'scrape' || looksLikeUrl(normalizedQuery)) {
           return await this.scrapeFirecrawl(normalizeScrapeUrl(normalizedQuery), options.timeoutMs || 12_000);
         }
-        return await this.searchFirecrawl(normalizedQuery, maxResults, options.timeoutMs || 12_000);
+        const result = await this.searchFirecrawl(normalizedQuery, maxResults, options.timeoutMs || 12_000);
+        if (hasUsefulResults(result) || (!this.tavilyKey && !this.braveKey)) return result;
       } catch (error: any) {
         if (!this.tavilyKey && !this.braveKey) return failed(normalizedQuery, 'firecrawl', error);
       }
     }
     if (this.tavilyKey) {
       try {
-        return await this.searchTavily(normalizedQuery, maxResults, options.timeoutMs || 12_000);
+        const result = await this.searchTavily(normalizedQuery, maxResults, options.timeoutMs || 12_000);
+        if (hasUsefulResults(result) || !this.braveKey) return result;
       } catch (error: any) {
         if (!this.braveKey) return failed(normalizedQuery, 'tavily', error);
       }
@@ -112,7 +122,7 @@ export class WebResearchGateway {
           : Array.isArray(data?.items)
             ? data.items
             : [];
-      const results = rawResults.slice(0, maxResults).map(firecrawlItemToResult).filter((item: ResearchResultItem) => item.url);
+      const results = normalizeResults(rawResults.map(firecrawlItemToResult), maxResults);
       return {
         status: 'completed',
         query,
@@ -179,13 +189,13 @@ export class WebResearchGateway {
         query,
         provider: 'tavily',
         message: results.length ? 'Research completed.' : 'Research completed with no results.',
-        results: results.slice(0, maxResults).map((item: any) => ({
+        results: normalizeResults(results.map((item: any) => ({
           title: truncate(item?.title || item?.url || 'Untitled result', 120),
           url: safeUrl(item?.url),
           snippet: truncate(item?.content || item?.snippet || '', 360),
           published_at: item?.published_date || item?.published_at || null,
           source: 'tavily',
-        })).filter((item: ResearchResultItem) => item.url),
+        })), maxResults),
       };
     } finally {
       clearTimeout(timer);
@@ -214,13 +224,13 @@ export class WebResearchGateway {
         query,
         provider: 'brave',
         message: results.length ? 'Research completed.' : 'Research completed with no results.',
-        results: results.slice(0, maxResults).map((item: any) => ({
+        results: normalizeResults(results.map((item: any) => ({
           title: truncate(item?.title || item?.url || 'Untitled result', 120),
           url: safeUrl(item?.url),
           snippet: truncate(item?.description || item?.snippet || '', 360),
           published_at: item?.age || null,
           source: 'brave',
-        })).filter((item: ResearchResultItem) => item.url),
+        })), maxResults),
       };
     } finally {
       clearTimeout(timer);
@@ -229,21 +239,52 @@ export class WebResearchGateway {
 }
 
 export function shouldUseWebResearch(input: { prompt: string; intent?: string; requiresFileChanges?: boolean }) {
-  const prompt = String(input.prompt || '').toLowerCase();
-  if (!prompt.trim()) return false;
-  if (/\b(bonjour|salut|hello|hi|merci|thanks)\b/.test(prompt) && prompt.length < 80) return false;
-  if (/\b(latest|recent|today|current|now|pricing|price|docs?|documentation|api|sdk|version|openrouter|railway|vercel|supabase|stripe|seo|google|cloudflare|dns|domain|deploy|error|bug)\b/i.test(prompt)) {
-    return true;
+  return buildWebResearchPlan(input).shouldResearch;
+}
+
+export function buildWebResearchPlan(input: { prompt: string; intent?: string; requiresFileChanges?: boolean }): WebResearchPlan {
+  const rawPrompt = String(input.prompt || '');
+  const prompt = rawPrompt.toLowerCase();
+  const query = sanitizeQuery(rawPrompt);
+  const url = extractPrimaryUrl(rawPrompt);
+  const isShortGreeting = /\b(bonjour|salut|hello|hi|merci|thanks)\b/.test(prompt) && prompt.length < 80;
+  const isSimpleLocalBuild = /\b(todo|to do|to-do|pomodoro|pomodero|timer|calculator|calculatrice|notes?|weather app|quiz)\b/i.test(prompt)
+    && /\b(create|build|make|generate|cr[eé]e|g[eé]n[eè]re|app|application)\b/i.test(prompt)
+    && !/\b(url|http|docs?|documentation|latest|recent|actuel|r[eé]cent|pricing|api|sdk|stripe|supabase|vercel|railway|github|figma|import|clone|rebuild|inspiration)\b/i.test(prompt);
+  const isInternalBugOnly = /\b(bug|erreur|error|preview blanche|white screen|corrige|fix)\b/i.test(prompt)
+    && !/\b(docs?|documentation|api|sdk|provider|openrouter|stripe|supabase|vercel|railway|google|cloudflare|dns|domain|oauth|webhook|latest|recent|actuel|r[eé]cent|pricing|http|url)\b/i.test(prompt);
+
+  if (!query || isShortGreeting || isSimpleLocalBuild || isInternalBugOnly) {
+    return { shouldResearch: false, action: 'search', query, reason: 'local_or_conversation' };
   }
-  return Boolean(input.requiresFileChanges && /\b(integrat|connect|provider|external|auth|payment|billing|database|deploy)\b/i.test(prompt));
+
+  if (url && /\b(research|analyse|analyze|scrape|crawl|import|clone|rebuild|inspiration|website|site|url|source url|website url|figma|github)\b/i.test(prompt)) {
+    return { shouldResearch: true, action: 'scrape', query: url, reason: 'url_context' };
+  }
+
+  if (/\b(search the web|web search|online search|look up|browse|research online|internet search|recherche en ligne|cherche sur internet|chercher sur internet|consulte le web|fais une recherche|faire une recherche|recherche web)\b/i.test(prompt)) {
+    return { shouldResearch: true, action: url ? 'scrape' : 'search', query: url || query, reason: 'explicit_web_research' };
+  }
+
+  if (/\b(latest|recent|today|current|now|new|pricing|price|docs?|documentation|api|sdk|version|changelog|release|availability|models?|provider|openrouter|railway|vercel|supabase|stripe|seo|google|cloudflare|dns|domain|deploy|oauth|webhook|terms|law|legal|gdpr)\b/i.test(prompt)
+    || /\b(dernier|derni[eè]re|r[eé]cent|actuel|aujourd'hui|maintenant|prix|tarif|documentation|d[eé]ployer|domaine|mod[eè]le|disponibilit[eé]|firecrawl|tavily|brave search)\b/i.test(prompt)) {
+    return { shouldResearch: true, action: 'search', query, reason: 'current_external_fact' };
+  }
+
+  if (input.requiresFileChanges && /\b(integrat|connect|provider|external|auth|payment|billing|database|deploy|api|sdk|webhook|oauth)\b/i.test(prompt)) {
+    return { shouldResearch: true, action: 'search', query, reason: 'external_integration' };
+  }
+
+  return { shouldResearch: false, action: 'search', query, reason: 'not_needed' };
 }
 
 export function researchToPromptContext(result: ResearchResult) {
   if (result.status !== 'completed' || !result.results.length) return '';
   return [
     'Recent web research context:',
-    ...result.results.map((item, index) => `${index + 1}. ${item.title} - ${item.url}\n   ${item.snippet}`),
+    ...result.results.map((item, index) => `${index + 1}. ${item.title} - ${item.url}\n   Source: ${item.source || result.provider}${item.published_at ? `; date: ${item.published_at}` : ''}\n   ${item.snippet}`),
     'Use these sources only as supporting context. Do not invent claims beyond the cited snippets.',
+    'Prefer official documentation and primary sources when results conflict.',
   ].join('\n');
 }
 
@@ -257,11 +298,16 @@ function failed(query: string, provider: 'firecrawl' | 'tavily' | 'brave', error
 }
 
 function clean(value: unknown) {
-  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
 }
 
 function sanitizeQuery(value: string) {
-  return redactSecrets(clean(value), '[redacted]').slice(0, 240);
+  const redacted = redactSecrets(clean(value), '[redacted]').replace(/\s+/g, ' ');
+  const url = extractPrimaryUrl(redacted);
+  if (url && redacted.length > 180 && /\b(website url|source url|import source|research this website|rebuild this website|use this website|clone my own site)\b/i.test(redacted)) {
+    return url;
+  }
+  return buildSearchQuery(redacted).slice(0, 240);
 }
 
 function truncate(value: unknown, limit: number) {
@@ -284,6 +330,59 @@ function normalizeScrapeUrl(value: unknown) {
   if (/^https?:\/\//i.test(url)) return safeUrl(url);
   if (/^[a-z0-9-]+(\.[a-z0-9-]+)+([/?#][^\s]*)?$/i.test(url)) return `https://${url}`.slice(0, 500);
   return '';
+}
+
+function buildSearchQuery(value: string) {
+  const text = clean(value).replace(/\s+/g, ' ');
+  if (!text) return '';
+  const url = extractPrimaryUrl(text);
+  if (url && looksLikeUrl(text)) return url;
+  const cleaned = text
+    .replace(/Huggy import context:/gi, '')
+    .replace(/Import instructions:/gi, '')
+    .replace(/User request:/gi, '')
+    .replace(/Important:.*$/gi, '')
+    .replace(/\b(project|files|existingFiles|seniorAgentOS|deepReasoning|uiGenerationPolicy)\b[:=][^{}]{0,180}/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const docsTarget = cleaned.match(/\b(?:docs?|documentation|api|sdk|pricing|deploy|oauth|webhook|latest|recent|current|version|mod[eè]le|tarif|prix|firecrawl|tavily|brave search|recherche en ligne|search the web|look up)\b.{0,140}/i)?.[0];
+  if (docsTarget) return truncate(docsTarget, 220);
+  return truncate(cleaned, 220);
+}
+
+function extractPrimaryUrl(value: unknown) {
+  const original = String(value || '');
+  const labelledLine = original.match(/\b(?:website url|source url|url|site)\s*:\s*([^\r\n\s)"'<>]+)/i)?.[1];
+  if (labelledLine) return normalizeScrapeUrl(labelledLine.replace(/[),.;]+$/g, ''));
+  const text = clean(value);
+  const explicit = text.match(/\bhttps?:\/\/[^\s)"'<>]+/i)?.[0];
+  if (explicit) return normalizeScrapeUrl(explicit.replace(/[),.;]+$/g, ''));
+  const labelled = text.match(/\b(?:website url|source url|url|site)\s*:\s*([a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#][^\s)"'<>]*)?)/i)?.[1];
+  if (labelled) return normalizeScrapeUrl(labelled.replace(/[),.;]+$/g, ''));
+  return '';
+}
+
+function hasUsefulResults(result: ResearchResult) {
+  return result.status === 'completed' && result.results.some(item => item.url && item.snippet);
+}
+
+function normalizeResults(items: ResearchResultItem[], maxResults: number) {
+  const seen = new Set<string>();
+  const normalized: ResearchResultItem[] = [];
+  for (const item of items) {
+    const url = safeUrl(item.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    normalized.push({
+      title: truncate(item.title || url, 120),
+      url,
+      snippet: truncate(item.snippet || '', 520),
+      published_at: item.published_at || null,
+      source: item.source || 'web',
+    });
+    if (normalized.length >= maxResults) break;
+  }
+  return normalized;
 }
 
 function firecrawlItemToResult(item: any): ResearchResultItem {
