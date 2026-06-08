@@ -169,7 +169,9 @@ export function verifyGeneratedProject(input: {
   } else {
     checks.push(pass('seo_description', 'Preview includes a meta description.'));
   }
-  if (/<script[^>]*>[\s\S]*<\/script>/i.test(htmlSource) && /throw new Error\(|__HUGGY_FORCE_ERROR__/i.test(htmlSource)) {
+  const hasKnownRuntimeBlocker = /__HUGGY_FORCE_ERROR__/i.test(htmlSource)
+    || /throw\s+new\s+Error\(\s*['"`](?:__HUGGY_PLACEHOLDER__|App component is missing)/i.test(htmlSource);
+  if (/<script[^>]*>[\s\S]*<\/script>/i.test(htmlSource) && hasKnownRuntimeBlocker) {
     checks.push(fail('preview_runtime_guard', 'medium', 'Preview contains a known forced runtime failure marker.'));
   }
 

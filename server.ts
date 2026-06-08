@@ -1670,10 +1670,9 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     "import { readFileSync } from 'node:fs';",
     '',
     "const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');",
-    "if (!/export\\s+default\\s+function\\s+App|export\\s+default\\s+App|const\\s+App\\s*=/.test(app)) {",
-    "  throw new Error('App component is missing a default export.');",
-    '}',
-    "console.log('Generated app smoke test passed.');",
+    "const isValid = /export\\s+default\\s+function\\s+App|export\\s+default\\s+App|const\\s+App\\s*=/.test(app);",
+    "console.log(isValid ? 'PASS: App component smoke test passed.' : 'FAIL: App component missing default export.');",
+    'process.exit(isValid ? 0 : 1);',
     '',
   ].join('\n'), 'ts');
 
@@ -2746,7 +2745,10 @@ class AgentOrchestrator {
       'index html should load', 'index.html should load', 'src main tsx', 'main tsx absent',
       'app tsx absent', 'preview blanche', 'blank preview', 'corrige le probleme',
       'corrige le blocage', 'blocage restant', 'points bloquants',
-      'forced runtime failure marker', 'runtime failure marker'
+      'corriger le blocage', 'corrige les erreurs', 'répare', 'repare', 'réparer',
+      'reparer', 'fix the blocking', 'resous le probleme', 'résous le problème',
+      'ça ne marche pas', 'ca ne marche pas', 'app cassée', 'app cassee',
+      'erreur runtime', 'forced runtime failure marker', 'runtime failure marker'
     ];
     const verifyHints = [
       'verifie', 'vérifie', 'verify', 'audit', 'check', 'teste', 'test', 'review',

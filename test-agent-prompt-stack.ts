@@ -18,7 +18,7 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v13');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v14');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
@@ -59,5 +59,11 @@ assert.ok(generationPrompt.includes('A builder agent should not over-explain bef
 assert.ok(generationPrompt.includes('Never answer a clear build request with a generic plan'), 'generation prompt must reject generic plan detours for build requests');
 assert.ok(generationPrompt.includes('ask exactly one concise question'), 'generation prompt must keep clarification short');
 assert.ok(routerPrompt.includes('Do not ask "Build or Plan?"'), 'router prompt must forbid generic mode questions');
+assert.ok(generationPrompt.includes('Zero-bug generation contract'), 'generation prompt must include zero-bug generation contract');
+assert.ok(generationPrompt.includes('src/main.tsx must import React'), 'generation prompt must require a real Vite entrypoint');
+assert.ok(generationPrompt.includes('process.exit(isValid ? 0 : 1)'), 'generation prompt must require a non-throwing smoke test');
+assert.ok(generationPrompt.includes('Never generate throw new Error() inside src/App.tsx'), 'generation prompt must forbid runtime throw markers');
+assert.ok(generationPrompt.includes('Never output __HUGGY_FORCE_ERROR__'), 'generation prompt must forbid forced runtime failure markers');
+assert.ok(generationPrompt.includes('Huggy is a general web-app builder'), 'generation prompt must stay general-purpose');
 
 console.log('agent prompt stack ok');
