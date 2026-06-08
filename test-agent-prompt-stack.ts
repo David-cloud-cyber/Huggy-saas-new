@@ -34,6 +34,12 @@ assert.ok(generationPrompt.toLowerCase().includes('return a complete modern reac
 assert.ok(generationPrompt.includes('Never assume a global supabase variable'), 'generation prompt must forbid global Supabase auth clients');
 assert.ok(generationPrompt.includes('never call supabase.auth unless supabase is imported or created'), 'generation prompt must require an explicit auth client');
 assert.ok(generationPrompt.includes('show a safe demo/auth-unavailable state instead of crashing'), 'generation prompt must keep auth previews safe when config is missing');
+assert.ok(generationPrompt.includes('Generation stack v2 is mandatory'), 'generation prompt must include the strict generation stack v2 policy');
+assert.ok(generationPrompt.includes('React 18'), 'generation prompt must require React 18');
+assert.ok(generationPrompt.includes('lucide-react'), 'generation prompt must require lucide-react icons');
+assert.ok(generationPrompt.includes('tailwind.config.ts'), 'generation prompt must require Tailwind config');
+assert.ok(generationPrompt.includes('postcss.config.cjs'), 'generation prompt must require PostCSS config');
+assert.ok(generationPrompt.includes('src/lib/supabaseClient.ts'), 'generation prompt must require a browser-safe Supabase client for backend apps');
 assert.ok(routerPrompt.includes('Words like create, add, generate, improve, fix, modify, arrange, or correct are not enough'), 'router must resist keyword-only coding decisions');
 assert.ok(routerPrompt.includes('Figma, GitHub, Image, and Website URL'), 'router prompt must understand import sources');
 assert.ok(generationPrompt.includes('convert static frames into a real responsive app'), 'generation prompt must upgrade Figma frames into product UI');

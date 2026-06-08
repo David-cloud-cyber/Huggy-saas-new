@@ -257,16 +257,21 @@ const HUGGY_PREMIUM_UI_ESCALATION_POLICY = [
 const HUGGY_GENERATION_PRODUCT_POLICY = [
   'Generated app quality:',
   'Generate real project files, not a static screenshot or fake mockup.',
-  'New web apps should be modern Vite + React + TypeScript projects unless the existing project architecture requires a safer incremental path.',
+  'Generation stack v2 is mandatory for new apps: React 18, Vite, strict TypeScript, Tailwind CSS v3, and lucide-react icons. Do not deviate unless patching an existing incompatible codebase safely.',
   'For new apps, return at minimum package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts. package.json must include dev, build, test, and lint scripts.',
+  'package.json must include runtime dependencies react ^18.3.1, react-dom ^18.3.1, lucide-react ^0.383.0; dev dependencies @vitejs/plugin-react ^4.3.4, vite ^5.4.19, typescript ^5.7.3, @types/react ^18.3.18, @types/react-dom ^18.3.5, tailwindcss ^3.4.17, postcss ^8.4.49, autoprefixer ^10.4.20.',
   'index.html must be a Vite shell with <div id="root"></div> and a module script for /src/main.tsx. Do not put the whole app in index.html.',
+  'vite.config.ts must configure @vitejs/plugin-react. tsconfig.json must use strict true and jsx react-jsx. tailwind.config.ts must scan ./index.html and ./src/**/*.{ts,tsx}.',
   'src/App.tsx must contain a real product experience with stateful behavior and meaningful content tailored to the prompt.',
-  'Use Tailwind CSS utility classes in all React components. src/index.css should contain only @tailwind base; @tailwind components; @tailwind utilities; and tiny global resets if absolutely necessary.',
+  'src/App.tsx must export default function App(). Type every business entity and handler. Avoid any for business data. Forms need onSubmit and preventDefault. Lists need empty states. Buttons need real handlers.',
+  'Use Tailwind CSS utility classes in all React components. src/index.css should contain only @tailwind base; @tailwind components; @tailwind utilities; no custom component CSS, no inline style attributes, and no style objects unless unavoidable for a browser API.',
   'Use self-contained React, TypeScript, and Tailwind classes. Do not depend on remote assets, private UI libraries, or unavailable packages.',
-  'Include Supabase schema in supabase/schema.sql only when the app needs persistent data.',
+  'For local-only demo apps, all primary controls must work with React state and realistic seed data. localStorage is allowed only when the user explicitly asks for local browser persistence or the app is clearly a local demo.',
+  'If the app needs persistent backend data or auth, include @supabase/supabase-js ^2.106.0, src/lib/supabaseClient.ts with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY only, src/lib/types.ts, src/lib/api.ts, and supabase/schema.sql with RLS, policies, indexes, timestamps, and owner/user scoping.',
   'Every app should be SEO and AI-search ready when relevant: semantic HTML, one useful H1, title/meta description, Open Graph/Twitter metadata, descriptive alt text, JSON-LD when appropriate, and robots/sitemap for multi-page public apps.',
   'Use modern browser APIs and React state where they make the app actually interactive. Avoid pretending a static preview is a working product when the prompt asks for app behavior.',
   'Design loading, empty, error, and success states for core flows. A generated app should be usable before backend integration and honest about what is mocked.',
+  'Absolute generation rules: never return only index.html, never use global window.supabase, never include service role or provider secrets, never truncate files, never output Markdown fences, and never ship inert primary buttons.',
 ].join('\n');
 
 const HUGGY_FINAL_DELIVERY_POLICY = [
@@ -336,7 +341,9 @@ const HUGGY_JSON_OUTPUT_POLICY = [
   'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
   'For build, edit, or debug generation, a JSON object with status, plan, phases, steps, next_action, or recommendations but no non-empty files array is invalid. Think through the plan internally, then return actual project files.',
   'The summary must mention the detected app type and chosen design direction in one concise sentence.',
-  'For a new app, files must include package.json, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts.',
+  'For a new app, files must include package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts.',
+  'Valid language values are tsx, ts, js, json, css, html, markdown, and sql.',
+  'Before returning, mentally verify: App has a default export, all imports exist, package scripts are complete, Tailwind files are present, index.html loads /src/main.tsx, primary buttons have handlers, forms prevent default, lists have empty states, seed data is realistic, no file is truncated, and the JSON is valid.',
   'Never return standalone HTML as the only deliverable for a normal app request. Use HTML-only only when the user explicitly asks for a static one-page HTML file.',
   'Every generated app must include working primary controls or honest disabled/empty states. A visually polished but non-functional app is not complete.',
 ].join('\n');
