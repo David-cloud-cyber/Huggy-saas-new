@@ -26,13 +26,20 @@ export function safeRedirectTarget(candidate?: string | null): string {
   const value = String(candidate || '').trim();
   if (!value) return fallback;
 
+  const isSafeInternalPath = (target: string) => {
+    const normalized = target.trim();
+    if (!normalized.startsWith('/') || normalized.startsWith('//') || normalized.includes('\\')) return false;
+    if (/^\/https?:\/\//i.test(normalized)) return false;
+    return true;
+  };
+
   try {
     const decoded = decodeURIComponent(value);
-    if (decoded.startsWith('/') && !decoded.startsWith('//') && !decoded.includes('\\')) {
+    if (isSafeInternalPath(decoded)) {
       return decoded;
     }
   } catch {
-    if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) {
+    if (isSafeInternalPath(value)) {
       return value;
     }
   }

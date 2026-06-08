@@ -53,6 +53,17 @@ assert(
 );
 
 assert(
+  browserAuthSource.includes('/^\\/https?:\\/\\//i.test(normalized)'),
+  'browser auth redirects must reject malformed absolute URL paths like /https://www.huggy.fun/admin.html',
+);
+
+assert(
+  serverSource.includes('normalizeMalformedAbsolutePath') &&
+    serverSource.includes("res.redirect(302, normalizedPath)"),
+  'server must repair malformed absolute Huggy paths before static routing',
+);
+
+assert(
   browserAuthSource.includes("scope: 'local'"),
   'browser auth must sign out current device only',
 );

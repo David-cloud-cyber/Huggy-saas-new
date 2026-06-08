@@ -16,8 +16,15 @@ async function check(path) {
   console.log(`[prod-smoke] ${path} ${response.status} ${duration}ms`);
 }
 
-for (const path of paths) {
-  await check(path);
+async function main() {
+  for (const path of paths) {
+    await check(path);
+  }
+
+  console.log('[prod-smoke] public pages reachable');
 }
 
-console.log('[prod-smoke] public pages reachable');
+main().catch(error => {
+  console.error(`[prod-smoke] ${error?.message || error}`);
+  process.exitCode = 1;
+});

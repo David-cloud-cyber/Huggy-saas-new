@@ -85,6 +85,23 @@ function skeleton(rows = 5) {
   return `<div class="admin-skeleton" aria-label="Loading">${Array.from({ length: rows }, () => '<div class="admin-skeleton-line"></div>').join('')}</div>`;
 }
 
+async function safeAdminFetch<T extends JsonRecord>(path: string, fallback: T): Promise<T> {
+  try {
+    return await apiFetch<T>(path);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Admin data unavailable.';
+    return {
+      ...fallback,
+      success: false,
+      error: message,
+      availability: {
+        ...(fallback.availability || {}),
+        endpoint: false,
+      },
+    };
+  }
+}
+
 function metric(label: string, value: unknown, note = '') {
   return `
     <article class="admin-card clickable" data-drawer-type="metric" data-drawer-id="${escapeHtml(label)}">
@@ -358,16 +375,29 @@ function renderFlags() {
   if (!root) return;
   root.innerHTML = `
     <article class="admin-card full">
-      <span class="panel-label">Feature flags</span>
+      <div class="admin-panel-head">
+        <div>
+          <span class="panel-label">Feature flags</span>
+          <p class="metric-note">Read-only rollout map. Dangerous mutations stay disabled until audit logging is wired.</p>
+        </div>
+        ${pill(`${state.flags.filter(flag => flag.enabled).length} enabled`)}
+      </div>
       <div class="flag-list" style="margin-top:12px;">
         ${state.flags.map(flag => `
           <div class="flag-row">
-            <div><strong>${escapeHtml(flag.label)}</strong><br><span>${escapeHtml(flag.key)} · ${escapeHtml(flag.rollout)} · risk ${escapeHtml(flag.risk)}</span></div>
-            ${pill(flag.enabled ? 'enabled' : 'disabled')}
+            <div>
+              <strong>${escapeHtml(flag.label)}</strong>
+              <br>
+              <span>${escapeHtml(flag.key)}</span>
+            </div>
+            <div class="flag-meta">
+              <span>${escapeHtml(flag.rollout || 'all')}</span>
+              <span>risk ${escapeHtml(flag.risk || 'medium')}</span>
+              ${pill(flag.enabled ? 'enabled' : 'disabled')}
+            </div>
           </div>
         `).join('')}
       </div>
-      <p class="metric-note">Rollout mutation is intentionally read-only until dangerous admin actions are explicitly wired with audit logs.</p>
     </article>
   `;
 }
@@ -412,17 +442,17 @@ async function loadAdminData() {
     const liveStatus = qs('#admin-live-status');
     if (liveStatus) liveStatus.textContent = 'Refreshing live data';
     const [overview, users, projects, runs, errors, costs, providers, margins, publish, security, flags] = await Promise.all([
-      apiFetch<JsonRecord>('/api/admin/overview'),
-      apiFetch<JsonRecord>('/api/admin/users'),
-      apiFetch<JsonRecord>('/api/admin/projects'),
-      apiFetch<JsonRecord>('/api/admin/runs'),
-      apiFetch<JsonRecord>('/api/admin/errors'),
-      apiFetch<JsonRecord>('/api/admin/ai-costs'),
-      apiFetch<JsonRecord>('/api/admin/provider-usage'),
-      apiFetch<JsonRecord>('/api/admin/billing/margins'),
-      apiFetch<JsonRecord>('/api/admin/publish'),
-      apiFetch<JsonRecord>('/api/admin/security'),
-      apiFetch<JsonRecord>('/api/admin/feature-flags'),
+      safeAdminFetch('/api/admin/overview', { metrics: {}, health: [], availability: {}, distributions: {}, recent: { failed_runs: [] } }),
+      safeAdminFetch('/api/admin/users', { users: [], availability: {} }),
+      safeAdminFetch('/api/admin/projects', { projects: [], availability: {} }),
+      safeAdminFetch('/api/admin/runs', { runs: [], distributions: {}, availability: {} }),
+      safeAdminFetch('/api/admin/errors', { errors: { failed_runs: [], runner_failures: [] }, grouped: {}, availability: {} }),
+      safeAdminFetch('/api/admin/ai-costs', { rows: [], availability: {} }),
+      safeAdminFetch('/api/admin/provider-usage', { rows: [], availability: {} }),
+      safeAdminFetch('/api/admin/billing/margins', { rows: [], guardrails: {}, availability: {} }),
+      safeAdminFetch('/api/admin/publish', { deployments: [], domains: [], availability: {}, grouped: {} }),
+      safeAdminFetch('/api/admin/security', { summary: {}, checklist: [], findings: [], availability: {} }),
+      safeAdminFetch('/api/admin/feature-flags', { flags: [], availability: {} }),
     ]);
     state.overview = overview;
     allUsers = users.users || [];
@@ -451,7 +481,7 @@ function bindNavigation() {
   document.querySelectorAll<HTMLButtonElement>('[data-admin-tab]').forEach(button => {
     button.addEventListener('click', () => {
       const tab = button.dataset.adminTab;
-      document.querySelectorAll('[data-admin-tab]').forEach(item => item.classList.toggle('active', item === button));
+      document.querySelectorAll<HTMLElement>('[data-admin-tab]').forEach(item => item.classList.toggle('active', item.dataset.adminTab === tab));
       document.querySelectorAll<HTMLElement>('[data-section]').forEach(section => section.classList.toggle('active', section.dataset.section === tab));
     });
   });

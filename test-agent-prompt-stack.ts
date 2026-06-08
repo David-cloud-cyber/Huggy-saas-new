@@ -18,7 +18,7 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v15');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v16');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
@@ -68,5 +68,12 @@ assert.ok(generationPrompt.includes('Never generate throw new Error() inside src
 assert.ok(generationPrompt.includes('Never output __HUGGY_FORCE_ERROR__'), 'generation prompt must forbid forced runtime failure markers');
 assert.ok(generationPrompt.includes('Huggy is a general web-app builder'), 'generation prompt must stay general-purpose');
 assert.ok(generationPrompt.includes('Recovery pass is mandatory'), 'generation prompt must require repair/retest before final delivery');
+assert.ok(generationPrompt.includes('Generated app design system policy'), 'generation prompt must include generated app design system policy');
+assert.ok(generationPrompt.includes('design tokens'), 'generation prompt must require design tokens');
+assert.ok(generationPrompt.includes('Avoid generic AI patterns'), 'generation prompt must reject generic AI aesthetics');
+assert.ok(generationPrompt.includes('Frontend craft policy'), 'generation prompt must include frontend craft policy');
+assert.ok(generationPrompt.includes('Touch targets must be at least 44x44px'), 'generation prompt must enforce touch target accessibility');
+assert.ok(generationPrompt.includes('prefers-reduced-motion'), 'generation prompt must respect reduced motion');
+assert.ok(generationPrompt.includes('Motion and polish policy'), 'generation prompt must include motion polish guidance');
 
 console.log('agent prompt stack ok');

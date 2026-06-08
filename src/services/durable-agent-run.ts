@@ -291,7 +291,7 @@ function defaultCheckpointMessage(phase: DurableRunPhase) {
     retesting: 'Retesting after fixes.',
     saving: 'Saving project state.',
     ready: 'Run ready.',
-    needs_fix: 'Recoverable draft saved for repair.',
+    needs_fix: 'Work saved. Preview verification still needs a clean pass.',
     blocked: 'Run blocked until one required action is available.',
     stopped: 'Run stopped.',
   };

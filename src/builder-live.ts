@@ -1,4 +1,4 @@
-import { apiFetch, apiStream } from './lib/api';
+import { apiFetch } from './lib/api';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import {
@@ -283,6 +283,7 @@ let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let currentMediaPreviewHtml = '';
+let previewThemeSyncBound = false;
 let currentPlanKey: PlanKey = 'free';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
@@ -943,6 +944,50 @@ function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
   return centeredPreviewLoaderHtml(mode, label);
 }
 
+function getBuilderPreviewTheme(): 'light' | 'dark' {
+  const documentTheme = document.documentElement.getAttribute('data-theme')?.toLowerCase();
+  if (documentTheme === 'light' || documentTheme === 'dark') return documentTheme;
+  try {
+    const storedTheme = localStorage.getItem('huggy-theme')?.toLowerCase();
+    if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme;
+  } catch {
+    // Keep the preview shell usable even when storage is unavailable.
+  }
+  return 'light';
+}
+
+function syncInternalPreviewTheme() {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  const theme = getBuilderPreviewTheme();
+  if (frame.dataset.previewShellTheme === theme) return;
+  if (frame.dataset.emptyPreview === 'true') {
+    frame.dataset.previewShellTheme = theme;
+    const mode: EmptyPreviewMode = emptyPreviewMode === 'working' ? 'working' : 'idle';
+    frame.srcdoc = centeredPreviewLoaderHtml(mode, emptyPreviewLabel);
+    return;
+  }
+  if (frame.dataset.designPreview === 'true' && activeWorkshop === 'design' && !isUsablePreviewHtml(currentPreviewHtml)) {
+    setDesignPreviewHtml(designPreviewShellHtml('idle', 'Design canvas'));
+    return;
+  }
+  if (frame.dataset.mediaPreview === 'true' && activeWorkshop === 'media' && !isUsablePreviewHtml(currentPreviewHtml)) {
+    setMediaPreviewHtml(mediaPreviewShellHtml('idle', 'Media output'));
+  }
+}
+
+function bindPreviewThemeSync() {
+  if (previewThemeSyncBound) return;
+  previewThemeSyncBound = true;
+  if ('MutationObserver' in window) {
+    const observer = new MutationObserver(() => syncInternalPreviewTheme());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  window.addEventListener('storage', event => {
+    if (event.key === 'huggy-theme') syncInternalPreviewTheme();
+  });
+}
+
 function isUsablePreviewHtml(html: unknown) {
   const source = String(html || '').trim();
   if (!source) return false;
@@ -966,8 +1011,9 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
   const status = escapeHtml(rawStatus);
   const letters = previewLoaderLetters(rawStatus);
   const stateClass = isWorking ? 'working' : 'idle';
+  const previewTheme = getBuilderPreviewTheme();
   return `<!DOCTYPE html>
-<html lang="en" data-preview-state="${stateClass}">
+<html lang="en" data-preview-state="${stateClass}" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1002,6 +1048,36 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
     --ring-glow-a: rgba(147,197,253,.22);
     --ring-glow-b: rgba(191,219,254,.12);
   }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --loader-text: #1c1c1c;
+  --loader-bg-a: #fcfbf8;
+  --loader-bg-b: #f7f4ed;
+  --loader-bg-c: #fffdf8;
+  --ring-a: #dbeafe;
+  --ring-b: #93c5fd;
+  --ring-c: #2f6df6;
+  --ring-mid-a: #bfdbfe;
+  --ring-mid-b: #60a5fa;
+  --ring-mid-c: #173f8f;
+  --ring-glow-a: rgba(96,165,250,.22);
+  --ring-glow-b: rgba(47,109,246,.14);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --loader-text: #f8f4eb;
+  --loader-bg-a: #171613;
+  --loader-bg-b: #201f1b;
+  --loader-bg-c: #2a2822;
+  --ring-a: #d8d1c3;
+  --ring-b: #93c5fd;
+  --ring-c: #93c5fd;
+  --ring-mid-a: #f8f4eb;
+  --ring-mid-b: #bfdbfe;
+  --ring-mid-c: #60a5fa;
+  --ring-glow-a: rgba(147,197,253,.22);
+  --ring-glow-b: rgba(191,219,254,.12);
 }
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
@@ -1120,6 +1196,7 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   emptyPreviewLabel = resolvedLabel;
   frame.dataset.emptyPreview = 'true';
   frame.dataset.emptyPreviewMode = mode;
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.srcdoc = centeredPreviewLoaderHtml(mode, resolvedLabel);
   setPreviewDevice(selectedPreviewDevice, false);
   syncPreviewAddress(null);
@@ -1127,18 +1204,21 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
 
 function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
   const isWorking = state === 'working';
+  const previewTheme = getBuilderPreviewTheme();
   const status = isWorking ? title || 'Generating media' : 'Ready for media';
   const helper = isWorking
     ? 'Huggy is turning the request into a usable creative brief and preview.'
     : 'Describe a product image, UGC video, storyboard, thumbnail or campaign pack.';
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
+:root[data-theme=light]{color-scheme:light;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
+:root[data-theme=dark]{color-scheme:dark;--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue:#60a5fa}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(47,109,246,.10),transparent 32%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
 .wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,42px)}
 .empty{width:min(760px,100%);display:grid;gap:14px;color:var(--muted)}
@@ -1173,6 +1253,7 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
   if (!frame) return;
   currentMediaPreviewHtml = html;
   frame.dataset.mediaPreview = 'true';
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.removeAttribute('data-design-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
@@ -1183,6 +1264,7 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
 
 function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Design canvas') {
   const isWorking = state === 'working';
+  const previewTheme = getBuilderPreviewTheme();
   const brief = buildDesignStudioBrief({ settings: designSettings });
   const artifact = designWorkshopOptionLabel('artifact', brief.artifact_type);
   const handoff = designWorkshopOptionLabel('handoff', brief.handoff);
@@ -1190,13 +1272,15 @@ function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Des
     ? 'Huggy is shaping a visual direction, checking brand fit and preparing a clean handoff.'
     : 'Describe a screen, section, prototype, deck or brand direction. Huggy will keep the canvas calm and the app safe.';
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#66625a;--line:#ece8df;--soft:#f7f3ea;--blue:#2f6df6;--blue-soft:rgba(47,109,246,.10)}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue-soft:rgba(96,165,250,.16)}}
+:root[data-theme=light]{color-scheme:light;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#66625a;--line:#ece8df;--soft:#f7f3ea;--blue:#2f6df6;--blue-soft:rgba(47,109,246,.10)}
+:root[data-theme=dark]{color-scheme:dark;--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue:#60a5fa;--blue-soft:rgba(96,165,250,.16)}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,var(--blue-soft),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
 .wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,44px)}
 .studio{width:min(860px,100%);display:grid;gap:16px}
@@ -1239,6 +1323,7 @@ function setDesignPreviewHtml(html: string, addressLabel = 'design.huggy.local /
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (!frame) return;
   frame.dataset.designPreview = 'true';
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.removeAttribute('data-media-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
@@ -2042,14 +2127,15 @@ function createHuggyWorklineBlock(): HuggyWorklineBlock {
 }
 
 function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
-  if (!card || !journal) return;
-  setMessageBlock(card, {
-    ...journal,
-    entries: journal.entries.map(entry => ({
-      ...entry,
-      items: entry.items ? [...entry.items] : undefined,
-    })),
-  });
+  if (!card) return;
+  setMessageBlock(card, journal);
+  const id = messageHandleId(card);
+  if (!id || !conversationApi) return;
+  if (journal?.status === 'active') {
+    conversationApi.setWorking(id, journal.activeText || 'Thinking...');
+  } else {
+    conversationApi.clearWorking(id);
+  }
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -2277,6 +2363,16 @@ function generatedCodeBlockedText(speaksFrench: boolean) {
     : 'I will not paste raw generated code into chat. A real generation must write project files, refresh the preview, then show a short summary.';
 }
 
+function cleanRecoveryText(speaksFrench: boolean) {
+  return speaksFrench
+    ? 'Je garde le travail en sécurité. La preview sera affichée seulement après une vérification propre.'
+    : 'I kept the work safe. The preview will only be shown after a clean verification.';
+}
+
+function looksLikeInternalRecoveryText(value: string) {
+  return /\b(draft recuperable|draft récupérable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes:\s*0 created|verification:\s*huggy stopped)\b/i.test(value);
+}
+
 function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
   const text = repairTextEncoding(redactSecrets(String(value || '').trim()));
   if (!text) return fallback;
@@ -2284,6 +2380,7 @@ function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallbac
     .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+  if (looksLikeInternalRecoveryText(unfenced)) return fallback || cleanRecoveryText(speaksFrench);
   if (/^[\[{]/.test(unfenced) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(unfenced)) {
     return fallback || (speaksFrench
       ? 'J’ai préparé le travail dans le projet. La preview et les fichiers doivent rester la source de vérité.'
@@ -4157,7 +4254,6 @@ async function loadProject() {
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     syncWorkshopPreview();
     removeMessage(loading);
-    void restoreLatestWorklineFromRunHistory(payload);
     if (!payload.messages?.length) {
       showTransientNotice('Ready when you are.', 1600);
     }
@@ -4176,10 +4272,19 @@ function restoreMessages(payload: ProjectPayload) {
     .filter(message => message.content && !/^Project (synchronized|ready)\./i.test(message.content))
     .slice(-100)
     .forEach(message => {
-    const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
-    if (message.intent === 'plan') {
-      lastPlan = message.content;
-    }
+      const role = message.role === 'user' ? 'user' : 'assistant';
+      const content = role === 'assistant'
+        ? safeAssistantDisplayText(
+          message.content,
+          isLikelyFrenchText(message.content),
+          cleanRecoveryText(isLikelyFrenchText(message.content)),
+        )
+        : message.content;
+      const card = appendMessage(role, content);
+      void card;
+      if (message.intent === 'plan') {
+        lastPlan = message.content;
+      }
     });
 }
 
@@ -4420,38 +4525,24 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
     return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
   }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
-  const blockerCount = compact.match(/\b(\d+)\s+points?\s+bloquants?\s+restent\b/i)?.[1]
-    || compact.match(/\b(\d+)\s+blocking\s+issues?\b/i)?.[1]
-    || compact.match(/\bstill\s+has\s+(\d+)\s+blocking\b/i)?.[1];
+  if (looksLikeInternalRecoveryText(compact)) return cleanRecoveryText(speaksFrench);
   if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
-    return speaksFrench
-      ? `Draft récupérable sauvegardée. La preview reste en attente${blockerCount ? `: ${blockerCount} blocage${blockerCount === '1' ? '' : 's'} à corriger` : ''}.`
-      : `Recoverable draft saved. The preview is still waiting${blockerCount ? `: ${blockerCount} blocker${blockerCount === '1' ? '' : 's'} to fix` : ''}.`;
+    return cleanRecoveryText(speaksFrench);
   }
   if (/^i keep the work recoverable without claiming a false ready preview\.?$/i.test(compact)) {
-    return speaksFrench
-      ? 'Je garde le travail récupérable sans annoncer une preview prête trop tôt.'
-      : 'I keep the work recoverable without claiming a false ready preview.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/preview contains a known forced runtime failure marker/i.test(compact)) {
-    return speaksFrench
-      ? 'Blocage principal: un marqueur de crash forcé est encore présent dans la preview.'
-      : 'Main blocker: a forced runtime failure marker is still present in the preview.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/huggy stopped before saving because the generated app still has/i.test(compact)) {
-    return speaksFrench
-      ? 'Draft sauvegardée. Je dois encore corriger les blocages avant d’annoncer la preview prête.'
-      : 'Draft saved. I still need to fix the blockers before marking the preview ready.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/task app must support adding, completing, and deleting tasks/i.test(compact)) {
-    return speaksFrench
-      ? 'La vérification demande encore des actions visibles: ajouter, terminer et supprimer.'
-      : 'The check still needs visible add, complete and delete actions.';
+    return '';
   }
   if (/commerce app must include cart state/i.test(compact)) {
-    return speaksFrench
-      ? 'La vérification métier a détecté un critère non lié à cette demande. Je l’ignore pour cette app.'
-      : 'A business check detected a criterion unrelated to this request. I will ignore it for this app.';
+    return '';
   }
   const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
     { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
@@ -4894,10 +4985,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
     return target;
   };
-  setWorkJournalBlock(status, journal);
-  journalTimer = window.setInterval(() => {
-    if (journal.status === 'active') scheduleJournal();
-  }, 1000);
+  const startBuildStream = () => {
+    journal.status = 'active';
+    journal.activeText = say('Je prépare le travail.', 'Preparing the work.');
+    setWorkJournalBlock(status, journal);
+    journalTimer = window.setInterval(() => {
+      journal.elapsed = elapsedForStatus() || journal.elapsed;
+      scheduleJournal(true);
+    }, 1000);
+    scheduleJournal(true);
+  };
+  startBuildStream();
   try {
     await ensureProjectForPrompt(safePrompt);
     if (activeWorkshop === 'media') {
@@ -4942,13 +5040,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       });
       return;
     }
-    let previewReadyPayload: any = null;
-    let finalPayload: any = null;
-    let answerBuffer = '';
-    let streamFinalText = '';
-    let pendingPlanText = '';
-    let externalRequirements: any[] = [];
-    const streamBody = {
+    const requestBody = {
       prompt: safePrompt,
       requestedMode,
       useLastPlan,
@@ -4956,312 +5048,125 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       ...effectiveExtra,
     };
 
-    await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, streamBody, (eventType, eventData) => {
-      const eventPayload = redactInternalModelFields(eventData?.payload || {});
-      const rawEventMessage = repairTextEncoding(redactSecrets(String(eventData?.message || ''))).trim();
-      const eventMessage = cleanPublicJournalText(rawEventMessage, speaksFrench) || rawEventMessage;
-      const detail = journalDetailFromPayload(eventPayload, eventMessage);
-      if (eventPayload.build_session_id) lastBuildSessionId = String(eventPayload.build_session_id);
-      if (eventPayload.agent_run_id) lastAgentRunId = String(eventPayload.agent_run_id);
+    if (requestedMode === 'build' || requestedMode === 'auto') {
+      generationTouchesPreview = true;
+      activeGenerationTouchesPreview = true;
+      activateBuilderView('preview');
+      setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
+    }
 
-      if (eventType === 'narration') {
-        const text = cleanPublicJournalText(eventPayload.text || eventMessage || '', speaksFrench);
-        addJournalLine(text, detail, `narration:${journalTextKey(text)}`, 'done');
-        return;
-      }
+    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+      method: 'POST',
+      signal: activeAbort.signal,
+      body: JSON.stringify(requestBody),
+    });
 
-      if (eventType === 'thinking') {
-        setJournalActive(String(eventPayload.text || eventMessage || say('En réflexion', 'Thinking')));
-        return;
-      }
+    const responsePayload = redactInternalModelFields(payload || {});
+    if (responsePayload.project?.id) {
+      currentProjectId = String(responsePayload.project.id);
+      setCurrentBuilderProjectId(currentProjectId);
+      if (responsePayload.project.name) setProjectNameDisplay(String(responsePayload.project.name));
+    }
+    if (Array.isArray(responsePayload.files)) renderFiles(responsePayload.files);
+    if (Array.isArray(responsePayload.diff?.file_stats)) {
+      responsePayload.diff.file_stats.slice(0, 8).forEach((fileStat: Record<string, any>) => upsertFileEditEntry(fileStat));
+    } else if (responsePayload.diff) {
+      const paths = filesFromDiff(responsePayload.diff);
+      paths.slice(0, 8).forEach((label: string) => {
+        const action = label.startsWith('+ ')
+          ? 'created'
+          : label.startsWith('- ')
+            ? 'deleted'
+            : 'modified';
+        upsertFileEditEntry({ path: label.replace(/^[+~-]\s+/, ''), action });
+      });
+    }
 
-      if (eventType === 'file_edit') {
-        upsertFileEditEntry(eventPayload);
-        return;
-      }
-
-      if (eventType === 'command_started') {
-        setRunningCommand(eventPayload);
-        setJournalActive(String(eventPayload.label || eventMessage || say('Commande en cours', 'Command running')));
-        return;
-      }
-
-      if (eventType === 'command_completed') {
-        completeRunningCommand(eventPayload, eventMessage);
-        return;
-      }
-
-      if (eventType === 'tool_group') {
-        const items = Array.isArray(eventPayload.items)
-          ? eventPayload.items.map((item: any) => redactSecrets(String(item || '')).trim()).filter(Boolean)
-          : [];
-        if (items.length) {
-          let group = journalGroups.get('commands');
-          if (!group) {
-            group = { id: 'commands', kind: 'group', text: speaksFrench ? 'commandes exécutées' : 'commands executed', items: [], status: 'done' };
-            journalGroups.set('commands', group);
-            journal.entries.push(group);
-          }
-          group.text = speaksFrench ? 'commandes exécutées' : 'commands executed';
-          group.status = eventPayload.status === 'failed' ? 'failed' : 'done';
-          group.items = items.slice(-32);
-          scheduleJournal();
-        }
-        return;
-      }
-
-      if (eventType === 'check_started' || eventType === 'check_running') {
-        setJournalActive(String(eventPayload.label || eventMessage || say('Verification en cours', 'Check running')));
-        return;
-      }
-
-      if (eventType === 'check_completed' || eventType === 'check_done') {
-        seenJournalKeys.add('new_check_protocol');
-        const checkType = String(eventPayload.check_type || 'check').trim();
-        const status = String(eventPayload.status || '').trim();
-        const summary = String(eventPayload.summary || eventMessage || '').trim();
-        const item = [checkType, status, summary].filter(Boolean).join(' — ');
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications terminées' : 'checks completed', item, status === 'failed' ? 'failed' : 'done');
-        return;
-      }
-
-      if (eventType === 'final_summary') {
-        streamFinalText = cleanPublicJournalText(eventPayload.text || eventMessage || streamFinalText || '', speaksFrench);
-        journal.finalText = streamFinalText;
-        scheduleJournal(true);
-        return;
-      }
-
-      if (eventType === 'working_tick') {
-        const now = Date.now();
-        if (now - lastWorkingTickAt > 3400) {
-          lastWorkingTickAt = now;
-          setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('Huggy avance', 'Huggy is moving')));
-        }
-        return;
-      }
-
-      if (eventType === 'answer_token') {
-        answerBuffer += String(eventPayload.text_delta || eventMessage || '');
-        switchToPlainResponse();
-        updateMessage(status, answerBuffer.trimStart());
-        return;
-      }
-
-      if (eventType === 'model_streaming') {
-        setJournalActive(say('Je travaille sur les fichiers', 'Working on the files'));
-        return;
-      }
-
-      if ((eventType === 'diff_ready' || eventType === 'files_changed') && Array.isArray(eventPayload.diff?.file_stats) && eventPayload.diff.file_stats.length) {
-        setJournalActive(say('Je garde le diff lisible', 'Keeping the diff readable'));
-        return;
-      }
-
-      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
-        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
-        return;
-      }
-
-      if ((eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') && seenJournalKeys.has('new_check_protocol')) {
-        return;
-      }
-
-      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
-        const path = String(eventPayload.path || '').trim();
-        if (path) setJournalActive(journalFileLabel(path, String(eventPayload.status || '')));
-        if (eventType === 'file_stream_completed') setJournalActive(say('Je prepare le diff', 'Preparing the diff'));
-        return;
-      }
-
-      if (eventType === 'file_stream_started' || eventType === 'file_stream_chunk' || eventType === 'file_stream_completed') {
-        const path = String(eventPayload.path || '').trim();
-        if (path) {
-          upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', journalFileLabel(path, String(eventPayload.status || '')));
-        }
-        if (eventType === 'file_stream_completed') setJournalActive(say('Je prépare le diff', 'Preparing the diff'));
-        return;
-      }
-
-      if (eventType === 'diff_ready' || eventType === 'files_changed') {
-        const diffFiles = filesFromDiff(eventPayload.diff);
-        diffFiles.forEach(file => upsertJournalGroup('files', speaksFrench ? 'fichiers touchés' : 'files touched', file));
-      }
-
-      if (eventType === 'runner_started' || eventType === 'quality_gate_started' || eventType === 'visual_inspection_started' || eventType === 'verification_started') {
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications lancées' : 'checks started', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), 'active');
-      }
-
-      if (eventType === 'runner_passed' || eventType === 'runner_failed' || eventType === 'quality_checked' || eventType === 'visual_inspection_passed' || eventType === 'visual_inspection_failed') {
-        upsertJournalGroup('checks', speaksFrench ? 'vérifications effectuées' : 'checks completed', journalEventText(eventType, eventMessage, eventPayload, speaksFrench), eventType.includes('failed') ? 'failed' : 'done');
-      }
-
-      if (eventType === 'patch_applied') {
-        upsertJournalGroup('fixes', speaksFrench ? 'corrections appliquées' : 'fixes applied', String(eventPayload.patch?.summary || eventMessage || journalEventText(eventType, eventMessage, eventPayload, speaksFrench)));
-      }
-
-      if (eventType === 'plan_ready') {
-        pendingPlanText = String(eventPayload.text || eventMessage || '').trim();
-        if (pendingPlanText) lastPlan = pendingPlanText;
-      }
-
-      if (eventType === 'external_api_keys_required') {
-        externalRequirements = Array.isArray(eventPayload.requirements) ? eventPayload.requirements : [];
-        streamFinalText = eventMessage || (speaksFrench
-          ? 'Cette app peut utiliser des clés API externes avant de continuer.'
-          : 'This app can use external API keys before continuing.');
-      }
-
-      if (eventType === 'preview_skeleton_started' || eventType === 'preview_building') {
-        promoteToPreviewWork(journalEventText(eventType, eventMessage, eventPayload, speaksFrench));
-      }
-
-      if (eventType === 'preview_ready') {
-        previewReadyPayload = eventPayload;
-        finalPayload = eventPayload;
-        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench), true);
-        if (eventPayload.project?.id) {
-          currentProjectId = String(eventPayload.project.id);
-          setCurrentBuilderProjectId(currentProjectId);
-          if (eventPayload.project.name) setProjectNameDisplay(String(eventPayload.project.name));
-        }
-        if (Array.isArray(eventPayload.files)) renderFiles(eventPayload.files);
-        if (eventPayload.preview?.html) {
-          generationTouchesPreview = true;
-          activeGenerationTouchesPreview = true;
-          activateBuilderView('preview');
-          setPreview(String(eventPayload.preview.html), String(eventPayload.preview.status || 'ready'));
-        }
-      }
-
-      if (eventType === 'answering' || eventType === 'clarification_required' || eventType === 'plan_ready' || eventType === 'preview_ready') {
-        const rawEventText = String(eventPayload.text || eventMessage || answerBuffer || streamFinalText || '').trim();
-        const safeEventText = safeAssistantDisplayText(rawEventText, speaksFrench, '');
-        const blockedRawCode = rawEventText && !safeEventText && looksLikeGeneratedSourceDump(rawEventText);
-        if (safeEventText) {
-          streamFinalText = safeEventText;
-        } else if (blockedRawCode && (eventType === 'answering' || eventType === 'clarification_required')) {
-          streamFinalText = generatedCodeBlockedText(speaksFrench);
-        }
-        if ((eventType === 'answering' || eventType === 'clarification_required') && !previewReadyPayload?.preview?.html) {
-          switchToPlainResponse();
-          if (streamFinalText) updateMessage(status, streamFinalText);
-        }
-      }
-
-      if (eventType === 'done') {
-        finalPayload ||= eventPayload;
-        if (plainResponseMode) return;
-      }
-
-      if (eventType === 'error') {
-        journal.status = 'failed';
-        journal.activeText = '';
-        addJournalLine(eventMessage || say('Le run a échoué.', 'The run failed.'), detail, `event:${eventType}:${journalTextKey(eventMessage)}`, 'failed');
-        scheduleJournal(true);
-        return;
-      }
-
-      if (eventType === 'cancelled') {
-        journal.status = 'cancelled';
-        journal.activeText = '';
-        addJournalLine(eventMessage || say('Travail annulé.', 'Work cancelled.'), detail, `event:${eventType}`, 'cancelled');
-        scheduleJournal(true);
-        return;
-      }
-
-      const publicText = journalEventText(eventType, eventMessage, eventPayload, speaksFrench);
-      const shouldShowLine = ![
-        'queued',
-        'routing',
-        'answer_stream_started',
+    const previewHtml = String(responsePayload.preview?.html || responsePayload.project?.preview_html || '').trim();
+    const previewStatus = String(responsePayload.preview?.status || responsePayload.project?.preview_status || 'ready');
+    if (previewHtml) {
+      generationTouchesPreview = true;
+      activeGenerationTouchesPreview = true;
+      activateBuilderView('preview');
+      setPreview(previewHtml, previewStatus);
+      addJournalLine(
+        speaksFrench ? 'La preview est affichée.' : 'The preview is displayed.',
+        '',
+        'preview_ready',
         'done',
-      ].includes(eventType) && publicText;
-      if (shouldShowLine) {
-        addJournalLine(publicText, detail, `event:${eventType}`, eventType.includes('failed') || eventType === 'error_detected' ? 'failed' : 'done');
-      }
-    }, activeAbort.signal);
+      );
+    }
 
-    const diffSummary = String(previewReadyPayload?.diff?.summary || finalPayload?.diff?.summary || '').trim();
-    const verificationMessage = String(previewReadyPayload?.reliability_summary?.message || previewReadyPayload?.verification?.message || '').trim();
-    const safeStreamFinalText = safeAssistantDisplayText(streamFinalText, speaksFrench, '');
-    const safeAnswerBuffer = safeAssistantDisplayText(answerBuffer.trim(), speaksFrench, '');
-    const finalText = safeStreamFinalText
-      || safeAnswerBuffer
-      || (previewReadyPayload?.preview?.html
+    if (responsePayload.plan?.title || responsePayload.plan?.steps) {
+      lastPlan = JSON.stringify(responsePayload.plan, null, 2);
+    }
+
+    const hasNeedsFix = Boolean(responsePayload.needs_fix);
+    const diffSummary = hasNeedsFix ? '' : String(responsePayload.diff?.summary || '').trim();
+    const verificationMessage = hasNeedsFix ? '' : String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
+    const rawText = String(responsePayload.summary || responsePayload.text || responsePayload.message || '').trim();
+    const finalText = safeAssistantDisplayText(
+      rawText,
+      speaksFrench,
+      previewHtml
         ? generationReadyText(speaksFrench)
-        : (speaksFrench
-          ? 'J’ai gardé le travail en attente de correction. La preview ne sera marquée prête qu’après vérification.'
-          : 'I kept the work waiting for a fix. The preview will only be marked ready after verification.'));
+        : hasNeedsFix
+          ? cleanRecoveryText(speaksFrench)
+          : (speaksFrench ? 'Termine.' : 'Done.'),
+    );
+
+    clearMessageShimmer(status);
     const target = commitAssistantText([
       finalText,
       diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
-      verificationMessage ? `${speaksFrench ? 'Vérification' : 'Checks'}: ${verificationMessage}` : '',
-    ].filter(Boolean).join('\n'), 'Done.', previewReadyPayload?.preview?.html ? say('Preview prête', 'Preview ready') : say('Terminé', 'Completed'));
-
-    if (externalRequirements.length) {
-      addInlineAction(target, speaksFrench ? 'Connecter les clés' : 'Connect keys', () => showApiKeyModal(externalRequirements));
-      addInlineAction(target, speaksFrench ? 'Continuer sans clés' : 'Continue without keys', () => void generateFromPrompt('Continue with safe placeholders', 'build', false, { skipExternalKeys: true }));
+      verificationMessage ? `${speaksFrench ? 'Verification' : 'Checks'}: ${verificationMessage}` : '',
+    ].filter(Boolean).join('\n'), 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
+    if (hasNeedsFix && target === status) {
+      journal.status = 'failed';
+      journal.activeText = '';
+      journal.finalText = finalText;
+      scheduleJournal(true);
     }
-    if (previewReadyPayload?.intent?.intent === 'clarification_required') {
+
+    if (responsePayload.intent?.intent === 'clarification_required') {
       setMessageBlock(target, {
         type: 'confirmation',
-        title: speaksFrench ? 'Clarification nécessaire' : 'Clarification needed',
+        title: speaksFrench ? 'Clarification necessaire' : 'Clarification needed',
         body: finalText,
         state: 'approval-requested',
-        approveLabel: speaksFrench ? 'Répondre' : 'Answer',
+        approveLabel: speaksFrench ? 'Repondre' : 'Answer',
         rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
       });
     }
-    if (previewReadyPayload?.preview?.html) {
-      addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
-        void recordAgentFeedback('keep');
-        appendMessage('system', speaksFrench ? 'Version gardée comme preview actuelle.' : 'Kept as the current preview.');
-      });
-      addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
-        void recordAgentFeedback('modify');
-        const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
-        promptInput?.focus();
-        if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
-      });
-      addInlineAction(target, speaksFrench ? 'Regénérer' : 'Regenerate', () => {
-        void recordAgentFeedback('regenerate');
-        void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
-      });
-      addInlineAction(target, 'Publish', () => {
-        void recordAgentFeedback('publish');
-        void openPublishPanel();
-      });
-      addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
-    }
-    if (Array.isArray(previewReadyPayload?.errors) && previewReadyPayload.errors.length) showFixBugBox(previewReadyPayload.errors);
-    if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
-    return;
 
+    if (Array.isArray(responsePayload.errors) && responsePayload.errors.length) showFixBugBox(responsePayload.errors);
+    if (generationTouchesPreview && !previewHtml) setEmptyPreviewState('idle', 'Ready when you are');
+    return;
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       const stoppedText = stopRequested
         ? (speaksFrench ? 'Génération arrêtée.' : 'Generation stopped.')
         : (speaksFrench ? 'Build annulé.' : 'Build cancelled.');
+      clearMessageShimmer(status);
       journal.status = 'cancelled';
       journal.activeText = '';
       journal.finalText = stoppedText;
-      scheduleJournal();
+      scheduleJournal(true);
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
+      clearMessageShimmer(status);
       journal.status = 'failed';
       journal.activeText = '';
       journal.finalText = errorText;
-      addJournalLine(errorText, '', `catch:${Date.now()}`, 'failed');
-      scheduleJournal();
+      scheduleJournal(true);
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
     if (journalTimer !== null) window.clearInterval(journalTimer);
     if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);
-    flushJournal();
+    clearMessageShimmer(status);
     setBusy(false);
     activeAbort = null;
     stopRequested = false;
@@ -6033,6 +5938,7 @@ function init() {
   syncBuilderPlanBadges(currentPlanKey);
   void loadProjectMenuCredits();
   bindPreviewDeviceToggle();
+  bindPreviewThemeSync();
   bindMobileBuilderShell();
   initStudioWorkshops();
   initPromptInputActions({

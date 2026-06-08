@@ -81,6 +81,22 @@ for (const item of GOLDEN_EXECUTION_PROMPTS) {
 }
 
 {
+  const prompt = 'cree une mini app pomodoro';
+  const contract = buildExecutionContract({ prompt, hasFiles: false });
+  const raw = [
+    'Huggy stopped before saving because the generated app still has 3 blocking issues.',
+    'Preview contains a known forced runtime failure marker.',
+    'Task app must support adding, completing, and deleting tasks with visible state changes.',
+    'Commerce app must include cart state, quantity/variant handling, and checkout feedback.',
+  ].join('\n');
+  const cleaned = sanitizeAssistantOutput({ text: raw, prompt, contract, intent: 'build' });
+  assert.doesNotMatch(cleaned, /forced runtime failure marker/i);
+  assert.doesNotMatch(cleaned, /Task app must support/i);
+  assert.doesNotMatch(cleaned, /Commerce app must include/i);
+  assert.match(cleaned, /preview|verification|sécurité|securite/i);
+}
+
+{
   const contract = buildExecutionContract({ prompt: 'cree une todo app', hasFiles: false });
   const validation = validateExecutionOutputContract({
     contract,

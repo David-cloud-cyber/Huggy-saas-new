@@ -110,6 +110,11 @@ function collapseDuplicateParagraphs(value: string) {
   return output.join('\n\n');
 }
 
+function looksLikeInternalRecoveryText(value: string) {
+  const text = normalizeExecutionText(value);
+  return /\b(draft recuperable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes 0 created|verification huggy stopped)\b/i.test(text);
+}
+
 function removeFalseCompletionClaims(value: string, contract?: ExecutionContract) {
   if (!contract?.can_mutate_files) return value;
   return String(value || '')
@@ -147,18 +152,11 @@ export function sanitizeAssistantOutput(input: {
       : 'I am keeping the plan internal and moving to execution. I will verify the preview before delivery.';
   }
 
-  return collapseDuplicateParagraphs(removeFalseCompletionClaims(text, contract));
-}
+  if (looksLikeInternalRecoveryText(text)) {
+    return buildRecoverableDraftMessage({ prompt: input.prompt });
+  }
 
-function reliabilityBlockingMessages(summary?: ReliabilityLike) {
-  const items = [
-    ...(Array.isArray(summary?.blocking) ? summary!.blocking! : []),
-    ...(Array.isArray(summary?.failed) ? summary!.failed! : []),
-  ];
-  return items
-    .map(item => String(item?.message || item?.file || item?.source || '').trim())
-    .filter(Boolean)
-    .slice(0, 3);
+  return collapseDuplicateParagraphs(removeFalseCompletionClaims(text, contract));
 }
 
 export function shouldDeliverRecoverableDraft(summary?: ReliabilityLike) {
@@ -171,24 +169,8 @@ export function buildRecoverableDraftMessage(input: {
   blockingCount?: number;
 }) {
   const fr = speaksFrench(input.prompt);
-  const blockers = reliabilityBlockingMessages(input.reliabilitySummary);
-  const count = Math.max(Number(input.blockingCount || blockers.length || 1), 1);
-  const blockerLine = blockers.length
-    ? (fr ? `Blocage restant: ${blockers[0]}` : `Remaining blocker: ${blockers[0]}`)
-    : (input.reliabilitySummary?.message || (fr ? 'Un blocage technique reste a corriger.' : 'One technical blocker still needs a fix.'));
-  return fr
-    ? [
-        'J ai sauvegarde une draft recuperable, mais je ne marque pas encore la preview comme prete.',
-        `${count} point${count > 1 ? 's' : ''} bloquant${count > 1 ? 's' : ''} reste${count > 1 ? 'nt' : ''}.`,
-        blockerLine,
-        'Demande "corrige le blocage restant" et Huggy reprendra depuis cette draft sans perdre le travail.',
-      ].join('\n')
-    : [
-        'I saved a recoverable draft, but I am not marking the preview as ready yet.',
-        `${count} blocking issue${count > 1 ? 's' : ''} remain${count > 1 ? '' : 's'}.`,
-        blockerLine,
-        'Ask "fix the remaining blocker" and Huggy will continue from this draft without losing the work.',
-      ].join('\n');
+  if (fr) return 'Je garde le travail en securite. La preview sera affichee seulement apres une verification propre.';
+  return 'I kept the work safe. The preview will only be shown after a clean verification.';
 }
 
 export function buildInternalExecutionPlan(input: {

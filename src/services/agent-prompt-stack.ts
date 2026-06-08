@@ -3,7 +3,7 @@ import {
   inferProductionBlueprint,
 } from './production-blueprints.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v15';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v16';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -202,6 +202,49 @@ const HUGGY_PLATFORM_INTELLIGENCE_POLICY = [
   'A restaurant/local business app needs menu, reservation, hours, location, reviews, and contact actions. A fintech/billing app needs tabular numbers, confirmations, and sober trust states.',
   'An AI tool needs prompt input, conversation/output, honest streaming status, settings/model state, and persistent results. A healthcare/education app needs calm readability and accessibility.',
   'Use the provided uiGenerationPolicy.designBrief and uiGenerationPolicy.platformIntelligence as binding product requirements, not optional inspiration.',
+].join('\n');
+
+const HUGGY_GENERATED_APP_DESIGN_SYSTEM_POLICY = [
+  'Generated app design system policy:',
+  'Before writing UI code, internally create a compact design brief: app type, target user, product mood, visual direction, layout system, component set, interaction states, accessibility risks, and anti-generic-design risks.',
+  'Every generated app must include design tokens in the implementation: semantic color roles, neutral surfaces, typography scale, spacing scale, radius scale, shadow/elevation, focus ring, motion duration, and responsive breakpoints.',
+  'Use CSS custom properties or Tailwind theme-consistent values when practical. Do not scatter random colors, one-off spacing, mismatched radii, or unrelated shadow styles across the app.',
+  'Choose a deliberate aesthetic direction that fits the product: calm operational, editorial, refined luxury, playful, technical, local-business warm, fintech sober, creator/media expressive, or another context-true direction.',
+  'Avoid generic AI patterns: purple-blue gradient hero, three identical feature cards, oversized vague headlines, fake SaaS dashboards, meaningless glassmorphism, bland placeholder copy, inert CTAs, and UI that could belong to any product.',
+  'Typography should feel chosen, not defaulted. If external fonts are not available, use a thoughtful CSS font stack and hierarchy; do not rely on Arial/Roboto/Inter-like generic defaults as the whole visual personality.',
+  'Use real layout architecture: clear zones, stable grids, useful density, constrained line lengths, predictable navigation, and responsive transformations that preserve the primary workflow on mobile.',
+  'Cards are for repeated items, tools, panels, or modals. Do not nest decorative cards inside cards or turn every section into a floating card.',
+].join('\n');
+
+const HUGGY_FRONTEND_CRAFT_POLICY = [
+  'Frontend craft policy:',
+  'Build real working components, not visual screenshots. Every important component needs default, hover, focus-visible, active/selected, disabled, loading, empty, error, and success states when relevant.',
+  'Buttons must look clickable and have visible feedback. Forms need labels, validation, helper/error text near the field, keyboard submission, and visible success or failure feedback.',
+  'Use icons only when they improve scanning. Prefer lucide-react icons already allowed by the stack, keep sizes consistent, and do not use emoji as UI icons.',
+  'For dashboards and operational tools, prioritize scanability: restrained surfaces, compact controls, aligned tables/lists, filters, bulk/action affordances, and calm hierarchy.',
+  'For marketing or landing experiences, prioritize conversion: specific offer, proof, differentiated sections, clear CTAs, trust signals, and no vague filler.',
+  'For creative/media experiences, allow more expressive motion and composition, but keep the workflow usable and accessible.',
+  'Use realistic demo data that matches the product domain. Do not leave lorem ipsum, "Feature 1", "Card title", or template-sounding copy in final files.',
+].join('\n');
+
+const HUGGY_RESPONSIVE_ACCESSIBILITY_POLICY = [
+  'Responsive and accessibility policy:',
+  'Design mobile-first and ensure the app works at mobile, tablet, and desktop sizes without horizontal scroll or overlapping text.',
+  'Touch targets must be at least 44x44px for interactive controls unless the control is inside a dense data surface with an accessible equivalent.',
+  'Body text should be readable: usually 16px or larger, comfortable line-height, sufficient contrast, and no negative letter spacing.',
+  'Meet WCAG contrast expectations for text and controls. Preserve visible focus states and keyboard navigation for buttons, links, tabs, menus, modals, and forms.',
+  'Use semantic HTML, accessible labels, aria only where it helps, alt text for meaningful images, and aria-live for dynamic status messages that users need to know.',
+  'Modals, popovers, dropdowns, and command menus must open/close reliably, not trap users accidentally, and expose clear cancel/close controls.',
+  'Responsive elements need stable dimensions with min/max constraints, grid tracks, aspect ratios, or container-aware sizing so dynamic content does not break layout.',
+].join('\n');
+
+const HUGGY_MOTION_POLISH_POLICY = [
+  'Motion and polish policy:',
+  'Use motion to explain state changes, not to decorate randomly. Prefer transform and opacity animations, keep most UI transitions between 150ms and 300ms, and avoid layout-thrashing properties.',
+  'Respect prefers-reduced-motion with reduced or disabled animations. Never rely on motion alone to communicate state.',
+  'Use subtle page/component reveal, button feedback, list item insertion/removal, modal transitions, skeleton/loading states, and success/error feedback when they make the experience clearer.',
+  'Do not create heavy animated backgrounds, orb decorations, distracting bokeh blobs, or effects that compete with the main workflow.',
+  'Before final JSON output, silently run a design QA pass: visual hierarchy, spacing consistency, contrast, responsive behavior, keyboard/focus, states, copy specificity, and anti-generic-design quality.',
 ].join('\n');
 
 const HUGGY_FUNCTIONAL_QUALITY_POLICY = [
@@ -487,6 +530,10 @@ export function buildGenerationSystemPrompt(input: {
     ].join('\n'),
     HUGGY_PLATFORM_INTELLIGENCE_POLICY,
     input.uiPolicySystemPrompt,
+    HUGGY_GENERATED_APP_DESIGN_SYSTEM_POLICY,
+    HUGGY_FRONTEND_CRAFT_POLICY,
+    HUGGY_RESPONSIVE_ACCESSIBILITY_POLICY,
+    HUGGY_MOTION_POLISH_POLICY,
     HUGGY_GENERATION_PRODUCT_POLICY,
     HUGGY_FUNCTIONAL_QUALITY_POLICY,
     HUGGY_CLOUD_POLICY,

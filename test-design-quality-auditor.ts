@@ -278,8 +278,19 @@ const pomodoroFunctionality = auditGeneratedFunctionality({
   previewHtml: pomodoroFiles.find(file => file.path === 'index.html')?.content,
   platformType: 'generic_web_app',
   hasExistingFiles: false,
+  prompt: 'genere une mini app de pomodero avec start pause reset',
 });
 assert.equal(pomodoroFunctionality.find(check => check.key === 'functionality_todo_core_loop'), undefined);
 assert.equal(pomodoroFunctionality.find(check => check.key === 'functionality_commerce_core_loop'), undefined);
+
+const staleProjectPomodoroFunctionality = auditGeneratedFunctionality({
+  files: pomodoroFiles,
+  previewHtml: pomodoroFiles.find(file => file.path === 'index.html')?.content,
+  platformType: 'generic_web_app',
+  hasExistingFiles: true,
+  prompt: 'genere une mini app de pomodero avec historique local',
+});
+assert.equal(staleProjectPomodoroFunctionality.find(check => check.key === 'functionality_todo_core_loop'), undefined);
+assert.equal(staleProjectPomodoroFunctionality.find(check => check.key === 'functionality_commerce_core_loop'), undefined);
 
 console.log('test-design-quality-auditor passed');

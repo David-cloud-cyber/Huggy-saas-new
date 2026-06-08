@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Huggy Blog — AI App Builder Guides</title>
+    <title>Huggy Blog - AI App Builder Guides</title>
   <!-- HUGGY_SEO_START -->
-  <meta name="description" content="Guides, prompts and product lessons for building production-ready apps with AI." />
+  <meta name="description" content="Product guides, AI builder playbooks, prompt recipes and launch lessons for turning ideas into working web apps with Huggy." />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://huggy.fun/blog.html" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -16,26 +16,542 @@
   <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
-  <meta property="og:title" content="Huggy Blog — AI App Builder Guides" />
-  <meta property="og:description" content="Guides, prompts and product lessons for building production-ready apps with AI." />
+  <meta property="og:title" content="Huggy Blog - AI App Builder Guides" />
+  <meta property="og:description" content="Product guides, AI builder playbooks, prompt recipes and launch lessons for turning ideas into working web apps with Huggy." />
   <meta property="og:url" content="https://huggy.fun/blog.html" />
   <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Huggy Blog — AI App Builder Guides" />
-  <meta name="twitter:description" content="Guides, prompts and product lessons for building production-ready apps with AI." />
+  <meta name="twitter:title" content="Huggy Blog - AI App Builder Guides" />
+  <meta name="twitter:description" content="Product guides, AI builder playbooks, prompt recipes and launch lessons for turning ideas into working web apps with Huggy." />
   <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
   <script type="application/ld+json">{
   "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Huggy Blog — AI App Builder Guides",
-  "description": "Guides, prompts and product lessons for building production-ready apps with AI.",
-  "url": "https://huggy.fun/blog.html"
+  "@type": "Blog",
+  "name": "Huggy Blog",
+  "description": "Product guides, AI builder playbooks, prompt recipes and launch lessons for turning ideas into working web apps with Huggy.",
+  "url": "https://huggy.fun/blog.html",
+  "publisher": {
+    "@type": "Organization",
+    "name": "Huggy",
+    "url": "https://huggy.fun"
+  },
+  "blogPost": [
+    {
+      "@type": "BlogPosting",
+      "headline": "Build a SaaS MVP with AI",
+      "url": "https://huggy.fun/guides/build-saas-mvp-with-ai/"
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "Supabase App Builder Guide",
+      "url": "https://huggy.fun/guides/supabase-app-builder/"
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "AI Landing Page SEO",
+      "url": "https://huggy.fun/guides/ai-landing-page-seo/"
+    }
+  ]
+}</script>
+  <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Huggy blog articles",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "url": "https://huggy.fun/guides/build-saas-mvp-with-ai/"},
+    {"@type": "ListItem", "position": 2, "url": "https://huggy.fun/guides/supabase-app-builder/"},
+    {"@type": "ListItem", "position": 3, "url": "https://huggy.fun/guides/ai-landing-page-seo/"},
+    {"@type": "ListItem", "position": 4, "url": "https://huggy.fun/prompt-recipes/saas-dashboard/"}
+  ]
 }</script>
   <!-- HUGGY_SEO_END -->
     <link rel="preconnect" href="https://fonts.googleapis.com"/>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
     <link rel="stylesheet" href="/src/index.css"/>
+    <style>
+      .blog-shell {
+        width: min(1180px, calc(100vw - 40px));
+        margin: 0 auto;
+      }
+
+      .blog-hero {
+        padding: 132px 0 56px;
+      }
+
+      .blog-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 820;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+      }
+
+      .blog-eyebrow::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent-blue);
+        box-shadow: 0 0 0 7px var(--accent-blue-soft);
+      }
+
+      .blog-hero h1 {
+        max-width: 980px;
+        margin: 22px 0 18px;
+        color: var(--text);
+        font-size: clamp(46px, 8vw, 112px);
+        line-height: .92;
+        letter-spacing: -0.065em;
+      }
+
+      .blog-hero p {
+        max-width: 720px;
+        color: var(--text-muted);
+        font-size: clamp(17px, 2vw, 22px);
+        line-height: 1.55;
+      }
+
+      .blog-hero-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+        gap: 36px;
+        align-items: end;
+      }
+
+      .blog-media {
+        min-height: 300px;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 18%, var(--accent-blue-soft), transparent 34%),
+          linear-gradient(180deg, var(--bg-surface), var(--bg-elevated));
+        box-shadow: var(--huggy-shadow-card, 0 24px 80px rgba(24, 22, 17, .12));
+        display: grid;
+        place-items: center;
+      }
+
+      .blog-media img {
+        width: min(84%, 360px);
+        height: auto;
+        display: block;
+        filter: drop-shadow(0 24px 50px rgba(28, 28, 28, .14));
+      }
+
+      .blog-prompt-band {
+        margin: 18px 0 72px;
+        padding: clamp(22px, 3vw, 34px);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--accent-blue-soft) 46%, transparent), transparent 42%),
+          var(--bg-surface);
+        box-shadow: var(--huggy-shadow-soft, 0 18px 60px rgba(24, 22, 17, .08));
+        display: grid;
+        grid-template-columns: minmax(240px, .72fr) minmax(320px, 1fr);
+        gap: 26px;
+        align-items: center;
+      }
+
+      .blog-prompt-copy h2 {
+        margin: 10px 0 10px;
+        color: var(--text);
+        font-size: clamp(28px, 4vw, 46px);
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .blog-prompt-copy p {
+        color: var(--text-muted);
+        line-height: 1.65;
+        font-size: 15px;
+      }
+
+      .blog-section {
+        padding: 22px 0 78px;
+      }
+
+      .blog-section-header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 24px;
+      }
+
+      .blog-section-header h2 {
+        margin: 0;
+        color: var(--text);
+        font-size: clamp(34px, 5vw, 64px);
+        line-height: .98;
+        letter-spacing: -0.05em;
+      }
+
+      .blog-section-header p {
+        max-width: 430px;
+        color: var(--text-muted);
+        line-height: 1.6;
+        font-size: 15px;
+      }
+
+      .blog-feature-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+        gap: 18px;
+      }
+
+      .blog-card {
+        position: relative;
+        min-height: 260px;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 24px;
+        background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+        text-decoration: none;
+        color: inherit;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 220ms cubic-bezier(.22, 1, .36, 1), border-color 220ms cubic-bezier(.22, 1, .36, 1), background 220ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms cubic-bezier(.22, 1, .36, 1);
+      }
+
+      .blog-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -12% -34% 48%;
+        height: 170px;
+        border-radius: 999px;
+        background: radial-gradient(circle, color-mix(in srgb, var(--accent-blue) 16%, transparent), transparent 68%);
+        opacity: .78;
+        pointer-events: none;
+      }
+
+      .blog-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--border-focus);
+        background: var(--bg-surface);
+        box-shadow: var(--huggy-shadow-card, 0 22px 70px rgba(24, 22, 17, .12));
+      }
+
+      .blog-card.is-featured {
+        min-height: 420px;
+        padding: clamp(28px, 4vw, 42px);
+        background:
+          radial-gradient(circle at 92% 12%, var(--accent-blue-soft), transparent 34%),
+          linear-gradient(180deg, var(--bg-surface), var(--bg-elevated));
+      }
+
+      .blog-card-top {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+
+      .blog-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text-muted);
+        background: color-mix(in srgb, var(--bg-input) 82%, transparent);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .04em;
+      }
+
+      .blog-pill[data-tone="blue"] { color: var(--accent-blue); background: var(--accent-blue-soft); }
+      .blog-pill[data-tone="green"] { color: #16845d; background: color-mix(in srgb, #16a163 12%, transparent); }
+      .blog-pill[data-tone="amber"] { color: #986b00; background: color-mix(in srgb, #f59e0b 13%, transparent); }
+      .blog-pill[data-tone="rose"] { color: #b42358; background: color-mix(in srgb, #e11d48 10%, transparent); }
+
+      .blog-card h3 {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        max-width: 760px;
+        color: var(--text);
+        font-size: clamp(25px, 3.2vw, 50px);
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .blog-card:not(.is-featured) h3 {
+        font-size: clamp(22px, 2.2vw, 32px);
+      }
+
+      .blog-card p {
+        position: relative;
+        z-index: 1;
+        margin: 16px 0 0;
+        max-width: 680px;
+        color: var(--text-muted);
+        line-height: 1.65;
+        font-size: 15px;
+      }
+
+      .blog-card-footer {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 30px;
+        color: var(--text-sub);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .blog-read-more {
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .blog-read-more svg {
+        transition: transform 180ms cubic-bezier(.22, 1, .36, 1);
+      }
+
+      .blog-card:hover .blog-read-more svg {
+        transform: translateX(3px);
+      }
+
+      .blog-list-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .blog-feature-grid > .blog-list-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .blog-mini-card {
+        min-height: 220px;
+      }
+
+      .blog-guides-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .blog-guide {
+        min-height: 184px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 20px;
+        background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 200ms cubic-bezier(.22, 1, .36, 1), border-color 200ms cubic-bezier(.22, 1, .36, 1), background 200ms cubic-bezier(.22, 1, .36, 1);
+      }
+
+      .blog-guide:hover {
+        transform: translateY(-2px);
+        border-color: var(--border-focus);
+        background: var(--bg-surface);
+      }
+
+      .blog-guide span {
+        color: var(--accent-blue);
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+      }
+
+      .blog-guide h3 {
+        margin: 22px 0 10px;
+        color: var(--text);
+        font-size: 19px;
+        line-height: 1.12;
+        letter-spacing: -0.025em;
+      }
+
+      .blog-guide p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .blog-newsletter {
+        margin: 8px 0 84px;
+        padding: clamp(34px, 6vw, 72px);
+        border-radius: 28px;
+        border: 1px solid var(--border);
+        background:
+          radial-gradient(circle at 8% 8%, var(--accent-blue-soft), transparent 34%),
+          linear-gradient(180deg, var(--bg-surface), var(--bg-elevated));
+        text-align: center;
+      }
+
+      .blog-newsletter h2 {
+        max-width: 780px;
+        margin: 0 auto 14px;
+        color: var(--text);
+        font-size: clamp(34px, 5.4vw, 72px);
+        line-height: .98;
+        letter-spacing: -0.055em;
+      }
+
+      .blog-newsletter p {
+        max-width: 620px;
+        margin: 0 auto 30px;
+        color: var(--text-muted);
+        line-height: 1.65;
+      }
+
+      .blog-newsletter .input-wrapper {
+        width: min(820px, 100%);
+        min-height: 164px;
+        margin: 0 auto;
+        text-align: left;
+        border-radius: 22px;
+      }
+
+      .blog-newsletter textarea,
+      .blog-prompt-band textarea {
+        min-height: 88px;
+        padding: 20px 20px 8px;
+        font: inherit;
+        font-size: clamp(17px, 1.8vw, 22px);
+        line-height: 1.35;
+        letter-spacing: -0.02em;
+      }
+
+      .blog-faq {
+        width: min(920px, 100%);
+        margin: 0 auto 76px;
+      }
+
+      .blog-faq .faq-title {
+        margin: 0 0 20px;
+        color: var(--text);
+        font-size: clamp(32px, 4.6vw, 56px);
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .blog-faq .faq-item {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        margin-bottom: 10px;
+        background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+        overflow: hidden;
+      }
+
+      .blog-faq .faq-question {
+        width: 100%;
+        min-height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 18px;
+        color: var(--text);
+        font-size: 15px;
+        font-weight: 820;
+        text-align: left;
+      }
+
+      .blog-faq .faq-answer {
+        display: none;
+        padding: 0 18px 18px;
+        color: var(--text-muted);
+        line-height: 1.65;
+        font-size: 14px;
+      }
+
+      .blog-faq .faq-item.active .faq-answer,
+      .blog-faq .faq-item.open .faq-answer {
+        display: block;
+      }
+
+      .blog-faq .faq-icon {
+        transition: transform 180ms cubic-bezier(.22, 1, .36, 1);
+      }
+
+      .blog-faq .faq-item.active .faq-icon,
+      .blog-faq .faq-item.open .faq-icon {
+        transform: rotate(180deg);
+      }
+
+      @media (max-width: 980px) {
+        .blog-hero-row,
+        .blog-prompt-band,
+        .blog-feature-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .blog-media {
+          min-height: 220px;
+        }
+
+        .blog-list-grid,
+        .blog-guides-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        .blog-shell {
+          width: min(100% - 28px, 560px);
+        }
+
+        .blog-hero {
+          padding-top: 112px;
+        }
+
+        .blog-section-header {
+          display: block;
+        }
+
+        .blog-section-header p {
+          margin-top: 12px;
+        }
+
+        .blog-list-grid,
+        .blog-guides-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .blog-card,
+        .blog-card.is-featured {
+          min-height: 0;
+          padding: 22px;
+          border-radius: 20px;
+        }
+
+        .blog-prompt-band,
+        .blog-newsletter {
+          border-radius: 22px;
+          padding: 22px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .blog-card,
+        .blog-guide,
+        .blog-read-more svg,
+        .blog-faq .faq-icon {
+          transition: none;
+        }
+      }
+    </style>
 </head>
 <body>
     <div id="curtain"></div>
@@ -59,7 +575,7 @@
             <a href="/builder.html" class="nav-link-item">Builder</a>
         </div>
         <div class="nav-actions">
-            <button class="theme-toggle" id="theme-btn">
+            <button class="theme-toggle" id="theme-btn" aria-label="Toggle theme">
                 <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
@@ -75,25 +591,280 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button class="sign-in-btn">Sign In</button>
+            <button class="sign-in-btn" type="button">Sign In</button>
         </div>
     </nav>
 
-    <header class="page-hero">
-        <h1>Huggy Notes</h1>
-        <p class="hero-subtitle">Product lessons, build patterns and practical guidance for creating better AI-generated apps.</p>
-    </header>
+    <main>
+      <section class="blog-shell blog-hero">
+        <div class="blog-hero-row">
+          <div class="reveal">
+            <span class="blog-eyebrow">Huggy Blog</span>
+            <h1>Build better products with AI, not louder demos.</h1>
+            <p>Practical guides for founders, builders and product teams turning raw ideas into working web apps, launch pages, SaaS dashboards, AI tools and publishable MVPs.</p>
+          </div>
+          <figure class="blog-media reveal" aria-label="Huggy editorial preview">
+            <img src="/og-huggy.svg" alt="Huggy product preview artwork" loading="eager">
+          </figure>
+        </div>
+      </section>
 
-    <div class="page-content">
-        <h2>Building with intent</h2>
-        <p>Good AI app building starts before code: clarify the user, workflow, platform type, data model and quality bar. Huggy is being shaped around that product discipline.</p>
-        
-        <h2>Design without generic AI tells</h2>
-        <p>We write about UI patterns that make generated apps feel specific: platform-aware layouts, useful states, readable hierarchy, honest placeholders and restrained motion.</p>
-        
-        <h2>Reliability over novelty</h2>
-        <p>The most valuable AI builder is the one users can trust. That means fewer accidental builds, better verification, persistent conversations and publish flows that do not surprise people.</p>
-    </div>
+      <section class="blog-shell blog-prompt-band reveal" aria-label="Start from the blog">
+        <div class="blog-prompt-copy">
+          <span class="blog-eyebrow">Try an idea</span>
+          <h2>Read, then build while the idea is fresh.</h2>
+          <p>Describe the product you want. Huggy opens the builder with your prompt so the article can turn into a real working preview.</p>
+        </div>
+        <div class="input-wrapper" aria-label="Describe an app to build from the blog">
+          <textarea id="ai-textarea" rows="3" placeholder="Example: Build a lightweight CRM with contacts, deals, pipeline stages and a clean dashboard."></textarea>
+          <div class="input-actions">
+            <div class="actions-left">
+              <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+              <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+            </div>
+            <div class="actions-right">
+              <div class="prompt-mode" data-prompt-mode="auto">
+                <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
+                  <span class="prompt-mode-label">Auto</span>
+                  <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                </button>
+                <div class="prompt-mode-menu" role="menu">
+                  <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active"><span>Auto</span><small>Let Huggy decide</small></button>
+                  <button type="button" data-prompt-mode-option="build" role="menuitem"><span>Build</span><small>Generate the app</small></button>
+                  <button type="button" data-prompt-mode-option="plan" role="menuitem"><span>Plan</span><small>Think first</small></button>
+                </div>
+              </div>
+              <div class="submit-wrapper">
+                <button class="submit-btn" title="Build now" type="button">
+                  <span>Build now</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="blog-shell blog-section" aria-labelledby="featured-title">
+        <div class="blog-section-header reveal">
+          <h2 id="featured-title">Featured playbooks</h2>
+          <p>Start with the guides that map most directly to building, previewing and launching real web products with Huggy.</p>
+        </div>
+        <div class="blog-feature-grid">
+          <a class="blog-card is-featured reveal" href="/guides/build-saas-mvp-with-ai/">
+            <div>
+              <div class="blog-card-top">
+                <span class="blog-pill" data-tone="blue">Product</span>
+                <span class="blog-pill">8 min read</span>
+                <span class="blog-pill">Guide</span>
+              </div>
+              <h3>How to build a SaaS MVP with AI without shipping a fragile demo.</h3>
+              <p>Turn an idea into a scoped product: user journey, screens, data, auth, billing, preview checks and launch order.</p>
+            </div>
+            <div class="blog-card-footer">
+              <span>Updated Jun 2026</span>
+              <span class="blog-read-more">Read guide <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span>
+            </div>
+          </a>
+
+          <div class="blog-list-grid">
+            <a class="blog-card blog-mini-card reveal" href="/guides/supabase-app-builder/">
+              <div>
+                <div class="blog-card-top">
+                  <span class="blog-pill" data-tone="green">Backend</span>
+                  <span class="blog-pill">6 min</span>
+                </div>
+                <h3>Supabase-ready apps: what must be real before publish?</h3>
+                <p>Auth, tables, RLS, storage and validation patterns for AI-generated apps.</p>
+              </div>
+              <div class="blog-card-footer"><span>Guide</span><span class="blog-read-more">Open <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span></div>
+            </a>
+            <a class="blog-card blog-mini-card reveal" href="/guides/ai-landing-page-seo/">
+              <div>
+                <div class="blog-card-top">
+                  <span class="blog-pill" data-tone="amber">Launch</span>
+                  <span class="blog-pill">5 min</span>
+                </div>
+                <h3>Landing pages that convert without looking AI-generated.</h3>
+                <p>Structure, proof, FAQ, prompt CTA, metadata and fast first impressions.</p>
+              </div>
+              <div class="blog-card-footer"><span>Guide</span><span class="blog-read-more">Open <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span></div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="blog-shell blog-section" aria-labelledby="latest-title">
+        <div class="blog-section-header reveal">
+          <h2 id="latest-title">Latest articles</h2>
+          <p>Short, practical reads for choosing the right product shape before Huggy starts generating.</p>
+        </div>
+        <div class="blog-list-grid">
+          <a class="blog-card reveal" href="/prompt-recipes/saas-dashboard/">
+            <div>
+              <div class="blog-card-top">
+                <span class="blog-pill" data-tone="blue">Prompt recipe</span>
+                <span class="blog-pill">4 min</span>
+              </div>
+              <h3>SaaS dashboard prompt recipe</h3>
+              <p>A concise prompt structure for analytics, onboarding, settings, billing and team workflows.</p>
+            </div>
+            <div class="blog-card-footer"><span>Recipe</span><span class="blog-read-more">Read <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span></div>
+          </a>
+          <a class="blog-card reveal" href="/prompt-recipes/marketplace/">
+            <div>
+              <div class="blog-card-top">
+                <span class="blog-pill" data-tone="green">Marketplace</span>
+                <span class="blog-pill">4 min</span>
+              </div>
+              <h3>Marketplace prompts need trust, search and order state</h3>
+              <p>How to ask for seller profiles, filters, favorites, cart, order tracking and buyer confidence.</p>
+            </div>
+            <div class="blog-card-footer"><span>Recipe</span><span class="blog-read-more">Read <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span></div>
+          </a>
+          <a class="blog-card reveal" href="/prompt-recipes/restaurant-app/">
+            <div>
+              <div class="blog-card-top">
+                <span class="blog-pill" data-tone="rose">Local business</span>
+                <span class="blog-pill">3 min</span>
+              </div>
+              <h3>Restaurant apps should feel operational, not decorative</h3>
+              <p>Menus, booking, hours, reviews, location and mobile-first actions for real customers.</p>
+            </div>
+            <div class="blog-card-footer"><span>Recipe</span><span class="blog-read-more">Read <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg></span></div>
+          </a>
+        </div>
+      </section>
+
+      <section class="blog-shell blog-section" aria-labelledby="tools-title">
+        <div class="blog-section-header reveal">
+          <h2 id="tools-title">Useful tools</h2>
+          <p>Use these before opening the builder when you want a sharper prompt or a better launch page.</p>
+        </div>
+        <div class="blog-guides-grid">
+          <a class="blog-guide reveal" href="/tools/prompt-to-app-idea/">
+            <span>Tool</span>
+            <h3>Prompt to app idea</h3>
+            <p>Turn a rough prompt into a clearer product direction before generating.</p>
+          </a>
+          <a class="blog-guide reveal" href="/tools/landing-page-score/">
+            <span>Tool</span>
+            <h3>Landing page score</h3>
+            <p>Check message clarity, proof, structure and conversion gaps.</p>
+          </a>
+          <a class="blog-guide reveal" href="/documentation.html">
+            <span>Docs</span>
+            <h3>Builder basics</h3>
+            <p>Understand how Huggy moves from prompt to project workspace.</p>
+          </a>
+          <a class="blog-guide reveal" href="/showcase.html">
+            <span>Examples</span>
+            <h3>Built with Huggy</h3>
+            <p>Browse product shapes you can adapt for your own idea.</p>
+          </a>
+        </div>
+      </section>
+
+      <section class="blog-shell blog-newsletter cta-prompt-section reveal" aria-label="Build from the blog">
+        <h2>Have a product idea while reading?</h2>
+        <p>Drop it here. Huggy will open a builder workspace and keep the path focused: idea, files, preview, checks and publish.</p>
+        <div class="input-wrapper" aria-label="Describe your product idea">
+          <textarea rows="3" placeholder="Example: Create a booking app for a beauty studio with services, calendar slots, client form and confirmation flow."></textarea>
+          <div class="input-actions">
+            <div class="actions-left">
+              <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+              <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+            </div>
+            <div class="actions-right">
+              <div class="prompt-mode" data-prompt-mode="auto">
+                <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
+                  <span class="prompt-mode-label">Auto</span>
+                  <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                </button>
+                <div class="prompt-mode-menu" role="menu">
+                  <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active"><span>Auto</span><small>Let Huggy decide</small></button>
+                  <button type="button" data-prompt-mode-option="build" role="menuitem"><span>Build</span><small>Generate the app</small></button>
+                  <button type="button" data-prompt-mode-option="plan" role="menuitem"><span>Plan</span><small>Think first</small></button>
+                </div>
+              </div>
+              <div class="submit-wrapper">
+                <button class="submit-btn" title="Build now" type="button">
+                  <span>Build now</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="blog-shell blog-faq faq-section reveal" aria-labelledby="blog-faq-title">
+        <h2 id="blog-faq-title" class="faq-title">Blog questions</h2>
+        <div class="faq-list">
+          <div class="faq-item active">
+            <button class="faq-question" type="button">
+              <span>Is this blog only for technical users?</span>
+              <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer"><p>No. The blog is written for founders, product people, designers and developers. It focuses on what to ask Huggy to build and how to judge the result.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">
+              <span>Can I use an article as a starting prompt?</span>
+              <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer"><p>Yes. Use the prompt input on this page or click a recipe. Huggy opens a builder workspace so you can turn the concept into a preview.</p></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-question" type="button">
+              <span>Will there be more deep engineering articles?</span>
+              <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="faq-answer"><p>Yes. The best next topics are fullstack generation, Supabase RLS, publish reliability, visual editing and how to write prompts that produce functional apps.</p></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <a href="/auth.html" class="sticky-cta" id="sticky-cta">
+        Build with Huggy
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </a>
+
+    <div id="toast-container"></div>
 
     <footer class="footer">
         <div class="footer-grid">
@@ -140,10 +911,10 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <span>© 2026 Huggy Inc.</span>
+            <span>&copy; 2026 Huggy Inc.</span>
             <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+                <a href="/community.html" style="color:inherit;text-decoration:none;">Community</a>
+                <a href="/about.html" style="color:inherit;text-decoration:none;">About</a>
             </div>
         </div>
     </footer>
