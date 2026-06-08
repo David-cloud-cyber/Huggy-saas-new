@@ -25,6 +25,7 @@ function inferKind(files: PreviewFallbackFile[], prompt = '') {
     ...files.map(file => `${file.path}\n${file.content.slice(0, 4000)}`),
   ].join('\n'));
 
+  if (/\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|focus session|pause courte|pause longue)\b/.test(haystack)) return 'timer';
   if (/\b(todo|task|tache|kanban|checklist)\b/.test(haystack)) return 'todo';
   if (/\b(ecommerce|shop|cart|product|checkout|store|boutique|panier|produit)\b/.test(haystack)) return 'commerce';
   if (/\b(dashboard|analytics|crm|admin|metric|kpi)\b/.test(haystack)) return 'dashboard';
@@ -35,6 +36,7 @@ function inferKind(files: PreviewFallbackFile[], prompt = '') {
 function fallbackTitle(projectName: string, kind: string) {
   if (projectName && !/^untitled|huggy app$/i.test(projectName.trim())) return projectName.trim();
   if (kind === 'todo') return 'Todo app';
+  if (kind === 'timer') return 'Pomodoro timer';
   if (kind === 'commerce') return 'Product storefront';
   if (kind === 'dashboard') return 'Project dashboard';
   if (kind === 'booking') return 'Booking app';
@@ -79,6 +81,23 @@ function buildCommerceFallback() {
   ].join('\n');
 }
 
+function buildTimerFallback() {
+  return [
+    '<div class="huggy-preview-fallback-timer" aria-label="Pomodoro timer preview">',
+    '  <strong>25:00</strong>',
+    '  <span>Focus session ready</span>',
+    '</div>',
+    '<div class="huggy-preview-fallback-pills" aria-label="Timer modes">',
+    '  <span>Work</span><span>Short break</span><span>Long break</span>',
+    '</div>',
+    '<div class="huggy-preview-fallback-actions">',
+    '  <button type="button" class="huggy-preview-fallback-primary">Start</button>',
+    '  <button type="button" class="huggy-preview-fallback-secondary">Pause</button>',
+    '  <button type="button" class="huggy-preview-fallback-secondary">Reset</button>',
+    '</div>',
+  ].join('\n');
+}
+
 function buildGenericFallback() {
   return [
     '<div class="huggy-preview-fallback-grid">',
@@ -100,6 +119,8 @@ export function buildPreviewFallbackHtml(input: {
   const title = fallbackTitle(input.projectName || '', kind);
   const body = kind === 'todo'
     ? buildTodoFallback()
+    : kind === 'timer'
+      ? buildTimerFallback()
     : kind === 'dashboard'
       ? buildDashboardFallback()
       : kind === 'commerce' || kind === 'booking'
@@ -139,5 +160,6 @@ html,body,#root{min-height:100%;}body{margin:0;background:#fcfbf8;color:#1c1c1c;
 .huggy-preview-fallback-grid strong{font-size:18px;color:#1c1c1c;}.huggy-preview-fallback-grid span{color:#5f5f5d;line-height:1.45;}
 .huggy-preview-fallback-chart{display:flex;align-items:end;gap:8px;height:140px;margin-top:16px;border:1px solid #eceae4;border-radius:20px;background:#fff;padding:18px;}
 .huggy-preview-fallback-chart i{flex:1;border-radius:999px 999px 8px 8px;background:linear-gradient(180deg,#75c7ff,#2f6df6);min-height:30%;}.huggy-preview-fallback-chart i:nth-child(2){min-height:54%;}.huggy-preview-fallback-chart i:nth-child(3){min-height:78%;}.huggy-preview-fallback-chart i:nth-child(4){min-height:46%;}.huggy-preview-fallback-chart i:nth-child(5){min-height:68%;}
+.huggy-preview-fallback-timer{display:grid;gap:8px;max-width:520px;margin:0 0 18px;border:1px solid #eceae4;border-radius:28px;background:#fff;padding:28px;text-align:center;}.huggy-preview-fallback-timer strong{font-size:clamp(52px,10vw,96px);line-height:.95;letter-spacing:-.04em;color:#1c1c1c;}.huggy-preview-fallback-timer span{color:#5f5f5d;font-weight:750;}.huggy-preview-fallback-actions{display:flex;flex-wrap:wrap;gap:10px;}.huggy-preview-fallback-secondary{height:48px;border:1px solid #eceae4;border-radius:16px;background:#fff;color:#1c1c1c;padding:0 18px;font:800 14px/1 Inter,ui-sans-serif,system-ui;cursor:pointer;}
 @media (max-width:720px){.huggy-preview-fallback{padding:18px}.huggy-preview-fallback-panel{border-radius:22px;padding:24px}.huggy-preview-fallback-grid{grid-template-columns:1fr}.huggy-preview-fallback-form{flex-direction:column}.huggy-preview-fallback-form button,.huggy-preview-fallback-primary{width:100%;}}
 `;

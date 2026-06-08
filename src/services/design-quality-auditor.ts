@@ -12,6 +12,7 @@ export type GeneratedQualityAuditInput = {
   platformType?: GeneratedAppType;
   designDirection?: DesignDirection;
   hasExistingFiles?: boolean;
+  prompt?: string;
 };
 
 type SourceBundle = {
@@ -20,6 +21,7 @@ type SourceBundle = {
   css: string;
   tsx: string;
   html: string;
+  prompt: string;
   filePaths: string[];
 };
 
@@ -291,6 +293,7 @@ function buildBundle(input: GeneratedQualityAuditInput): SourceBundle {
   ].filter(Boolean).join('\n\n');
   const css = sourceFor(path => path.endsWith('.css') || path.endsWith('.scss'));
   const tsx = sourceFor(path => /\.(tsx|jsx|ts|js)$/i.test(path));
+  const prompt = String(input.prompt || '');
   const all = [html, css, tsx, sourceFor(path => path.endsWith('.json') || path.endsWith('.md'))]
     .filter(Boolean)
     .join('\n\n')
@@ -302,6 +305,7 @@ function buildBundle(input: GeneratedQualityAuditInput): SourceBundle {
     css,
     tsx,
     html,
+    prompt,
     filePaths: files.map(file => normalizePath(file.path).toLowerCase()),
   };
 }
@@ -313,6 +317,26 @@ function normalizePath(value: string) {
 function countKeywordHits(source: string, keywords: string[]) {
   const lower = source.toLowerCase();
   return keywords.reduce((count, keyword) => count + (lower.includes(keyword.toLowerCase()) ? 1 : 0), 0);
+}
+
+function hasTimerIntent(bundle: SourceBundle) {
+  return TIMER_APP_RE.test([bundle.prompt, bundle.tsx, bundle.html].join('\n'));
+}
+
+function hasTodoIntent(bundle: SourceBundle, platform: GeneratedAppType) {
+  if (hasTimerIntent(bundle)) return false;
+  if (/\b(todo|to-do|to do|gestion de taches|gestion de tâches|liste de taches|liste de tâches)\b/i.test(bundle.prompt)) return true;
+  if (platform !== 'generic_web_app') return false;
+  return TODO_APP_RE.test([bundle.tsx, bundle.html].join('\n'));
+}
+
+function hasCommerceIntent(bundle: SourceBundle, platform: GeneratedAppType) {
+  if (hasTimerIntent(bundle)) return false;
+  if (platform === 'ecommerce') return true;
+  if (/\b(ecommerce|e-commerce|shop|store|cart|checkout|catalog|panier|boutique|paiement|catalogue)\b/i.test(bundle.prompt)) return true;
+  if (platform !== 'generic_web_app') return false;
+  const source = [bundle.tsx, bundle.html].join('\n');
+  return ECOMMERCE_APP_RE.test(source) && /\b(cart|checkout|price|variant|quantity|panier|paiement)\b/i.test(source);
 }
 
 function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppType): AgentVerificationCheck[] {
@@ -336,8 +360,7 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     'Generated UI contains unfinished behavior such as coming soon, not implemented, or placeholder actions.',
   ));
 
-  const isTimerApp = TIMER_APP_RE.test(source);
-  if (TODO_APP_RE.test(source) && !isTimerApp) {
+  if (hasTodoIntent(bundle, platform)) {
     const hasTaskState = /\b(useState|setTasks|setTodos|setItems)\b/i.test(code);
     const canCreate = hasTaskState && /\b(onSubmit|addTask|handleAdd|setTasks\([\s\S]*(\.\.\.|concat\(|completed\s*:))/i.test(code);
     const canComplete = hasTaskState && /\b(toggleTask|handleToggle|checked=|onChange=\{[\s\S]*toggle|completed\s*:\s*!)/i.test(code);
@@ -359,9 +382,7 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
     ));
   }
 
-  const isExplicitCommerce = platform === 'ecommerce'
-    || (platform === 'generic_web_app' && ECOMMERCE_APP_RE.test(source) && !isTimerApp);
-  if (isExplicitCommerce) {
+  if (hasCommerceIntent(bundle, platform)) {
     const hasCart = /\b(cart|basket|panier|addToCart|setCart|checkoutItems)\b/i.test(code);
     const hasQuantity = /\b(quantity|qty|increment|decrement|setQuantity|stock|variant)\b/i.test(code);
     const hasCheckoutFeedback = /\b(checkout|payment|order|commande|receipt|success|confirmation|setStatus|toast)\b/i.test(code);

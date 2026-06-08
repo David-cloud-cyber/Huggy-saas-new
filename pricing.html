@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Huggy Pricing — Build, Preview and Deploy AI Apps</title>
+    <title>Huggy Pricing - Build, Preview and Deploy AI Apps</title>
   <!-- HUGGY_SEO_START -->
   <meta name="description" content="Choose the Huggy plan for AI app generation, premium models, custom domains, export and deployment workflows." />
   <meta name="robots" content="index, follow" />
@@ -16,18 +16,18 @@
   <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
-  <meta property="og:title" content="Huggy Pricing — Build, Preview and Deploy AI Apps" />
+  <meta property="og:title" content="Huggy Pricing - Build, Preview and Deploy AI Apps" />
   <meta property="og:description" content="Choose the Huggy plan for AI app generation, premium models, custom domains, export and deployment workflows." />
   <meta property="og:url" content="https://huggy.fun/pricing.html" />
   <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Huggy Pricing — Build, Preview and Deploy AI Apps" />
+  <meta name="twitter:title" content="Huggy Pricing - Build, Preview and Deploy AI Apps" />
   <meta name="twitter:description" content="Choose the Huggy plan for AI app generation, premium models, custom domains, export and deployment workflows." />
   <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
   <script type="application/ld+json">{
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "name": "Huggy Pricing — Build, Preview and Deploy AI Apps",
+  "name": "Huggy Pricing - Build, Preview and Deploy AI Apps",
   "description": "Choose the Huggy plan for AI app generation, premium models, custom domains, export and deployment workflows.",
   "url": "https://huggy.fun/pricing.html"
 }</script>
@@ -202,9 +202,180 @@
             line-height: 1.55;
         }
 
+        .pricing-choice-band,
+        .pricing-proof-section,
+        .plan-compare-section {
+            max-width: 1120px;
+            margin: 0 auto 96px;
+            padding: 0 24px;
+        }
+
+        .pricing-choice-inner {
+            display: grid;
+            grid-template-columns: minmax(260px, .9fr) minmax(320px, 1.1fr);
+            gap: 24px;
+            align-items: center;
+            border: 1px solid var(--border-focus);
+            border-radius: 24px;
+            padding: 28px;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--accent-blue-soft) 34%, var(--bg-surface)) 0%, var(--bg-surface) 72%);
+            box-shadow: var(--huggy-shadow-soft);
+        }
+
+        .pricing-choice-inner span,
+        .plan-compare-kicker,
+        .pricing-proof-kicker {
+            color: var(--accent-blue);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        .pricing-choice-inner h2,
+        .plan-compare-section h2,
+        .pricing-proof-section h2 {
+            margin: 12px 0 12px;
+            font-size: clamp(30px, 3.3vw, 48px);
+            line-height: 1;
+            letter-spacing: -.04em;
+        }
+
+        .pricing-choice-inner p,
+        .plan-compare-section > p,
+        .pricing-proof-section > p {
+            color: var(--text-muted);
+            line-height: 1.65;
+            font-size: 15px;
+            max-width: 680px;
+        }
+
+        .pricing-choice-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .pricing-choice-list li {
+            list-style: none;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            background: color-mix(in srgb, var(--bg) 82%, transparent);
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        .pricing-choice-list strong {
+            display: block;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .plan-compare-table-wrap {
+            margin-top: 28px;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            overflow: hidden;
+            background: var(--bg-surface);
+            box-shadow: var(--huggy-shadow-soft);
+        }
+
+        .plan-compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px;
+        }
+
+        .plan-compare-table th,
+        .plan-compare-table td {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            font-size: 14px;
+            color: var(--text-muted);
+            vertical-align: top;
+        }
+
+        .plan-compare-table th {
+            color: var(--text);
+            background: color-mix(in srgb, var(--bg-surface) 86%, var(--accent-blue-soft));
+            font-weight: 700;
+        }
+
+        .plan-compare-table td:first-child {
+            color: var(--text);
+            font-weight: 650;
+            width: 26%;
+        }
+
+        .plan-compare-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pricing-proof-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 28px;
+        }
+
+        .pricing-proof-card {
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px;
+            background: var(--bg-surface);
+            box-shadow: var(--huggy-shadow-soft);
+        }
+
+        .pricing-proof-card b {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            margin-bottom: 16px;
+            background: var(--accent);
+            color: var(--bg);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 12px;
+        }
+
+        .pricing-proof-card h3 {
+            font-size: 17px;
+            margin-bottom: 8px;
+        }
+
+        .pricing-proof-card p {
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .pricing-social-proof {
+            margin-top: 22px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 22px;
+            background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.55;
+        }
+
+        .pricing-social-proof strong {
+            color: var(--text);
+        }
+
         /* FAQ SECTION */
         .faq-section {
-            max-width: 800px;
+            max-width: 880px;
             margin: 0 auto 160px;
             padding: 0 24px;
         }
@@ -275,6 +446,24 @@
             .pricing-trust-card {
                 grid-template-columns: 1fr;
             }
+
+            .pricing-choice-inner,
+            .pricing-proof-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pricing-choice-list {
+                grid-template-columns: 1fr;
+            }
+
+            .plan-compare-table-wrap {
+                overflow-x: auto;
+            }
+
+            .pricing-social-proof {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -321,12 +510,12 @@
     </nav>
 
     <header class="pricing-hero">
-        <h1>Simple plans for<br>serious builders.</h1>
-        <p>Choose the path that matches your momentum: explore an idea for free, publish with Pro, or scale client work with more credits, cloud balance, storage and domains.</p>
+        <h1>Start free.<br>Ship real apps.</h1>
+        <p>Choose the plan for your stage: validate an idea for free, publish real apps with Pro, then scale with more credits, cloud balance, storage and domains when traffic grows.</p>
 
         <div class="billing-toggle">
             <button class="toggle-btn active" onclick="setBilling('monthly')">Monthly</button>
-            <button class="toggle-btn" onclick="setBilling('yearly')">Yearly — -20%</button>
+            <button class="toggle-btn" onclick="setBilling('yearly')">Yearly -20%</button>
         </div>
     </header>
 
@@ -348,10 +537,10 @@
         </div>
 
         <div class="pricing-card featured">
-            <span class="featured-label">Most popular</span>
+            <span class="featured-label">Best start</span>
             <span class="card-name">Pro</span>
             <div class="card-price" id="price-pro">$25 <span>/mo</span></div>
-            <p class="card-desc">For founders and freelancers who need real previews, publish controls and enough room to iterate.</p>
+            <p class="card-desc">Best for founders and freelancers who want to generate, verify, publish and keep improving real apps.</p>
             <ul class="feature-list">
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1,000 credits / month</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 active projects</li>
@@ -364,7 +553,7 @@
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Credit and Cloud top-ups</li>
             </ul>
             <p class="billing-note" id="note-pro">Monthly billing. Annual saves $60/year.</p>
-            <button class="card-cta btn-solid" onclick="navigate('/auth.html?plan=pro')">Upgrade to Pro</button>
+            <button class="card-cta btn-solid" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
         </div>
 
         <div class="pricing-card">
@@ -418,9 +607,125 @@
         </div>
     </section>
 
+    <section class="pricing-choice-band reveal" aria-label="Recommended plan">
+        <div class="pricing-choice-inner">
+            <div>
+                <span>Recommended path</span>
+                <h2>Most builders should start with Pro.</h2>
+                <p>Free is useful for testing the builder, but Pro is the first plan designed for real shipping: more iterations, publish controls, custom domains, rollback and enough included cloud capacity to launch without guessing.</p>
+            </div>
+            <ul class="pricing-choice-list">
+                <li><strong>Build with room</strong>Enough credits for real iteration, not just one first draft.</li>
+                <li><strong>Publish safely</strong>Preview can change freely. Live changes only after Publish.</li>
+                <li><strong>Look serious</strong>Custom domain, badge removal and cleaner client handoff.</li>
+                <li><strong>Grow without shock</strong>Cloud top-ups are separate from build credits.</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="plan-compare-section reveal" aria-label="Plan comparison">
+        <span class="plan-compare-kicker">Compare plans</span>
+        <h2>Everything important, side by side.</h2>
+        <p>Huggy keeps the pricing cards simple, then shows the operational limits clearly before you choose a plan.</p>
+        <div class="plan-compare-table-wrap">
+            <table class="plan-compare-table">
+                <thead>
+                    <tr>
+                        <th>Capability</th>
+                        <th>Free</th>
+                        <th>Pro</th>
+                        <th>Scale</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Best for</td>
+                        <td>Testing an idea</td>
+                        <td>Publishing real apps</td>
+                        <td>Teams and client work</td>
+                    </tr>
+                    <tr>
+                        <td>Build credits</td>
+                        <td>50 starter credits</td>
+                        <td>1,000 monthly credits</td>
+                        <td>10,000 monthly credits</td>
+                    </tr>
+                    <tr>
+                        <td>Projects</td>
+                        <td>1 active project</td>
+                        <td>10 active projects</td>
+                        <td>Unlimited draft projects</td>
+                    </tr>
+                    <tr>
+                        <td>Published apps</td>
+                        <td>Huggy subdomain with badge</td>
+                        <td>3 published apps, custom domain</td>
+                        <td>25 published apps, multiple domains</td>
+                    </tr>
+                    <tr>
+                        <td>Cloud included</td>
+                        <td>$1 balance, capped usage</td>
+                        <td>$10 balance, top-ups available</td>
+                        <td>$75 balance, auto top-up available</td>
+                    </tr>
+                    <tr>
+                        <td>Storage and bandwidth</td>
+                        <td>0.1 GB DB, 0.25 GB files, 1 GB bandwidth</td>
+                        <td>1 GB DB, 5 GB files, 50 GB bandwidth</td>
+                        <td>20 GB DB, 100 GB files, 250 GB bandwidth</td>
+                    </tr>
+                    <tr>
+                        <td>Versions and rollback</td>
+                        <td>Basic history</td>
+                        <td>Versions, diffs and rollback</td>
+                        <td>Advanced run history and team rollback</td>
+                    </tr>
+                    <tr>
+                        <td>Support</td>
+                        <td>Community and docs</td>
+                        <td>Priority product support</td>
+                        <td>Priority support for teams</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="pricing-proof-section reveal" aria-label="How Huggy ships">
+        <span class="pricing-proof-kicker">Proof of workflow</span>
+        <h2>From prompt to published app, without mystery.</h2>
+        <p>Pricing should match the workflow users actually experience: generate, inspect, verify, publish and keep the live version stable.</p>
+        <div class="pricing-proof-grid">
+            <div class="pricing-proof-card">
+                <b>1</b>
+                <h3>Describe the app</h3>
+                <p>Start from a prompt, image, Figma link, GitHub repo or URL and keep the builder focused on the project.</p>
+            </div>
+            <div class="pricing-proof-card">
+                <b>2</b>
+                <h3>Preview safely</h3>
+                <p>Huggy creates a working preview while keeping published versions untouched until you choose to publish.</p>
+            </div>
+            <div class="pricing-proof-card">
+                <b>3</b>
+                <h3>Check and improve</h3>
+                <p>Use the agent, code view, history and rollback to iterate without losing the work already created.</p>
+            </div>
+            <div class="pricing-proof-card">
+                <b>4</b>
+                <h3>Publish when ready</h3>
+                <p>Launch on a Huggy URL, connect a custom domain on paid plans and track cloud usage separately.</p>
+            </div>
+        </div>
+        <div class="pricing-social-proof">
+            <div><strong>Conversion note:</strong> users should understand before paying what credits build, what cloud runs, and what Pro unlocks.</div>
+            <button class="card-cta btn-solid" style="width:auto;min-width:180px;margin:0;" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
+        </div>
+    </section>
+
     <!-- FAQ -->
     <section class="faq-section">
-        <h2 class="faq-title">Frequently Asked Questions</h2>
+        <h2 class="faq-title">Questions before you choose</h2>
         <div class="faq-list">
             <div class="faq-item">
                 <div class="faq-q">
@@ -457,14 +762,42 @@
                 </div>
                 <div class="faq-a">Huggy keeps platform auth separate from generated app auth, protects secrets from the frontend, and treats your code and project data as your property. Sensitive keys should stay server-side only.</div>
             </div>
+            <div class="faq-item">
+                <div class="faq-q">
+                    <span>Why is Pro the recommended plan?</span>
+                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+                <div class="faq-a">Pro is the first plan meant for shipping publicly: more credits, custom domains, badge removal, rollback, published apps and enough cloud balance for real testing.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q">
+                    <span>Will I lose my projects if I downgrade or cancel?</span>
+                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+                <div class="faq-a">No. Projects stay attached to your account. Plan limits may affect publishing, top-ups or premium features, but Huggy should not remove your saved work unless you delete it.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q">
+                    <span>Can I connect my own domain?</span>
+                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+                <div class="faq-a">Yes. Paid plans are designed for custom domains. Free projects can use a Huggy subdomain with the Huggy badge.</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-q">
+                    <span>Do published apps change when I keep editing?</span>
+                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+                <div class="faq-a">No. The preview can evolve while the live app stays stable. The published version changes only after you click Publish again.</div>
+            </div>
         </div>
     </section>
 
     <section class="marketing-prompt-section reveal">
         <div class="marketing-prompt-copy">
             <span class="marketing-kicker">Try the workflow</span>
-            <h2>Know your plan? Start with the app idea.</h2>
-            <p>Describe what you want to build and Huggy will open a builder workspace with the right plan context, credits and publishing path.</p>
+            <h2>Ready to test Huggy with a real app?</h2>
+            <p>Describe the product, workflow or landing page you want. Huggy opens the builder, generates a working preview and keeps the project saved to your account.</p>
         </div>
         <div class="input-wrapper marketing-prompt-card">
                 <textarea rows="3" placeholder="Example: Build a paid SaaS dashboard with login, billing, usage metrics and a custom domain."></textarea>
@@ -566,7 +899,7 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <span>© 2026 Huggy Inc.</span>
+            <span>&copy; 2026 Huggy Inc.</span>
             <div style="display:flex;gap:20px;">
                 <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
                 <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>

@@ -4862,6 +4862,7 @@ function applyGeneratedDestructiveSafety(files: GeneratedFile[], summaries: stri
 function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], errors: any[]): AutoFixEngineResult {
   const reasonText = errors.map(error => `${error?.key || ''} ${error?.message || ''} ${error?.file || ''}`).join('\n');
   const summaries: string[] = [];
+  const promptForFix = project.prompt || project.name || 'Generated app';
   const markerClean = cleanGeneratedBlockingMarkers(files.map(file => ({ ...file })), summaries);
   let working = markerClean.files;
   const shouldForceModernVite = !isModernFrontendProject(files)
@@ -4870,7 +4871,7 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
   if (!shouldForceModernVite && !shouldFixDestructive && !markerClean.changed) {
     return { files, changed: false, changedPaths: [], summaries: [] };
   }
-  working = shouldForceModernVite ? ensureModernFrontendProject(working, project.name, project.prompt || project.name) : working;
+  working = shouldForceModernVite ? ensureModernFrontendProject(working, project.name, promptForFix) : working;
   const byPath = new Map(working.map(file => [generatedPath(file.path), { ...file, path: generatedPath(file.path) }]));
 
   if (shouldForceModernVite || !byPath.has('index.html')) {
@@ -4887,7 +4888,21 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
   }
 
   if (!byPath.has('src/App.tsx') && !byPath.has('src/App.jsx')) {
-    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, project.prompt || project.name), 'tsx', summaries);
+    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, promptForFix), 'tsx', summaries);
+  }
+
+  const appPath = byPath.has('src/App.tsx') ? 'src/App.tsx' : byPath.has('src/App.jsx') ? 'src/App.jsx' : 'src/App.tsx';
+  const appContent = byPath.get(appPath)?.content || '';
+  const shouldReplaceUnreliableApp = shouldForceModernVite
+    && /forced runtime failure marker|runtime error marker|data-huggy-runtime-error|blank preview|preview.*empty|technical build score|functionality_todo_core_loop|functionality_commerce_core_loop|primary controls|control_handlers|browser_actions_change_state|visual_primary_controls/i.test(reasonText)
+    && (
+      markerClean.changed
+      || appContent.trim().length < 700
+      || !/\bexport\s+default\s+function\s+App\b|\bconst\s+App\s*[:=]|\bfunction\s+App\s*\(/i.test(appContent)
+      || !/\b(onClick|onSubmit|onChange|useState|useReducer|localStorage|set[A-Z])\b/i.test(appContent)
+    );
+  if (shouldReplaceUnreliableApp) {
+    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, promptForFix), 'tsx', summaries);
   }
 
   if (!byPath.has('src/index.css')) {
@@ -6361,6 +6376,7 @@ function summarizeQualityForMemory(checks: AgentVerificationCheck[]) {
 
 function collectGenerationVerificationChecks(input: {
   projectName: string;
+  prompt: string;
   files: GeneratedFile[];
   previewHtml: string;
   uiPolicy: any;
@@ -6376,6 +6392,7 @@ function collectGenerationVerificationChecks(input: {
       platformType: input.uiPolicy.appType,
       designDirection: input.uiPolicy.designDirection,
       hasExistingFiles: input.hasExistingFiles,
+      prompt: input.prompt,
     }),
     ...auditGeneratedFunctionality({
       files: input.files,
@@ -6383,6 +6400,7 @@ function collectGenerationVerificationChecks(input: {
       platformType: input.uiPolicy.appType,
       designDirection: input.uiPolicy.designDirection,
       hasExistingFiles: input.hasExistingFiles,
+      prompt: input.prompt,
     }),
     ...inspectVisualPreview({
       files: input.files,
@@ -6437,6 +6455,7 @@ async function finalReliabilityAutoFix(input: {
     ...previewPipelineChecks(),
     ...collectGenerationVerificationChecks({
       projectName: input.project.name,
+      prompt: input.project.prompt || input.project.name,
       files,
       previewHtml,
       uiPolicy: input.uiPolicy,
@@ -6481,6 +6500,7 @@ async function finalReliabilityAutoFix(input: {
       ...previewPipelineChecks(),
       ...collectGenerationVerificationChecks({
         projectName: input.project.name,
+        prompt: input.project.prompt || input.project.name,
         files,
         previewHtml,
         uiPolicy: input.uiPolicy,
@@ -9686,18 +9706,19 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       { ensureIndex: true },
     );
     files = ensureModernFrontendProject(files, project.name, prompt);
+    const projectForRun: GeneratedProject = { ...project, prompt };
 
-    let pipeline = runPreviewPipeline(project, files);
+    let pipeline = runPreviewPipeline(projectForRun, files);
     let finalFiles = files;
     let autoFix = null as any;
     if (pipeline.status === 'failed') {
       await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
       for (let attempt = 1; attempt <= 3 && pipeline.status === 'failed'; attempt += 1) {
-        const fix = applyAutoFix(project, finalFiles, pipeline.errors);
+        const fix = applyAutoFix(projectForRun, finalFiles, pipeline.errors);
         autoFix = fix.patch;
         if (!fix.fixed) break;
         finalFiles = fix.files;
-        pipeline = runPreviewPipeline(project, finalFiles);
+        pipeline = runPreviewPipeline(projectForRun, finalFiles);
       }
     }
     let previewHtml = pipeline.html;
@@ -9713,7 +9734,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
       let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
       for (let attempt = 1; runnerBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
-        const fix = applyAutoFix(project, finalFiles, runnerBlocking.map(check => ({
+        const fix = applyAutoFix(projectForRun, finalFiles, runnerBlocking.map(check => ({
           file: check.file || 'index.html',
           message: check.message,
           severity: check.severity,
@@ -9721,7 +9742,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         autoFix = fix.patch;
         if (!fix.fixed) break;
         finalFiles = fix.files;
-        pipeline = runPreviewPipeline(project, finalFiles);
+        pipeline = runPreviewPipeline(projectForRun, finalFiles);
         previewHtml = pipeline.html;
         runnerResult = await projectRunner.run({
           runId: agentRunId || requestId,
@@ -9741,7 +9762,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       platformType: uiPolicy.appType,
     }).filter(isBlockingVerificationFailure);
     for (let attempt = 1; visualBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
-      const fix = applyAutoFix(project, finalFiles, visualBlocking.map(check => ({
+      const fix = applyAutoFix(projectForRun, finalFiles, visualBlocking.map(check => ({
         file: check.file || 'src/App.tsx',
         message: check.message,
         severity: check.severity,
@@ -9749,7 +9770,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       autoFix = fix.patch;
       if (!fix.fixed) break;
       finalFiles = fix.files;
-      pipeline = runPreviewPipeline(project, finalFiles);
+      pipeline = runPreviewPipeline(projectForRun, finalFiles);
       previewHtml = pipeline.html;
       visualBlocking = inspectVisualPreview({
         files: finalFiles,
@@ -9758,7 +9779,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }).filter(isBlockingVerificationFailure);
     }
     let finalGate = await finalReliabilityAutoFix({
-      project,
+      project: projectForRun,
       userId,
       agentRunId,
       requestId,

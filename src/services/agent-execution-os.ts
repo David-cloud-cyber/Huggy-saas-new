@@ -110,6 +110,11 @@ function collapseDuplicateParagraphs(value: string) {
   return output.join('\n\n');
 }
 
+function looksLikeInternalRecoveryText(value: string) {
+  const text = normalizeExecutionText(value);
+  return /\b(draft recuperable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes 0 created|verification huggy stopped)\b/i.test(text);
+}
+
 function removeFalseCompletionClaims(value: string, contract?: ExecutionContract) {
   if (!contract?.can_mutate_files) return value;
   return String(value || '')
@@ -147,6 +152,10 @@ export function sanitizeAssistantOutput(input: {
       : 'I am keeping the plan internal and moving to execution. I will verify the preview before delivery.';
   }
 
+  if (looksLikeInternalRecoveryText(text)) {
+    return buildRecoverableDraftMessage({ prompt: input.prompt });
+  }
+
   return collapseDuplicateParagraphs(removeFalseCompletionClaims(text, contract));
 }
 
@@ -160,9 +169,8 @@ export function buildRecoverableDraftMessage(input: {
   blockingCount?: number;
 }) {
   const fr = speaksFrench(input.prompt);
-  return fr
-    ? 'Je garde le travail en sécurité. La preview sera affichée seulement après une vérification propre.'
-    : 'I kept the work safe. The preview will only be shown after a clean verification.';
+  if (fr) return 'Je garde le travail en securite. La preview sera affichee seulement apres une verification propre.';
+  return 'I kept the work safe. The preview will only be shown after a clean verification.';
 }
 
 export function buildInternalExecutionPlan(input: {
