@@ -20,11 +20,19 @@ export type ResearchResult = {
   results: ResearchResultItem[];
 };
 
-export type WebResearchPlan = {
+export type WebResearchProvider = 'firecrawl' | 'tavily' | 'brave';
+
+export type WebResearchDecision = {
   shouldResearch: boolean;
-  action: 'search' | 'scrape';
+  action: 'none' | 'search' | 'scrape';
   query: string;
   reason: string;
+  confidence: number;
+  providerPreference: WebResearchProvider[];
+};
+
+export type WebResearchPlan = Omit<WebResearchDecision, 'action'> & {
+  action: 'search' | 'scrape';
 };
 
 export class WebResearchGateway {
@@ -239,14 +247,23 @@ export class WebResearchGateway {
 }
 
 export function shouldUseWebResearch(input: { prompt: string; intent?: string; requiresFileChanges?: boolean }) {
-  return buildWebResearchPlan(input).shouldResearch;
+  return decideWebResearch(input).shouldResearch;
 }
 
 export function buildWebResearchPlan(input: { prompt: string; intent?: string; requiresFileChanges?: boolean }): WebResearchPlan {
+  const decision = decideWebResearch(input);
+  return {
+    ...decision,
+    action: decision.action === 'none' ? 'search' : decision.action,
+  };
+}
+
+export function decideWebResearch(input: { prompt: string; intent?: string; requiresFileChanges?: boolean }): WebResearchDecision {
   const rawPrompt = String(input.prompt || '');
   const prompt = rawPrompt.toLowerCase();
   const query = sanitizeQuery(rawPrompt);
   const url = extractPrimaryUrl(rawPrompt);
+  const providerPreference: WebResearchProvider[] = ['firecrawl', 'tavily', 'brave'];
   const isShortGreeting = /\b(bonjour|salut|hello|hi|merci|thanks)\b/.test(prompt) && prompt.length < 80;
   const isSimpleLocalBuild = /\b(todo|to do|to-do|pomodoro|pomodero|timer|calculator|calculatrice|notes?|weather app|quiz)\b/i.test(prompt)
     && /\b(create|build|make|generate|cr[eé]e|g[eé]n[eè]re|app|application)\b/i.test(prompt)
@@ -255,27 +272,27 @@ export function buildWebResearchPlan(input: { prompt: string; intent?: string; r
     && !/\b(docs?|documentation|api|sdk|provider|openrouter|stripe|supabase|vercel|railway|google|cloudflare|dns|domain|oauth|webhook|latest|recent|actuel|r[eé]cent|pricing|http|url)\b/i.test(prompt);
 
   if (!query || isShortGreeting || isSimpleLocalBuild || isInternalBugOnly) {
-    return { shouldResearch: false, action: 'search', query, reason: 'local_or_conversation' };
+    return { shouldResearch: false, action: 'none', query, reason: 'local_or_conversation', confidence: 0.92, providerPreference };
   }
 
-  if (url && /\b(research|analyse|analyze|scrape|crawl|import|clone|rebuild|inspiration|website|site|url|source url|website url|figma|github)\b/i.test(prompt)) {
-    return { shouldResearch: true, action: 'scrape', query: url, reason: 'url_context' };
+  if (url && (looksLikeUrl(query) || /\b(research|analyse|analyze|scrape|crawl|import|clone|rebuild|inspiration|website|site|url|source url|website url|figma|github)\b/i.test(prompt))) {
+    return { shouldResearch: true, action: 'scrape', query: url, reason: 'url_context', confidence: 0.95, providerPreference };
   }
 
   if (/\b(search the web|web search|online search|look up|browse|research online|internet search|recherche en ligne|cherche sur internet|chercher sur internet|consulte le web|fais une recherche|faire une recherche|recherche web)\b/i.test(prompt)) {
-    return { shouldResearch: true, action: url ? 'scrape' : 'search', query: url || query, reason: 'explicit_web_research' };
+    return { shouldResearch: true, action: url ? 'scrape' : 'search', query: url || query, reason: 'explicit_web_research', confidence: 0.96, providerPreference };
   }
 
   if (/\b(latest|recent|today|current|now|new|pricing|price|docs?|documentation|api|sdk|version|changelog|release|availability|models?|provider|openrouter|railway|vercel|supabase|stripe|seo|google|cloudflare|dns|domain|deploy|oauth|webhook|terms|law|legal|gdpr)\b/i.test(prompt)
     || /\b(dernier|derni[eè]re|r[eé]cent|actuel|aujourd'hui|maintenant|prix|tarif|documentation|d[eé]ployer|domaine|mod[eè]le|disponibilit[eé]|firecrawl|tavily|brave search)\b/i.test(prompt)) {
-    return { shouldResearch: true, action: 'search', query, reason: 'current_external_fact' };
+    return { shouldResearch: true, action: 'search', query, reason: 'current_external_fact', confidence: 0.84, providerPreference };
   }
 
   if (input.requiresFileChanges && /\b(integrat|connect|provider|external|auth|payment|billing|database|deploy|api|sdk|webhook|oauth)\b/i.test(prompt)) {
-    return { shouldResearch: true, action: 'search', query, reason: 'external_integration' };
+    return { shouldResearch: true, action: 'search', query, reason: 'external_integration', confidence: 0.78, providerPreference };
   }
 
-  return { shouldResearch: false, action: 'search', query, reason: 'not_needed' };
+  return { shouldResearch: false, action: 'none', query, reason: 'not_needed', confidence: 0.74, providerPreference };
 }
 
 export function researchToPromptContext(result: ResearchResult) {

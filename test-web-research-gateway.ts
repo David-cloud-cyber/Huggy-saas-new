@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { WebResearchGateway, buildWebResearchPlan, researchToPromptContext, shouldUseWebResearch } from './src/services/web-research-gateway.ts';
+import { WebResearchGateway, buildWebResearchPlan, decideWebResearch, researchToPromptContext, shouldUseWebResearch } from './src/services/web-research-gateway.ts';
 
 assert.equal(shouldUseWebResearch({ prompt: 'bonjour', intent: 'conversation' }), false);
 assert.equal(shouldUseWebResearch({ prompt: 'Check the latest Supabase auth docs', intent: 'build', requiresFileChanges: true }), true);
@@ -16,6 +16,42 @@ const urlPlan = buildWebResearchPlan({
 assert.equal(urlPlan.shouldResearch, true);
 assert.equal(urlPlan.action, 'scrape');
 assert.equal(urlPlan.query, 'https://firecrawl.dev');
+
+const simpleBuildDecision = decideWebResearch({
+  prompt: 'crée une application web de livraison avec suivi des commandes',
+  intent: 'build',
+  requiresFileChanges: true,
+});
+assert.equal(simpleBuildDecision.shouldResearch, false);
+assert.equal(simpleBuildDecision.action, 'none');
+assert.equal(simpleBuildDecision.reason, 'not_needed');
+
+const explicitResearchDecision = decideWebResearch({
+  prompt: 'cherche sur internet les nouvelles règles de custom domains Vercel',
+  intent: 'build',
+  requiresFileChanges: true,
+});
+assert.equal(explicitResearchDecision.shouldResearch, true);
+assert.equal(explicitResearchDecision.action, 'search');
+assert.equal(explicitResearchDecision.reason, 'explicit_web_research');
+assert.ok(explicitResearchDecision.confidence >= 0.9);
+assert.deepEqual(explicitResearchDecision.providerPreference.slice(0, 2), ['firecrawl', 'tavily']);
+
+const providerDebugDecision = decideWebResearch({
+  prompt: 'OpenRouter retourne PROVIDER_TIMEOUT avec ce modèle, vérifie les docs API',
+  intent: 'debug',
+  requiresFileChanges: true,
+});
+assert.equal(providerDebugDecision.shouldResearch, true);
+assert.equal(providerDebugDecision.action, 'search');
+
+const internalDebugDecision = decideWebResearch({
+  prompt: 'corrige le blocage restant et la preview blanche dans ce projet',
+  intent: 'debug',
+  requiresFileChanges: true,
+});
+assert.equal(internalDebugDecision.shouldResearch, false);
+assert.equal(internalDebugDecision.action, 'none');
 
 const gateway = new WebResearchGateway({});
 const skipped = await gateway.search('latest OpenRouter model availability');
