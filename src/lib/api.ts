@@ -1,5 +1,4 @@
 import { getVerifiedSession, refreshVerifiedSession } from './supabase-browser';
-import { createJsonSseParser } from './sse-parser';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -85,67 +84,4 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
 
   return payload as T;
-}
-
-export async function apiStream(
-  path: string,
-  body: unknown,
-  onEvent: (eventType: string, data: any) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  let verified = await getVerifiedSession();
-  if (!verified?.session?.access_token) {
-    verified = await refreshVerifiedSession();
-  }
-  if (!verified?.session?.access_token) {
-    redirectToAuth();
-    throw new ApiError('Authentication required', 401, null);
-  }
-
-  const buildRequest = (accessToken: string, requestSignal?: AbortSignal) => ({
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body || {}),
-    signal: requestSignal,
-  });
-
-  let response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token, signal));
-  if (!response.ok || !response.body) {
-    let payload = await response.json().catch(() => ({}));
-    if (!signal?.aborted && isAuthSessionUnavailable(payload, response.status)) {
-      verified = await refreshVerifiedSession();
-      if (verified?.session?.access_token) {
-        response = await fetch(`${API_BASE_URL}${path}`, buildRequest(verified.session.access_token, signal));
-        if (response.ok && response.body) {
-          // Continue with the refreshed stream below.
-        } else {
-          payload = await response.json().catch(() => ({}));
-        }
-      }
-    }
-    if (!response.ok || !response.body) {
-      if (isAuthSessionUnavailable(payload, response.status)) redirectToAuth();
-      const message = extractApiMessage(payload, `Stream failed with ${response.status}`);
-      throw new ApiError(message, response.status, payload);
-    }
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const parser = createJsonSseParser(onEvent);
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      const tail = decoder.decode();
-      if (tail) parser.push(tail);
-      parser.flush();
-      break;
-    }
-
-    parser.push(decoder.decode(value, { stream: true }));
-  }
 }
