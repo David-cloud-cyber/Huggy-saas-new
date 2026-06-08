@@ -99,6 +99,63 @@
       margin-bottom: 24px;
     }
 
+    .admin-commandbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: -8px 0 22px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 18px 70px -62px rgba(0, 0, 0, 0.42);
+    }
+
+    .admin-global-search {
+      flex: 1 1 360px;
+      min-width: min(100%, 260px);
+      height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-input);
+      color: var(--text);
+      padding: 0 15px;
+      outline: none;
+      font-size: 13px;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .admin-global-search:focus,
+    .admin-search:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue) 12%, transparent);
+    }
+
+    .admin-live-status {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      font: 760 11px/1 "JetBrains Mono", monospace;
+      white-space: nowrap;
+    }
+
+    .admin-live-status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent-blue);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue) 13%, transparent);
+    }
+
     .admin-kicker {
       font-family: "JetBrains Mono", monospace;
       font-size: 11px;
@@ -149,6 +206,16 @@
       color: #fff;
     }
 
+    .admin-button.subtle {
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .admin-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
     .admin-grid {
       display: grid;
       grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -163,6 +230,17 @@
       padding: 16px;
       min-width: 0;
       box-shadow: 0 20px 70px -58px rgba(0, 0, 0, 0.45);
+    }
+
+    .admin-card.clickable {
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .admin-card.clickable:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-focus);
+      background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
     }
 
     .admin-card.wide { grid-column: span 8; }
@@ -212,6 +290,33 @@
       margin-bottom: 12px;
     }
 
+    .admin-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+    }
+
+    .admin-filter-chip {
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 800;
+      transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+    }
+
+    .admin-filter-chip:hover,
+    .admin-filter-chip.active {
+      color: var(--text);
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+    }
+
     .admin-search {
       width: min(360px, 100%);
       height: 40px;
@@ -229,7 +334,17 @@
       font-size: 13px;
     }
 
+    .admin-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg) 72%, transparent);
+    }
+
     .admin-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       color: var(--text-sub);
       font: 800 10px/1 "JetBrains Mono", monospace;
       letter-spacing: 0.08em;
@@ -237,6 +352,7 @@
       text-align: left;
       padding: 10px 8px;
       border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
     }
 
     .admin-table td {
@@ -246,9 +362,24 @@
       vertical-align: top;
     }
 
+    .admin-table tr {
+      transition: background 140ms ease;
+    }
+
+    .admin-table tbody tr:hover {
+      background: color-mix(in srgb, var(--accent-blue) 7%, transparent);
+    }
+
     .admin-table strong {
       color: var(--text);
       font-weight: 780;
+    }
+
+    .admin-mono {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--text-sub);
+      word-break: break-all;
     }
 
     .status-pill {
@@ -326,6 +457,19 @@
       color: #fca5a5;
     }
 
+    .admin-skeleton {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-skeleton-line {
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(90deg, var(--bg-elevated), color-mix(in srgb, var(--accent-blue) 7%, var(--bg-elevated)), var(--bg-elevated));
+      background-size: 220% 100%;
+      animation: adminShimmer 1.4s ease-in-out infinite;
+    }
+
     .admin-drawer {
       position: fixed;
       top: 0;
@@ -346,10 +490,74 @@
       transform: translateX(0);
     }
 
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+      background: rgba(0, 0, 0, 0.18);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     .drawer-close {
       float: right;
       color: var(--text-sub);
       font-size: 24px;
+    }
+
+    .drawer-title {
+      margin: 6px 40px 4px 0;
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+
+    .drawer-subtitle {
+      margin: 0 0 16px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    .drawer-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 0 16px;
+    }
+
+    .drawer-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .drawer-field {
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: var(--bg-elevated);
+      padding: 11px;
+    }
+
+    .drawer-field span {
+      display: block;
+      color: var(--text-sub);
+      font: 800 10px/1 "JetBrains Mono", monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 7px;
+    }
+
+    .drawer-field strong,
+    .drawer-field code {
+      color: var(--text);
+      font-size: 13px;
+      word-break: break-word;
     }
 
     .support-summary {
@@ -367,6 +575,22 @@
     @keyframes adminReveal {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes adminShimmer {
+      from { background-position: 120% 0; }
+      to { background-position: -120% 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .admin-section,
+      .admin-card.clickable,
+      .admin-drawer,
+      .drawer-backdrop,
+      .admin-skeleton-line {
+        animation: none !important;
+        transition: none !important;
+      }
     }
 
     @media (max-width: 980px) {
@@ -391,6 +615,14 @@
 
       .admin-actions {
         justify-content: flex-start;
+      }
+
+      .admin-commandbar {
+        align-items: stretch;
+      }
+
+      .admin-live-status {
+        width: 100%;
       }
 
       .admin-card,
@@ -435,6 +667,12 @@
         </div>
       </header>
 
+      <div class="admin-commandbar" role="search">
+        <input id="admin-global-search" class="admin-global-search" placeholder="Search users, projects, runs, errors or request IDs" autocomplete="off" />
+        <span class="admin-live-status" id="admin-live-status">Waiting for live data</span>
+        <button class="admin-button subtle" id="admin-clear-filters" type="button">Clear filters</button>
+      </div>
+
       <section class="admin-section active" data-section="overview">
         <div id="admin-overview" class="admin-grid"></div>
       </section>
@@ -445,6 +683,12 @@
             <span class="panel-label">Users</span>
             <input id="admin-user-search" class="admin-search" placeholder="Search email or user id" />
           </div>
+          <div class="admin-filter-row" data-filter-group="users">
+            <button class="admin-filter-chip active" data-filter-value="all" type="button">All</button>
+            <button class="admin-filter-chip" data-filter-value="admin" type="button">Admins</button>
+            <button class="admin-filter-chip" data-filter-value="active" type="button">Active today</button>
+            <button class="admin-filter-chip" data-filter-value="no-email" type="button">No email</button>
+          </div>
           <div id="admin-users"></div>
         </div>
       </section>
@@ -454,6 +698,12 @@
           <div class="admin-panel-head">
             <span class="panel-label">Projects</span>
             <input id="admin-project-search" class="admin-search" placeholder="Search project, owner or id" />
+          </div>
+          <div class="admin-filter-row" data-filter-group="projects">
+            <button class="admin-filter-chip active" data-filter-value="all" type="button">All</button>
+            <button class="admin-filter-chip" data-filter-value="preview-ready" type="button">Preview ready</button>
+            <button class="admin-filter-chip" data-filter-value="published" type="button">Published</button>
+            <button class="admin-filter-chip" data-filter-value="needs-attention" type="button">Needs attention</button>
           </div>
           <div id="admin-projects"></div>
         </div>
@@ -495,7 +745,8 @@
     </main>
   </div>
 
-  <aside id="admin-drawer" class="admin-drawer" aria-live="polite">
+  <div id="admin-drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
+  <aside id="admin-drawer" class="admin-drawer" aria-live="polite" aria-label="Admin details panel">
     <button class="drawer-close" id="admin-drawer-close" type="button" aria-label="Close">×</button>
     <div id="admin-drawer-content"></div>
   </aside>
