@@ -1130,6 +1130,7 @@ function ensureConversationStyles() {
       .huggy-feedback-reason,
       .huggy-conversation-download,
       .huggy-conversation-scroll,
+      .huggy-message-waiting::after,
       .huggy-live-dot,
       .huggy-agent-trace-dot,
       .huggy-agent-step-mark,
