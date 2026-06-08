@@ -430,7 +430,7 @@ function ensureConversationStyles() {
     .huggy-message-stack {
       max-width: min(92%, 560px);
       display: grid;
-      gap: 5px;
+      gap: 3px;
       justify-items: start;
     }
 
@@ -450,11 +450,11 @@ function ensureConversationStyles() {
     .huggy-message-utility {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      min-height: 26px;
+      gap: 3px;
+      min-height: 22px;
       color: var(--text-muted);
-      opacity: 0;
-      transform: translateY(-2px);
+      opacity: .18;
+      transform: translateY(-1px);
       pointer-events: none;
       transition: opacity 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1);
     }
@@ -467,17 +467,23 @@ function ensureConversationStyles() {
     }
 
     .huggy-message-utility button {
-      width: 25px;
-      height: 25px;
+      width: 22px;
+      height: 22px;
       display: inline-grid;
       place-items: center;
       border: 1px solid transparent;
-      border-radius: 8px;
+      border-radius: 7px;
       color: var(--text-muted);
       background: transparent;
       cursor: pointer;
       position: relative;
       transition: background 130ms cubic-bezier(.22,1,.36,1), color 130ms cubic-bezier(.22,1,.36,1), transform 130ms cubic-bezier(.22,1,.36,1), border-color 130ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-message-utility svg {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.05;
     }
 
     .huggy-message-utility button:hover,
@@ -506,15 +512,15 @@ function ensureConversationStyles() {
       content: attr(data-tooltip);
       position: absolute;
       left: 50%;
-      bottom: calc(100% + 7px);
+      bottom: calc(100% + 6px);
       transform: translateX(-50%) translateY(3px);
       border: 1px solid var(--border-light, var(--border));
-      border-radius: 8px;
+      border-radius: 7px;
       background: var(--text);
       color: var(--bg);
       box-shadow: 0 12px 28px rgba(9,9,11,.14);
-      padding: 5px 8px;
-      font-size: 11px;
+      padding: 4px 7px;
+      font-size: 10.5px;
       font-weight: 700;
       white-space: nowrap;
       opacity: 0;
@@ -531,10 +537,11 @@ function ensureConversationStyles() {
 
     .huggy-message-time {
       color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 620;
+      font-size: 10.5px;
+      font-weight: 650;
       font-variant-numeric: tabular-nums;
-      padding: 0 3px;
+      padding: 0 2px 0 4px;
+      opacity: .78;
     }
 
     .huggy-feedback-backdrop {
@@ -1078,9 +1085,13 @@ function ensureConversationStyles() {
 
     @media (hover: none) {
       .huggy-message-utility {
-        opacity: .82;
+        opacity: .52;
         transform: none;
         pointer-events: auto;
+      }
+
+      .huggy-message-utility button[data-mobile-secondary="true"] {
+        display: none;
       }
     }
 
@@ -1517,14 +1528,29 @@ function MessageUtilityBar({
   onNegative: (message: HuggyConversationMessage) => void;
   onExpand: (message: HuggyConversationMessage) => void;
 }) {
-  if (message.role === "system" || message.working) return null;
+  const [copied, setCopied] = React.useState(false);
+  const copyTimer = React.useRef<number | null>(null);
   const time = formatMessageTime(message.createdAt);
   const isAssistant = message.role === "assistant";
+  const handleCopy = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    void copyMessageText(message).then(() => {
+      setCopied(true);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1300);
+    });
+  }, [message]);
+
+  React.useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+  }, []);
+
+  if (message.role === "system" || message.working) return null;
 
   return (
     <div className="huggy-message-utility" aria-label="Message actions">
-      <button type="button" data-tooltip="Copier" aria-label="Copier" onClick={() => void copyMessageText(message)}>
-        <Copy size={15} aria-hidden="true" />
+      <button type="button" data-tooltip={copied ? "Copié" : "Copier"} aria-label={copied ? "Message copié" : "Copier"} onClick={handleCopy}>
+        <Copy aria-hidden="true" />
       </button>
       {isAssistant ? (
         <>
@@ -1534,9 +1560,13 @@ function MessageUtilityBar({
             data-feedback="positive"
             data-active={feedback === "positive" ? "true" : "false"}
             aria-label="Bonne reponse"
-            onClick={() => onPositive(message)}
+            data-mobile-secondary="true"
+            onClick={event => {
+              event.stopPropagation();
+              onPositive(message);
+            }}
           >
-            <ThumbsUp size={15} aria-hidden="true" />
+            <ThumbsUp aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -1544,17 +1574,39 @@ function MessageUtilityBar({
             data-feedback="negative"
             data-active={feedback === "negative" ? "true" : "false"}
             aria-label="Signaler un probleme"
-            onClick={() => onNegative(message)}
+            data-mobile-secondary="true"
+            onClick={event => {
+              event.stopPropagation();
+              onNegative(message);
+            }}
           >
-            <ThumbsDown size={15} aria-hidden="true" />
+            <ThumbsDown aria-hidden="true" />
           </button>
-          <button type="button" data-tooltip="Ouvrir" aria-label="Ouvrir le message" onClick={() => onExpand(message)}>
-            <Maximize2 size={15} aria-hidden="true" />
+          <button
+            type="button"
+            data-tooltip="Ouvrir"
+            aria-label="Ouvrir le message"
+            data-mobile-secondary="true"
+            onClick={event => {
+              event.stopPropagation();
+              onExpand(message);
+            }}
+          >
+            <Maximize2 aria-hidden="true" />
           </button>
         </>
       ) : (
-        <button type="button" data-tooltip="Modifier" aria-label="Modifier ce message" onClick={() => dispatchConversationEdit(message)}>
-          <Pencil size={15} aria-hidden="true" />
+        <button
+          type="button"
+          data-tooltip="Modifier"
+          aria-label="Modifier ce message"
+          data-mobile-secondary="true"
+          onClick={event => {
+            event.stopPropagation();
+            dispatchConversationEdit(message);
+          }}
+        >
+          <Pencil aria-hidden="true" />
         </button>
       )}
       {time ? <span className="huggy-message-time">{time}</span> : null}
