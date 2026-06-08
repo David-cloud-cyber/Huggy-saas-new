@@ -68,12 +68,9 @@ export default defineConfig(({mode}) => {
             }
             if (
               normalized.includes('/src/builder-conversation-island') ||
-              normalized.includes('/src/components/ai-elements/') ||
-              normalized.includes('/src/components/huggy-streaming/') ||
-              normalized.includes('/src/components/streaming/') ||
-              normalized.includes('/src/streaming/')
+              normalized.includes('/src/components/ai-elements/')
             ) {
-              return 'builder-streaming-ui';
+              return 'builder-chat-ui';
             }
             if (normalized.includes('/src/settings-panel')) return 'settings-panel';
           },
