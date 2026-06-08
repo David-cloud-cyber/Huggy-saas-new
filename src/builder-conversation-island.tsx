@@ -1248,6 +1248,16 @@ function renderStandardMessageContent(message: HuggyConversationMessage) {
   return renderPlainMessage(message.content);
 }
 
+function workJournalCompareText(value = "") {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
   const statusLabel = block.status === "done"
     ? "Terminé"
@@ -1260,6 +1270,14 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
   const maxVisibleEntries = block.status === "active" ? 9 : 11;
   const hiddenEntryCount = Math.max(0, block.entries.length - maxVisibleEntries);
   const visibleEntries = block.entries.slice(-maxVisibleEntries);
+  const finalTextKey = workJournalCompareText(block.finalText || "");
+  const finalAlreadyVisible = Boolean(finalTextKey) && visibleEntries.some(entry => {
+    if (entry.kind === "group" || entry.kind === "divider") return false;
+    return [entry.text, entry.detail].some(value => {
+      const key = workJournalCompareText(value || "");
+      return key && (key === finalTextKey || key.includes(finalTextKey) || finalTextKey.includes(key));
+    });
+  });
   const currentLine = block.status === "active"
     ? block.activeText || "Je prépare la suite."
     : block.status === "failed"
@@ -1354,7 +1372,7 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
               <span>{block.activeText || "Huggy avance"}</span>
             </p>
           ) : null}
-          {block.finalText ? (
+          {block.finalText && !finalAlreadyVisible ? (
             <p className="huggy-workline-final">{block.finalText}</p>
           ) : null}
         </div>

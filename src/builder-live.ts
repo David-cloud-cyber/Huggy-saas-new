@@ -4226,6 +4226,22 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
       : 'I kept the structured result in the project.';
   }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
+  const blockerCount = compact.match(/\b(\d+)\s+points?\s+bloquants?\s+restent\b/i)?.[1];
+  if (/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) && /preview/i.test(compact) && /bloquant/i.test(compact)) {
+    return speaksFrench
+      ? `Draft récupérable sauvegardée. La preview reste en attente${blockerCount ? `: ${blockerCount} blocage${blockerCount === '1' ? '' : 's'} à corriger` : ''}.`
+      : `Recoverable draft saved. The preview is still waiting${blockerCount ? `: ${blockerCount} blocker${blockerCount === '1' ? '' : 's'} to fix` : ''}.`;
+  }
+  if (/^i keep the work recoverable without claiming a false ready preview\.?$/i.test(compact)) {
+    return speaksFrench
+      ? 'Je garde le travail récupérable sans annoncer une preview prête trop tôt.'
+      : 'I keep the work recoverable without claiming a false ready preview.';
+  }
+  if (/preview contains a known forced runtime failure marker/i.test(compact)) {
+    return speaksFrench
+      ? 'Blocage principal: un marqueur de crash forcé est encore présent dans la preview.'
+      : 'Main blocker: a forced runtime failure marker is still present in the preview.';
+  }
   const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
     { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
     { pattern: /^i am deciding whether to answer, plan, edit, or generate\.?$/i, fr: 'Je choisis l’action juste.', en: 'I am choosing the right action.' },
