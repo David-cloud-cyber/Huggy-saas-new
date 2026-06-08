@@ -106,6 +106,7 @@ import {
   PREVIEW_FALLBACK_CSS,
   buildPreviewFallbackHtml,
 } from './src/services/preview-fallback.ts';
+import { createGeneratedRescueAppTsx } from './src/services/generated-app-rescue.ts';
 import {
   understandUserIntent,
   type IntentUnderstanding,
@@ -1717,7 +1718,11 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
   }
 
   if (!hasApp) {
-    addIfMissing('src/App.tsx', createReactAppFromStandaloneHtml(existingHtml, projectName), 'tsx');
+    addIfMissing(
+      'src/App.tsx',
+      createGeneratedRescueAppTsx({ projectName, prompt: promptOrDescription || existingHtml || projectName }),
+      'tsx',
+    );
   }
 
   addIfMissing('src/index.css', [
@@ -4676,6 +4681,8 @@ function createPomodoroAppTsx(projectName = 'Pomodoro Focus', prompt = '') {
 }
 
 function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
+  return createGeneratedRescueAppTsx({ projectName, prompt });
+
   const isPomodoro = /\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${prompt}`);
   if (isPomodoro) return createPomodoroAppTsx(projectName, prompt);
 
@@ -4894,7 +4901,7 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
   const appPath = byPath.has('src/App.tsx') ? 'src/App.tsx' : byPath.has('src/App.jsx') ? 'src/App.jsx' : 'src/App.tsx';
   const appContent = byPath.get(appPath)?.content || '';
   const shouldReplaceUnreliableApp = shouldForceModernVite
-    && /forced runtime failure marker|runtime error marker|data-huggy-runtime-error|blank preview|preview.*empty|technical build score|functionality_todo_core_loop|functionality_commerce_core_loop|primary controls|control_handlers|browser_actions_change_state|visual_primary_controls/i.test(reasonText)
+    && /forced runtime failure marker|runtime error marker|data-huggy-runtime-error|blank preview|preview.*empty|technical build score|functionality_(todo|commerce|restaurant|operational|auth|ai_tool)_core_loop|browser_(form_feedback_missing|control_interaction_failed|primary_controls_clickable|mobile_blank_preview|actions_change_state)|primary controls|control_handlers|visual_primary_controls|dead action|missing feedback|app non interactive|not interactive/i.test(reasonText)
     && (
       markerClean.changed
       || appContent.trim().length < 700

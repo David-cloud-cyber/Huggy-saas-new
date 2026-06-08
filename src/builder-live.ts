@@ -2042,8 +2042,15 @@ function createHuggyWorklineBlock(): HuggyWorklineBlock {
 }
 
 function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
-  void journal;
-  setMessageBlock(card, null);
+  if (!card) return;
+  setMessageBlock(card, journal);
+  const id = messageHandleId(card);
+  if (!id || !conversationApi) return;
+  if (journal?.status === 'active') {
+    conversationApi.setWorking(id, journal.activeText || 'Thinking...');
+  } else {
+    conversationApi.clearWorking(id);
+  }
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -4893,9 +4900,57 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
     return target;
   };
-  switchToPlainResponse();
-  setMessageShimmer(status, speaksFrench ? 'Huggy prepare le resultat...' : 'Huggy is preparing the result...', true);
-  updateMessage(status, speaksFrench ? 'Huggy prepare le resultat...' : 'Huggy is preparing the result...');
+  const buildStreamTimers: number[] = [];
+  const prefersReducedMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  const queueBuildStreamLine = (delay: number, activeText: string, line?: string, key?: string) => {
+    if (prefersReducedMotion && delay > 0) return;
+    const timer = window.setTimeout(() => {
+      setJournalActive(activeText, true);
+      if (line) addJournalLine(line, '', key || activeText);
+    }, delay);
+    buildStreamTimers.push(timer);
+  };
+  const startBuildStream = () => {
+    journal.status = 'active';
+    journal.activeText = say('Je définis le périmètre initial.', 'Defining the initial scope.');
+    setWorkJournalBlock(status, journal);
+    addJournalLine(
+      say(
+        'Je prépare la structure de l’application, les fichiers nécessaires et la preview.',
+        'I am preparing the app structure, required files, and preview.',
+      ),
+      '',
+      'scope',
+      'active',
+    );
+    queueBuildStreamLine(
+      420,
+      say('Je prépare les fichiers.', 'Preparing the files.'),
+      say('Je garde le flux compact pendant que les fichiers sont générés.', 'I am keeping the stream compact while files are generated.'),
+      'files_intro',
+    );
+    queueBuildStreamLine(
+      1300,
+      say('Je construis la preview.', 'Building the preview.'),
+      say('La preview sera affichée seulement quand elle sera réellement prête.', 'The preview will be shown only when it is actually ready.'),
+      'preview_intro',
+    );
+    queueBuildStreamLine(
+      2600,
+      say('Je vérifie le résultat.', 'Verifying the result.'),
+      say('Je vérifie les points bloquants avant de livrer.', 'I am checking blockers before delivery.'),
+      'check_intro',
+    );
+    journalTimer = window.setInterval(() => scheduleJournal(true), 1000);
+    scheduleJournal(true);
+  };
+  const stopBuildStreamTimers = () => {
+    while (buildStreamTimers.length) {
+      const timer = buildStreamTimers.pop();
+      if (timer) window.clearTimeout(timer);
+    }
+  };
+  startBuildStream();
   try {
     await ensureProjectForPrompt(safePrompt);
     if (activeWorkshop === 'media') {
@@ -4968,6 +5023,19 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (responsePayload.project.name) setProjectNameDisplay(String(responsePayload.project.name));
     }
     if (Array.isArray(responsePayload.files)) renderFiles(responsePayload.files);
+    if (Array.isArray(responsePayload.diff?.file_stats)) {
+      responsePayload.diff.file_stats.slice(0, 8).forEach((fileStat: Record<string, any>) => upsertFileEditEntry(fileStat));
+    } else if (responsePayload.diff) {
+      const paths = filesFromDiff(responsePayload.diff);
+      paths.slice(0, 8).forEach((label: string) => {
+        const action = label.startsWith('+ ')
+          ? 'created'
+          : label.startsWith('- ')
+            ? 'deleted'
+            : 'modified';
+        upsertFileEditEntry({ path: label.replace(/^[+~-]\s+/, ''), action });
+      });
+    }
 
     const previewHtml = String(responsePayload.preview?.html || responsePayload.project?.preview_html || '').trim();
     const previewStatus = String(responsePayload.preview?.status || responsePayload.project?.preview_status || 'ready');
@@ -4976,6 +5044,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       activeGenerationTouchesPreview = true;
       activateBuilderView('preview');
       setPreview(previewHtml, previewStatus);
+      addJournalLine(
+        speaksFrench ? 'La preview est affichée.' : 'The preview is displayed.',
+        '',
+        'preview_ready',
+        'done',
+      );
     }
 
     if (responsePayload.plan?.title || responsePayload.plan?.steps) {
@@ -5002,6 +5076,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
       verificationMessage ? `${speaksFrench ? 'Verification' : 'Checks'}: ${verificationMessage}` : '',
     ].filter(Boolean).join('\n'), 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
+    if (hasNeedsFix && target === status) {
+      journal.status = 'failed';
+      journal.activeText = '';
+      journal.finalText = finalText;
+      scheduleJournal(true);
+    }
 
     if (responsePayload.intent?.intent === 'clarification_required') {
       setMessageBlock(target, {
@@ -5023,15 +5103,22 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         ? (speaksFrench ? 'Génération arrêtée.' : 'Generation stopped.')
         : (speaksFrench ? 'Build annulé.' : 'Build cancelled.');
       clearMessageShimmer(status);
-      updateMessage(status, stoppedText);
+      journal.status = 'cancelled';
+      journal.activeText = '';
+      journal.finalText = stoppedText;
+      scheduleJournal(true);
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
       clearMessageShimmer(status);
-      updateMessage(status, errorText);
+      journal.status = 'failed';
+      journal.activeText = '';
+      journal.finalText = errorText;
+      scheduleJournal(true);
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {
+    stopBuildStreamTimers();
     if (journalTimer !== null) window.clearInterval(journalTimer);
     if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);

@@ -59,6 +59,7 @@ export type HuggyConversationBlock =
       entries: HuggyWorklineEntry[];
       activeText?: string;
       finalText?: string;
+      restored?: boolean;
     }
   | {
       type: "reasoning";
@@ -219,6 +220,407 @@ function ensureConversationStyles() {
     @keyframes huggy-waiting-dot {
       0%, 100% { transform: translateY(0); opacity: .26; }
       50% { transform: translateY(-2px); opacity: .68; }
+    }
+
+    .huggy-flowline {
+      --flow-muted: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
+      --flow-soft: color-mix(in srgb, var(--text-sub, var(--text-muted)) 52%, transparent);
+      display: grid;
+      gap: 9px;
+      width: min(100%, 600px);
+      color: var(--text);
+      padding: 2px 0;
+      position: relative;
+    }
+
+    .huggy-flowline-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      color: var(--flow-muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+
+    .huggy-flowline-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      background: var(--accent-blue, #2f6df6);
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,.12));
+    }
+
+    .huggy-flowline[data-status="active"] .huggy-flowline-dot {
+      animation: huggy-flowline-breathe 1.45s cubic-bezier(.22,1,.36,1) infinite;
+    }
+
+    .huggy-flowline[data-status="failed"] .huggy-flowline-dot {
+      background: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+    }
+
+    .huggy-flowline[data-status="cancelled"] .huggy-flowline-dot {
+      background: var(--text-muted, #6f6a5f);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-muted, #6f6a5f) 14%, transparent);
+    }
+
+    .huggy-flowline-state {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .huggy-flowline-time {
+      margin-left: auto;
+      color: var(--flow-soft);
+      font-variant-numeric: tabular-nums;
+      font-size: 11px;
+      font-weight: 680;
+    }
+
+    .huggy-flowline-current {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 720;
+      line-height: 1.45;
+      letter-spacing: -.01em;
+      animation: huggy-flowline-in 180ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-flowline-feed {
+      display: grid;
+      gap: 6px;
+      padding-left: 16px;
+      border-left: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 72%, transparent);
+    }
+
+    .huggy-flowline-row,
+    .huggy-flowline-file,
+    .huggy-flowline-command,
+    .huggy-flowline-final,
+    .huggy-flowline-more,
+    .huggy-flowline-group summary {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      min-width: 0;
+      margin: 0;
+      color: var(--flow-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+      animation: huggy-flowline-in 170ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-flowline-row[data-status="active"],
+    .huggy-flowline-command[data-status="active"] {
+      color: var(--text);
+      font-weight: 710;
+    }
+
+    .huggy-flowline-row[data-status="failed"],
+    .huggy-flowline-file[data-status="failed"],
+    .huggy-flowline-command[data-status="failed"],
+    .huggy-flowline-final[data-status="failed"] {
+      color: #ef4444;
+    }
+
+    .huggy-flowline-row span,
+    .huggy-flowline-file span,
+    .huggy-flowline-command span,
+    .huggy-flowline-group span {
+      min-width: 0;
+    }
+
+    .huggy-flowline-detail {
+      color: var(--flow-soft);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .huggy-flowline-file svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+      color: var(--flow-soft);
+      transform: translateY(2px);
+    }
+
+    .huggy-flowline code {
+      color: var(--text);
+      background: transparent;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+      font-size: .96em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .huggy-flowline-add {
+      color: #22c55e;
+      font-variant-numeric: tabular-nums;
+      font-weight: 720;
+    }
+
+    .huggy-flowline-del {
+      color: #fb7185;
+      font-variant-numeric: tabular-nums;
+      font-weight: 720;
+    }
+
+    .huggy-flowline-spinner {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      background: currentColor;
+      opacity: .55;
+      transform: translateY(1px);
+      animation: huggy-flowline-breathe 1.15s cubic-bezier(.22,1,.36,1) infinite;
+    }
+
+    .huggy-flowline-group {
+      margin: 0;
+    }
+
+    .huggy-flowline-group summary {
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .huggy-flowline-group summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .huggy-flowline-group ul {
+      display: grid;
+      gap: 4px;
+      margin: 6px 0 0 17px;
+      padding: 0;
+      color: var(--flow-soft);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .huggy-flowline-final {
+      color: var(--text);
+      font-weight: 650;
+      white-space: pre-wrap;
+    }
+
+    .huggy-flowline-more {
+      color: var(--flow-soft);
+      font-size: 11.5px;
+    }
+
+    .huggy-buildstream {
+      display: grid;
+      gap: 16px;
+      width: min(100%, 610px);
+      color: var(--text);
+      padding: 2px 0 4px;
+    }
+
+    .huggy-buildstream-thinking {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 82%, transparent);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: -.01em;
+    }
+
+    .huggy-buildstream-chevron {
+      width: 7px;
+      height: 7px;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(45deg) translateY(-2px);
+      opacity: .72;
+    }
+
+    .huggy-buildstream-phase {
+      display: grid;
+      gap: 10px;
+      padding-left: 24px;
+      animation: huggy-buildstream-in 190ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-buildstream-title {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 760;
+      line-height: 1.35;
+      letter-spacing: -.01em;
+    }
+
+    .huggy-buildstream-copy {
+      max-width: 52ch;
+      margin: 0;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+
+    .huggy-buildstream-feature-title {
+      margin: 8px 0 -3px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 760;
+      line-height: 1.35;
+    }
+
+    .huggy-buildstream-features {
+      display: grid;
+      gap: 5px;
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 92%, transparent);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+
+    .huggy-buildstream-card {
+      display: grid;
+      gap: 8px;
+      margin-left: 12px;
+      border: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 82%, transparent);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--bg-input) 82%, transparent);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--surface) 8%, transparent) inset;
+      padding: 10px;
+      animation: huggy-buildstream-in 210ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-buildstream-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 90%, transparent);
+      font-size: 12px;
+      font-weight: 680;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .huggy-buildstream-card-head svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      color: currentColor;
+    }
+
+    .huggy-buildstream-task {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-height: 24px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
+
+    .huggy-buildstream-task[data-status="active"] {
+      color: var(--text);
+      font-weight: 710;
+    }
+
+    .huggy-buildstream-task[data-status="done"] {
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 78%, transparent);
+    }
+
+    .huggy-buildstream-task[data-status="failed"] {
+      color: #ef4444;
+    }
+
+    .huggy-buildstream-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--text-sub, var(--text-muted)) 42%, transparent);
+      color: inherit;
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    .huggy-buildstream-task[data-status="active"] .huggy-buildstream-mark {
+      border-style: dashed;
+      animation: huggy-buildstream-spin 1.2s linear infinite;
+    }
+
+    .huggy-buildstream-task[data-status="done"] .huggy-buildstream-mark {
+      border-color: #22c55e;
+      background: #22c55e;
+      color: #fff;
+      animation: huggy-buildstream-pop 180ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-buildstream-statusbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 12px;
+      border: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 72%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--bg-input) 74%, transparent);
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .huggy-buildstream[data-status="done"] .huggy-buildstream-thinking,
+    .huggy-buildstream[data-status="failed"] .huggy-buildstream-thinking,
+    .huggy-buildstream[data-status="cancelled"] .huggy-buildstream-thinking {
+      opacity: .58;
+    }
+
+    .huggy-buildstream[data-restored="true"] * {
+      animation: none !important;
+    }
+
+    @keyframes huggy-buildstream-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes huggy-buildstream-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes huggy-buildstream-pop {
+      from { transform: scale(.82); }
+      to { transform: scale(1); }
+    }
+
+    .huggy-flowline[data-restored="true"] *,
+    .huggy-flowline[data-restored="true"] .huggy-flowline-current {
+      animation: none;
+    }
+
+    @keyframes huggy-flowline-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes huggy-flowline-breathe {
+      0%, 100% { opacity: .38; transform: scale(.92); }
+      50% { opacity: .9; transform: scale(1.05); }
     }
 
     .huggy-message-markdown {
@@ -1117,6 +1519,52 @@ function ensureConversationStyles() {
       }
     }
 
+    @media (max-width: 680px) {
+      .huggy-flowline {
+        gap: 7px;
+        width: 100%;
+      }
+
+      .huggy-flowline-feed {
+        gap: 5px;
+        padding-left: 12px;
+      }
+
+      .huggy-flowline-feed .huggy-flowline-row:nth-last-child(n+5),
+      .huggy-flowline-feed .huggy-flowline-file:nth-last-child(n+5),
+      .huggy-flowline-feed .huggy-flowline-command:nth-last-child(n+5),
+      .huggy-flowline-feed .huggy-flowline-group:nth-last-child(n+5) {
+        display: none;
+      }
+
+      .huggy-flowline-current,
+      .huggy-flowline-final {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .huggy-buildstream {
+        gap: 12px;
+      }
+
+      .huggy-buildstream-phase,
+      .huggy-buildstream-card,
+      .huggy-buildstream-statusbar {
+        margin-left: 0;
+      }
+
+      .huggy-buildstream-copy,
+      .huggy-buildstream-features li:nth-child(n+4) {
+        display: none;
+      }
+
+      .huggy-buildstream-card {
+        padding: 9px;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .huggy-message {
         animation: none !important;
@@ -1135,6 +1583,8 @@ function ensureConversationStyles() {
       .huggy-agent-trace-dot,
       .huggy-agent-step-mark,
       .huggy-reasoning-streaming .huggy-reasoning-dot,
+      .huggy-flowline *,
+      .huggy-buildstream *,
       .huggy-agent-trace[data-status="active"]::after {
         transition: none !important;
         animation: none !important;
@@ -1404,12 +1854,124 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
   );
 }
 
+function streamTextLooksFrench(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
+  const sample = [
+    block.activeText || "",
+    block.finalText || "",
+    ...block.entries.slice(-8).flatMap(entry => [entry.text || "", entry.detail || ""]),
+  ].join(" ").toLowerCase();
+  return /\b(je|tu|vous|nous|pret|prêt|preview|fichier|corrige|verifie|vérifie|application|generation|génération|termine|terminé|bloque|bloqué)\b/.test(sample);
+}
+
+function buildStreamTasks(block: Extract<HuggyConversationBlock, { type: "work_journal" }>, isFrench: boolean) {
+  const hasFile = block.entries.some(entry => entry.kind === "file_edit");
+  const hasPreview = block.entries.some(entry => /preview|aperçu/i.test(`${entry.text} ${entry.detail || ""}`));
+  const hasCheck = block.entries.some(entry => entry.kind === "command" || entry.kind === "group" || /check|verif|vérif|build/i.test(`${entry.text} ${entry.detail || ""}`));
+  const failed = block.status === "failed";
+  const done = block.status === "done";
+  return [
+    {
+      label: isFrench ? "Définir le périmètre initial" : "Define the initial scope",
+      status: "done",
+    },
+    {
+      label: isFrench ? "Créer les fichiers de l’application" : "Create the application files",
+      status: failed && !hasFile ? "failed" : hasFile || done ? "done" : "active",
+    },
+    {
+      label: isFrench ? "Ouvrir et vérifier la preview" : "Open and verify the preview",
+      status: failed ? "failed" : hasPreview || hasCheck || done ? "done" : hasFile ? "active" : "pending",
+    },
+  ] as Array<{ label: string; status: "pending" | "active" | "done" | "failed" }>;
+}
+
+function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
+  const isFrench = streamTextLooksFrench(block);
+  const tasks = buildStreamTasks(block, isFrench);
+  const doneCount = tasks.filter(task => task.status === "done").length;
+  const hasFile = block.entries.some(entry => entry.kind === "file_edit");
+  const hasPreview = block.entries.some(entry => /preview|aperçu/i.test(`${entry.text} ${entry.detail || ""}`)) || block.status === "done";
+  const hasCheck = block.entries.some(entry => entry.kind === "command" || entry.kind === "group" || /check|verif|vérif|build/i.test(`${entry.text} ${entry.detail || ""}`));
+  const lastUsefulLine = block.entries
+    .slice()
+    .reverse()
+    .find(entry => entry.kind !== "divider" && entry.kind !== "group" && entry.text);
+  const phaseTitle = block.status === "failed"
+    ? (isFrench ? "Point bloquant détecté" : "Blocking point detected")
+    : block.status === "done"
+      ? (isFrench ? "Version prête à tester" : "Version ready to test")
+      : hasPreview || hasCheck
+        ? (isFrench ? "Vérification de la preview" : "Verifying the preview")
+        : hasFile
+          ? (isFrench ? "Construction de l’application" : "Building the application")
+          : (isFrench ? "Définition du périmètre initial" : "Defining the initial scope");
+  const body = block.status === "failed"
+    ? block.finalText || (isFrench ? "Je garde le travail récupérable et j’isole le blocage restant." : "I am keeping the work recoverable and isolating the remaining blocker.")
+    : block.status === "done"
+      ? block.finalText || (isFrench ? "La génération est terminée. Tu peux maintenant tester la preview." : "The generation is complete. You can now test the preview.")
+      : lastUsefulLine?.detail || lastUsefulLine?.text || block.activeText || (isFrench ? "Je prépare la structure, les fichiers et la preview sans afficher de logs inutiles." : "I am preparing the structure, files, and preview without noisy logs.");
+  const featureTitle = isFrench ? "Première version :" : "First version:";
+  const features = [
+    isFrench ? "Structure d’application propre et modifiable" : "Clean editable app structure",
+    hasFile ? (isFrench ? "Fichiers ciblés mis à jour" : "Targeted files updated") : (isFrench ? "Fichiers nécessaires préparés" : "Required files prepared"),
+    hasPreview ? (isFrench ? "Preview synchronisée" : "Preview synchronized") : (isFrench ? "Preview préparée" : "Preview prepared"),
+    hasCheck ? (isFrench ? "Vérifications prises en compte" : "Checks accounted for") : (isFrench ? "Interactions et états UI prévus" : "Interactions and UI states planned"),
+  ];
+  const thinkingLabel = block.status === "active"
+    ? "Thinking..."
+    : block.status === "failed"
+      ? (isFrench ? "À corriger" : "Needs fix")
+      : block.status === "cancelled"
+        ? (isFrench ? "Arrêté" : "Stopped")
+        : (isFrench ? "Terminé" : "Done");
+  const progressLabel = isFrench
+    ? `${doneCount}/${tasks.length} tâches terminées`
+    : `${doneCount}/${tasks.length} tasks done`;
+
+  return (
+    <div
+      className="huggy-buildstream"
+      data-restored={block.restored ? "true" : "false"}
+      data-status={block.status}
+      aria-live={block.status === "active" ? "polite" : "off"}
+    >
+      <div className="huggy-buildstream-thinking">
+        <span className="huggy-buildstream-chevron" aria-hidden="true" />
+        <span>{thinkingLabel}</span>
+      </div>
+      <div className="huggy-buildstream-phase">
+        <p className="huggy-buildstream-title">{phaseTitle}</p>
+        <p className="huggy-buildstream-copy">{body}</p>
+        <p className="huggy-buildstream-feature-title">{featureTitle}</p>
+        <ul className="huggy-buildstream-features">
+          {features.map(feature => <li key={feature}>{feature}</li>)}
+        </ul>
+      </div>
+      <div className="huggy-buildstream-card">
+        <div className="huggy-buildstream-card-head">
+          <span>{progressLabel}</span>
+          {block.elapsed ? <span>{block.elapsed}</span> : null}
+        </div>
+        {tasks.map(task => (
+          <div className="huggy-buildstream-task" data-status={task.status} key={task.label}>
+            <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? "✓" : ""}</span>
+            <span>{task.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="huggy-buildstream-statusbar">
+        <span>{progressLabel}</span>
+      </div>
+    </div>
+  );
+}
+
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
   if (block.type === "work_journal") {
-    return null;
+    return renderBuildStreamBlock(block);
   }
 
   if (block.type === "reasoning") {
