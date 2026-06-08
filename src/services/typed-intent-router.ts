@@ -161,8 +161,8 @@ function isDiscussFirst(text: string) {
 }
 
 function isExplicitAppBuildRequest(text: string) {
-  return /\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b[\s\S]{0,100}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool)\b/i.test(text)
-    || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool)\b[\s\S]{0,100}\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b/i.test(text);
+  return /\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b[\s\S]{0,140}\b(app|application|mini app|mini application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calendar|calendrier|notes)\b/i.test(text)
+    || /\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas)\b[\s\S]{0,140}\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique|de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i.test(text);
 }
 
 function isBareBuildCommand(text: string) {

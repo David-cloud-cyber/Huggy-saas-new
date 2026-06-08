@@ -43,6 +43,20 @@ Fonctionnalites indispensables: Ajout, Suppression, Marquage terminee, Filtres T
 }
 
 {
+  const contract = buildExecutionContract({ prompt: 'genere une mini app de pomodero', legacyDecision: legacy({ intent: 'conversation' }) });
+  assert.equal(contract.mode, 'build');
+  assert.equal(contract.can_mutate_files, true);
+  assert.equal(contract.target_kind, 'app');
+}
+
+{
+  const contract = buildExecutionContract({ prompt: 'crée une application web de calculatrice scientifique avec historique', legacyDecision: legacy({ intent: 'conversation' }) });
+  assert.equal(contract.mode, 'build');
+  assert.equal(contract.can_mutate_files, true);
+  assert.equal(contract.target_kind, 'app');
+}
+
+{
   const contract = buildExecutionContract({ prompt: "dis moi c'est quoi lovable.dev", legacyDecision: legacy({ intent: 'build', requiresFileChanges: true }) });
   assert.equal(contract.mode, 'chat');
   assert.equal(contract.can_mutate_files, false);
@@ -57,6 +71,20 @@ Fonctionnalites indispensables: Ajout, Suppression, Marquage terminee, Filtres T
   assert.equal(contract.mode, 'debug');
   assert.equal(contract.can_mutate_files, true);
   assert.equal(contract.target_kind, 'bug');
+}
+
+{
+  const contract = buildExecutionContract({
+    prompt: 'corrige le blocage restant',
+    hasFiles: true,
+    legacyDecision: legacy({ intent: 'conversation' }),
+  });
+  assert.equal(contract.mode, 'debug');
+  assert.equal(contract.can_mutate_files, true);
+  assert.equal(contract.should_touch_preview, true);
+  const decision = applyExecutionContractToDecision(legacy({ intent: 'conversation' }), contract);
+  assert.equal(decision.intent, 'debug_fix');
+  assert.equal(decision.nextAction, 'debug_fix');
 }
 
 {

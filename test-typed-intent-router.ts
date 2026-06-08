@@ -116,6 +116,19 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
 }
 
 {
+  const { typedDecision, gated } = typed('genere une mini app de pomodero', {
+    intent: 'build',
+    requiresFileChanges: true,
+    requiresPreviewRebuild: true,
+    requiresCredits: true,
+  });
+  assert.equal(typedDecision.primary_intent, 'BUILD');
+  assert.equal(typedDecision.execution_strategy, 'RUN_AGENT');
+  assert.equal(typedDecision.requires_code_changes, true);
+  assert.equal(gated.requiresFileChanges, true);
+}
+
+{
   const { typedDecision, gated } = typed('preview blanche, index.html should load /src/main.tsx, corrige le probleme', {
     intent: 'debug_fix',
     requiresFileChanges: true,

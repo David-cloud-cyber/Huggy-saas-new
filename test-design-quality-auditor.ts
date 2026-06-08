@@ -236,4 +236,50 @@ assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_
 assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_todo_management_tools')?.status, 'pass');
 assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_score')?.status, 'pass');
 
+const pomodoroFiles = [
+  ...goodFiles.filter(file => file.path !== 'src/App.tsx' && file.path !== 'index.html'),
+  {
+    path: 'index.html',
+    language: 'html',
+    content: '<!doctype html><html><head><title>Pomodoro Focus</title><meta name="description" content="Productivity timer"></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>',
+  },
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: `
+      import { useMemo, useState } from "react";
+      export default function App() {
+        const [mode, setMode] = useState("work");
+        const [seconds, setSeconds] = useState(1500);
+        const [running, setRunning] = useState(false);
+        const [status, setStatus] = useState("Ready for deep work tasks.");
+        const minutes = useMemo(() => Math.floor(seconds / 60), [seconds]);
+        function startTimer() { setRunning(true); setStatus("Focus session running."); }
+        function pauseTimer() { setRunning(false); setStatus("Timer paused."); }
+        function resetTimer() { setSeconds(mode === "work" ? 1500 : 300); setRunning(false); setStatus("Timer reset."); }
+        function switchMode(nextMode: string) { setMode(nextMode); setSeconds(nextMode === "work" ? 1500 : 300); setStatus("Mode updated."); }
+        return <main aria-label="Pomodoro productivity timer">
+          <h1>Pomodoro Focus</h1>
+          <p>Plan work sessions, breaks and daily productivity without becoming a task manager or a product checkout.</p>
+          <button type="button" onClick={startTimer}>{running ? "Running" : "Start"}</button>
+          <button type="button" onClick={pauseTimer}>Pause</button>
+          <button type="button" onClick={resetTimer}>Reset</button>
+          <button type="button" onClick={() => switchMode("work")}>Work</button>
+          <button type="button" onClick={() => switchMode("break")}>Break</button>
+          <section aria-live="polite">{minutes} minutes left. {status}</section>
+        </main>;
+      }
+    `,
+  },
+];
+
+const pomodoroFunctionality = auditGeneratedFunctionality({
+  files: pomodoroFiles,
+  previewHtml: pomodoroFiles.find(file => file.path === 'index.html')?.content,
+  platformType: 'generic_web_app',
+  hasExistingFiles: false,
+});
+assert.equal(pomodoroFunctionality.find(check => check.key === 'functionality_todo_core_loop'), undefined);
+assert.equal(pomodoroFunctionality.find(check => check.key === 'functionality_commerce_core_loop'), undefined);
+
 console.log('test-design-quality-auditor passed');

@@ -2690,8 +2690,8 @@ class AgentOrchestrator {
       });
     }
 
-    const explicitAppBuildRequest = /\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique)\b[\s\S]{0,80}\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b/i.test(lower)
-      || /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b[\s\S]{0,80}\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique)\b/i.test(lower);
+    const explicitAppBuildRequest = /\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique)\b[\s\S]{0,140}\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calendar|calendrier|notes)\b/i.test(lower)
+      || /\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel)\b[\s\S]{0,140}\b(crée|cree|créer|creer|génère|genere|générer|generer|build|create|make|construis|fabrique|de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i.test(lower);
 
     if ((understanding.needsClarification && !explicitAppBuildRequest) || (forceBuild && !understanding.allowsFileAction && !explicitAppBuildRequest)) {
       return decision({
@@ -2729,6 +2729,7 @@ class AgentOrchestrator {
       'page', 'component', 'dashboard', 'landing', 'formulaire', 'deploy', 'supprime',
       'remove', 'replace', 'met a jour', 'mets a jour', 'update', 'todo app',
       'to do app', 'to-do app', 'mini app', 'application web', 'app web',
+      'pomodoro', 'pomodero', 'timer', 'minuteur', 'quiz', 'game', 'jeu', 'outil',
       'localstorage', 'local storage', 'filtre', 'filtres', 'responsive',
       'ajout de tache', 'ajout de tâche', 'supprimer une tache', 'supprimer une tâche'
     ];
@@ -2743,7 +2744,9 @@ class AgentOrchestrator {
       'technical build score', 'preview ne s affiche pas', 'preview ne s affiche plus',
       'app ne s affiche pas', 'application ne s affiche pas', 'generated app still has',
       'index html should load', 'index.html should load', 'src main tsx', 'main tsx absent',
-      'app tsx absent', 'preview blanche', 'blank preview', 'corrige le probleme'
+      'app tsx absent', 'preview blanche', 'blank preview', 'corrige le probleme',
+      'corrige le blocage', 'blocage restant', 'points bloquants',
+      'forced runtime failure marker', 'runtime failure marker'
     ];
     const verifyHints = [
       'verifie', 'vérifie', 'verify', 'audit', 'check', 'teste', 'test', 'review',
@@ -3501,7 +3504,9 @@ function buildAgentTextMessages(input: {
     ? 'Produce a concise execution plan. Do not claim files were changed. Do not include code unless needed for clarity.'
     : decision.intent === 'deploy_assist'
       ? 'Give deployment, domain or production-readiness guidance. Do not claim files were changed.'
-      : 'Answer conversationally and helpfully. Do not claim files were changed. If the user likely wants implementation, explain what Huggy can do next.';
+      : decision.intent === 'conversation'
+        ? 'Answer directly in 2 to 5 short sentences for simple questions. Match the user language. Do not mention intents, modes, models, credits, internal routing, files, preview, or checks unless the user explicitly asks. If the user asks technical advice, be precise. If the user asks vague product help, give 2-3 concrete examples Huggy can do.'
+        : 'Answer naturally and helpfully. If implementation is needed, explain the next action in plain language without forcing the user to choose Build or Plan.';
 
   return [
     {
@@ -4514,7 +4519,7 @@ function createPomodoroAppTsx(projectName = 'Pomodoro Focus', prompt = '') {
 }
 
 function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
-  const isPomodoro = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${prompt}`);
+  const isPomodoro = /\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${prompt}`);
   if (isPomodoro) return createPomodoroAppTsx(projectName, prompt);
 
   const isTodo = /\b(todo|to do|to-do|tache|taches|task|tasks)\b/i.test(`${projectName} ${prompt}`);
@@ -5024,7 +5029,7 @@ function buildGenerationMessages(input: {
 function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOrDescription = '') {
   const prompt = String(promptOrDescription || projectName || '').trim();
   const normalized = normalizePromptIntentText(prompt);
-  const isPomodoro = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${normalized}`);
+  const isPomodoro = /\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${normalized}`);
   const isTodo = /\b(todo|to do|to-do|task|tasks|tache|taches|tâche|tâches)\b/i.test(normalized);
   const safeName = JSON.stringify(projectName || 'Huggy App');
   const safePrompt = JSON.stringify(prompt || 'A useful generated application.');

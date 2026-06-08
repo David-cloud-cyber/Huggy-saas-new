@@ -287,16 +287,38 @@ function projectKind(project: DashboardProject) {
   return 'Web app';
 }
 
-function projectInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
-  return (parts.map(part => part.charAt(0)).join('') || 'H').toUpperCase();
-}
-
 function isRecentProject(project: DashboardProject) {
   const raw = project.updated_at || project.created_at;
   if (!raw) return false;
   const time = new Date(raw).getTime();
   return Number.isFinite(time) && Date.now() - time < 1000 * 60 * 60 * 24 * 7;
+}
+
+function projectHealthItems(project: DashboardProject, state: ReturnType<typeof projectState>) {
+  return [
+    {
+      label: 'Preview',
+      status: state === 'ready' || state === 'published' ? 'ok' : state === 'building' ? 'working' : state === 'needs-fix' ? 'issue' : 'idle',
+    },
+    {
+      label: 'Live',
+      status: state === 'published' ? 'ok' : 'idle',
+    },
+    {
+      label: 'Recent',
+      status: isRecentProject(project) ? 'ok' : 'idle',
+    },
+  ];
+}
+
+function projectTimelineItems(project: DashboardProject, state: ReturnType<typeof projectState>) {
+  const items = [
+    `Created ${relativeTime(project.created_at)}`,
+    `Updated ${relativeTime(project.updated_at || project.created_at)}`,
+  ];
+  if (state === 'published') items.push('Live');
+  if (state === 'needs-fix') items.push('Needs review');
+  return items.slice(0, 3);
 }
 
 function installDashboardUxPolish() {
@@ -382,39 +404,36 @@ function installDashboardUxPolish() {
     .project-card {
       position: relative;
       overflow: hidden;
+      padding: 18px !important;
+      border-radius: 18px !important;
+      gap: 14px !important;
+      background: color-mix(in srgb, var(--bg-surface) 92%, var(--project-accent) 8%) !important;
       transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .project-card:hover {
+      box-shadow: 0 14px 34px rgba(18, 22, 32, 0.09) !important;
     }
 
     .project-card[hidden] {
       display: none !important;
     }
 
-    .project-preview-thumb {
+    .project-card-topline {
       display: flex;
-      min-height: 104px;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-      padding: 14px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      background:
-        radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--project-accent) 34%, transparent), transparent 34%),
-        linear-gradient(135deg, color-mix(in srgb, var(--project-accent) 16%, var(--bg-elevated)), var(--bg-surface));
+      gap: 10px;
+      min-height: 26px;
     }
 
-    .project-thumb-initials {
-      display: grid;
+    .project-accent-line {
+      display: block;
       width: 42px;
-      height: 42px;
-      place-items: center;
-      border-radius: 14px;
-      background: color-mix(in srgb, var(--project-accent) 20%, var(--bg-surface));
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 880;
-      letter-spacing: 0.06em;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--project-accent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--project-accent) 10%, transparent);
     }
 
     .project-kind-pill,
@@ -434,18 +453,108 @@ function installDashboardUxPolish() {
       color: var(--text-muted);
     }
 
+    .project-card .card-header {
+      align-items: flex-start;
+    }
+
+    .project-card .card-title-row {
+      min-width: 0;
+    }
+
+    .project-card .card-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-card .card-desc {
+      margin: -2px 0 0;
+      min-height: 40px;
+      line-height: 1.55;
+    }
+
     .project-status.draft { border-color: var(--border); background: var(--bg-elevated); color: var(--text-muted); }
     .project-status.ready { border-color: rgba(59, 130, 246, 0.22); background: rgba(59, 130, 246, 0.10); color: var(--accent); }
     .project-status.published { border-color: rgba(34, 197, 94, 0.22); background: rgba(34, 197, 94, 0.10); color: var(--success); }
     .project-status.building { border-color: rgba(245, 158, 11, 0.22); background: rgba(245, 158, 11, 0.10); color: #d97706; }
     .project-status.needs-fix { border-color: rgba(248, 113, 113, 0.26); background: rgba(248, 113, 113, 0.10); color: #ef4444; }
 
+    .project-health-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .project-health-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 24px;
+      color: var(--text-sub);
+      font-size: 11px;
+      font-weight: 720;
+    }
+
+    .project-health-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--border-mid);
+    }
+
+    .project-health-item.ok .project-health-dot {
+      background: var(--success);
+      box-shadow: 0 0 0 3px var(--success-dim);
+    }
+
+    .project-health-item.working .project-health-dot {
+      background: var(--warning);
+      box-shadow: 0 0 0 3px var(--warning-dim);
+      animation: dotPulse 1.6s ease-in-out infinite;
+    }
+
+    .project-health-item.issue .project-health-dot {
+      background: var(--error);
+      box-shadow: 0 0 0 3px var(--error-dim);
+    }
+
+    .project-mini-timeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--text-sub);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .project-mini-timeline span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .project-mini-timeline span:not(:last-child)::after {
+      content: "";
+      width: 3px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--border-mid);
+    }
+
     .project-card-actions {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-top: 16px;
+      margin-top: 2px;
+    }
+
+    .project-card-actions .btn-open-project {
+      min-height: 32px;
+      border-radius: 999px !important;
+      padding: 0 14px !important;
+      font-weight: 760;
     }
 
     .dashboard-activity-item {
@@ -499,8 +608,8 @@ function installDashboardUxPolish() {
         grid-template-columns: 1fr;
       }
 
-      .project-preview-thumb {
-        min-height: 86px;
+      .project-card {
+        padding: 16px !important;
       }
     }
 
@@ -671,10 +780,12 @@ function renderLiveProjects(projects: DashboardProject[]) {
   grid.innerHTML = projects.map((project, index) => {
     const state = projectState(project);
     const accent = projectAccent(index);
+    const health = projectHealthItems(project, state);
+    const timeline = projectTimelineItems(project, state);
     return `
       <div class="project-card" data-id="${escapeHtml(project.id)}" data-project-state="${state}" data-project-recent="${isRecentProject(project) ? 'true' : 'false'}" style="--project-accent:${accent}">
-        <div class="project-preview-thumb">
-          <span class="project-thumb-initials">${escapeHtml(projectInitials(project.name))}</span>
+        <div class="project-card-topline">
+          <span class="project-accent-line" aria-hidden="true"></span>
           <span class="project-kind-pill">${escapeHtml(projectKind(project))}</span>
         </div>
         <div class="card-header">
@@ -685,12 +796,19 @@ function renderLiveProjects(projects: DashboardProject[]) {
           <span class="status-badge project-status ${state}">${escapeHtml(projectStateLabel(state))}</span>
         </div>
         <p class="card-desc">${escapeHtml(projectDescription(project))}</p>
-        <div class="card-stats">
-          <span class="score-badge meta" style="background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border);">${escapeHtml(project.model_id || 'Auto')}</span>
-          <span class="score-badge meta" style="background:var(--bg-elevated);color:var(--text-muted);border:1px solid var(--border);">Updated ${relativeTime(project.updated_at || project.created_at)}</span>
+        <div class="project-health-row" aria-label="Project health">
+          ${health.map(item => `
+            <span class="project-health-item ${escapeHtml(item.status)}">
+              <span class="project-health-dot" aria-hidden="true"></span>
+              ${escapeHtml(item.label)}
+            </span>
+          `).join('')}
+        </div>
+        <div class="project-mini-timeline">
+          ${timeline.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
         </div>
         <div class="card-footer project-card-actions">
-          <span class="card-meta">${escapeHtml(project.slug || project.id.slice(0, 8))}</span>
+          <span class="card-meta">${escapeHtml(project.slug ? `/${project.slug}` : project.id.slice(0, 8))}</span>
           <button class="btn-open-project" type="button" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;color:var(--text);">Open Builder</button>
         </div>
       </div>

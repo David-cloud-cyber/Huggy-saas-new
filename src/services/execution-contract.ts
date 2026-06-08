@@ -210,9 +210,11 @@ function isContinuationBuild(text: string, hasLastPlan: boolean) {
 
 function isExplicitAppBuildRequest(text: string) {
   const action = /\b(agis en tant que|je souhaite creer|je veux creer|j aimerais creer|i want to create|i need to build|cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b/i;
-  const target = /\b(app|application|mini application|mini app|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|task|tache|taches|admin panel|saas|outil|tool)\b/i;
+  const target = /\b(app|application|mini application|mini app|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|task|tache|taches|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calendar|calendrier|notes)\b/i;
   const featureBundle = /\b(fonctionnalites indispensables|ajout|suppression|marquage|filtres|localstorage|stockage local|completed|active|termin[eé]es|taches)\b/i;
+  const genericAppTarget = /\b(app|application|mini application|mini app|site web|web app|outil|tool)\b[\s\S]{0,160}\b(de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i;
   return (action.test(text) && target.test(text))
+    || (action.test(text) && genericAppTarget.test(text))
     || (target.test(text) && featureBundle.test(text))
     || /\b(todo|to do|to-do)\b[\s\S]{0,220}\b(ajout|add|suppression|delete|filtre|filter|localstorage|stockage local)\b/i.test(text);
 }
@@ -222,7 +224,7 @@ function isExplicitEditRequest(text: string) {
 }
 
 function isDebugFixRequest(text: string) {
-  return /\b(debug|bug|erreur|error|crash|preview blanche|ecran blanc|blank preview|ne s affiche pas|n'affiche pas|ne fonctionne pas|failed|blocking issue|technical build score|index\.html should load|src\/main\.tsx|generated app still has|corrige le probleme|corrige ce bug)\b/i.test(text);
+  return /\b(debug|bug|erreur|error|crash|preview blanche|ecran blanc|blank preview|ne s affiche pas|n'affiche pas|ne fonctionne pas|failed|blocking issue|blocking issues|blocage restant|points bloquants|technical build score|index\.html should load|src\/main\.tsx|generated app still has|forced runtime failure marker|runtime failure marker|corrige le probleme|corrige ce probleme|corrige le blocage|corrige ce bug)\b/i.test(text);
 }
 
 function isVerifyRequest(text: string) {
@@ -243,7 +245,7 @@ function targetKindFor(text: string, mode: ExecutionContractMode, category: User
   if (/\b(database|base de donnees|supabase|sql|rls|auth|stripe|api|backend)\b/i.test(text)) return 'backend';
   if (/\b(ui|ux|interface|design|button|bouton|header|footer|pricing|page|component|composant)\b/i.test(text)) return 'ui';
   if (category === 'code' || category === 'refactor') return 'code';
-  if (mode === 'build' || /\b(app|application|site|dashboard|todo|saas)\b/i.test(text)) return 'app';
+  if (mode === 'build' || /\b(app|application|mini app|site|outil|tool|dashboard|todo|saas|pomodoro|pomodero|timer|minuteur)\b/i.test(text)) return 'app';
   if (mode === 'edit') return 'project';
   return 'none';
 }

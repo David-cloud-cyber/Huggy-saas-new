@@ -108,6 +108,21 @@ check(
 );
 
 check(
+  'genere une mini app de pomodero',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
+  'crée une application web de calculatrice scientifique avec historique',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
+  'build an app for habit tracking with streaks and weekly progress',
+  { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
+);
+
+check(
   'crée une landing page pour un SaaS IA',
   { category: 'app', action: 'file_action', allowsFileAction: true, needsClarification: false },
 );
@@ -145,6 +160,18 @@ check(
 check(
   'corrige le bug du bouton login qui ne fonctionne pas',
   { category: 'bug', action: 'file_action', allowsFileAction: true },
+  { hasFiles: true },
+);
+
+check(
+  'corrige le blocage restant',
+  { category: 'bug', action: 'file_action', allowsFileAction: true, needsClarification: false },
+  { hasFiles: true },
+);
+
+check(
+  'corrige le blocage restant: Preview contains a known forced runtime failure marker',
+  { category: 'bug', action: 'file_action', allowsFileAction: true, needsClarification: false },
   { hasFiles: true },
 );
 

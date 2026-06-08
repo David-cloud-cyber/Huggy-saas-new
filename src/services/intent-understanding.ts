@@ -238,9 +238,11 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'css', 'html', 'react', 'vite', 'typescript', 'javascript', 'js',
   ];
   const appTargets = [
-    'app', 'application', 'site web', 'web app', 'landing page', 'saas', 'dashboard',
+    'app', 'application', 'mini app', 'mini application', 'site web', 'web app', 'outil', 'tool',
+    'landing page', 'saas', 'dashboard',
     'todo', 'restaurant', 'crm', 'marketplace', 'ecommerce', 'e commerce', 'portfolio',
-    'admin panel', 'mobile app',
+    'admin panel', 'mobile app', 'pomodoro', 'pomodero', 'timer', 'minuteur', 'quiz', 'game',
+    'jeu', 'calculatrice', 'calendar', 'calendrier', 'notes',
   ];
 
   const hasDirectAction = matchesAny(text, directActionPatterns);
@@ -249,8 +251,12 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
   const hasRefactorIntent = includesAny(text, ['refactor', 'refactorise', 'refactoriser', 'refonte technique', 'restructure', 'restructurer']);
   const explicitArtifactPattern = matchesAny(text, [
     /\b(je veux|j aimerais|i want|i need|build me|cree moi|creer moi|genere moi|create a|create an|make me)\b/,
-    /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
-    /\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec)\b/,
+    /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b.*\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
+    /\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b.*\b(complet|complete|fonctionnel|functional|responsive|avec|de|pour|qui)\b/,
+  ]);
+  const genericAppArtifactRequest = matchesAny(text, [
+    /\b(cree|creer|genere|génère|build|create|make|construis|fabrique)\b[\s\S]{0,140}\b(app|application|mini app|mini application|site web|web app|outil|tool)\b/i,
+    /\b(app|application|mini app|mini application|site web|web app|outil|tool)\b[\s\S]{0,140}\b(de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i,
   ]);
   const explicitApplyToProduct = matchesAny(text, [
     /\b(implemente|applique|corrige|fix|repare|modifie|change|ajoute|supprime|remplace|connecte)\b.*\b(huggy|saas|app|application|site|page|component|composant|api|database|supabase|ui|code|projet|agent|message|messages|reponse|reponses|réponse|réponses|feedback|retroaction|rétroaction|pouce|pouces)\b/,
@@ -273,8 +279,8 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
       /\b(cree|creer|genere|generer|build|construis|fabrique)\b.*\b(app|application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e commerce|admin panel)\b/,
     ]);
   const asksForGeneratedArtifact =
-    explicitArtifactPattern
-    && hasAppTarget
+    (explicitArtifactPattern || genericAppArtifactRequest)
+    && (hasAppTarget || genericAppArtifactRequest)
     && !hasNoAction
     && !explanatoryOrMetaRequest
     && !isExistingProjectEditRequest;
@@ -287,11 +293,16 @@ export function understandUserIntent(input: IntentInput): IntentUnderstanding {
     'huggy stopped before saving',
     'blocking issue',
     'blocking issues',
+    'blocage restant',
+    'corrige le blocage',
+    'points bloquants',
     'technical build score',
     'preview ne s affiche pas',
     'app ne s affiche pas',
     'application ne s affiche pas',
     'generated app still has',
+    'forced runtime failure marker',
+    'runtime failure marker',
     'index html should load',
     'src main tsx',
     'main tsx absent',

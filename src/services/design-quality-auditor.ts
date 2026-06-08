@@ -43,9 +43,9 @@ const DELETE_RE = /\b(delete|remove|supprimer|effacer|archive|danger|destructive
 const CONFIRM_RE = /\b(confirm\(|dialog|modal|undo|annuler|confirmation|are you sure|etes vous sur|êtes vous sûr)\b/i;
 const UNIMPLEMENTED_RE = /\b(coming soon|not implemented|not wired|TODO:|wire this later|backend coming|placeholder action|fake data only)\b/i;
 const DEAD_NAV_RE = /href=["']#["']|href=["']javascript:void\(0\)["']|onClick=\{\s*\(\)\s*=>\s*\{\s*\}\s*\}/i;
-const TODO_APP_RE = /\b(todo|to-do|task manager|checklist|kanban|tasks?|taches?|tâches?)\b/i;
-const TIMER_APP_RE = /\b(pomodoro|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|focus session|session de travail)\b/i;
-const ECOMMERCE_APP_RE = /\b(ecommerce|e-commerce|shop|store|cart|checkout|product|catalog|panier|boutique|paiement|customer orders|order management|commandes clients|gestion commandes)\b/i;
+const TODO_APP_RE = /\b(todo|to-do|to do|task manager|checklist|kanban|gestion de taches|gestion de tâches|liste de taches|liste de tâches)\b/i;
+const TIMER_APP_RE = /\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|focus session|session de travail)\b/i;
+const ECOMMERCE_APP_RE = /\b(ecommerce|e-commerce|shop|store|cart|checkout|catalog|panier|boutique|paiement|customer orders|order management|commandes clients|gestion commandes)\b|\bproduct(?:s| catalog| card| grid| listing)\b/i;
 const RESTAURANT_APP_RE = /\b(restaurant|menu|reservation|réservation|booking|hours|horaires|table)\b/i;
 const AUTH_APP_RE = /\b(login|signup|sign in|sign up|auth|password|forgot|register|connexion|inscription)\b/i;
 const OPERATIONAL_APP_RE = /\b(dashboard|admin|crm|erp|analytics|kpi|table|pipeline|invoice|inventory|settings)\b/i;
@@ -360,7 +360,7 @@ function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppT
   }
 
   const isExplicitCommerce = platform === 'ecommerce'
-    || (platform === 'generic_web_app' && ECOMMERCE_APP_RE.test(source));
+    || (platform === 'generic_web_app' && ECOMMERCE_APP_RE.test(source) && !isTimerApp);
   if (isExplicitCommerce) {
     const hasCart = /\b(cart|basket|panier|addToCart|setCart|checkoutItems)\b/i.test(code);
     const hasQuantity = /\b(quantity|qty|increment|decrement|setQuantity|stock|variant)\b/i.test(code);
