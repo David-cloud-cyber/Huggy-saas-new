@@ -141,15 +141,6 @@ const generatedPages = [
     faq: ['Should I Plan or Build first?', 'Use Plan when scope is not clear. Use Build when the first version can be generated safely.'],
   },
   {
-    slug: 'guides/ai-landing-page-seo',
-    title: 'AI Landing Page SEO Guide',
-    description: 'Create AI-generated landing pages that avoid generic design and include metadata, headings, FAQs, internal links and conversion CTAs.',
-    h1: 'AI landing pages need search intent, not filler',
-    prompt: 'Create an SEO-ready landing page for an AI productivity SaaS with structured sections, FAQ, social proof and conversion CTA.',
-    cards: ['One H1 with clear intent.', 'FAQ and structured metadata.', 'CTA connected to builder handoff.'],
-    faq: ['Why do AI landing pages fail?', 'They often look generic and miss search intent. Huggy pushes differentiated UI and SEO structure.'],
-  },
-  {
     slug: 'guides/supabase-app-builder',
     title: 'Supabase App Builder With AI',
     description: 'Use Huggy to generate Supabase-ready web apps with schema notes, project database visibility and secure secret handling.',
