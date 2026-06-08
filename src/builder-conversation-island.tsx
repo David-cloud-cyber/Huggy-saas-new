@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, FileText, ListChecks, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -491,6 +491,14 @@ function ensureConversationStyles() {
       line-height: 1.45;
     }
 
+    .huggy-buildstream-commit {
+      margin: 4px 0 0;
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 650;
+      line-height: 1.45;
+    }
+
     .huggy-buildstream-card {
       display: grid;
       gap: 8px;
@@ -512,6 +520,25 @@ function ensureConversationStyles() {
       font-size: 12px;
       font-weight: 680;
       font-variant-numeric: tabular-nums;
+    }
+
+    .huggy-buildstream-card-title,
+    .huggy-buildstream-card-actions,
+    .huggy-buildstream-status-left,
+    .huggy-buildstream-status-icons {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .huggy-buildstream-card-actions {
+      margin-left: auto;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 72%, transparent);
+    }
+
+    .huggy-buildstream-card-actions svg {
+      opacity: .72;
     }
 
     .huggy-buildstream-card-head svg {
@@ -541,6 +568,13 @@ function ensureConversationStyles() {
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 78%, transparent);
     }
 
+    .huggy-buildstream-task[data-status="done"] > span:last-child {
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
+      text-decoration-color: color-mix(in srgb, currentColor 70%, transparent);
+      opacity: .72;
+    }
+
     .huggy-buildstream-task[data-status="failed"] {
       color: #ef4444;
     }
@@ -556,6 +590,12 @@ function ensureConversationStyles() {
       color: inherit;
       font-size: 10px;
       line-height: 1;
+    }
+
+    .huggy-buildstream-mark svg {
+      width: 10px;
+      height: 10px;
+      stroke-width: 3;
     }
 
     .huggy-buildstream-task[data-status="active"] .huggy-buildstream-mark {
@@ -582,6 +622,17 @@ function ensureConversationStyles() {
       padding: 8px 10px;
       font-size: 12px;
       font-weight: 680;
+    }
+
+    .huggy-buildstream-statusbar svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      color: currentColor;
+    }
+
+    .huggy-buildstream-status-spacer {
+      flex: 1 1 auto;
     }
 
     .huggy-buildstream[data-status="done"] .huggy-buildstream-thinking,
@@ -1910,7 +1961,7 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
     : block.status === "done"
       ? block.finalText || (isFrench ? "La génération est terminée. Tu peux maintenant tester la preview." : "The generation is complete. You can now test the preview.")
       : lastUsefulLine?.detail || lastUsefulLine?.text || block.activeText || (isFrench ? "Je prépare la structure, les fichiers et la preview sans afficher de logs inutiles." : "I am preparing the structure, files, and preview without noisy logs.");
-  const featureTitle = isFrench ? "Première version :" : "First version:";
+  const featureTitle = isFrench ? "Première version :" : "First Version Features:";
   const features = [
     isFrench ? "Structure d’application propre et modifiable" : "Clean editable app structure",
     hasFile ? (isFrench ? "Fichiers ciblés mis à jour" : "Targeted files updated") : (isFrench ? "Fichiers nécessaires préparés" : "Required files prepared"),
@@ -1927,6 +1978,7 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
   const progressLabel = isFrench
     ? `${doneCount}/${tasks.length} tâches terminées`
     : `${doneCount}/${tasks.length} tasks done`;
+  const commitLine = isFrench ? "Je passe à l’exécution." : "Let’s implement this design:";
 
   return (
     <div
@@ -1946,21 +1998,36 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
         <ul className="huggy-buildstream-features">
           {features.map(feature => <li key={feature}>{feature}</li>)}
         </ul>
+        <p className="huggy-buildstream-commit">{commitLine}</p>
       </div>
       <div className="huggy-buildstream-card">
         <div className="huggy-buildstream-card-head">
-          <span>{progressLabel}</span>
-          {block.elapsed ? <span>{block.elapsed}</span> : null}
+          <span className="huggy-buildstream-card-title">
+            <ListChecks aria-hidden="true" />
+            <span>{progressLabel}</span>
+          </span>
+          <span className="huggy-buildstream-card-actions" aria-hidden="true">
+            <ChevronDown />
+            <XIcon />
+          </span>
         </div>
         {tasks.map(task => (
           <div className="huggy-buildstream-task" data-status={task.status} key={task.label}>
-            <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? "✓" : ""}</span>
+            <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? <Check /> : ""}</span>
             <span>{task.label}</span>
           </div>
         ))}
       </div>
       <div className="huggy-buildstream-statusbar">
-        <span>{progressLabel}</span>
+        <span className="huggy-buildstream-status-left">
+          <span className="huggy-buildstream-status-icons" aria-hidden="true">
+            <ListChecks />
+            <FileText />
+          </span>
+          <span>{progressLabel}</span>
+        </span>
+        <span className="huggy-buildstream-status-spacer" />
+        <ChevronDown aria-hidden="true" />
       </div>
     </div>
   );
