@@ -1264,41 +1264,86 @@
     <aside class="admin-sidebar">
       <a class="admin-brand" href="/dashboard.html" aria-label="Back to dashboard">
         <span class="admin-brand-mark">H</span>
-        <span>Huggy Admin</span>
+        <span class="admin-brand-text">Huggy Admin</span>
       </a>
       <nav class="admin-nav" aria-label="Admin sections">
-        <button class="active" data-admin-tab="overview" type="button">Overview <span>01</span></button>
-        <button data-admin-tab="users" type="button">Users <span>02</span></button>
-        <button data-admin-tab="projects" type="button">Projects <span>03</span></button>
-        <button data-admin-tab="runs" type="button">Runs <span>04</span></button>
-        <button data-admin-tab="errors" type="button">Errors <span>05</span></button>
-        <button data-admin-tab="models" type="button">Models <span>06</span></button>
-        <button data-admin-tab="publish" type="button">Publish <span>07</span></button>
-        <button data-admin-tab="security" type="button">Security <span>08</span></button>
-        <button data-admin-tab="flags" type="button">Flags <span>09</span></button>
-        <button data-admin-tab="support" type="button">Support <span>10</span></button>
+        <button class="active" data-admin-tab="overview" type="button" aria-label="Overview"><span class="admin-nav-icon">O</span><span class="admin-nav-label">Overview</span><span class="admin-nav-index">01</span></button>
+        <button data-admin-tab="users" type="button" aria-label="Users"><span class="admin-nav-icon">U</span><span class="admin-nav-label">Users</span><span class="admin-nav-index">02</span></button>
+        <button data-admin-tab="projects" type="button" aria-label="Projects"><span class="admin-nav-icon">P</span><span class="admin-nav-label">Projects</span><span class="admin-nav-index">03</span></button>
+        <button data-admin-tab="runs" type="button" aria-label="Runs"><span class="admin-nav-icon">R</span><span class="admin-nav-label">Runs</span><span class="admin-nav-index">04</span></button>
+        <button data-admin-tab="errors" type="button" aria-label="Errors"><span class="admin-nav-icon">E</span><span class="admin-nav-label">Errors</span><span class="admin-nav-index">05</span></button>
+        <button data-admin-tab="models" type="button" aria-label="Models"><span class="admin-nav-icon">M</span><span class="admin-nav-label">Models</span><span class="admin-nav-index">06</span></button>
+        <button data-admin-tab="publish" type="button" aria-label="Publish"><span class="admin-nav-icon">D</span><span class="admin-nav-label">Publish</span><span class="admin-nav-index">07</span></button>
+        <button data-admin-tab="security" type="button" aria-label="Security"><span class="admin-nav-icon">S</span><span class="admin-nav-label">Security</span><span class="admin-nav-index">08</span></button>
+        <button data-admin-tab="flags" type="button" aria-label="Flags"><span class="admin-nav-icon">F</span><span class="admin-nav-label">Flags</span><span class="admin-nav-index">09</span></button>
+        <button data-admin-tab="support" type="button" aria-label="Support"><span class="admin-nav-icon">?</span><span class="admin-nav-label">Support</span><span class="admin-nav-index">10</span></button>
       </nav>
-      <a class="admin-return" href="/dashboard.html">Go to Dashboard <span>→</span></a>
+      <a class="admin-return" href="/dashboard.html" aria-label="Go to dashboard"><span class="admin-nav-icon">H</span><span class="admin-nav-label">Dashboard</span><span class="admin-nav-index">-&gt;</span></a>
     </aside>
 
     <main class="admin-main">
+      <div class="admin-appbar" role="search">
+        <div class="admin-breadcrumb">
+          <span class="admin-app-icon">~</span>
+          <span>Activity</span>
+          <strong>/ Huggy Admin</strong>
+        </div>
+        <div class="admin-search-shell">
+          <input id="admin-global-search" class="admin-global-search" placeholder="Search activity, users, runs or request IDs" autocomplete="off" />
+        </div>
+        <span class="admin-live-status" id="admin-live-status">Waiting for live data</span>
+        <button class="admin-button subtle" id="admin-clear-filters" type="button">Clear</button>
+      </div>
+
       <header class="admin-topbar">
-        <div>
-          <p class="admin-kicker">Platform operations</p>
-          <h1 class="admin-title">Control Huggy without touching production code.</h1>
-          <p class="admin-subtitle">Observe users, projects, runs, billing, publish, model health, security and support signals from one redacted, admin-only console.</p>
+        <div class="admin-product-lockup">
+          <span class="admin-product-avatar" aria-hidden="true">H</span>
+          <div>
+            <p class="admin-kicker">Platform operations</p>
+            <h1 class="admin-title">Huggy Admin</h1>
+            <p class="admin-subtitle">A redacted operations cockpit for users, projects, runs, publish health, model reliability and security signals.</p>
+          </div>
         </div>
         <div class="admin-actions">
           <button class="admin-button" id="admin-refresh" type="button">Refresh</button>
-          <button class="admin-button primary" id="admin-copy-summary" type="button">Copy ops summary</button>
+          <button class="admin-button primary" id="admin-copy-summary" type="button">Copy summary</button>
         </div>
       </header>
 
-      <div class="admin-commandbar" role="search">
-        <input id="admin-global-search" class="admin-global-search" placeholder="Search users, projects, runs, errors or request IDs" autocomplete="off" />
-        <span class="admin-live-status" id="admin-live-status">Waiting for live data</span>
-        <button class="admin-button subtle" id="admin-clear-filters" type="button">Clear filters</button>
+      <div class="admin-hero-metrics" aria-label="Admin highlights">
+        <article class="admin-signal-card">
+          <span class="admin-signal-value">Live</span>
+          <span class="admin-signal-note">Model, publish and builder signals in one place.</span>
+          <div class="admin-mini-bars" aria-hidden="true">
+            <span style="height: 20px"></span><span style="height: 26px"></span><span style="height: 18px"></span><span style="height: 31px"></span><span style="height: 24px"></span><span style="height: 29px"></span><span style="height: 34px"></span><span style="height: 25px"></span><span style="height: 30px"></span><span style="height: 21px"></span><span style="height: 28px"></span><span style="height: 32px"></span><span style="height: 23px"></span><span style="height: 20px"></span><span style="height: 26px"></span><span style="height: 18px"></span><span style="height: 24px"></span><span style="height: 31px"></span>
+          </div>
+        </article>
+        <article class="admin-signal-card">
+          <span class="admin-signal-value">142ms</span>
+          <span class="admin-signal-note">Target feel for admin interactions and filters.</span>
+          <div class="admin-mini-line" aria-hidden="true"></div>
+        </article>
+        <article class="admin-signal-card">
+          <span class="admin-signal-value">Safe</span>
+          <span class="admin-signal-note">Read-only by default until audited admin actions are wired.</span>
+          <div class="admin-mini-bars" aria-hidden="true">
+            <span style="height: 30px"></span><span style="height: 18px"></span><span style="height: 26px"></span><span style="height: 34px"></span><span style="height: 27px"></span><span style="height: 21px"></span><span style="height: 32px"></span><span style="height: 25px"></span><span style="height: 28px"></span><span style="height: 19px"></span><span style="height: 31px"></span><span style="height: 26px"></span><span style="height: 22px"></span><span style="height: 20px"></span><span style="height: 24px"></span><span style="height: 18px"></span><span style="height: 29px"></span><span style="height: 21px"></span>
+          </div>
+        </article>
       </div>
+
+      <nav class="admin-tabs" aria-label="Admin workspaces">
+        <button class="active" data-admin-tab="overview" type="button">Signal</button>
+        <button data-admin-tab="users" type="button">Users</button>
+        <button data-admin-tab="projects" type="button">Projects</button>
+        <button data-admin-tab="runs" type="button">Runs</button>
+        <button data-admin-tab="errors" type="button">Errors</button>
+        <button data-admin-tab="models" type="button">Models</button>
+        <button data-admin-tab="publish" type="button">Publish</button>
+        <button data-admin-tab="security" type="button">Security</button>
+        <button data-admin-tab="flags" type="button">Flags</button>
+        <button data-admin-tab="support" type="button">Support</button>
+      </nav>
 
       <section class="admin-section active" data-section="overview">
         <div id="admin-overview" class="admin-grid"></div>

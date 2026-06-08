@@ -943,6 +943,18 @@ function emptyPreviewHtml(mode: EmptyPreviewMode, label = '') {
   return centeredPreviewLoaderHtml(mode, label);
 }
 
+function getBuilderPreviewTheme(): 'light' | 'dark' {
+  const documentTheme = document.documentElement.getAttribute('data-theme')?.toLowerCase();
+  if (documentTheme === 'light' || documentTheme === 'dark') return documentTheme;
+  try {
+    const storedTheme = localStorage.getItem('huggy-theme')?.toLowerCase();
+    if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme;
+  } catch {
+    // Keep the preview shell usable even when storage is unavailable.
+  }
+  return 'light';
+}
+
 function isUsablePreviewHtml(html: unknown) {
   const source = String(html || '').trim();
   if (!source) return false;
@@ -966,8 +978,9 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
   const status = escapeHtml(rawStatus);
   const letters = previewLoaderLetters(rawStatus);
   const stateClass = isWorking ? 'working' : 'idle';
+  const previewTheme = getBuilderPreviewTheme();
   return `<!DOCTYPE html>
-<html lang="en" data-preview-state="${stateClass}">
+<html lang="en" data-preview-state="${stateClass}" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1002,6 +1015,36 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
     --ring-glow-a: rgba(147,197,253,.22);
     --ring-glow-b: rgba(191,219,254,.12);
   }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --loader-text: #1c1c1c;
+  --loader-bg-a: #fcfbf8;
+  --loader-bg-b: #f7f4ed;
+  --loader-bg-c: #fffdf8;
+  --ring-a: #dbeafe;
+  --ring-b: #93c5fd;
+  --ring-c: #2f6df6;
+  --ring-mid-a: #bfdbfe;
+  --ring-mid-b: #60a5fa;
+  --ring-mid-c: #173f8f;
+  --ring-glow-a: rgba(96,165,250,.22);
+  --ring-glow-b: rgba(47,109,246,.14);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --loader-text: #f8f4eb;
+  --loader-bg-a: #171613;
+  --loader-bg-b: #201f1b;
+  --loader-bg-c: #2a2822;
+  --ring-a: #d8d1c3;
+  --ring-b: #93c5fd;
+  --ring-c: #93c5fd;
+  --ring-mid-a: #f8f4eb;
+  --ring-mid-b: #bfdbfe;
+  --ring-mid-c: #60a5fa;
+  --ring-glow-a: rgba(147,197,253,.22);
+  --ring-glow-b: rgba(191,219,254,.12);
 }
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
@@ -1127,18 +1170,21 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
 
 function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
   const isWorking = state === 'working';
+  const previewTheme = getBuilderPreviewTheme();
   const status = isWorking ? title || 'Generating media' : 'Ready for media';
   const helper = isWorking
     ? 'Huggy is turning the request into a usable creative brief and preview.'
     : 'Describe a product image, UGC video, storyboard, thumbnail or campaign pack.';
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
+:root[data-theme=light]{color-scheme:light;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
+:root[data-theme=dark]{color-scheme:dark;--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue:#60a5fa}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(47,109,246,.10),transparent 32%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
 .wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,42px)}
 .empty{width:min(760px,100%);display:grid;gap:14px;color:var(--muted)}
@@ -1183,6 +1229,7 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
 
 function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Design canvas') {
   const isWorking = state === 'working';
+  const previewTheme = getBuilderPreviewTheme();
   const brief = buildDesignStudioBrief({ settings: designSettings });
   const artifact = designWorkshopOptionLabel('artifact', brief.artifact_type);
   const handoff = designWorkshopOptionLabel('handoff', brief.handoff);
@@ -1190,13 +1237,15 @@ function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Des
     ? 'Huggy is shaping a visual direction, checking brand fit and preparing a clean handoff.'
     : 'Describe a screen, section, prototype, deck or brand direction. Huggy will keep the canvas calm and the app safe.';
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${previewTheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#66625a;--line:#ece8df;--soft:#f7f3ea;--blue:#2f6df6;--blue-soft:rgba(47,109,246,.10)}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue-soft:rgba(96,165,250,.16)}}
+:root[data-theme=light]{color-scheme:light;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#66625a;--line:#ece8df;--soft:#f7f3ea;--blue:#2f6df6;--blue-soft:rgba(47,109,246,.10)}
+:root[data-theme=dark]{color-scheme:dark;--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue:#60a5fa;--blue-soft:rgba(96,165,250,.16)}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,var(--blue-soft),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
 .wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,44px)}
 .studio{width:min(860px,100%);display:grid;gap:16px}
