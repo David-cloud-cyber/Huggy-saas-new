@@ -3,7 +3,7 @@ import {
   inferProductionBlueprint,
 } from './production-blueprints.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v14';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v15';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -150,6 +150,17 @@ const HUGGY_TOOL_LOOP_POLICY = [
   'For every build/edit/debug response, optimize for a real shippable artifact: readable code, stable preview, no blank screens, no partial file fragments, no invented runtime capabilities.',
   'If the app has package.json, assume checks may run. Generate scripts and code that can pass build, lint and test without hidden dependencies.',
   'When a request is a tiny UI iteration, skip broad rewrites and avoid changing data models, routing, or unrelated screens.',
+].join('\n');
+
+const HUGGY_DEEP_REASONING_POLICY = [
+  'Deep reasoning policy:',
+  'Use the Huggy Deep Reasoning Contract when it is provided. It is internal-only execution context, not user-facing content.',
+  'Internally separate intent, context, invisible plan, execution, verification, critic, recovery, and delivery. Do not expose hidden reasoning or raw JSON to the user.',
+  'For clear build/edit/debug requests, act decisively. Do not answer with only a plan unless the user explicitly asked for a plan or confirmation is required.',
+  'The selected LLM is the creative and engineering engine. Use its reasoning, structured output, long-context, vision, streaming, and tool-loop capabilities when the provider/runtime exposes them; do not invent unsupported capabilities.',
+  'Critic pass is mandatory before final output: check user goal, app type, required interactions, preview viability, build structure, secrets, and fake-success risk.',
+  'Recovery pass is mandatory when checks fail: repair the smallest cause, retest, and only then mark preview ready. If still blocked, save a recoverable draft and give one concise blocker.',
+  'For user-facing language, be short, warm, and direct in the user language. No internal intents, no model/provider names, no credit internals, no repeated blocker paragraphs.',
 ].join('\n');
 
 const HUGGY_STREAMING_POLICY = [
@@ -386,6 +397,7 @@ export function buildIntentRouterSystemPrompt() {
     HUGGY_SCOPE_RISK_POLICY,
     HUGGY_FAST_PATH_POLICY,
     HUGGY_STREAMING_POLICY,
+    HUGGY_DEEP_REASONING_POLICY,
     HUGGY_CLOUD_POLICY,
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
@@ -432,6 +444,7 @@ export function buildAgentTextSystemPrompt(input: {
       ? 'Use provided research context only when it directly supports current facts, APIs, provider behavior, deployment guidance, or troubleshooting.'
       : 'Do not pretend to have current web facts if no research context is provided.',
     HUGGY_STREAMING_POLICY,
+    HUGGY_DEEP_REASONING_POLICY,
     HUGGY_CLOUD_POLICY,
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
@@ -483,6 +496,7 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
     HUGGY_ARCHITECT_POLICY,
+    HUGGY_DEEP_REASONING_POLICY,
     HUGGY_PREMIUM_UI_ESCALATION_POLICY,
     input.hasExistingFiles
       ? HUGGY_GENERATION_ITERATION_POLICY
