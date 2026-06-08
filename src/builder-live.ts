@@ -1915,7 +1915,7 @@ function isLikelyFrenchText(value: string) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[’‘`´ʼʹ]/g, "'");
-  return /\b(je|tu|vous|nous|veux|j'aimerais|j aimerais|qu'est ce|qu est ce|cree|corrige|explique|comment|pourquoi|bonjour|salut|merci|projet|application|couleur|bouton)\b/i.test(normalized);
+  return /\b(je|tu|vous|nous|veux|j'aimerais|j aimerais|qu'est ce|qu est ce|cree|creer|genere|generer|corrige|repare|explique|comment|pourquoi|bonjour|salut|merci|projet|application|app web|couleur|bouton|tache|taches|supprime|ajoute|ameliore)\b/i.test(normalized);
 }
 
 function normalizePromptIntentText(value: string) {
@@ -4131,7 +4131,7 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
     journal.entries.push({
       id: 'commands_restored',
       kind: 'group',
-      text: 'commandes executees',
+      text: 'commandes exécutées',
       status: 'done',
       items: commandItems.slice(-32),
     });
@@ -4140,7 +4140,7 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
     journal.entries.push({
       id: 'checks_restored',
       kind: 'group',
-      text: 'verifications terminees',
+      text: 'vérifications terminées',
       status: checkItems.some(item => /\bfailed\b|erreur|corriger/i.test(item)) ? 'failed' : 'done',
       items: checkItems.slice(-24),
     });
@@ -4212,7 +4212,25 @@ function journalTextKey(value: string) {
     .slice(0, 140);
 }
 
-function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = '') {
+function semanticJournalKey(value: string) {
+  const key = journalTextKey(value);
+  if (!key) return '';
+  if (/\b(draft recuperable|recoverable draft|work recoverable|false ready preview|preview reste en attente)\b/.test(key)) {
+    return 'recoverable_draft_preview_waiting';
+  }
+  if (/\b(forced runtime failure marker|marqueur de crash force|crash force)\b/.test(key)) {
+    return 'forced_runtime_failure_marker';
+  }
+  if (/\b(task app must support|commerce app must include|technical build score|blocking issue|points bloquants)\b/.test(key)) {
+    return 'blocking_quality_findings';
+  }
+  if (/\b(preview is ready|preview prete|la preview est prete)\b/.test(key)) {
+    return 'preview_ready';
+  }
+  return key;
+}
+
+function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = ''): string {
   const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).trim();
   if (!raw) return '';
   const withoutFence = raw
@@ -4225,9 +4243,29 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
       ? 'J’ai gardé le résultat structuré dans le projet.'
       : 'I kept the structured result in the project.';
   }
+  const chunks = withoutFence
+    .split(/\n{2,}|\r?\n(?=(?:I |Je |J[’' ]ai|Huggy|Preview|Blocage|Draft|Recoverable|Work complete|Done|Task app|Commerce app))/)
+    .map(chunk => chunk.trim())
+    .filter(Boolean);
+  if (chunks.length > 1) {
+    const seen = new Set<string>();
+    const cleanChunks: string[] = chunks
+      .map((chunk): string => cleanPublicJournalText(chunk, speaksFrench))
+      .filter(Boolean)
+      .filter(chunk => {
+        const key = semanticJournalKey(chunk);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    const joined: string = cleanChunks.join('\n\n').trim();
+    return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
+  }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
-  const blockerCount = compact.match(/\b(\d+)\s+points?\s+bloquants?\s+restent\b/i)?.[1];
-  if (/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) && /preview/i.test(compact) && /bloquant/i.test(compact)) {
+  const blockerCount = compact.match(/\b(\d+)\s+points?\s+bloquants?\s+restent\b/i)?.[1]
+    || compact.match(/\b(\d+)\s+blocking\s+issues?\b/i)?.[1]
+    || compact.match(/\bstill\s+has\s+(\d+)\s+blocking\b/i)?.[1];
+  if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
     return speaksFrench
       ? `Draft récupérable sauvegardée. La preview reste en attente${blockerCount ? `: ${blockerCount} blocage${blockerCount === '1' ? '' : 's'} à corriger` : ''}.`
       : `Recoverable draft saved. The preview is still waiting${blockerCount ? `: ${blockerCount} blocker${blockerCount === '1' ? '' : 's'} to fix` : ''}.`;
@@ -4242,19 +4280,40 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
       ? 'Blocage principal: un marqueur de crash forcé est encore présent dans la preview.'
       : 'Main blocker: a forced runtime failure marker is still present in the preview.';
   }
+  if (/huggy stopped before saving because the generated app still has/i.test(compact)) {
+    return speaksFrench
+      ? 'Draft sauvegardée. Je dois encore corriger les blocages avant d’annoncer la preview prête.'
+      : 'Draft saved. I still need to fix the blockers before marking the preview ready.';
+  }
+  if (/task app must support adding, completing, and deleting tasks/i.test(compact)) {
+    return speaksFrench
+      ? 'La vérification demande encore des actions visibles: ajouter, terminer et supprimer.'
+      : 'The check still needs visible add, complete and delete actions.';
+  }
+  if (/commerce app must include cart state/i.test(compact)) {
+    return speaksFrench
+      ? 'La vérification métier a détecté un critère non lié à cette demande. Je l’ignore pour cette app.'
+      : 'A business check detected a criterion unrelated to this request. I will ignore it for this app.';
+  }
   const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
     { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
     { pattern: /^i am deciding whether to answer, plan, edit, or generate\.?$/i, fr: 'Je choisis l’action juste.', en: 'I am choosing the right action.' },
     { pattern: /^i am starting the file work\.?$/i, fr: 'Je prépare les fichiers.', en: 'I am preparing the files.' },
+    { pattern: /^i am asking for a modern app with react\/vite structure, interactions, and ui states\.?$/i, fr: 'Je demande une vraie app React/Vite avec interactions et états UI.', en: 'I am asking for a real React/Vite app with interactions and UI states.' },
     { pattern: /^normalizing generated files and building preview\.?$/i, fr: 'Je prépare une preview utilisable.', en: 'I am preparing a usable preview.' },
     { pattern: /^i am turning the output into a usable project before display\.?$/i, fr: 'Je transforme la génération en projet utilisable.', en: 'I am turning the generation into a usable project.' },
     { pattern: /^i am keeping what already works and preparing a readable diff\.?$/i, fr: 'Je garde ce qui fonctionne et je prépare un diff lisible.', en: 'I am keeping what works and preparing a readable diff.' },
+    { pattern: /^previewing\s+(.+?)\.?$/i, fr: 'Aperçu du fichier concerné.', en: 'Previewing the changed file.' },
+    { pattern: /^redacted public preview from the real generated file\.?$/i, fr: 'Aperçu public nettoyé depuis le vrai fichier généré.', en: 'Redacted public preview from the real generated file.' },
+    { pattern: /^backend huggy cloud detected\.?$/i, fr: 'Backend Huggy Cloud détecté.', en: 'Huggy Cloud backend detected.' },
     { pattern: /^i am preparing the preview\.?$/i, fr: 'Je prépare la preview.', en: 'I am preparing the preview.' },
     { pattern: /^i am rebuilding the preview\.?$/i, fr: 'Je reconstruis la preview.', en: 'I am rebuilding the preview.' },
     { pattern: /^i am rebuilding the preview before delivering anything\.?$/i, fr: 'Je vérifie la preview avant de livrer.', en: 'I am checking the preview before delivery.' },
     { pattern: /^i show a work state only during the real preview build\.?$/i, fr: 'Je montre l’attente seulement pendant la vraie construction.', en: 'I show waiting only during the real build.' },
     { pattern: /^the published version stays unchanged until you click publish\.?$/i, fr: 'La version publiée reste inchangée jusqu’à Publish.', en: 'The published version stays unchanged until Publish.' },
     { pattern: /^huggy is moving\.?$/i, fr: 'Huggy avance.', en: 'Huggy is moving.' },
+    { pattern: /^work complete\.?$/i, fr: 'Travail terminé.', en: 'Work complete.' },
+    { pattern: /^done\.?$/i, fr: 'Terminé.', en: 'Done.' },
   ];
   const found = replacements.find(item => item.pattern.test(compact));
   const normalized = found ? (speaksFrench ? found.fr : found.en) : compact;
@@ -4402,6 +4461,19 @@ function commandSummaryItem(payload: Record<string, any>, rawMessage = '') {
   return [command, summary].filter(Boolean).join(' — ');
 }
 
+function localizeJournalStatus(value: string, speaksFrench: boolean) {
+  const text = repairTextEncoding(redactSecrets(String(value || ''))).trim();
+  if (!speaksFrench || !text) return text;
+  return text
+    .replace(/\bpassed\b/gi, 'OK')
+    .replace(/\bsuccess\b/gi, 'OK')
+    .replace(/\bfailed\b/gi, 'échec')
+    .replace(/\brunning\b/gi, 'en cours')
+    .replace(/\bwarning\b/gi, 'avertissement')
+    .replace(/\bblocked\b/gi, 'bloqué')
+    .replace(/\bcheck\b/gi, 'vérification');
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
   const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
@@ -4491,7 +4563,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     } else if (journalFlushTimer !== null) {
       return;
     }
-    const wait = immediate ? 0 : Math.max(0, 140 - (Date.now() - lastJournalFlushAt));
+    const wait = immediate ? 0 : Math.max(0, 180 - (Date.now() - lastJournalFlushAt));
     const requestFrame = () => {
       journalFrame = window.requestAnimationFrame(flushJournal);
     };
@@ -4517,11 +4589,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const clean = cleanPublicJournalText(text, speaksFrench);
     if (!clean) return;
     const cleanDetail = cleanPublicJournalText(detail, speaksFrench);
-    const dedupeKey = key || journalTextKey(clean);
+    const contentKey = semanticJournalKey(clean);
+    const dedupeKey = key ? `${key}:${contentKey}` : contentKey;
     if (seenJournalKeys.has(dedupeKey)) return;
     const lastEntry = journal.entries[journal.entries.length - 1];
-    if (lastEntry?.kind !== 'group' && journalTextKey(lastEntry?.text || '') === journalTextKey(clean)) return;
+    if (seenJournalKeys.has(`content:${contentKey}`)) return;
+    if (lastEntry?.kind !== 'group' && semanticJournalKey(lastEntry?.text || '') === contentKey) return;
     seenJournalKeys.add(dedupeKey);
+    seenJournalKeys.add(`content:${contentKey}`);
     journal.entries.push({
       id: journalEntryId('line'),
       kind: 'update',
@@ -4539,8 +4614,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     scheduleJournal();
   };
   const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyWorklineEntry['status'] = 'done') => {
-    const cleanItem = redactSecrets(item).trim();
+    const cleanItem = localizeJournalStatus(cleanPublicJournalText(item, speaksFrench) || redactSecrets(item).trim(), speaksFrench);
     if (!cleanItem) return;
+    const itemKey = semanticJournalKey(cleanItem);
     let group = journalGroups.get(id);
     if (!group) {
       group = { id, kind: 'group', text: label, items: [], status: entryStatus };
@@ -4549,7 +4625,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
     group.status = entryStatus;
     group.items ||= [];
-    if (!group.items.includes(cleanItem)) group.items.push(cleanItem);
+    const hasItem = group.items.some(existing => semanticJournalKey(existing) === itemKey);
+    if (!hasItem) group.items.push(cleanItem);
     if (group.items.length > 18) group.items = group.items.slice(-18);
     scheduleJournal();
   };
@@ -4602,13 +4679,13 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       return;
     }
     const item = commandSummaryItem(payload, rawMessage);
-    if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes executees' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
+    if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes exécutées' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
   const setJournalActive = (label: string, urgent = false) => {
     const clean = cleanPublicJournalText(label, speaksFrench);
     if (!clean || journal.activeText === clean) return;
     const now = Date.now();
-    if (!urgent && now - lastActiveTextAt < 650) return;
+    if (!urgent && now - lastActiveTextAt < 900) return;
     lastActiveTextAt = now;
     journal.activeText = clean;
     scheduleJournal(urgent);
@@ -4723,7 +4800,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 
     await apiStream(`/api/projects/${encodeURIComponent(currentProjectId)}/generate/stream`, streamBody, (eventType, eventData) => {
       const eventPayload = redactInternalModelFields(eventData?.payload || {});
-      const eventMessage = redactSecrets(String(eventData?.message || '')).trim();
+      const rawEventMessage = repairTextEncoding(redactSecrets(String(eventData?.message || ''))).trim();
+      const eventMessage = cleanPublicJournalText(rawEventMessage, speaksFrench) || rawEventMessage;
       const detail = journalDetailFromPayload(eventPayload, eventMessage);
       if (eventPayload.build_session_id) lastBuildSessionId = String(eventPayload.build_session_id);
       if (eventPayload.agent_run_id) lastAgentRunId = String(eventPayload.agent_run_id);
@@ -4762,11 +4840,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         if (items.length) {
           let group = journalGroups.get('commands');
           if (!group) {
-            group = { id: 'commands', kind: 'group', text: speaksFrench ? 'commandes executees' : 'commands executed', items: [], status: 'done' };
+            group = { id: 'commands', kind: 'group', text: speaksFrench ? 'commandes exécutées' : 'commands executed', items: [], status: 'done' };
             journalGroups.set('commands', group);
             journal.entries.push(group);
           }
-          group.text = speaksFrench ? 'commandes executees' : 'commands executed';
+          group.text = speaksFrench ? 'commandes exécutées' : 'commands executed';
           group.status = eventPayload.status === 'failed' ? 'failed' : 'done';
           group.items = items.slice(-32);
           scheduleJournal();
@@ -4785,7 +4863,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         const status = String(eventPayload.status || '').trim();
         const summary = String(eventPayload.summary || eventMessage || '').trim();
         const item = [checkType, status, summary].filter(Boolean).join(' — ');
-        upsertJournalGroup('checks', speaksFrench ? 'verifications terminees' : 'checks completed', item, status === 'failed' ? 'failed' : 'done');
+        upsertJournalGroup('checks', speaksFrench ? 'vérifications terminées' : 'checks completed', item, status === 'failed' ? 'failed' : 'done');
         return;
       }
 
@@ -4954,7 +5032,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       || safeAnswerBuffer
       || (previewReadyPayload?.preview?.html
         ? generationReadyText(speaksFrench)
-        : (speaksFrench ? 'C’est prêt.' : 'Done.'));
+        : (speaksFrench
+          ? 'J’ai gardé le travail en attente de correction. La preview ne sera marquée prête qu’après vérification.'
+          : 'I kept the work waiting for a fix. The preview will only be marked ready after verification.'));
     const target = commitAssistantText([
       finalText,
       diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',

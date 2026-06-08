@@ -113,6 +113,17 @@
 
 .huggy-workline-note,
 .huggy-workline-final,
+.huggy-workline-live,
+.huggy-workline-file,
+.huggy-workline-command,
+.huggy-workline-group,
+.huggy-workline-divider {
+  animation: huggy-workline-line-in 170ms cubic-bezier(.22, 1, .36, 1) both;
+  will-change: opacity, transform;
+}
+
+.huggy-workline-note,
+.huggy-workline-final,
 .huggy-workline-live {
   margin: 0;
   color: var(--text, #201d17);
@@ -170,6 +181,10 @@
 
 .huggy-workline-command[data-status="active"] {
   color: color-mix(in srgb, var(--text, #201d17) 46%, transparent);
+  animation-name: huggy-workline-line-in, huggy-workline-soft-glow;
+  animation-duration: 170ms, 1.8s;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1), ease-in-out;
+  animation-iteration-count: 1, infinite;
 }
 
 .huggy-workline-command[data-status="failed"],
@@ -321,6 +336,26 @@
   50% {
     opacity: 1;
     transform: scale(1.08);
+  }
+}
+
+@keyframes huggy-workline-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes huggy-workline-soft-glow {
+  0%, 100% {
+    filter: saturate(1);
+  }
+  50% {
+    filter: saturate(1.08);
   }
 }
 
@@ -699,6 +734,13 @@
   .huggy-shimmer,
   .huggy-workline,
   .huggy-workline-rail span,
+  .huggy-workline-note,
+  .huggy-workline-final,
+  .huggy-workline-live,
+  .huggy-workline-file,
+  .huggy-workline-command,
+  .huggy-workline-group,
+  .huggy-workline-divider,
   .huggy-workline-live-dot,
   .huggy-mission-stream,
   .huggy-web-preview-skeleton span {

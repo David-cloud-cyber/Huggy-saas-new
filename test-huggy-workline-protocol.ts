@@ -42,6 +42,12 @@ assert.ok(builderLive.includes("'done',"), 'builder should explicitly suppress d
 assert.ok(builderLive.includes("'clarification_only'"), 'builder should have a lightweight clarification mode for bare actions');
 assert.ok(builderLive.includes("if (bareAction.test(normalized)) return 'clarification_only';"), 'bare actions like genere must not create a local plan');
 assert.ok(builderLive.includes('buildClarificationOnlyReply'), 'builder should answer vague bare actions with one concrete question');
+assert.ok(builderLive.includes('semanticJournalKey'), 'builder should dedupe repeated semantic journal lines');
+assert.ok(builderLive.includes('localizeJournalStatus'), 'builder should localize status words in stream details');
+assert.ok(builderLive.includes('i am asking for a modern app with react\\/vite structure'), 'builder should translate common server narration into the user language');
+assert.ok(builderLive.includes('J’ai gardé le travail en attente de correction'), 'builder should not claim ready when no verified preview exists');
+assert.ok(styles.includes('huggy-workline-line-in'), 'workline should use a calm per-line reveal animation');
+assert.ok(styles.includes('prefers-reduced-motion'), 'workline animation should respect reduced motion');
 assert.ok(!server.includes('Possible directions'), 'clarification text should not expose noisy option labels');
 assert.ok(!server.includes('My recommendation'), 'clarification text should not append generic recommendations');
 assert.ok(!server.includes('Should Huggy only answer'), 'clarification must not ask a generic answer-or-build question');
