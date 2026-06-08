@@ -428,6 +428,7 @@ function ensureConversationStyles() {
       width: min(100%, 610px);
       color: var(--text);
       padding: 2px 0 4px;
+      animation: huggy-buildstream-shell 180ms cubic-bezier(.22,1,.36,1) both;
     }
 
     .huggy-buildstream-thinking {
@@ -557,6 +558,20 @@ function ensureConversationStyles() {
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
       font-size: 12.5px;
       line-height: 1.35;
+      opacity: 0;
+      animation: huggy-buildstream-in 220ms cubic-bezier(.22,1,.36,1) forwards;
+    }
+
+    .huggy-buildstream-task-detail {
+      display: block;
+      margin-top: 3px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 76%, transparent);
+      font-size: 11px;
+      font-weight: 520;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .huggy-buildstream-task[data-status="active"] {
@@ -643,6 +658,12 @@ function ensureConversationStyles() {
 
     .huggy-buildstream[data-restored="true"] * {
       animation: none !important;
+      opacity: 1 !important;
+    }
+
+    @keyframes huggy-buildstream-shell {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     @keyframes huggy-buildstream-in {
@@ -1915,70 +1936,89 @@ function streamTextLooksFrench(block: Extract<HuggyConversationBlock, { type: "w
 }
 
 function buildStreamTasks(block: Extract<HuggyConversationBlock, { type: "work_journal" }>, isFrench: boolean) {
-  const hasFile = block.entries.some(entry => entry.kind === "file_edit");
-  const hasPreview = block.entries.some(entry => /preview|aperçu/i.test(`${entry.text} ${entry.detail || ""}`));
-  const hasCheck = block.entries.some(entry => entry.kind === "command" || entry.kind === "group" || /check|verif|vérif|build/i.test(`${entry.text} ${entry.detail || ""}`));
-  const failed = block.status === "failed";
-  const done = block.status === "done";
-  return [
-    {
-      label: isFrench ? "Définir le périmètre initial" : "Define the initial scope",
-      status: "done",
-    },
-    {
-      label: isFrench ? "Créer les fichiers de l’application" : "Create the application files",
-      status: failed && !hasFile ? "failed" : hasFile || done ? "done" : "active",
-    },
-    {
-      label: isFrench ? "Ouvrir et vérifier la preview" : "Open and verify the preview",
-      status: failed ? "failed" : hasPreview || hasCheck || done ? "done" : hasFile ? "active" : "pending",
-    },
-  ] as Array<{ label: string; status: "pending" | "active" | "done" | "failed" }>;
+  const tasks: Array<{ label: string; detail?: string; status: "pending" | "active" | "done" | "failed" }> = [];
+  const seen = new Set<string>();
+  const clean = (value = "") => value.replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+  const statusFor = (status?: HuggyWorklineEntry["status"]) => status === "failed"
+    ? "failed"
+    : status === "active"
+      ? "active"
+      : status === "cancelled"
+        ? "failed"
+        : "done";
+  const push = (label: string, status: "pending" | "active" | "done" | "failed", detail = "") => {
+    const nextLabel = clean(label);
+    const nextDetail = clean(detail);
+    if (!nextLabel) return;
+    const key = nextLabel.toLowerCase() + "|" + nextDetail.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    tasks.push({ label: nextLabel, detail: nextDetail || undefined, status });
+  };
+
+  block.entries.forEach(entry => {
+    if (entry.kind === "divider") return;
+    const status = statusFor(entry.status);
+    if (entry.kind === "file_edit") {
+      const actionLabel = entry.action === "created"
+        ? (isFrench ? "Creation de" : "Created")
+        : entry.action === "deleted"
+          ? (isFrench ? "Suppression de" : "Deleted")
+          : (isFrench ? "Modification de" : "Modified");
+      push(
+        actionLabel + " " + (entry.path || entry.text) + " +" + Math.max(0, Number(entry.additions || 0)) + " -" + Math.max(0, Number(entry.deletions || 0)),
+        status,
+      );
+      return;
+    }
+    if (entry.kind === "command") {
+      push(entry.command ? entry.text + " " + entry.command : entry.text, status);
+      return;
+    }
+    if (entry.kind === "group") {
+      const count = entry.items?.length || 0;
+      if (!count) return;
+      push(String(count) + " " + entry.text, status, entry.items?.slice(0, 2).join(" | ") || "");
+      return;
+    }
+    push(entry.text, status, entry.detail || "");
+  });
+
+  return tasks.slice(-6);
 }
 
 function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
   const isFrench = streamTextLooksFrench(block);
   const tasks = buildStreamTasks(block, isFrench);
   const doneCount = tasks.filter(task => task.status === "done").length;
-  const hasFile = block.entries.some(entry => entry.kind === "file_edit");
-  const hasPreview = block.entries.some(entry => /preview|aperçu/i.test(`${entry.text} ${entry.detail || ""}`)) || block.status === "done";
-  const hasCheck = block.entries.some(entry => entry.kind === "command" || entry.kind === "group" || /check|verif|vérif|build/i.test(`${entry.text} ${entry.detail || ""}`));
-  const lastUsefulLine = block.entries
-    .slice()
-    .reverse()
-    .find(entry => entry.kind !== "divider" && entry.kind !== "group" && entry.text);
+  const lastTask = tasks[tasks.length - 1];
   const phaseTitle = block.status === "failed"
-    ? (isFrench ? "Point bloquant détecté" : "Blocking point detected")
+    ? (isFrench ? "Point bloquant detecte" : "Blocking point detected")
     : block.status === "done"
-      ? (isFrench ? "Version prête à tester" : "Version ready to test")
-      : hasPreview || hasCheck
-        ? (isFrench ? "Vérification de la preview" : "Verifying the preview")
-        : hasFile
-          ? (isFrench ? "Construction de l’application" : "Building the application")
-          : (isFrench ? "Définition du périmètre initial" : "Defining the initial scope");
+      ? (isFrench ? "Version prete a tester" : "Version ready to test")
+      : lastTask?.label || block.activeText || (isFrench ? "Huggy travaille" : "Huggy is working");
   const body = block.status === "failed"
-    ? block.finalText || (isFrench ? "Je garde le travail récupérable et j’isole le blocage restant." : "I am keeping the work recoverable and isolating the remaining blocker.")
+    ? block.finalText || (isFrench ? "Je garde le travail recuperable et j'isole le blocage restant." : "I am keeping the work recoverable and isolating the remaining blocker.")
     : block.status === "done"
-      ? block.finalText || (isFrench ? "La génération est terminée. Tu peux maintenant tester la preview." : "The generation is complete. You can now test the preview.")
-      : lastUsefulLine?.detail || lastUsefulLine?.text || block.activeText || (isFrench ? "Je prépare la structure, les fichiers et la preview sans afficher de logs inutiles." : "I am preparing the structure, files, and preview without noisy logs.");
-  const featureTitle = isFrench ? "Première version :" : "First Version Features:";
-  const features = [
-    isFrench ? "Structure d’application propre et modifiable" : "Clean editable app structure",
-    hasFile ? (isFrench ? "Fichiers ciblés mis à jour" : "Targeted files updated") : (isFrench ? "Fichiers nécessaires préparés" : "Required files prepared"),
-    hasPreview ? (isFrench ? "Preview synchronisée" : "Preview synchronized") : (isFrench ? "Preview préparée" : "Preview prepared"),
-    hasCheck ? (isFrench ? "Vérifications prises en compte" : "Checks accounted for") : (isFrench ? "Interactions et états UI prévus" : "Interactions and UI states planned"),
-  ];
+      ? block.finalText || (isFrench ? "La generation est terminee. Tu peux tester la preview." : "The generation is complete. You can test the preview.")
+      : lastTask?.detail || block.activeText || "";
+  const featureTitle = isFrench ? "Progression reelle :" : "Real progress:";
+  const features = tasks.slice(0, 4).map(task => task.label);
   const thinkingLabel = block.status === "active"
     ? "Thinking..."
     : block.status === "failed"
-      ? (isFrench ? "À corriger" : "Needs fix")
+      ? (isFrench ? "A corriger" : "Needs fix")
       : block.status === "cancelled"
-        ? (isFrench ? "Arrêté" : "Stopped")
-        : (isFrench ? "Terminé" : "Done");
-  const progressLabel = isFrench
-    ? `${doneCount}/${tasks.length} tâches terminées`
-    : `${doneCount}/${tasks.length} tasks done`;
-  const commitLine = isFrench ? "Je passe à l’exécution." : "Let’s implement this design:";
+        ? (isFrench ? "Arrete" : "Stopped")
+        : (isFrench ? "Termine" : "Done");
+  const progressLabel = tasks.length
+    ? (isFrench
+      ? doneCount + "/" + tasks.length + " taches terminees"
+      : doneCount + "/" + tasks.length + " tasks done")
+    : (isFrench ? "En attente des vrais evenements" : "Waiting for real events");
+  const commitLine = block.status === "active"
+    ? (isFrench ? "Cette vue se met a jour uniquement avec les vrais evenements." : "This view updates only from real events.")
+    : "";
 
   return (
     <div
@@ -1991,44 +2031,62 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
         <span className="huggy-buildstream-chevron" aria-hidden="true" />
         <span>{thinkingLabel}</span>
       </div>
-      <div className="huggy-buildstream-phase">
-        <p className="huggy-buildstream-title">{phaseTitle}</p>
-        <p className="huggy-buildstream-copy">{body}</p>
-        <p className="huggy-buildstream-feature-title">{featureTitle}</p>
-        <ul className="huggy-buildstream-features">
-          {features.map(feature => <li key={feature}>{feature}</li>)}
-        </ul>
-        <p className="huggy-buildstream-commit">{commitLine}</p>
-      </div>
-      <div className="huggy-buildstream-card">
-        <div className="huggy-buildstream-card-head">
-          <span className="huggy-buildstream-card-title">
-            <ListChecks aria-hidden="true" />
+      {tasks.length || body ? (
+        <div className="huggy-buildstream-phase">
+          <p className="huggy-buildstream-title">{phaseTitle}</p>
+          {body ? <p className="huggy-buildstream-copy">{body}</p> : null}
+          {features.length ? (
+            <>
+              <p className="huggy-buildstream-feature-title">{featureTitle}</p>
+              <ul className="huggy-buildstream-features">
+                {features.map(feature => <li key={feature}>{feature}</li>)}
+              </ul>
+            </>
+          ) : null}
+          {commitLine ? <p className="huggy-buildstream-commit">{commitLine}</p> : null}
+        </div>
+      ) : null}
+      {tasks.length ? (
+        <div className="huggy-buildstream-card">
+          <div className="huggy-buildstream-card-head">
+            <span className="huggy-buildstream-card-title">
+              <ListChecks aria-hidden="true" />
+              <span>{progressLabel}</span>
+            </span>
+            <span className="huggy-buildstream-card-actions" aria-hidden="true">
+              <ChevronDown />
+              <XIcon />
+            </span>
+          </div>
+          {tasks.map((task, index) => (
+            <div
+              className="huggy-buildstream-task"
+              data-status={task.status}
+              key={task.label}
+              style={block.restored ? undefined : { animationDelay: Math.min(index * 75, 300) + "ms" }}
+            >
+              <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? <Check /> : ""}</span>
+              <span>
+                {task.label}
+                {task.detail ? <small className="huggy-buildstream-task-detail">{task.detail}</small> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {tasks.length ? (
+        <div className="huggy-buildstream-statusbar">
+          <span className="huggy-buildstream-status-left">
+            <span className="huggy-buildstream-status-icons" aria-hidden="true">
+              <ListChecks />
+              <FileText />
+            </span>
             <span>{progressLabel}</span>
           </span>
-          <span className="huggy-buildstream-card-actions" aria-hidden="true">
-            <ChevronDown />
-            <XIcon />
-          </span>
+          <span className="huggy-buildstream-status-spacer" />
+          <ChevronDown aria-hidden="true" />
         </div>
-        {tasks.map(task => (
-          <div className="huggy-buildstream-task" data-status={task.status} key={task.label}>
-            <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? <Check /> : ""}</span>
-            <span>{task.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="huggy-buildstream-statusbar">
-        <span className="huggy-buildstream-status-left">
-          <span className="huggy-buildstream-status-icons" aria-hidden="true">
-            <ListChecks />
-            <FileText />
-          </span>
-          <span>{progressLabel}</span>
-        </span>
-        <span className="huggy-buildstream-status-spacer" />
-        <ChevronDown aria-hidden="true" />
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -283,6 +283,7 @@ let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let currentMediaPreviewHtml = '';
+let previewThemeSyncBound = false;
 let currentPlanKey: PlanKey = 'free';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
@@ -955,6 +956,38 @@ function getBuilderPreviewTheme(): 'light' | 'dark' {
   return 'light';
 }
 
+function syncInternalPreviewTheme() {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  const theme = getBuilderPreviewTheme();
+  if (frame.dataset.previewShellTheme === theme) return;
+  if (frame.dataset.emptyPreview === 'true') {
+    frame.dataset.previewShellTheme = theme;
+    const mode: EmptyPreviewMode = emptyPreviewMode === 'working' ? 'working' : 'idle';
+    frame.srcdoc = centeredPreviewLoaderHtml(mode, emptyPreviewLabel);
+    return;
+  }
+  if (frame.dataset.designPreview === 'true' && activeWorkshop === 'design' && !isUsablePreviewHtml(currentPreviewHtml)) {
+    setDesignPreviewHtml(designPreviewShellHtml('idle', 'Design canvas'));
+    return;
+  }
+  if (frame.dataset.mediaPreview === 'true' && activeWorkshop === 'media' && !isUsablePreviewHtml(currentPreviewHtml)) {
+    setMediaPreviewHtml(mediaPreviewShellHtml('idle', 'Media output'));
+  }
+}
+
+function bindPreviewThemeSync() {
+  if (previewThemeSyncBound) return;
+  previewThemeSyncBound = true;
+  if ('MutationObserver' in window) {
+    const observer = new MutationObserver(() => syncInternalPreviewTheme());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  window.addEventListener('storage', event => {
+    if (event.key === 'huggy-theme') syncInternalPreviewTheme();
+  });
+}
+
 function isUsablePreviewHtml(html: unknown) {
   const source = String(html || '').trim();
   if (!source) return false;
@@ -1163,6 +1196,7 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   emptyPreviewLabel = resolvedLabel;
   frame.dataset.emptyPreview = 'true';
   frame.dataset.emptyPreviewMode = mode;
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.srcdoc = centeredPreviewLoaderHtml(mode, resolvedLabel);
   setPreviewDevice(selectedPreviewDevice, false);
   syncPreviewAddress(null);
@@ -1219,6 +1253,7 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
   if (!frame) return;
   currentMediaPreviewHtml = html;
   frame.dataset.mediaPreview = 'true';
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.removeAttribute('data-design-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
@@ -1288,6 +1323,7 @@ function setDesignPreviewHtml(html: string, addressLabel = 'design.huggy.local /
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (!frame) return;
   frame.dataset.designPreview = 'true';
+  frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.removeAttribute('data-media-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
@@ -5902,6 +5938,7 @@ function init() {
   syncBuilderPlanBadges(currentPlanKey);
   void loadProjectMenuCredits();
   bindPreviewDeviceToggle();
+  bindPreviewThemeSync();
   bindMobileBuilderShell();
   initStudioWorkshops();
   initPromptInputActions({
