@@ -1548,12 +1548,18 @@ function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean
       : [];
 
   const files = entries
-    .map((entry: any) => ({
-      path: String(entry.path || entry.file || '').trim(),
-      content: String(entry.content ?? entry.data ?? ''),
-      language: entry.language ? String(entry.language) : undefined,
-      updated_at: new Date().toISOString(),
-    }))
+    .map((entry: any) => {
+      let cleanedPath = String(entry.path || entry.file || '').trim().replace(/\\/g, '/');
+      while (cleanedPath.startsWith('/')) {
+        cleanedPath = cleanedPath.slice(1);
+      }
+      return {
+        path: cleanedPath,
+        content: String(entry.content ?? entry.data ?? ''),
+        language: entry.language ? String(entry.language) : undefined,
+        updated_at: new Date().toISOString(),
+      };
+    })
     .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0);
 
   if (ensureIndex && !files.some(file => file.path === 'index.html')) {
@@ -2487,7 +2493,7 @@ function buildReactVitePreviewHtml(
     fileByPath(files, 'src/index.css')?.content,
     fileByPath(files, 'src/App.css')?.content,
   ].filter(Boolean).join('\n\n');
-  const appCode = stripReactImportsForPreview(appFile.content);
+
   const title = projectName || 'Huggy app';
   const description = summarizeForMeta(promptOrDescription || title, 'Production-ready React app generated with Huggy.');
   const slug = slugify(slugOrId || projectId || title) || 'huggy-app';
@@ -2495,6 +2501,17 @@ function buildReactVitePreviewHtml(
   const robots = environment === 'production' ? 'index, follow' : 'noindex, nofollow';
   const fallbackHtml = buildPreviewFallbackHtml({ projectName: title, prompt: promptOrDescription || title, files });
   const fallbackScriptValue = JSON.stringify(fallbackHtml);
+
+  // Extract all TS/JS/JSON files for our dynamic module loader
+  const modulesObject: Record<string, { code: string }> = {};
+  for (const file of files) {
+    const ext = file.path.split('.').pop()?.toLowerCase();
+    if (ext && ['ts', 'tsx', 'js', 'jsx', 'json'].includes(ext)) {
+      modulesObject[file.path] = { code: file.content };
+    }
+  }
+  const escapedModulesValue = JSON.stringify(modulesObject).replace(/<\/script>/gi, '<\\/script>');
+
   const html = [
     '<!doctype html>',
     '<html lang="en">',
@@ -2513,6 +2530,8 @@ function buildReactVitePreviewHtml(
     '  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>',
     '  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>',
     '  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>',
+    '  <script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js"></script>',
+    '  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>',
     '  <style>',
     css || '',
     PREVIEW_FALLBACK_CSS,
@@ -2523,7 +2542,7 @@ function buildReactVitePreviewHtml(
     '  <noscript>',
     fallbackHtml,
     '  </noscript>',
-    '  <script type="text/babel" data-presets="typescript,react">',
+    '  <script type="text/javascript">',
     `    const __HUGGY_PREVIEW_FALLBACK__ = ${fallbackScriptValue};`,
     '    function __huggyRestorePreview(error) {',
     '      try {',
@@ -2542,27 +2561,108 @@ function buildReactVitePreviewHtml(
     "      __huggyRestorePreview('React runtime unavailable');",
     "      throw new Error('React runtime unavailable');",
     '    }',
-    '    const { useCallback, useEffect, useMemo, useRef, useState } = React;',
-    appCode,
-    '    try {',
-    "      const rootNode = document.getElementById('root');",
-    "      if (!rootNode) throw new Error('Missing #root element');",
-    '      const root = ReactDOM.createRoot(rootNode);',
-    '      root.render(<App />);',
-    "      rootNode.dataset.huggyMounted = 'true';",
-    '      window.setTimeout(() => {',
-    "        if (rootNode.dataset.huggyMounted === 'true' && !rootNode.textContent.trim() && rootNode.children.length === 0) {",
-    "          rootNode.dataset.huggyMounted = 'false';",
-    "          __huggyRestorePreview('Generated app rendered an empty root');",
+    '',
+    `    window.__modules__ = ${escapedModulesValue};`,
+    '    window.__module_cache__ = {};',
+    '',
+    '    window.__resolve_path__ = function(referrer, importPath) {',
+    '      let cleanedImport = importPath.replace(/\\.(tsx|ts|jsx|js)$/, "");',
+    '      if (!cleanedImport.startsWith(".")) return cleanedImport;',
+    '      const parts = referrer.split("/");',
+    '      parts.pop();',
+    '      const relativeParts = cleanedImport.split("/");',
+    '      for (const part of relativeParts) {',
+    '        if (part === ".") continue;',
+    '        if (part === "..") {',
+    '          parts.pop();',
+    '        } else {',
+    '          parts.push(part);',
     '        }',
-    '      }, 1200);',
+    '      }',
+    '      const resolvedBase = parts.join("/");',
+    '      const extensions = [".tsx", ".ts", ".jsx", ".js", ".json", ""];',
+    '      for (const ext of extensions) {',
+    '        const candidate = resolvedBase + ext;',
+    '        if (window.__modules__[candidate]) return candidate;',
+    '      }',
+    '      return resolvedBase;',
+    '    };',
+    '',
+    '    window.LucideReact = new Proxy({}, {',
+    '      get: function(target, name) {',
+    '        if (name === "__esModule") return true;',
+    '        if (window.lucide && window.lucide[name]) {',
+    '          return window.lucide[name];',
+    '        }',
+    '        return function(props) {',
+    '          return React.createElement("span", {',
+    '            className: "inline-block " + (props.className || ""),',
+    '            style: { width: props.size || "1.2em", height: props.size || "1.2em", display: "inline-flex", alignItems: "center", justifyContent: "center" }',
+    '          }, "⚙️");',
+    '        };',
+    '      }',
+    '    });',
+    '',
+    '    window.require = function(importPath, referrer = "src/main.tsx") {',
+    '      if (importPath === "react") return window.React;',
+    '      if (importPath === "react-dom") return window.ReactDOM;',
+    '      if (importPath === "react-dom/client") {',
+    '        return {',
+    '          createRoot: window.ReactDOM.createRoot',
+    '        };',
+    '      }',
+    '      if (importPath === "react/jsx-runtime") {',
+    '        return {',
+    '          jsx: window.React.createElement,',
+    '          jsxs: window.React.createElement',
+    '        };',
+    '      }',
+    '      if (importPath === "lucide-react") return window.LucideReact;',
+    '      if (importPath === "@supabase/supabase-js") return window.supabase;',
+    '',
+    '      const resolved = window.__resolve_path__(referrer, importPath);',
+    '      if (window.__module_cache__[resolved]) {',
+    '        return window.__module_cache__[resolved];',
+    '      }',
+    '      const mod = window.__modules__[resolved];',
+    '      if (!mod) {',
+    '        throw new Error("Module not found: " + importPath + " (resolved to: " + resolved + ")");',
+    '      }',
+    '      const exports = {};',
+    '      window.__module_cache__[resolved] = exports;',
+    '      if (resolved.endsWith(".json")) {',
+    '        try {',
+    '          const parsedJson = JSON.parse(mod.code);',
+    '          Object.assign(exports, parsedJson);',
+    '          window.__module_cache__[resolved] = parsedJson;',
+    '          return parsedJson;',
+    '        } catch (e) {',
+    '          throw new Error("Failed to parse JSON module: " + resolved);',
+    '        }',
+    '      }',
+    '      const compiled = Babel.transform(mod.code, {',
+    '        presets: ["typescript", "react"],',
+    '        plugins: ["transform-modules-commonjs"]',
+    '      }).code;',
+    '      const wrapper = new Function("exports", "require", "__filename", compiled);',
+    '      const localRequire = function(p) {',
+    '        return window.require(p, resolved);',
+    '      };',
+    '      wrapper(exports, localRequire, resolved);',
+    '      return exports;',
+    '    };',
+    '',
+    '    try {',
+    '      const entryPoint = window.__modules__["src/main.tsx"] ? "src/main.tsx" : "src/App.tsx";',
+    '      window.require(entryPoint);',
+    '      const rootNode = document.getElementById("root");',
+    '      if (rootNode) rootNode.dataset.huggyMounted = "true";',
     '    } catch (error) {',
     '      __huggyRestorePreview(error);',
     '    }',
     '  </script>',
     '</body>',
     '</html>',
-    '',
   ].join('\n');
   return injectAnalyticsSnippet(html, projectId, environment);
 }

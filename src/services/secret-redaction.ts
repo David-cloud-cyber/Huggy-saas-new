@@ -42,7 +42,14 @@ export function containsSecret(value: unknown): boolean {
   DIRECT_SECRET_RE.lastIndex = 0;
   if (DIRECT_SECRET_RE.test(text)) return true;
   SECRET_ASSIGNMENT_RE.lastIndex = 0;
-  if (SECRET_ASSIGNMENT_RE.test(text)) return true;
+  let match;
+  while ((match = SECRET_ASSIGNMENT_RE.exec(text)) !== null) {
+    const val = match[4];
+    if (/placeholder|your[_-]|example|fake|secret|key|token|dummy|test[_-]?value|masked[_-]secret/i.test(val)) {
+      continue;
+    }
+    return true;
+  }
   JWT_RE.lastIndex = 0;
   return Array.from(text.matchAll(JWT_RE)).some(match => isSensitiveJwt(match[0]));
 }
