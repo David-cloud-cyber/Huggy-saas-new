@@ -4340,7 +4340,7 @@ function cleanGeneratedBlockingMarkers(files: GeneratedFile[], summaries: string
     let content = source
       .replace(/^\s*throw\s+new\s+Error\(\s*['"`]__HUGGY_FORCE_ERROR__['"`]\s*\);\s*$/gim, '')
       .replace(/throw\s+new\s+Error\(\s*['"`]__HUGGY_FORCE_ERROR__['"`]\s*\);?/gi, '')
-      .replace(/__HUGGY_FORCE_ERROR__/g, '')
+      .replace(/__HUGGY_FORCE_ERROR__/gi, '')
       .replace(/import\s+[^;\n]+from\s+['"]__missing_import__['"];?\s*/gi, '')
       .replace(/from\s+['"]__missing_import__['"];?/gi, '');
     if (content === source) return file;
@@ -4705,7 +4705,7 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
   const markerClean = cleanGeneratedBlockingMarkers(files.map(file => ({ ...file })), summaries);
   let working = markerClean.files;
   const shouldForceModernVite = !isModernFrontendProject(files)
-    || /index\.html should load \/src\/main\.tsx as a module|vite_main_script|missing.*main\.tsx|missing.*app\.tsx|blank preview|preview.*empty|technical build score|runner|forced runtime failure marker|__HUGGY_FORCE_ERROR__/i.test(reasonText);
+    || /index\.html should load \/src\/main\.tsx as a module|vite_main_script|missing.*main\.tsx|missing.*app\.tsx|blank preview|preview.*empty|technical build score|runner|runtime error marker|forced runtime failure marker|data-huggy-runtime-error|__HUGGY_FORCE_ERROR__/i.test(reasonText);
   const shouldFixDestructive = /destructive.*confirmation|destructive.*undo|clear feedback|delete\/remove|visual_destructive_confirmation|destructive_action_safety/i.test(reasonText);
   if (!shouldForceModernVite && !shouldFixDestructive && !markerClean.changed) {
     return { files, changed: false, changedPaths: [], summaries: [] };
@@ -4811,7 +4811,7 @@ function applyAutoFix(project: GeneratedProject, files: GeneratedFile[], errors:
   const patched = files.map(file => {
     if (file.path !== targetPath) return file;
     let content = file.content
-      .replace(/__HUGGY_FORCE_ERROR__/g, '')
+      .replace(/__HUGGY_FORCE_ERROR__/gi, '')
       .replace(/from\s+['"]__missing_import__['"];?/g, '')
       .replace(/sk_live_[A-Za-z0-9_]+|sk_test_[A-Za-z0-9_]+/g, 'SECRET_CONFIGURED_SERVER_SIDE');
 
