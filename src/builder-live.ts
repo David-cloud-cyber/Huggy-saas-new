@@ -5044,11 +5044,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (generationTouchesPreview) setEmptyPreviewState('idle', stopRequested ? 'Generation stopped' : 'Build cancelled');
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
-      journal.status = 'failed';
-      journal.activeText = '';
-      journal.finalText = errorText;
-      addJournalLine(errorText, '', `catch:${Date.now()}`, 'failed');
-      scheduleJournal();
+      clearMessageShimmer(status);
+      updateMessage(status, errorText);
       if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
     }
   } finally {

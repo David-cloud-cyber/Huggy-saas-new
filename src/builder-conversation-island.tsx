@@ -12,7 +12,6 @@ import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
-import { ChatStream } from "./components/huggy-streaming/ChatStream";
 import "./styles/huggy-ai-elements.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
@@ -197,6 +196,29 @@ function ensureConversationStyles() {
     .huggy-message-plain {
       display: block;
       white-space: pre-wrap;
+    }
+
+    .huggy-message-waiting {
+      display: inline-flex;
+      align-items: center;
+      color: color-mix(in srgb, var(--text) 66%, transparent);
+      white-space: pre-wrap;
+    }
+
+    .huggy-message-waiting::after {
+      content: "";
+      width: 4px;
+      height: 4px;
+      margin-left: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: .48;
+      animation: huggy-waiting-dot 1.25s ease-in-out infinite;
+    }
+
+    @keyframes huggy-waiting-dot {
+      0%, 100% { transform: translateY(0); opacity: .26; }
+      50% { transform: translateY(-2px); opacity: .68; }
     }
 
     .huggy-message-markdown {
@@ -1386,7 +1408,7 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   if (!block) return null;
 
   if (block.type === "work_journal") {
-    return renderWorkJournalBlock(block);
+    return null;
   }
 
   if (block.type === "reasoning") {
@@ -1425,14 +1447,17 @@ function renderWorkingStatus(message: HuggyConversationMessage) {
   const cleanDetail = latestDetail.replace(/^(done|now):\s*/, "").trim();
   const showDetail = cleanDetail && !headline.toLowerCase().includes(cleanDetail.toLowerCase());
 
-  return <ChatStream streaming content={showDetail ? `${headline} · ${cleanDetail}` : headline} />;
+  return (
+    <span className="huggy-message-waiting" aria-live="polite">
+      {showDetail ? `${headline} · ${cleanDetail}` : headline}
+    </span>
+  );
 }
 
 function renderAgentTrace(message: HuggyConversationMessage) {
   // Legacy traces are intentionally not rendered anymore.
-  // Project work is now shown through the Huggy Workline, and
-  // simple conversation is shown through ChatStream. Keeping this as a no-op
-  // preserves the old API surface while preventing duplicated streaming UIs.
+  // The builder now uses a simple wait state plus a final response/preview.
+  // Keeping this as a no-op preserves the old API surface.
   void message;
   return null;
 }
@@ -1452,7 +1477,7 @@ const BuilderConversationMessageItem = React.memo(function BuilderConversationMe
 }) {
   const block = renderMessageBlock(message);
   const trace = renderAgentTrace(message);
-  const contentIsTraceLike = Boolean(trace || message.block?.type === "work_journal");
+  const contentIsTraceLike = Boolean(trace);
 
   return (
     <Message from={message.role}>
