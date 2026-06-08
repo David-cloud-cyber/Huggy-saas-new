@@ -1,5 +1,6 @@
 export type HuggyMediaKind =
   | 'launch_kit'
+  | 'campaign_pack'
   | 'social_posts'
   | 'ads_creatives'
   | 'brand_assets'
@@ -62,7 +63,7 @@ export const MEDIA_MODEL_REGISTRY: HuggyMediaModelDefinition[] = [
     output: 'marketing_kit',
     quality: 'balanced',
     endpointId: 'internal-marketing-kit',
-    recommendedFor: ['launch_kit', 'social_posts', 'ads_creatives', 'brand_assets', 'pitch_one_pager'],
+    recommendedFor: ['launch_kit', 'campaign_pack', 'social_posts', 'ads_creatives', 'brand_assets', 'pitch_one_pager'],
     creditBase: 4,
     minPlan: 'free',
   },
@@ -152,6 +153,7 @@ export const MEDIA_MODEL_REGISTRY: HuggyMediaModelDefinition[] = [
 
 const MEDIA_KINDS = new Set<HuggyMediaKind>([
   'launch_kit',
+  'campaign_pack',
   'social_posts',
   'ads_creatives',
   'brand_assets',
@@ -195,6 +197,7 @@ export function mediaDurationSeconds(duration: HuggyMediaDuration): number {
 
 export function isMarketingMediaKind(kind: HuggyMediaKind) {
   return kind === 'launch_kit'
+    || kind === 'campaign_pack'
     || kind === 'social_posts'
     || kind === 'ads_creatives'
     || kind === 'brand_assets'
@@ -257,6 +260,7 @@ export function estimateMediaCredits(settings: HuggyMediaSettings, model: HuggyM
   if (model.output === 'marketing_kit') {
     const kitCredits: Record<HuggyMediaKind, number> = {
       launch_kit: 6,
+      campaign_pack: 8,
       social_posts: 4,
       ads_creatives: 6,
       brand_assets: 5,
@@ -278,6 +282,7 @@ export function estimateMediaCredits(settings: HuggyMediaSettings, model: HuggyM
 export function mediaSettingsSummary(settings: HuggyMediaSettings) {
   const kindLabels: Record<HuggyMediaKind, string> = {
     launch_kit: 'Launch kit',
+    campaign_pack: 'Campaign pack',
     social_posts: 'Social posts',
     ads_creatives: 'Ads creatives',
     brand_assets: 'Brand assets',

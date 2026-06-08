@@ -15,6 +15,7 @@ import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create
 import { buildExecutionContract } from './services/execution-contract';
 import {
   DESIGN_WORKSHOP_OPTIONS,
+  buildDesignStudioBrief,
   designWorkshopOptionLabel,
   normalizeDesignWorkshopSettings,
   type DesignWorkshopSettings,
@@ -109,7 +110,7 @@ type UserWorkspaceState = {
 
 type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
 type EmptyPreviewMode = 'idle' | 'working';
-type MediaKind = 'launch_kit' | 'social_posts' | 'ads_creatives' | 'brand_assets' | 'pitch_one_pager' | 'video_ad' | 'ugc' | 'storyboard' | 'product_image' | 'social_creative' | 'thumbnail';
+type MediaKind = 'launch_kit' | 'campaign_pack' | 'social_posts' | 'ads_creatives' | 'brand_assets' | 'pitch_one_pager' | 'video_ad' | 'ugc' | 'storyboard' | 'product_image' | 'social_creative' | 'thumbnail';
 type MediaFormat = '9:16' | '1:1' | '4:5' | '16:9' | '3:4';
 type MediaDuration = '5s' | '8s' | '10s' | '15s' | '30s';
 type MediaModelPreference = 'auto' | 'best_quality' | 'fast' | 'seedance' | 'veo' | 'sora' | 'kling' | 'flux' | 'openai_image';
@@ -259,6 +260,8 @@ let designSettings: DesignWorkshopSettings = {
   scope: 'focused',
   target: 'auto',
   direction: 'auto',
+  artifact: 'auto',
+  handoff: 'preview_first',
 };
 let mediaSettings: MediaSettings = {
   kind: 'launch_kit',
@@ -322,7 +325,7 @@ const WORKSHOP_CONFIG: Record<StudioWorkshop, {
   media: {
     label: 'Huggy Media',
     shortLabel: 'Media',
-    placeholder: 'Describe the launch kit, post, ad, visual or media asset you want',
+    placeholder: 'Describe the image, video ad, UGC or campaign asset you want',
     icon: '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 10h5"></path><path d="M3 14h5"></path><path d="M16 14h5"></path>',
     promptPrefix: 'Huggy Media workspace: treat this as a creative marketing media request for images, videos, UGC ads, product storytelling, thumbnails, social creatives, app teasers, or campaign assets. Do not build a web app unless the user explicitly asks to use the asset inside the app. Choose media format and model intelligently from the compact settings, keep the result in Preview, and never expose provider costs. If details are missing, use the default vertical 15s TikTok/Reels UGC ad direction and ask at most one short product/offer question instead of listing every possible output.',
   },
@@ -335,8 +338,8 @@ const MEDIA_OPTIONS: {
   duration: Array<{ value: MediaDuration; label: string; hint: string }>;
 } = {
   modelPreference: [
-    { value: 'auto', label: 'Auto model', hint: 'Best fit' },
-    { value: 'best_quality', label: 'Best quality', hint: 'Premium' },
+    { value: 'auto', label: 'Auto', hint: 'Best fit' },
+    { value: 'best_quality', label: 'Quality', hint: 'Premium' },
     { value: 'fast', label: 'Fast', hint: 'Lower cost' },
     { value: 'seedance', label: 'Seedance', hint: 'UGC/video' },
     { value: 'veo', label: 'Veo', hint: 'Cinematic' },
@@ -354,12 +357,13 @@ const MEDIA_OPTIONS: {
   ],
   kind: [
     { value: 'launch_kit', label: 'Launch kit', hint: 'Posts + CTAs' },
+    { value: 'campaign_pack', label: 'Campaign', hint: 'Ads set' },
     { value: 'social_posts', label: 'Social posts', hint: 'FB/LinkedIn/WhatsApp' },
     { value: 'ads_creatives', label: 'Ads', hint: 'A/B angles' },
     { value: 'brand_assets', label: 'Brand assets', hint: 'Visual system' },
     { value: 'pitch_one_pager', label: 'One-pager', hint: 'Pitch copy' },
     { value: 'video_ad', label: 'Video ad', hint: 'Campaign' },
-    { value: 'ugc', label: 'UGC', hint: 'Creator-style' },
+    { value: 'ugc', label: 'UGC video', hint: 'Creator-style' },
     { value: 'storyboard', label: 'Storyboard', hint: 'Plan shots' },
     { value: 'product_image', label: 'Product image', hint: 'Still' },
     { value: 'social_creative', label: 'Social creative', hint: 'Ad asset' },
@@ -469,7 +473,7 @@ function syncBuilderPlanBadges(planInput: unknown) {
   });
 }
 
-const DESIGN_CONTROL_ORDER: Array<keyof typeof DESIGN_WORKSHOP_OPTIONS> = ['action', 'scope', 'target', 'direction'];
+const DESIGN_CONTROL_ORDER: Array<keyof typeof DESIGN_WORKSHOP_OPTIONS> = ['action', 'artifact', 'handoff', 'scope', 'target', 'direction'];
 
 function loadDesignSettings() {
   try {
@@ -612,6 +616,7 @@ function openDesignSettingsMenu(key: keyof typeof DESIGN_WORKSHOP_OPTIONS, ancho
       saveDesignSettings();
       closeDesignSettingsMenu();
       syncDesignControls();
+      syncWorkshopPreview();
     });
   });
   document.body.appendChild(popover);
@@ -684,21 +689,29 @@ function ensureMediaControlsStyle() {
       align-items: center;
       flex-wrap: wrap;
       gap: 5px;
-      margin: 7px 14px 0;
+      margin: 8px 14px 0;
       max-width: calc(100% - 28px);
     }
     .huggy-media-controls.visible { display: flex; }
+    .huggy-media-controls::before {
+      content: "Media";
+      color: var(--text-faint);
+      font: 820 9px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-right: 2px;
+    }
     .huggy-media-pill {
-      height: 23px;
+      height: 26px;
       border: 1px solid var(--border-light);
       border-radius: 999px;
-      background: color-mix(in srgb, var(--bg-input) 84%, transparent);
+      background: color-mix(in srgb, var(--bg-input) 88%, transparent);
       color: var(--text-muted);
-      padding: 0 8px;
+      padding: 0 9px;
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      font: 760 10px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+      font: 780 10.5px/1 "Instrument Sans", Inter, system-ui, sans-serif;
       cursor: pointer;
       transition: border-color 140ms cubic-bezier(.22,1,.36,1), color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), transform 140ms cubic-bezier(.22,1,.36,1);
     }
@@ -718,7 +731,7 @@ function ensureMediaControlsStyle() {
       position: fixed;
       z-index: 12000;
       min-width: 182px;
-      max-width: min(260px, calc(100vw - 24px));
+      max-width: min(286px, calc(100vw - 24px));
       padding: 6px;
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -730,7 +743,7 @@ function ensureMediaControlsStyle() {
     }
     .huggy-media-menu-option {
       width: 100%;
-      min-height: 34px;
+      min-height: 38px;
       border: 0;
       border-radius: 9px;
       background: transparent;
@@ -739,7 +752,7 @@ function ensureMediaControlsStyle() {
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 7px 8px;
+      padding: 8px 9px;
       text-align: left;
       cursor: pointer;
     }
@@ -748,7 +761,7 @@ function ensureMediaControlsStyle() {
       background: var(--accent-dim);
     }
     .huggy-media-menu-option strong {
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 820;
     }
     .huggy-media-menu-option span {
@@ -911,7 +924,7 @@ function studioPromptContextPayload() {
         workshop: activeWorkshop,
         label: config.label,
         instruction: config.promptPrefix || '',
-        ...(activeWorkshop === 'design' ? { settings: designSettings } : {}),
+        ...(activeWorkshop === 'design' ? { settings: designSettings, designBrief: buildDesignStudioBrief({ settings: designSettings }) } : {}),
         ...(activeWorkshop === 'media' ? { settings: mediaSettings } : {}),
       };
 }
@@ -1116,10 +1129,10 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
 
 function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
   const isWorking = state === 'working';
-  const status = isWorking ? title || 'Generating media' : 'Media results will appear here';
+  const status = isWorking ? title || 'Generating media' : 'Ready for media';
   const helper = isWorking
-    ? 'Huggy is preparing the asset from your current request.'
-    : 'Use the main input to create an image, video, UGC ad, storyboard or campaign asset.';
+    ? 'Huggy is turning the request into a usable creative brief and preview.'
+    : 'Describe a product image, UGC video, storyboard, thumbnail or campaign pack.';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1128,14 +1141,16 @@ function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Medi
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--soft:#f7f4ed;--blue:#2f6df6}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
-.wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
-.empty{display:grid;justify-items:center;gap:10px;text-align:center;max-width:360px;color:var(--muted)}
-.status{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--panel) 88%,transparent);padding:9px 13px;color:var(--ink);font-size:13px;font-weight:750;box-shadow:0 8px 28px rgba(28,28,28,.06)}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(47,109,246,.10),transparent 32%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,42px)}
+.empty{width:min(760px,100%);display:grid;gap:14px;color:var(--muted)}
+.status{width:max-content;display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--panel) 88%,transparent);padding:9px 13px;color:var(--ink);font-size:13px;font-weight:780;box-shadow:0 8px 28px rgba(28,28,28,.06)}
 .dot{width:8px;height:8px;border-radius:999px;background:#2f6df6;box-shadow:0 0 0 5px rgba(47,109,246,.10);animation:${isWorking ? 'pulse 1.6s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
-.helper{margin:0;font-size:12px;line-height:1.45;color:var(--muted)}
-@keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}
-@media(prefers-reduced-motion:reduce){.dot{animation:none}}
+.helper{margin:0;max-width:560px;font-size:clamp(15px,2.2vw,22px);line-height:1.35;color:var(--ink);font-weight:760;letter-spacing:-.02em}
+.mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:4px}.mini-card{border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--panel) 90%,transparent);padding:14px;min-height:86px}.mini-card strong{display:block;color:var(--ink);font-size:13px;margin-bottom:6px}.mini-card span{display:block;color:var(--muted);font-size:12px;line-height:1.4}
+.bar{height:4px;width:min(360px,100%);overflow:hidden;border-radius:999px;background:var(--soft);border:1px solid var(--line)}.bar::after{content:"";display:block;width:38%;height:100%;border-radius:999px;background:linear-gradient(90deg,transparent,#2f6df6,transparent);animation:${isWorking ? 'scan 1.35s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}@keyframes scan{0%{transform:translateX(-110%)}100%{transform:translateX(270%)}}
+@media(max-width:680px){.mini-grid{grid-template-columns:1fr}.helper{font-size:20px}.empty{gap:12px}}@media(prefers-reduced-motion:reduce){.dot,.bar::after{animation:none}}
 </style>
 </head>
 <body>
@@ -1143,6 +1158,12 @@ function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Medi
   <section class="empty" aria-label="Huggy Media preview">
     <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span>${escapeHtml(status)}</div>
     <p class="helper">${escapeHtml(helper)}</p>
+    <div class="bar" aria-hidden="true"></div>
+    <div class="mini-grid" aria-label="Media capabilities">
+      <div class="mini-card"><strong>Campaign</strong><span>Angles, hooks, posts and ad variations.</span></div>
+      <div class="mini-card"><strong>Visual</strong><span>Product images, thumbnails and hero assets.</span></div>
+      <div class="mini-card"><strong>Video</strong><span>UGC scripts, storyboard and short promo direction.</span></div>
+    </div>
   </section>
 </main>
 </body>
@@ -1154,6 +1175,73 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
   if (!frame) return;
   currentMediaPreviewHtml = html;
   frame.dataset.mediaPreview = 'true';
+  frame.removeAttribute('data-design-preview');
+  frame.removeAttribute('data-empty-preview');
+  frame.srcdoc = html;
+  setPreviewDevice(selectedPreviewDevice, false);
+  const address = document.querySelector('.preview-address-glow span:last-child');
+  if (address) address.textContent = addressLabel;
+}
+
+function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Design canvas') {
+  const isWorking = state === 'working';
+  const brief = buildDesignStudioBrief({ settings: designSettings });
+  const artifact = designWorkshopOptionLabel('artifact', brief.artifact_type);
+  const handoff = designWorkshopOptionLabel('handoff', brief.handoff);
+  const helper = isWorking
+    ? 'Huggy is shaping a visual direction, checking brand fit and preparing a clean handoff.'
+    : 'Describe a screen, section, prototype, deck or brand direction. Huggy will keep the canvas calm and the app safe.';
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#66625a;--line:#ece8df;--soft:#f7f3ea;--blue:#2f6df6;--blue-soft:rgba(47,109,246,.10)}
+@media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f;--blue-soft:rgba(96,165,250,.16)}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,var(--blue-soft),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:clamp(18px,4vw,44px)}
+.studio{width:min(860px,100%);display:grid;gap:16px}
+.status{width:max-content;display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--panel) 88%,transparent);padding:9px 13px;font-size:13px;font-weight:780;box-shadow:0 8px 28px rgba(28,28,28,.06)}
+.dot{width:8px;height:8px;border-radius:999px;background:var(--blue);box-shadow:0 0 0 5px var(--blue-soft);animation:${isWorking ? 'pulse 1.6s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+h1{margin:0;max-width:720px;font-size:clamp(34px,6vw,70px);line-height:.98;letter-spacing:-.055em}
+p{margin:0;max-width:620px;color:var(--muted);font-size:clamp(15px,2vw,20px);line-height:1.45}
+.pills{display:flex;flex-wrap:wrap;gap:7px}.pill{border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 88%,transparent);border-radius:999px;padding:8px 11px;color:var(--muted);font-size:12px;font-weight:760}.pill strong{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:5px}.card{border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--panel) 90%,transparent);padding:15px;min-height:112px;box-shadow:0 20px 60px rgba(28,28,28,.05)}.card strong{display:block;font-size:13px;margin-bottom:8px}.card span{display:block;color:var(--muted);font-size:12px;line-height:1.45}
+.bar{height:4px;width:min(420px,100%);overflow:hidden;border-radius:999px;background:var(--soft);border:1px solid var(--line)}.bar::after{content:"";display:block;width:35%;height:100%;border-radius:999px;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:${isWorking ? 'scan 1.35s cubic-bezier(.22,1,.36,1) infinite' : 'none'}}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.18)}}@keyframes scan{0%{transform:translateX(-110%)}100%{transform:translateX(300%)}}
+@media(max-width:760px){.grid{grid-template-columns:1fr 1fr}h1{font-size:42px}.studio{gap:13px}}@media(max-width:520px){.grid{grid-template-columns:1fr}.pills{gap:6px}}@media(prefers-reduced-motion:reduce){.dot,.bar::after{animation:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="studio" aria-label="Huggy Design preview">
+    <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span>${escapeHtml(isWorking ? title : 'Huggy Design')}</div>
+    <h1>${escapeHtml(isWorking ? 'Preparing a design direction' : 'Ready for design')}</h1>
+    <p>${escapeHtml(helper)}</p>
+    <div class="pills" aria-label="Design context">
+      <span class="pill">Output <strong>${escapeHtml(artifact)}</strong></span>
+      <span class="pill">Handoff <strong>${escapeHtml(handoff)}</strong></span>
+      <span class="pill">Style <strong>${escapeHtml(designWorkshopOptionLabel('direction', designSettings.direction))}</strong></span>
+    </div>
+    <div class="bar" aria-hidden="true"></div>
+    <div class="grid" aria-label="Design capabilities">
+      <div class="card"><strong>Brand kit</strong><span>Extract colors, type, spacing, voice and motion from the current product.</span></div>
+      <div class="card"><strong>Variations</strong><span>Explore clean alternatives without rewriting the whole app by default.</span></div>
+      <div class="card"><strong>Critic</strong><span>Check hierarchy, contrast, mobile, states and anti-generic patterns.</span></div>
+      <div class="card"><strong>Apply</strong><span>Patch the app only when handoff is set to Apply or the user asks clearly.</span></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>`;
+}
+
+function setDesignPreviewHtml(html: string, addressLabel = 'design.huggy.local / canvas') {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  frame.dataset.designPreview = 'true';
+  frame.removeAttribute('data-media-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
   setPreviewDevice(selectedPreviewDevice, false);
@@ -1164,13 +1252,19 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
 function syncWorkshopPreview() {
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (!frame) return;
+  if (activeWorkshop === 'design' && !isUsablePreviewHtml(currentPreviewHtml)) {
+    activateBuilderView('preview');
+    setDesignPreviewHtml(designPreviewShellHtml('idle', 'Design canvas'));
+    return;
+  }
   if (activeWorkshop === 'media') {
     activateBuilderView('preview');
     setMediaPreviewHtml(currentMediaPreviewHtml || mediaPreviewShellHtml('idle', 'Media output'));
     return;
   }
-  if (frame.dataset.mediaPreview === 'true') {
+  if (frame.dataset.mediaPreview === 'true' || frame.dataset.designPreview === 'true') {
     frame.removeAttribute('data-media-preview');
+    frame.removeAttribute('data-design-preview');
     if (currentPreviewHtml.trim()) {
       setPreview(currentPreviewHtml, 'ready');
     } else {

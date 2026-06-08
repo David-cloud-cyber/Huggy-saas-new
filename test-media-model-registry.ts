@@ -25,6 +25,14 @@ assert.equal(onePagerModel.id, 'huggy/media-kit');
 assert.equal(estimateMediaCredits(onePager, onePagerModel), 10);
 assert.ok(mediaSettingsSummary(onePager).includes('Pitch / one-pager'));
 
+const campaignPack = normalizeMediaSettings({ kind: 'campaign_pack', format: '4:5', duration: '15s' });
+const campaignModel = selectMediaModel(campaignPack, 'free');
+assert.equal(mediaOutputForKind(campaignPack.kind), 'marketing_kit');
+assert.equal(isMarketingMediaKind(campaignPack.kind), true);
+assert.equal(campaignModel.id, 'huggy/media-kit');
+assert.equal(estimateMediaCredits(campaignPack, campaignModel), 8);
+assert.ok(mediaSettingsSummary(campaignPack).includes('Campaign pack'));
+
 const video = normalizeMediaSettings({ kind: 'ugc', duration: '8s', modelPreference: 'fast' });
 const videoModel = selectMediaModel(video, 'free');
 assert.notEqual(videoModel.output, 'marketing_kit');

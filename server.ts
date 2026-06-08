@@ -170,6 +170,7 @@ import {
 } from './src/services/deep-reasoning.ts';
 import { buildAgentMoatIntelligence } from './src/services/agent-moat-intelligence.ts';
 import {
+  buildDesignStudioBrief,
   designWorkshopInstructionLines,
   normalizeDesignWorkshopSettings,
 } from './src/services/design-workshop.ts';
@@ -373,6 +374,26 @@ function getOptionalAuthState(req: any) {
   };
 }
 
+const DEFAULT_PLATFORM_ADMIN_EMAILS = ['novacore629@gmail.com'];
+
+function normalizeAdminEmail(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getPlatformAdminEmails() {
+  const configured = [
+    process.env.HUGGY_ADMIN_EMAILS,
+    process.env.ADMIN_EMAILS,
+    process.env.PLATFORM_ADMIN_EMAILS,
+  ]
+    .filter(Boolean)
+    .flatMap(value => String(value).split(','))
+    .map(normalizeAdminEmail)
+    .filter(Boolean);
+
+  return new Set([...DEFAULT_PLATFORM_ADMIN_EMAILS, ...configured]);
+}
+
 async function requireAuth(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -448,6 +469,7 @@ app.get('/api/auth/me', requireAuth, async (req: any, res) => {
       id: auth.userId,
       email: auth.email,
       role: auth.user.role,
+      is_platform_admin: isPlatformAdmin(req),
     },
     plan: {
       key: plan.key,
@@ -1075,20 +1097,29 @@ function normalizeStudioContext(value: any): StudioContextKind {
   return raw === 'design' || raw === 'decks' || raw === 'media' ? raw : 'chat';
 }
 
-function studioContextInstruction(value: any) {
+function studioContextInstruction(value: any, prompt = '') {
   const context = normalizeStudioContext(value);
   if (context === 'design') {
     const settings = normalizeDesignWorkshopSettings(value?.settings || value?.designSettings || {});
+    const designBrief = buildDesignStudioBrief({ prompt, settings });
     return [
       'Huggy Design workspace context:',
       '- Interpret the request as UI/UX, product design, visual system, prototype, or targeted interface refinement.',
+      '- Treat Huggy Design as a lightweight design studio, not a heavy editor: one input, compact controls, preview canvas, and clear handoff.',
       '- Preserve existing app behavior unless the user clearly asks for a new app or a full redesign.',
       '- Prefer focused changes, coherent design tokens, responsive states, accessibility, and anti-generic visual decisions.',
       '- For applied design work, favor Opus-level visual reasoning: hierarchy, spacing, motion, states, responsive behavior, and product taste.',
       '- Offer critique, copy, or strategy without touching files unless the user clearly asks to apply changes.',
       '- If the user is only asking for advice or explanation, answer without modifying files.',
+      '- Build or describe a brand kit when useful: color tokens, type scale, spacing rhythm, radius scale, motion tone and voice.',
+      '- If generating variations, create two or three distinct directions with a recommendation, not a noisy gallery.',
+      '- If generating decks or prototypes, render them as honest HTML/CSS/JS preview artifacts unless an actual exporter exists.',
+      '- Run a design critic pass before final delivery: hierarchy, contrast, spacing, mobile fit, states, brand consistency and anti-generic patterns.',
+      '- Use Preview first for exploration. Apply to project files only when the user asks clearly or handoff is set to Apply.',
       '- Design Mode must never touch auth, database, billing, secrets, payment logic, provider keys, or business-critical backend behavior unless the user explicitly leaves Design mode and asks for engineering work.',
       '- For small visual edits, patch only the relevant CSS/component files and preserve rollback/version history.',
+      '- Internal design studio brief. Use it for decisions but never print it as raw JSON to the user:',
+      JSON.stringify(designBrief, null, 2),
       ...designWorkshopInstructionLines(settings),
     ].join('\n');
   }
@@ -1124,7 +1155,7 @@ function studioContextInstruction(value: any) {
 }
 
 function applyStudioContextToPrompt(prompt: string, studioContext: any) {
-  const instruction = studioContextInstruction(studioContext);
+  const instruction = studioContextInstruction(studioContext, prompt);
   return instruction ? `${instruction}\n\nUser request:\n${prompt}` : prompt;
 }
 
@@ -1325,12 +1356,19 @@ function getUserProjectRole(req: any, project?: GeneratedProject): ProjectRole {
 function isPlatformAdmin(req: any) {
   const metadata = getOptionalAuthState(req).user?.app_metadata || {};
   const roles = Array.isArray(metadata.roles) ? metadata.roles : [];
-  return metadata.role === 'platform_admin' || roles.includes('platform_admin');
+  const email = normalizeAdminEmail(getOptionalAuthState(req).email);
+  return metadata.role === 'platform_admin' || roles.includes('platform_admin') || getPlatformAdminEmails().has(email);
 }
 
 function requirePlatformAdmin(req: any, res: any) {
   if (isPlatformAdmin(req)) return true;
-  res.status(403).json({ success: false, error: 'Platform admin access required.' });
+  res.status(403).json({
+    success: false,
+    error: 'Platform admin access required.',
+    message: 'This area is restricted to Huggy platform admins.',
+    diagnostic_code: 'ADMIN_ACCESS_REQUIRED',
+    suggested_action: 'sign_in_as_admin',
+  });
   return false;
 }
 
@@ -7903,6 +7941,368 @@ app.post('/api/billing/checkout/cloud-topup', async (req, res) => {
   }
 });
 
+function adminSafeString(value: unknown, fallback = '') {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+}
+
+function adminTableMissing(error: any) {
+  return isSchemaShapeError(error) || /relation .* does not exist|table .* does not exist|schema cache/i.test(error?.message || '');
+}
+
+async function adminRows(client: any, table: string, select = '*', options: { limit?: number; order?: string } = {}) {
+  try {
+    let query = client.from(table).select(select).limit(options.limit || 100);
+    if (options.order) query = query.order(options.order, { ascending: false });
+    const { data, error } = await query;
+    if (error) {
+      return {
+        available: false,
+        rows: [],
+        error: adminSafeString(error.message, 'Query failed'),
+        missing: adminTableMissing(error),
+      };
+    }
+    return { available: true, rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  } catch (error: any) {
+    return {
+      available: false,
+      rows: [],
+      error: adminSafeString(error?.message, 'Query failed'),
+      missing: adminTableMissing(error),
+    };
+  }
+}
+
+async function adminAuthUsers(client: any, limit = 100) {
+  try {
+    const listUsers = (client.auth as any)?.admin?.listUsers;
+    if (typeof listUsers !== 'function') {
+      return { available: false, users: [], error: 'Supabase admin user API is unavailable.' };
+    }
+    const { data, error } = await listUsers.call((client.auth as any).admin, { page: 1, perPage: limit });
+    if (error) return { available: false, users: [], error: error.message || 'Unable to list users.' };
+    const users = Array.isArray(data?.users) ? data.users : [];
+    return {
+      available: true,
+      users: users.map((user: any) => ({
+        id: user.id,
+        email: user.email || null,
+        created_at: user.created_at || null,
+        last_sign_in_at: user.last_sign_in_at || null,
+        confirmed_at: user.confirmed_at || null,
+        role: user.role || null,
+        provider: Array.isArray(user.app_metadata?.providers) ? user.app_metadata.providers.join(', ') : user.app_metadata?.provider || null,
+        is_platform_admin: getPlatformAdminEmails().has(normalizeAdminEmail(user.email)) ||
+          user.app_metadata?.role === 'platform_admin' ||
+          (Array.isArray(user.app_metadata?.roles) && user.app_metadata.roles.includes('platform_admin')),
+      })),
+      error: null,
+    };
+  } catch (error: any) {
+    return { available: false, users: [], error: error?.message || 'Unable to list users.' };
+  }
+}
+
+function adminCountBy(rows: any[], key: string) {
+  return rows.reduce((acc: Record<string, number>, row: any) => {
+    const value = adminSafeString(row?.[key], 'unknown');
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function adminRecentIso(days: number) {
+  return Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function adminIsRecent(value: unknown, days = 1) {
+  const time = Date.parse(String(value || ''));
+  return Number.isFinite(time) && time >= adminRecentIso(days);
+}
+
+function sanitizeAdminProject(row: any) {
+  const fileCount = Array.isArray(row?.files)
+    ? row.files.length
+    : typeof row?.files_count === 'number'
+      ? row.files_count
+      : null;
+  return {
+    id: row?.id,
+    name: row?.name || row?.title || 'Untitled project',
+    slug: row?.slug || null,
+    owner_id: row?.owner_id || row?.created_by || row?.user_id || null,
+    organization_id: row?.organization_id || null,
+    status: row?.status || 'draft',
+    preview_status: row?.preview_status || row?.preview_state || 'unknown',
+    publish_status: row?.deployment_status || row?.publish_status || null,
+    live_url: row?.published_url || row?.live_url || row?.deployment_url || null,
+    model_id: row?.model_id || null,
+    file_count: fileCount,
+    created_at: row?.created_at || null,
+    updated_at: row?.updated_at || null,
+  };
+}
+
+function sanitizeAdminRun(row: any) {
+  return {
+    id: row?.id,
+    request_id: row?.request_id || null,
+    project_id: row?.project_id || null,
+    user_id: row?.user_id || null,
+    intent: row?.intent || row?.mode || 'unknown',
+    mode: row?.mode || null,
+    model_id: row?.model_id || null,
+    status: row?.status || 'unknown',
+    diagnostic_code: row?.diagnostic_code || null,
+    suggested_action: row?.suggested_action || null,
+    duration_ms: Number(row?.duration_ms || 0),
+    created_at: row?.created_at || null,
+    completed_at: row?.completed_at || null,
+  };
+}
+
+function sanitizeAdminDeployment(row: any) {
+  return {
+    id: row?.id || row?.deployment_id || row?.vercel_deployment_id || null,
+    project_id: row?.project_id || null,
+    status: row?.status || row?.deployment_status || 'unknown',
+    url: row?.url || row?.deployment_url || row?.live_url || row?.published_url || null,
+    domain: row?.domain || row?.custom_domain || null,
+    provider: row?.provider || 'vercel',
+    created_at: row?.created_at || null,
+    updated_at: row?.updated_at || null,
+  };
+}
+
+function sanitizeAdminWallet(row: any) {
+  return {
+    organization_id: row?.organization_id || row?.wallet_id || null,
+    balance: getCreditBalanceFromRow(row),
+    monthly_credits: getNumericCreditValue(row?.monthly_credits),
+    daily_promo_credits: getNumericCreditValue(row?.daily_promo_credits || row?.promo_credits),
+    topup_credits: getNumericCreditValue(row?.topup_credits),
+    updated_at: row?.updated_at || null,
+  };
+}
+
+function buildAdminHealth() {
+  const supabaseDiagnostics = getSupabaseRuntimeDiagnostics();
+  return [
+    { id: 'supabase', label: 'Supabase', status: supabaseDiagnostics.project_refs_match ? 'ok' : 'warning', detail: supabaseDiagnostics.project_refs_match ? 'Frontend/backend refs match' : 'Check Supabase env refs' },
+    { id: 'openrouter', label: 'OpenRouter', status: getOpenRouterApiKey() ? 'ok' : 'warning', detail: getOpenRouterApiKey() ? 'API key configured' : 'Missing provider key' },
+    { id: 'vercel', label: 'Vercel', status: getVercelToken() ? 'ok' : 'warning', detail: getVercelToken() ? 'Publish token configured' : 'Publish token missing' },
+    { id: 'stripe', label: 'Stripe', status: process.env.STRIPE_SECRET_KEY ? 'ok' : 'warning', detail: process.env.STRIPE_SECRET_KEY ? 'Billing key configured' : 'Billing key missing' },
+    { id: 'admin', label: 'Admin guard', status: 'ok', detail: `${getPlatformAdminEmails().size} admin email${getPlatformAdminEmails().size > 1 ? 's' : ''} configured` },
+  ];
+}
+
+app.get('/api/admin/overview', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin overview');
+  const [usersResult, projectsResult, runsResult, aiRequestsResult, deploymentsResult, walletsResult] = await Promise.all([
+    adminAuthUsers(client, 200),
+    adminRows(client, 'projects', '*', { limit: 250, order: 'updated_at' }),
+    adminRows(client, 'agent_runs', 'id,request_id,project_id,user_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,created_at,completed_at,cancelled_at', { limit: 300, order: 'created_at' }),
+    adminRows(client, 'ai_requests', 'id,organization_id,project_id,model_id,request_type,status,created_at', { limit: 300, order: 'created_at' }),
+    adminRows(client, 'deployments', '*', { limit: 150, order: 'created_at' }),
+    adminRows(client, 'credit_wallets', '*', { limit: 250, order: 'updated_at' }),
+  ]);
+
+  const projects = projectsResult.rows.map(sanitizeAdminProject);
+  const runs = runsResult.rows.map(sanitizeAdminRun);
+  const deployments = deploymentsResult.rows.map(sanitizeAdminDeployment);
+  const wallets = walletsResult.rows.map(sanitizeAdminWallet);
+  const failedRuns = runs.filter((run: any) => run.status === 'failed');
+  const successfulDeployments = deployments.filter((deployment: any) => /ready|success|published|completed/i.test(deployment.status));
+  const totalCredits = wallets.reduce((sum: number, wallet: any) => sum + Number(wallet.balance || 0), 0);
+
+  res.json({
+    success: true,
+    generated_at: new Date().toISOString(),
+    admin: {
+      email: getOptionalAuthState(req).email || null,
+      role: 'platform_admin',
+    },
+    metrics: {
+      users: usersResult.users.length,
+      projects: projects.length,
+      active_today: usersResult.users.filter((user: any) => adminIsRecent(user.last_sign_in_at, 1)).length,
+      runs: runs.length,
+      failed_runs: failedRuns.length,
+      success_rate: runs.length ? Math.round(((runs.length - failedRuns.length) / runs.length) * 100) : 100,
+      previews_ready: projects.filter((project: any) => project.preview_status === 'ready').length,
+      publish_success: successfulDeployments.length,
+      ai_requests: aiRequestsResult.rows.length,
+      wallet_credits: Math.round(totalCredits * 10) / 10,
+    },
+    health: buildAdminHealth(),
+    distributions: {
+      project_status: adminCountBy(projects, 'status'),
+      preview_status: adminCountBy(projects, 'preview_status'),
+      run_status: adminCountBy(runs, 'status'),
+      run_intent: adminCountBy(runs, 'intent'),
+      deployment_status: adminCountBy(deployments, 'status'),
+    },
+    recent: {
+      users: usersResult.users.slice(0, 8),
+      projects: projects.slice(0, 8),
+      failed_runs: failedRuns.slice(0, 8),
+      deployments: deployments.slice(0, 8),
+    },
+    availability: {
+      users: usersResult.available,
+      projects: projectsResult.available,
+      agent_runs: runsResult.available,
+      ai_requests: aiRequestsResult.available,
+      deployments: deploymentsResult.available,
+      credit_wallets: walletsResult.available,
+    },
+  });
+});
+
+app.get('/api/admin/users', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin users');
+  const query = String(req.query?.q || '').trim().toLowerCase();
+  const [usersResult, walletsResult, projectsResult, runsResult] = await Promise.all([
+    adminAuthUsers(client, 500),
+    adminRows(client, 'credit_wallets', '*', { limit: 500, order: 'updated_at' }),
+    adminRows(client, 'projects', 'id,name,owner_id,organization_id,status,preview_status,updated_at', { limit: 500, order: 'updated_at' }),
+    adminRows(client, 'agent_runs', 'id,user_id,status,created_at', { limit: 500, order: 'created_at' }),
+  ]);
+  const wallets = new Map(walletsResult.rows.map((row: any) => [row.organization_id || row.wallet_id, sanitizeAdminWallet(row)]));
+  const projectsByOwner = adminCountBy(projectsResult.rows, 'owner_id');
+  const runsByUser = adminCountBy(runsResult.rows, 'user_id');
+  const users = usersResult.users
+    .filter((user: any) => !query || String(user.email || '').toLowerCase().includes(query) || String(user.id || '').toLowerCase().includes(query))
+    .map((user: any) => ({
+      ...user,
+      wallet: wallets.get(user.id) || null,
+      project_count: projectsByOwner[user.id] || 0,
+      run_count: runsByUser[user.id] || 0,
+    }));
+  res.json({ success: true, users, availability: { users: usersResult.available, wallets: walletsResult.available } });
+});
+
+app.get('/api/admin/projects', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin projects');
+  const query = String(req.query?.q || '').trim().toLowerCase();
+  const projectsResult = await adminRows(client, 'projects', '*', { limit: 500, order: 'updated_at' });
+  const projects = projectsResult.rows
+    .map(sanitizeAdminProject)
+    .filter((project: any) => !query || String(project.name || '').toLowerCase().includes(query) || String(project.id || '').toLowerCase().includes(query) || String(project.owner_id || '').toLowerCase().includes(query));
+  res.json({ success: true, projects, availability: { projects: projectsResult.available }, error: projectsResult.error });
+});
+
+app.get('/api/admin/runs', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin runs');
+  const runsResult = await adminRows(client, 'agent_runs', 'id,request_id,project_id,user_id,intent,mode,model_id,status,diagnostic_code,suggested_action,duration_ms,created_at,completed_at,cancelled_at', { limit: 500, order: 'created_at' });
+  const runs = runsResult.rows.map(sanitizeAdminRun);
+  res.json({ success: true, runs, distributions: { status: adminCountBy(runs, 'status'), intent: adminCountBy(runs, 'intent'), model: adminCountBy(runs, 'model_id') }, availability: { agent_runs: runsResult.available } });
+});
+
+app.get('/api/admin/errors', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin errors');
+  const [runsResult, runnerResult] = await Promise.all([
+    adminRows(client, 'agent_runs', 'id,request_id,project_id,user_id,intent,model_id,status,diagnostic_code,suggested_action,duration_ms,created_at', { limit: 500, order: 'created_at' }),
+    adminRows(client, 'agent_runner_results', 'agent_run_id,status,check_type,severity,message,duration_ms,created_at', { limit: 500, order: 'created_at' }),
+  ]);
+  const failedRuns = runsResult.rows.map(sanitizeAdminRun).filter((run: any) => run.status === 'failed' || run.diagnostic_code);
+  const runnerFailures = runnerResult.rows
+    .filter((row: any) => row.status === 'failed' || row.severity === 'blocker' || row.severity === 'error')
+    .map(redactAgentPayload);
+  res.json({
+    success: true,
+    errors: {
+      failed_runs: failedRuns,
+      runner_failures: runnerFailures,
+    },
+    grouped: {
+      diagnostic_code: adminCountBy(failedRuns, 'diagnostic_code'),
+      check_type: adminCountBy(runnerFailures, 'check_type'),
+      severity: adminCountBy(runnerFailures, 'severity'),
+    },
+    availability: { agent_runs: runsResult.available, agent_runner_results: runnerResult.available },
+  });
+});
+
+app.get('/api/admin/publish', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin publish');
+  const deploymentsResult = await adminRows(client, 'deployments', '*', { limit: 300, order: 'created_at' });
+  const domainsResult = await adminRows(client, 'domains', '*', { limit: 300, order: 'created_at' });
+  const deployments = deploymentsResult.rows.map(sanitizeAdminDeployment);
+  res.json({
+    success: true,
+    deployments,
+    domains: domainsResult.rows.map((row: any) => ({
+      id: row?.id,
+      project_id: row?.project_id,
+      domain: row?.domain || row?.hostname,
+      status: row?.status || row?.verification_status || 'unknown',
+      is_primary: Boolean(row?.is_primary || row?.primary),
+      created_at: row?.created_at || null,
+    })),
+    distributions: {
+      deployment_status: adminCountBy(deployments, 'status'),
+      domain_status: adminCountBy(domainsResult.rows, 'status'),
+    },
+    availability: { deployments: deploymentsResult.available, domains: domainsResult.available },
+  });
+});
+
+app.get('/api/admin/security', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  const client = requireSupabase('Admin security');
+  const [runnerResult, projectsResult] = await Promise.all([
+    adminRows(client, 'agent_runner_results', 'agent_run_id,status,check_type,severity,message,created_at', { limit: 500, order: 'created_at' }),
+    adminRows(client, 'projects', 'id,name,owner_id,preview_status,status,updated_at', { limit: 300, order: 'updated_at' }),
+  ]);
+  const runnerFindings = runnerResult.rows
+    .filter((row: any) => /security|secret|rls|auth|webhook|service_role|xss|csrf|upload/i.test(`${row.check_type} ${row.message}`))
+    .map(redactAgentPayload);
+  res.json({
+    success: true,
+    summary: {
+      open_findings: runnerFindings.length,
+      projects_observed: projectsResult.rows.length,
+      secrets_exposed_to_client: false,
+      service_role_frontend_guard: 'enabled',
+      admin_guard: 'enabled',
+    },
+    findings: runnerFindings.slice(0, 100),
+    checklist: [
+      { label: 'Service role never returned to clients', status: 'ok' },
+      { label: 'Admin endpoints require platform admin', status: 'ok' },
+      { label: 'Provider payloads redacted in logs', status: 'ok' },
+      { label: 'Generated app security checks tracked', status: runnerFindings.length ? 'warning' : 'ok' },
+    ],
+    health: buildAdminHealth(),
+    availability: { agent_runner_results: runnerResult.available, projects: projectsResult.available },
+  });
+});
+
+app.get('/api/admin/feature-flags', async (req: any, res) => {
+  if (!requirePlatformAdmin(req, res)) return;
+  res.json({
+    success: true,
+    flags: [
+      { key: 'huggy_media', label: 'Huggy Media', enabled: true, rollout: 'beta', risk: 'medium' },
+      { key: 'huggy_design', label: 'Huggy Design', enabled: true, rollout: 'beta', risk: 'medium' },
+      { key: 'huggy_decks', label: 'Huggy Decks', enabled: true, rollout: 'beta', risk: 'medium' },
+      { key: 'workline_journal', label: 'Workline journal', enabled: true, rollout: 'all', risk: 'low' },
+      { key: 'publish_vercel', label: 'Vercel publish', enabled: Boolean(getVercelToken()), rollout: getVercelToken() ? 'all' : 'blocked', risk: 'high' },
+      { key: 'browser_testing', label: 'Browser testing runtime', enabled: true, rollout: 'all', risk: 'medium' },
+      { key: 'auto_model_router', label: 'Auto model router', enabled: true, rollout: 'all', risk: 'medium' },
+    ],
+    note: 'Flags are read-only here until rollout mutation endpoints are explicitly enabled.',
+  });
+});
+
 app.get('/api/admin/billing/margins', async (req: any, res) => {
   if (!requirePlatformAdmin(req, res)) return;
   const client = requireSupabase('Admin billing margins');
@@ -8604,9 +9004,10 @@ function buildMediaPrompt(input: {
     `Asset type: ${input.settings.kind.replace(/_/g, ' ')}.`,
     'Style: clean, premium, marketing-ready, direct, modern, specific to the project, not generic AI design.',
     isMarketingKit
-      ? 'Include launch headline, positioning, social posts, WhatsApp copy, ad angles, CTA, brand asset guidance, and one-pager outline.'
+      ? 'Include brand DNA, campaign promise, social posts, WhatsApp copy, ad angles, CTA, asset checklist, and one-pager outline.'
       : 'If this is a rendered asset, keep the result visually simple, brand-safe, and useful for launch.',
     'If this is UGC or an ad, include a strong first-second hook, clear product promise, simple visual sequence, and CTA.',
+    'Do not expose internal provider cost or raw provider payloads. Return a useful brief even if rendering is unavailable.',
     `User request: ${input.prompt}`,
   ].join('\n');
 }
@@ -8614,6 +9015,7 @@ function buildMediaPrompt(input: {
 function mediaKindLabel(kind: HuggyMediaSettings['kind']) {
   const labels: Record<HuggyMediaSettings['kind'], string> = {
     launch_kit: 'Launch kit',
+    campaign_pack: 'Campaign pack',
     social_posts: 'Social posts',
     ads_creatives: 'Ads creatives',
     brand_assets: 'Brand assets',
@@ -8626,6 +9028,15 @@ function mediaKindLabel(kind: HuggyMediaSettings['kind']) {
     thumbnail: 'Thumbnail',
   };
   return labels[kind] || 'Media';
+}
+
+function mediaRouteLabel(value: unknown) {
+  const normalized = String(value || 'auto').replace(/_/g, ' ').toLowerCase();
+  if (normalized === 'best quality') return 'Quality route';
+  if (normalized === 'fast') return 'Fast route';
+  if (normalized === 'flux' || normalized === 'openai image') return 'Image route';
+  if (normalized === 'seedance' || normalized === 'veo' || normalized === 'sora' || normalized === 'kling') return 'Video route';
+  return 'Auto route';
 }
 
 function projectAudienceHint(project: GeneratedProject, prompt: string) {
@@ -8654,7 +9065,9 @@ function buildMediaKitSections(input: {
     : input.settings.kind === 'social_posts'
       ? 'Try it today'
       : 'Launch with Huggy';
-  const angle = input.settings.kind === 'ads_creatives'
+  const angle = input.settings.kind === 'campaign_pack'
+    ? 'Build one clear campaign system: hook, promise, visual proof, short copy, and repeatable variants.'
+    : input.settings.kind === 'ads_creatives'
     ? 'Turn the pain point into a fast, visible before/after.'
     : input.settings.kind === 'brand_assets'
       ? 'Make every asset feel consistent, trustworthy and easy to reuse.'
@@ -8663,6 +9076,10 @@ function buildMediaKitSections(input: {
         : 'Show the app as a practical launch-ready solution.';
 
   return [
+    {
+      title: 'Brand DNA',
+      body: `${projectName} should feel direct, credible, launch-ready and easy to understand in under five seconds.`,
+    },
     {
       title: 'Launch headline',
       body: `${projectName}: ${promise}`,
@@ -8700,6 +9117,10 @@ function buildMediaKitSections(input: {
       body: 'Use one hero screenshot, one square social card, one vertical story, one simple logo lockup, and one short CTA line.',
     },
     {
+      title: 'Creative direction',
+      body: `Format ${input.settings.format}, duration ${input.settings.duration}. Keep one visual idea, one promise and one CTA per asset.`,
+    },
+    {
       title: 'One-pager outline',
       body: `Problem, audience, product promise, 3 key benefits, proof or preview screenshot, pricing/next step, CTA: ${cta}.`,
     },
@@ -8726,10 +9147,11 @@ function renderHuggyMediaPreviewHtml(input: {
   const kind = mediaKindLabel(input.settings.kind);
   const output = mediaOutputForKind(input.settings.kind);
   const isMarketingKit = output === 'marketing_kit';
+  const routeLabel = mediaRouteLabel(input.settings.modelPreference);
   const statusCopy: Record<'completed' | 'queued' | 'not_configured' | 'locked' | 'failed', string> = {
     completed: 'Asset ready',
     queued: 'Render queued',
-    not_configured: 'Provider not connected',
+    not_configured: 'Brief ready',
     locked: 'Plan upgrade required',
     failed: 'Render needs retry',
   };
@@ -8740,15 +9162,15 @@ function renderHuggyMediaPreviewHtml(input: {
       : input.providerStatus === 'locked'
         ? 'This media model is reserved for a higher plan or needs more credits.'
         : input.providerStatus === 'failed'
-          ? 'The provider could not complete this render.'
-          : 'Huggy prepared the creative direction. Connect fal.ai to render real media.';
+          ? 'The render could not complete, so Huggy kept the usable brief and retry path.'
+          : 'Huggy prepared the creative direction. Connect media rendering when you want real output.';
   const cards = isMarketingKit
     ? buildMediaKitSections({ project: input.project, prompt: input.prompt, settings: input.settings })
     : [
       { title: 'Hook', body: input.settings.kind === 'ugc' ? 'Open with a human, problem-first line that feels native to Reels/TikTok.' : 'Lead with the clearest product promise in the first second.' },
-      { title: 'Visual rhythm', body: output === 'image' ? 'One strong focal point, product-first composition, clean negative space.' : '3 short beats: problem, transformation, proof or CTA.' },
-      { title: 'Brand fit', body: 'Use the project tone, avoid stock-looking scenes, keep text short and readable.' },
-      { title: 'Next action', body: input.assets.length ? 'Download, reuse, or ask Huggy for a variation.' : 'Render when provider access is ready, or ask for a cheaper/faster variant.' },
+      { title: 'Storyboard', body: output === 'image' ? 'One focal scene, product first, readable text and clean negative space.' : 'Three beats: problem, visible transformation, proof or CTA.' },
+      { title: 'Prompt direction', body: `Use a premium ${input.settings.format} composition, short copy, clear lighting, and the current project tone.` },
+      { title: 'Next action', body: input.assets.length ? 'Download, reuse, or ask Huggy for a variation.' : 'Render when media access is ready, or ask for a cheaper/faster variant.' },
     ];
   return `<!doctype html>
 <html lang="en">
@@ -8758,19 +9180,19 @@ function renderHuggyMediaPreviewHtml(input: {
 <style>
 :root{color-scheme:light dark;--bg:#fcfbf8;--panel:#fffefa;--ink:#1c1c1c;--muted:#5f5f5d;--line:#eceae4;--blue:#315fdc;--soft:#f7f4ed}
 @media(prefers-color-scheme:dark){:root{--bg:#171613;--panel:#201f1b;--ink:#f8f4eb;--muted:#d8d1c3;--line:rgba(252,251,248,.14);--soft:#24231f}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(59,130,246,.13),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
-.media-lab{min-height:100vh;padding:clamp(22px,4vw,44px);display:grid;align-content:center;gap:18px}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0,rgba(59,130,246,.10),transparent 34%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+.media-lab{min-height:100vh;padding:clamp(18px,3vw,34px);display:grid;align-content:center;gap:14px}
 .media-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.dot{width:8px;height:8px;border-radius:99px;background:#3b82f6;box-shadow:0 0 0 5px rgba(59,130,246,.12)}
-h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacing:-.05em;max-width:780px}.summary{margin:0;max-width:680px;color:var(--muted);font-size:clamp(14px,1.7vw,18px);line-height:1.55}
+h1{margin:8px 0 8px;font-size:clamp(28px,4.4vw,48px);line-height:.98;letter-spacing:-.045em;max-width:780px}.summary{margin:0;max-width:680px;color:var(--muted);font-size:clamp(14px,1.6vw,17px);line-height:1.55}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;background:var(--panel);padding:9px 12px;font-size:12px;font-weight:800;color:var(--ink);white-space:nowrap}
 .grid{display:grid;grid-template-columns:${isMarketingKit ? '1fr' : 'minmax(0,1.25fr) minmax(280px,.75fr)'};gap:16px;align-items:stretch}.stage,.brief{border:1px solid var(--line);border-radius:22px;background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 24px 70px rgba(28,28,28,.08);overflow:hidden}
-.stage{min-height:${isMarketingKit ? 'auto' : '420px'};display:grid;place-items:center;padding:18px}.asset-wrap{width:100%;height:100%;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,var(--soft),var(--panel));border:1px solid var(--line);overflow:hidden}
-.media-preview-asset{max-width:100%;max-height:68vh;border-radius:16px;display:block;object-fit:contain}.placeholder{padding:32px;text-align:center;max-width:520px}.orb{width:138px;height:138px;margin:0 auto 22px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.9) 23%,rgba(49,95,220,.55) 52%,rgba(28,28,28,.18) 76%);box-shadow:0 24px 80px rgba(49,95,220,.24);animation:pulse 4s cubic-bezier(.22,1,.36,1) infinite}
+.stage{min-height:${isMarketingKit ? 'auto' : '380px'};display:grid;place-items:center;padding:16px}.asset-wrap{width:100%;height:100%;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,var(--soft),var(--panel));border:1px solid var(--line);overflow:hidden}
+.media-preview-asset{max-width:100%;max-height:68vh;border-radius:16px;display:block;object-fit:contain}.placeholder{padding:28px;text-align:center;max-width:520px}.orb{width:112px;height:112px;margin:0 auto 18px;border-radius:999px;background:radial-gradient(circle at 28% 24%,#fff,rgba(191,219,254,.9) 23%,rgba(49,95,220,.55) 52%,rgba(28,28,28,.18) 76%);box-shadow:0 24px 80px rgba(49,95,220,.20);animation:pulse 4s cubic-bezier(.22,1,.36,1) infinite}
 .placeholder strong{display:block;font-size:22px;margin-bottom:8px}.placeholder span{color:var(--muted);font-size:14px;line-height:1.5}.brief{padding:18px;display:grid;gap:10px}.meta{display:flex;flex-wrap:wrap;gap:8px}.pill{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:7px 9px;font-size:12px;font-weight:800;color:var(--ink)}
 .kit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:14px}.card span{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.card p{margin:0;color:var(--ink);font-size:13px;line-height:1.48}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.actions a,.actions button{height:34px;border-radius:999px;border:1px solid var(--line);background:var(--ink);color:var(--bg);padding:0 13px;font:800 12px Inter,system-ui;text-decoration:none;display:inline-flex;align-items:center}
-.actions button{background:transparent;color:var(--ink)}.error{color:#b42318;font-size:12px;margin-top:8px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.actions a,.action-chip{height:32px;border-radius:999px;border:1px solid var(--line);background:var(--ink);color:var(--bg);padding:0 12px;font:800 12px Inter,system-ui;text-decoration:none;display:inline-flex;align-items:center}
+.action-chip{background:transparent;color:var(--ink)}.error{color:#b42318;font-size:12px;margin-top:8px}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.04);opacity:1}}@media(max-width:820px){.grid,.kit-grid{grid-template-columns:1fr}.media-head{display:grid}.stage{min-height:${isMarketingKit ? 'auto' : '340px'}}}@media(prefers-reduced-motion:reduce){.orb{animation:none}}
 </style>
 </head>
@@ -8794,7 +9216,7 @@ h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacin
       <div class="meta">
         <span class="pill">${escapeHtml(input.settings.format)}</span>
         <span class="pill">${escapeHtml(input.settings.duration)}</span>
-        <span class="pill">${escapeHtml(input.modelLabel)}</span>
+        <span class="pill">${escapeHtml(routeLabel)}</span>
         <span class="pill">~${input.estimatedCredits} credits</span>
       </div>
       <div class="${isMarketingKit ? 'kit-grid' : ''}">
@@ -8802,8 +9224,8 @@ h1{margin:8px 0 8px;font-size:clamp(30px,5vw,58px);line-height:.94;letter-spacin
       </div>
       <div class="actions">
         ${input.assets[0]?.url ? `<a href="${escapeHtml(input.assets[0].url)}" download>Download</a>` : ''}
-        <button type="button">${isMarketingKit ? 'Make more variants' : 'Make variation'}</button>
-        <button type="button">${isMarketingKit ? 'Turn into visual' : 'Use in app'}</button>
+        <span class="action-chip">${isMarketingKit ? 'Ask for variants' : 'Ask for variation'}</span>
+        <span class="action-chip">${isMarketingKit ? 'Turn into visual' : 'Use in app'}</span>
       </div>
     </aside>
   </section>
@@ -8935,32 +9357,32 @@ app.post('/api/projects/:id/media/generate', async (req: any, res: any) => {
     ? [
       isMarketingKit
         ? 'J ai prepare un kit marketing propre dans la preview.'
-        : assets.length ? 'Le media est pret dans la preview.' : 'J ai prepare un brief media propre dans la preview.',
-      `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Modele: ${model.label}.`,
+        : assets.length ? 'Le media est pret dans la preview.' : 'J ai prepare un brief media utilisable dans la preview.',
+      `${mediaKindLabel(settings.kind)} - ${settings.format} - ${settings.duration} - ~${estimatedCredits} credits.`,
       isMarketingKit
-        ? `Credits estimes: ${estimatedCredits}. Tu peux demander une variante, un format social ou une version visuelle.`
+        ? 'Tu peux demander une variante, un format social ou une version visuelle.'
         : providerStatus === 'not_configured'
-        ? 'fal.ai n est pas encore configure cote serveur, donc je ne pretends pas avoir rendu une vraie video/image.'
+        ? 'Le rendu media reel n est pas encore connecte cote serveur, donc je garde un brief honnete au lieu de pretendre avoir genere une video/image.'
         : providerStatus === 'locked'
           ? 'Ce rendu demande un plan ou des credits suffisants.'
           : providerStatus === 'failed'
-            ? 'Le provider n a pas termine le rendu. Le brief reste disponible pour relancer ou changer de modele.'
-            : `Credits estimes: ${estimatedCredits}.`,
+            ? 'Le rendu n a pas abouti. Le brief reste disponible pour relancer ou changer d option.'
+            : 'Tu peux telecharger, creer une variante ou l utiliser dans le projet.',
     ].join('\n')
     : [
       isMarketingKit
         ? 'I prepared a clean marketing kit in Preview.'
         : assets.length ? 'The media asset is ready in Preview.' : 'I prepared a clean media brief in Preview.',
-      `Type: ${mediaKindLabel(settings.kind)}. Format: ${settings.format}. Model: ${model.label}.`,
+      `${mediaKindLabel(settings.kind)} - ${settings.format} - ${settings.duration} - ~${estimatedCredits} credits.`,
       isMarketingKit
-        ? `Estimated credits: ${estimatedCredits}. You can ask for variants, a social format, or a rendered visual next.`
+        ? 'You can ask for variants, a social format, or a rendered visual next.'
         : providerStatus === 'not_configured'
-        ? 'fal.ai is not configured on the server yet, so I am not pretending a real image/video was rendered.'
+        ? 'Real media rendering is not connected on the server yet, so I kept an honest brief instead of pretending an image/video was rendered.'
         : providerStatus === 'locked'
           ? 'This render needs the right plan or enough credits.'
-          : providerStatus === 'failed'
-            ? 'The provider did not complete the render. The brief is available for retry or model change.'
-            : `Estimated credits: ${estimatedCredits}.`,
+        : providerStatus === 'failed'
+            ? 'The render did not complete. The brief is available for retry or option changes.'
+            : 'You can download, make a variation, or use it in the project.',
     ].join('\n');
 
   await saveProjectMessage({

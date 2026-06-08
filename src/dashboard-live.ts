@@ -836,6 +836,17 @@ function hydrateUserIdentity(detail?: any) {
   if (emailEl) emailEl.textContent = email || 'Session verified';
 }
 
+async function hydrateAdminConsoleAccess() {
+  const adminLink = document.getElementById('btn-admin-console') as HTMLElement | null;
+  if (!adminLink) return;
+  try {
+    const response = await apiFetch<{ success: boolean; user?: { is_platform_admin?: boolean } }>('/api/auth/me');
+    adminLink.style.display = response.user?.is_platform_admin ? 'flex' : 'none';
+  } catch {
+    adminLink.style.display = 'none';
+  }
+}
+
 async function loadLiveProjects() {
   try {
     localStorage.removeItem('huggy-projects');
@@ -1200,6 +1211,7 @@ function initDashboardLive() {
   void hydrateWorkspaceState();
   void loadLiveProjects();
   void loadLiveWallet();
+  void hydrateAdminConsoleAccess();
 }
 
 window.addEventListener('huggy:auth-ready', event => {
