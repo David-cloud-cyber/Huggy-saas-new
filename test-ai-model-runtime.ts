@@ -109,4 +109,49 @@ for (const modelId of AI_ALLOWED_MODELS) {
   assert.equal(profile.supports.longContext, true);
 }
 
+// Thinking/reasoning budget tests
+{
+  const runtime = buildAIModelRuntimeConfig({ modelId: 'openai/gpt-5.5', task: 'security' });
+  assert.ok(runtime.thinking, 'Runtime config should include thinking section');
+  assert.ok(runtime.thinking.budgetTokens > 0, 'Security task with reasoning model should get a thinking budget');
+  assert.equal(runtime.thinking.includeInResponse, false, 'Thinking should not be included in user-facing response');
+  assert.equal(runtime.thinking.enabled, true, 'Thinking should be enabled for security task with reasoning model');
+}
+
+{
+  const runtime = buildAIModelRuntimeConfig({ modelId: 'openai/gpt-5-mini', task: 'conversation' });
+  assert.ok('thinking' in runtime, 'All runtime configs should include thinking section');
+}
+
+// Expanded reasoning control detection
+{
+  const anthropicProfile = getAIModelCapabilityProfile('anthropic/claude-opus-4.8');
+  assert.equal(anthropicProfile.supports.reasoningControl, true, 'Claude Opus should support reasoning control');
+}
+
+{
+  const anthropicSonnetProfile = getAIModelCapabilityProfile('anthropic/claude-sonnet-4.6');
+  assert.equal(anthropicSonnetProfile.supports.reasoningControl, true, 'Claude Sonnet 4.6 should support reasoning control');
+}
+
+// Temperature safety via provider adapters
+{
+  const runtime = buildAIModelRuntimeConfig({ modelId: 'anthropic/claude-opus-4.8', task: 'security', stream: true });
+  const providerConfig = buildProviderRequestConfig(runtime);
+  if (runtime.thinking.enabled) {
+    assert.equal(providerConfig.temperature, 1.0, 'Thinking-enabled models should use temperature 1.0 for safety');
+    assert.ok(providerConfig.thinking_budget! > 0, 'Provider config should forward thinking budget');
+  }
+}
+
+// Thinking budget for OpenRouter extras
+{
+  const runtime = buildAIModelRuntimeConfig({ modelId: 'openai/gpt-5.5', task: 'backend_generation' });
+  const providerConfig = buildProviderRequestConfig(runtime);
+  const extras = toOpenRouterChatPayloadExtras(providerConfig);
+  if (providerConfig.thinking_budget) {
+    assert.ok(extras.thinking, 'OpenRouter extras should forward thinking params');
+  }
+}
+
 console.log('ai-model-runtime tests passed');

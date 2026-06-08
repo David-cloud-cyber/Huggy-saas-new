@@ -100,6 +100,11 @@ export type AIModelRuntimeConfig = {
     enabled: boolean;
     effort: 'low' | 'medium' | 'high';
   };
+  thinking: {
+    enabled: boolean;
+    budgetTokens: number;
+    includeInResponse: boolean;
+  };
   vision: {
     enabled: boolean;
   };
@@ -145,10 +150,14 @@ function knownLimitsForProvider(provider: ModelProvider, modelId: AllowedModelId
 }
 
 function supportsReasoningControl(provider: ModelProvider, modelId: AllowedModelId) {
-  // Keep this strict. Huggy can use a model for reasoning through prompts without
-  // sending provider-specific reasoning parameters unless that capability is
-  // explicitly known in this registry.
-  return provider === 'openai' && /gpt-5\.5/i.test(modelId);
+  // Expanded reasoning control detection for all major providers.
+  // Huggy sends provider-specific reasoning/thinking parameters only when
+  // the model is explicitly known to support them.
+  if (provider === 'openai' && /gpt-5\.5|gpt-5-pro|o[1-4]/i.test(modelId)) return true;
+  if (provider === 'anthropic' && /claude-opus|claude-sonnet-4/i.test(modelId)) return true;
+  if (provider === 'google' && /gemini-3-pro|gemini-3-ultra/i.test(modelId)) return true;
+  if (provider === 'deepseek' && /deepseek-r1|deepseek-v4/i.test(modelId)) return true;
+  return false;
 }
 
 export function getAIModelCapabilityProfile(modelId: AllowedModelId): AIModelCapabilityProfile {
@@ -222,6 +231,14 @@ function reasoningEffortForTask(profile: AIModelCapabilityProfile, task: AIWorkf
   if (profile.reasoning === 'frontier' && ['debug', 'security', 'backend_generation', 'database'].includes(task)) return 'high';
   if (['planning', 'frontend_generation', 'backend_generation', 'database', 'debug', 'design', 'security'].includes(task)) return 'medium';
   return 'low';
+}
+
+function thinkingBudgetForTask(profile: AIModelCapabilityProfile, task: AIWorkflowTask): number {
+  if (!profile.supports.reasoningControl) return 0;
+  if (['security', 'database', 'backend_generation'].includes(task) && (profile.reasoning === 'frontier' || profile.reasoning === 'high')) return 16384;
+  if (['debug', 'planning', 'frontend_generation'].includes(task)) return 8192;
+  if (['design', 'tests'].includes(task)) return 4096;
+  return 2048;
 }
 
 function responseFormatForTask(profile: AIModelCapabilityProfile, task: AIWorkflowTask): RuntimeResponseFormat {
@@ -303,6 +320,7 @@ export function buildAIModelRuntimeConfig(input: {
   if (tools.length) notes.push(`tools:${tools.length}`);
   if (input.hasVisionInput && profile.supports.vision) notes.push('vision:enabled');
   if (longContextEnabled) notes.push('long_context:enabled');
+  if (profile.supports.reasoningControl) notes.push(`thinking_budget:${thinkingBudgetForTask(profile, task)}`);
 
   return {
     profile,
@@ -317,6 +335,11 @@ export function buildAIModelRuntimeConfig(input: {
     reasoning: {
       enabled: profile.supports.reasoningControl && reasoningEffort !== 'low',
       effort: reasoningEffort,
+    },
+    thinking: {
+      enabled: profile.supports.reasoningControl && reasoningEffort !== 'low',
+      budgetTokens: thinkingBudgetForTask(profile, task),
+      includeInResponse: false,
     },
     vision: {
       enabled: Boolean(input.hasVisionInput && profile.supports.vision),

@@ -8,6 +8,8 @@ export type ProviderRequestConfig = {
   tools?: Record<string, unknown>[];
   toolChoice?: 'auto' | 'none';
   reasoning?: Record<string, unknown>;
+  thinking_budget?: number;
+  include_reasoning?: boolean;
   metadata?: Record<string, unknown>;
 };
 
@@ -39,9 +41,15 @@ function openAiCompatibleResponseFormat(runtime: AIModelRuntimeConfig) {
 
 export function buildProviderRequestConfig(runtime: AIModelRuntimeConfig): ProviderRequestConfig {
   const adapter = runtime.profile.adapter;
+
+  // Temperature safety: reasoning/thinking models often require temperature=1.0
+  const safeTemperature = runtime.thinking?.enabled && adapter !== 'gemini'
+    ? 1.0
+    : runtime.temperature;
+
   const base: ProviderRequestConfig = {
     adapter,
-    temperature: runtime.temperature,
+    temperature: safeTemperature,
     maxTokens: runtime.maxTokens,
     metadata: {
       task: runtime.task,
@@ -59,6 +67,8 @@ export function buildProviderRequestConfig(runtime: AIModelRuntimeConfig): Provi
       tools: tools.length ? tools : undefined,
       toolChoice: tools.length ? runtime.toolChoice : 'none',
       reasoning: runtime.reasoning.enabled ? { effort: runtime.reasoning.effort } : undefined,
+      thinking_budget: runtime.thinking?.enabled ? runtime.thinking.budgetTokens : undefined,
+      include_reasoning: runtime.thinking?.enabled ? runtime.thinking.includeInResponse : undefined,
     };
   }
 
@@ -75,6 +85,8 @@ export function buildProviderRequestConfig(runtime: AIModelRuntimeConfig): Provi
       toolChoice: runtime.tools.length ? runtime.toolChoice : 'none',
       // Anthropic-compatible requests should not receive OpenAI response_format.
       responseFormat: runtime.responseFormat.type === 'text' ? undefined : { type: 'json_instruction' },
+      thinking_budget: runtime.thinking?.enabled ? runtime.thinking.budgetTokens : undefined,
+      include_reasoning: runtime.thinking?.enabled ? runtime.thinking.includeInResponse : undefined,
     };
   }
 
@@ -94,6 +106,7 @@ export function buildProviderRequestConfig(runtime: AIModelRuntimeConfig): Provi
         }))
         : undefined,
       toolChoice: runtime.tools.length ? runtime.toolChoice : 'none',
+      thinking_budget: runtime.thinking?.enabled ? runtime.thinking.budgetTokens : undefined,
     };
   }
 
@@ -139,6 +152,7 @@ export function toOpenRouterChatPayloadExtras(config?: ProviderRequestConfig) {
     if (config.toolChoice && config.toolChoice !== 'none') extras.tool_choice = config.toolChoice;
   }
   if (config.reasoning) extras.reasoning = config.reasoning;
+  if (config.thinking_budget) extras.thinking = { budget_tokens: config.thinking_budget };
   return extras;
 }
 
