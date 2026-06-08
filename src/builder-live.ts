@@ -1,4 +1,4 @@
-import { apiFetch } from './lib/api';
+import { apiFetch, apiStream } from './lib/api';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import {
@@ -2042,8 +2042,14 @@ function createHuggyWorklineBlock(): HuggyWorklineBlock {
 }
 
 function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
-  void journal;
-  setMessageBlock(card, null);
+  if (!card || !journal) return;
+  setMessageBlock(card, {
+    ...journal,
+    entries: journal.entries.map(entry => ({
+      ...entry,
+      items: entry.items ? [...entry.items] : undefined,
+    })),
+  });
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -4151,6 +4157,7 @@ async function loadProject() {
     setPreviewDevice(normalizePreviewDevice(payload.workspace_state?.preview_device || userWorkspaceState?.builder_preview_device), false);
     syncWorkshopPreview();
     removeMessage(loading);
+    void restoreLatestWorklineFromRunHistory(payload);
     if (!payload.messages?.length) {
       showTransientNotice('Ready when you are.', 1600);
     }
@@ -4887,9 +4894,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
     return target;
   };
-  switchToPlainResponse();
-  setMessageShimmer(status, speaksFrench ? 'Huggy prepare le resultat...' : 'Huggy is preparing the result...', true);
-  updateMessage(status, speaksFrench ? 'Huggy prepare le resultat...' : 'Huggy is preparing the result...');
+  setWorkJournalBlock(status, journal);
+  journalTimer = window.setInterval(() => {
+    if (journal.status === 'active') scheduleJournal();
+  }, 1000);
   try {
     await ensureProjectForPrompt(safePrompt);
     if (activeWorkshop === 'media') {
