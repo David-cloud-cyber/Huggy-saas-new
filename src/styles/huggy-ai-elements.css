@@ -3,11 +3,11 @@
 }
 
 .huggy-workline {
-  width: min(760px, 100%);
+  width: min(680px, 100%);
   display: grid;
-  gap: 14px;
+  gap: 10px;
   color: var(--text, #201d17);
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 14px minmax(0, 1fr);
   animation: huggy-workline-in 180ms cubic-bezier(.22, 1, .36, 1) both;
 }
 
@@ -15,13 +15,13 @@
   position: relative;
   display: flex;
   justify-content: center;
-  padding-top: 9px;
+  padding-top: 7px;
 }
 
 .huggy-workline-rail::after {
   content: "";
   position: absolute;
-  top: 28px;
+  top: 22px;
   bottom: 2px;
   width: 1px;
   border-radius: 999px;
@@ -35,14 +35,14 @@
 .huggy-workline-rail span {
   position: relative;
   z-index: 1;
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
   background: var(--accent-blue, #2f6df6);
   box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--accent-blue, #2f6df6) 12%, transparent),
-    0 0 24px color-mix(in srgb, var(--accent-blue, #2f6df6) 28%, transparent);
-  animation: huggy-workline-pulse 1.55s ease-in-out infinite;
+    0 0 0 4px color-mix(in srgb, var(--accent-blue, #2f6df6) 10%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent-blue, #2f6df6) 22%, transparent);
+  animation: huggy-workline-pulse 1.8s ease-in-out infinite;
 }
 
 .huggy-workline[data-status="done"] .huggy-workline-rail span {
@@ -60,28 +60,28 @@
 .huggy-workline-body {
   min-width: 0;
   display: grid;
-  gap: 10px;
+  gap: 7px;
 }
 
 .huggy-workline-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 7px;
   color: color-mix(in srgb, var(--text, #201d17) 54%, transparent);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 520;
 }
 
 .huggy-workline-head span {
   color: var(--text, #201d17);
-  font-weight: 680;
+  font-weight: 720;
 }
 
 .huggy-workline-head strong,
 .huggy-workline-head em {
   color: color-mix(in srgb, var(--text, #201d17) 48%, transparent);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 620;
 }
@@ -90,13 +90,13 @@
   width: fit-content;
   max-width: 100%;
   margin: 0;
-  border: 1px solid color-mix(in srgb, var(--border, #e8e2d6) 72%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-surface, #fffdf8) 52%, transparent);
-  color: color-mix(in srgb, var(--text, #201d17) 76%, transparent);
-  padding: 8px 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text, #201d17) 80%, transparent);
+  padding: 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
@@ -108,7 +108,7 @@
 
 .huggy-workline-feed {
   display: grid;
-  gap: 14px;
+  gap: 9px;
 }
 
 .huggy-workline-note,
@@ -116,8 +116,8 @@
 .huggy-workline-live {
   margin: 0;
   color: var(--text, #201d17);
-  font-size: 14px;
-  line-height: 1.62;
+  font-size: 13px;
+  line-height: 1.55;
   letter-spacing: 0;
 }
 
@@ -125,7 +125,7 @@
   display: block;
   margin-top: 4px;
   color: color-mix(in srgb, var(--text, #201d17) 52%, transparent);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .huggy-workline-file,
@@ -134,15 +134,17 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: color-mix(in srgb, var(--text, #201d17) 56%, transparent);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 .huggy-workline-file svg {
   color: color-mix(in srgb, var(--text, #201d17) 46%, transparent);
   flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
 }
 
 .huggy-workline-file code,
@@ -185,24 +187,24 @@
 }
 
 .huggy-workline-final {
-  padding-top: 2px;
+  padding-top: 1px;
   white-space: pre-wrap;
 }
 
 .huggy-workline-live {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   color: color-mix(in srgb, var(--text, #201d17) 48%, transparent);
 }
 
 .huggy-workline-live-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   background: var(--accent-blue, #2f6df6);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-blue, #2f6df6) 13%, transparent);
-  animation: huggy-workline-pulse 1.45s ease-in-out infinite;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue, #2f6df6) 11%, transparent);
+  animation: huggy-workline-pulse 1.8s ease-in-out infinite;
 }
 
 .huggy-workline-divider {
@@ -223,14 +225,14 @@
 
 .huggy-workline-group {
   color: color-mix(in srgb, var(--text, #201d17) 52%, transparent);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .huggy-workline-group summary {
   width: fit-content;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   list-style: none;
   cursor: pointer;
   user-select: none;
@@ -241,21 +243,21 @@
 }
 
 .huggy-workline-icon {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
   display: inline-grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--text, #201d17) 28%, transparent);
   border-radius: 5px;
   color: color-mix(in srgb, var(--text, #201d17) 54%, transparent);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
 }
 
 .huggy-workline-group ul {
   display: grid;
-  gap: 7px;
-  margin: 10px 0 0 25px;
+  gap: 6px;
+  margin: 8px 0 0 22px;
   padding: 0;
 }
 
@@ -705,6 +707,24 @@
 }
 
 @media (max-width: 640px) {
+  .huggy-workline {
+    width: 100%;
+    gap: 8px;
+    grid-template-columns: 10px minmax(0, 1fr);
+  }
+
+  .huggy-workline-feed {
+    gap: 8px;
+  }
+
+  .huggy-workline-note,
+  .huggy-workline-final,
+  .huggy-workline-live,
+  .huggy-workline-file,
+  .huggy-workline-command {
+    font-size: 12px;
+  }
+
   .huggy-mission-stream {
     width: 100%;
   }

@@ -2119,10 +2119,19 @@ function generatedCodeBlockedText(speaksFrench: boolean) {
 }
 
 function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
-  const text = redactSecrets(String(value || '').trim());
+  const text = repairTextEncoding(redactSecrets(String(value || '').trim()));
   if (!text) return fallback;
+  const unfenced = text
+    .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (/^[\[{]/.test(unfenced) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(unfenced)) {
+    return fallback || (speaksFrench
+      ? 'J’ai préparé le travail dans le projet. La preview et les fichiers doivent rester la source de vérité.'
+      : 'I prepared the work in the project. The preview and files should stay the source of truth.');
+  }
   if (looksLikeGeneratedSourceDump(text)) return fallback || generatedCodeBlockedText(speaksFrench);
-  return text;
+  return text.replace(/\n\s*[-*]\s*$/gm, '').trim();
 }
 
 function generationReadyText(speaksFrench: boolean) {
@@ -4058,12 +4067,12 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
     const payload = redactInternalModelFields(step.public_payload || {});
     const message = redactSecrets(String(step.message || '')).trim();
     if (step.event_type === 'narration') {
-      const text = redactSecrets(String(payload.text || message || '')).trim();
+      const text = cleanPublicJournalText(payload.text || message || '', true);
       if (text) journal.entries.push({ id: journalEntryId('narration'), kind: 'narration', text, status: 'done' });
       return;
     }
     if (step.event_type === 'thinking' && journal.status === 'active') {
-      const text = redactSecrets(String(payload.text || message || 'En reflexion')).trim();
+      const text = cleanPublicJournalText(payload.text || message || 'En réflexion', true);
       if (text) journal.entries.push({ id: journalEntryId('thinking'), kind: 'thinking', text, status: 'muted' });
       return;
     }
@@ -4105,15 +4114,15 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
       return;
     }
     if (step.event_type === 'final_summary') {
-      finalText = redactSecrets(String(payload.text || message || '')).trim();
+      finalText = cleanPublicJournalText(payload.text || message || '', true);
       return;
     }
     if (step.event_type === 'error') {
-      journal.entries.push({ id: journalEntryId('error'), kind: 'update', text: message || 'Le run a echoue.', status: 'failed' });
+      journal.entries.push({ id: journalEntryId('error'), kind: 'update', text: cleanPublicJournalText(message || 'Le run a échoué.', true), status: 'failed' });
       return;
     }
     if (step.event_type === 'cancelled') {
-      journal.entries.push({ id: journalEntryId('cancelled'), kind: 'update', text: message || 'Travail annule.', status: 'cancelled' });
+      journal.entries.push({ id: journalEntryId('cancelled'), kind: 'update', text: cleanPublicJournalText(message || 'Travail annulé.', true), status: 'cancelled' });
     }
   });
 
@@ -4191,8 +4200,53 @@ function journalEntryId(prefix = 'entry') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function journalTextKey(value: string) {
+  return repairTextEncoding(redactSecrets(String(value || '')))
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[`´’‘ʼʹ"]/g, "'")
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140);
+}
+
+function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = '') {
+  const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).trim();
+  if (!raw) return '';
+  const withoutFence = raw
+    .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  if (!withoutFence) return '';
+  if (/^[\[{]/.test(withoutFence) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(withoutFence)) {
+    return speaksFrench
+      ? 'J’ai gardé le résultat structuré dans le projet.'
+      : 'I kept the structured result in the project.';
+  }
+  const compact = withoutFence.replace(/\s+/g, ' ').trim();
+  const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
+    { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
+    { pattern: /^i am deciding whether to answer, plan, edit, or generate\.?$/i, fr: 'Je choisis l’action juste.', en: 'I am choosing the right action.' },
+    { pattern: /^i am starting the file work\.?$/i, fr: 'Je prépare les fichiers.', en: 'I am preparing the files.' },
+    { pattern: /^normalizing generated files and building preview\.?$/i, fr: 'Je prépare une preview utilisable.', en: 'I am preparing a usable preview.' },
+    { pattern: /^i am turning the output into a usable project before display\.?$/i, fr: 'Je transforme la génération en projet utilisable.', en: 'I am turning the generation into a usable project.' },
+    { pattern: /^i am keeping what already works and preparing a readable diff\.?$/i, fr: 'Je garde ce qui fonctionne et je prépare un diff lisible.', en: 'I am keeping what works and preparing a readable diff.' },
+    { pattern: /^i am preparing the preview\.?$/i, fr: 'Je prépare la preview.', en: 'I am preparing the preview.' },
+    { pattern: /^i am rebuilding the preview\.?$/i, fr: 'Je reconstruis la preview.', en: 'I am rebuilding the preview.' },
+    { pattern: /^i am rebuilding the preview before delivering anything\.?$/i, fr: 'Je vérifie la preview avant de livrer.', en: 'I am checking the preview before delivery.' },
+    { pattern: /^i show a work state only during the real preview build\.?$/i, fr: 'Je montre l’attente seulement pendant la vraie construction.', en: 'I show waiting only during the real build.' },
+    { pattern: /^the published version stays unchanged until you click publish\.?$/i, fr: 'La version publiée reste inchangée jusqu’à Publish.', en: 'The published version stays unchanged until Publish.' },
+    { pattern: /^huggy is moving\.?$/i, fr: 'Huggy avance.', en: 'Huggy is moving.' },
+  ];
+  const found = replacements.find(item => item.pattern.test(compact));
+  const normalized = found ? (speaksFrench ? found.fr : found.en) : compact;
+  return normalized.length > 360 ? `${normalized.slice(0, 357).trimEnd()}...` : normalized;
+}
+
 function journalEventText(eventType: string, rawMessage: string, payload: Record<string, any>, speaksFrench: boolean) {
-  const fallback = redactSecrets(rawMessage || payload.step_label || payload.step_detail || '').trim();
+  const fallback = cleanPublicJournalText(rawMessage || payload.step_label || payload.step_detail || '', speaksFrench);
   const fr: Record<string, string> = {
     run_started: 'Je prends la demande.',
     context_loaded: 'Je lis le projet et l’historique utile.',
@@ -4273,8 +4327,8 @@ function journalEventText(eventType: string, rawMessage: string, payload: Record
 }
 
 function journalDetailFromPayload(payload: Record<string, any>, rawMessage = '') {
-  const detail = redactSecrets(String(payload.step_detail || payload.detail || '')).trim();
-  const message = redactSecrets(rawMessage).trim();
+  const detail = repairTextEncoding(redactSecrets(String(payload.step_detail || payload.detail || ''))).trim();
+  const message = repairTextEncoding(redactSecrets(rawMessage)).trim();
   if (detail && detail !== message) return detail;
   return '';
 }
@@ -4327,8 +4381,8 @@ function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: 
 }
 
 function commandSummaryItem(payload: Record<string, any>, rawMessage = '') {
-  const command = redactSecrets(String(payload.command || '')).trim();
-  const summary = redactSecrets(String(payload.output_summary || payload.summary || rawMessage || '')).trim();
+  const command = repairTextEncoding(redactSecrets(String(payload.command || ''))).trim();
+  const summary = repairTextEncoding(redactSecrets(String(payload.output_summary || payload.summary || rawMessage || ''))).trim();
   return [command, summary].filter(Boolean).join(' — ');
 }
 
@@ -4398,7 +4452,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const runningCommandEntries = new Map<string, HuggyWorklineEntry>();
   const seenJournalKeys = new Set<string>();
   let journalFrame = 0;
+  let journalFlushTimer: number | null = null;
+  let lastJournalFlushAt = 0;
   let lastWorkingTickAt = 0;
+  let lastActiveTextAt = 0;
   let journalTimer: number | null = null;
   const elapsedForStatus = () => {
     const startedAt = Number(status?.dataset.workingStartedAt || 0);
@@ -4406,11 +4463,30 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const flushJournal = () => {
     journalFrame = 0;
+    lastJournalFlushAt = Date.now();
     journal.elapsed = elapsedForStatus() || journal.elapsed;
     setWorkJournalBlock(status, journal);
   };
-  const scheduleJournal = () => {
-    if (!journalFrame) journalFrame = window.requestAnimationFrame(flushJournal);
+  const scheduleJournal = (immediate = false) => {
+    if (journalFrame) return;
+    if (immediate && journalFlushTimer !== null) {
+      window.clearTimeout(journalFlushTimer);
+      journalFlushTimer = null;
+    } else if (journalFlushTimer !== null) {
+      return;
+    }
+    const wait = immediate ? 0 : Math.max(0, 140 - (Date.now() - lastJournalFlushAt));
+    const requestFrame = () => {
+      journalFrame = window.requestAnimationFrame(flushJournal);
+    };
+    if (wait > 0) {
+      journalFlushTimer = window.setTimeout(() => {
+        journalFlushTimer = null;
+        requestFrame();
+      }, wait);
+      return;
+    }
+    requestFrame();
   };
   const switchToPlainResponse = () => {
     if (plainResponseMode) return;
@@ -4422,19 +4498,22 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setMessageBlock(status, null);
   };
   const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyWorklineEntry['status'] = 'done') => {
-    const clean = redactSecrets(text).trim();
+    const clean = cleanPublicJournalText(text, speaksFrench);
     if (!clean) return;
-    const dedupeKey = key || clean;
+    const cleanDetail = cleanPublicJournalText(detail, speaksFrench);
+    const dedupeKey = key || journalTextKey(clean);
     if (seenJournalKeys.has(dedupeKey)) return;
+    const lastEntry = journal.entries[journal.entries.length - 1];
+    if (lastEntry?.kind !== 'group' && journalTextKey(lastEntry?.text || '') === journalTextKey(clean)) return;
     seenJournalKeys.add(dedupeKey);
     journal.entries.push({
       id: journalEntryId('line'),
       kind: 'update',
       text: clean,
-      detail: redactSecrets(detail).trim() || undefined,
+      detail: cleanDetail && journalTextKey(cleanDetail) !== journalTextKey(clean) ? cleanDetail : undefined,
       status: entryStatus,
     });
-    if (journal.entries.length > 36) journal.entries.splice(0, journal.entries.length - 36);
+    if (journal.entries.length > 28) journal.entries.splice(0, journal.entries.length - 28);
     scheduleJournal();
   };
   const addJournalDivider = (text: string, key = text) => {
@@ -4509,9 +4588,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const item = commandSummaryItem(payload, rawMessage);
     if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes executees' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
-  const setJournalActive = (label: string) => {
-    journal.activeText = redactSecrets(label).trim() || journal.activeText;
-    scheduleJournal();
+  const setJournalActive = (label: string, urgent = false) => {
+    const clean = cleanPublicJournalText(label, speaksFrench);
+    if (!clean || journal.activeText === clean) return;
+    const now = Date.now();
+    if (!urgent && now - lastActiveTextAt < 650) return;
+    lastActiveTextAt = now;
+    journal.activeText = clean;
+    scheduleJournal(urgent);
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     void key;
@@ -4629,12 +4713,13 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventPayload.agent_run_id) lastAgentRunId = String(eventPayload.agent_run_id);
 
       if (eventType === 'narration') {
-        addJournalLine(String(eventPayload.text || eventMessage || ''), detail, `narration:${journal.entries.length}`, 'done');
+        const text = cleanPublicJournalText(eventPayload.text || eventMessage || '', speaksFrench);
+        addJournalLine(text, detail, `narration:${journalTextKey(text)}`, 'done');
         return;
       }
 
       if (eventType === 'thinking') {
-        setJournalActive(String(eventPayload.text || eventMessage || say('En reflexion', 'Thinking')));
+        setJournalActive(String(eventPayload.text || eventMessage || say('En réflexion', 'Thinking')));
         return;
       }
 
@@ -4689,15 +4774,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
 
       if (eventType === 'final_summary') {
-        streamFinalText = String(eventPayload.text || eventMessage || streamFinalText || '').trim();
+        streamFinalText = cleanPublicJournalText(eventPayload.text || eventMessage || streamFinalText || '', speaksFrench);
         journal.finalText = streamFinalText;
-        scheduleJournal();
+        scheduleJournal(true);
         return;
       }
 
       if (eventType === 'working_tick') {
         const now = Date.now();
-        if (now - lastWorkingTickAt > 2800) {
+        if (now - lastWorkingTickAt > 3400) {
           lastWorkingTickAt = now;
           setJournalActive(String(eventPayload.step_label || eventPayload.step_detail || eventMessage || say('Huggy avance', 'Huggy is moving')));
         }
@@ -4782,6 +4867,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'preview_ready') {
         previewReadyPayload = eventPayload;
         finalPayload = eventPayload;
+        setJournalActive(journalEventText(eventType, eventMessage, eventPayload, speaksFrench), true);
         if (eventPayload.project?.id) {
           currentProjectId = String(eventPayload.project.id);
           setCurrentBuilderProjectId(currentProjectId);
@@ -4819,8 +4905,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (eventType === 'error') {
         journal.status = 'failed';
         journal.activeText = '';
-        addJournalLine(eventMessage || say('Le run a échoué.', 'The run failed.'), detail, `event:${eventType}:${journal.entries.length}`, 'failed');
-        scheduleJournal();
+        addJournalLine(eventMessage || say('Le run a échoué.', 'The run failed.'), detail, `event:${eventType}:${journalTextKey(eventMessage)}`, 'failed');
+        scheduleJournal(true);
         return;
       }
 
@@ -4828,7 +4914,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         journal.status = 'cancelled';
         journal.activeText = '';
         addJournalLine(eventMessage || say('Travail annulé.', 'Work cancelled.'), detail, `event:${eventType}`, 'cancelled');
-        scheduleJournal();
+        scheduleJournal(true);
         return;
       }
 
@@ -4919,6 +5005,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
   } finally {
     if (journalTimer !== null) window.clearInterval(journalTimer);
+    if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);
     flushJournal();
     setBusy(false);

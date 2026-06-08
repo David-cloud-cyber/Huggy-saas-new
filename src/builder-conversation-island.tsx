@@ -1250,31 +1250,42 @@ function renderStandardMessageContent(message: HuggyConversationMessage) {
 
 function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
   const statusLabel = block.status === "done"
-    ? "Prêt à tester"
+    ? "Terminé"
     : block.status === "failed"
-      ? "Draft à corriger"
+      ? "À corriger"
       : block.status === "cancelled"
         ? "Arrêté"
         : "En cours";
   const elapsed = block.elapsed ? block.elapsed : "";
-  const visibleEntries = block.entries.slice(-18);
+  const maxVisibleEntries = block.status === "active" ? 9 : 11;
+  const hiddenEntryCount = Math.max(0, block.entries.length - maxVisibleEntries);
+  const visibleEntries = block.entries.slice(-maxVisibleEntries);
   const currentLine = block.status === "active"
-    ? block.activeText || "Huggy prépare la suite"
-    : block.finalText || statusLabel;
+    ? block.activeText || "Je prépare la suite."
+    : block.status === "failed"
+      ? "Le travail reste récupérable."
+      : block.status === "cancelled"
+        ? "Le run a été arrêté."
+        : "Version prête à vérifier.";
 
   return (
-    <div className="huggy-workline" data-status={block.status}>
+    <div className="huggy-workline" data-status={block.status} aria-live={block.status === "active" ? "polite" : undefined}>
       <div className="huggy-workline-rail" aria-hidden="true">
         <span />
       </div>
       <div className="huggy-workline-body">
         <div className="huggy-workline-head">
-          <span>Huggy Workline</span>
+          <span>Huggy</span>
           <strong>{statusLabel}</strong>
           {elapsed ? <em>{elapsed}</em> : null}
         </div>
         <p className="huggy-workline-current">{currentLine}</p>
         <div className="huggy-workline-feed">
+          {hiddenEntryCount > 0 ? (
+            <p className="huggy-workline-note" data-status="muted">
+              {hiddenEntryCount} étapes précédentes compactées.
+            </p>
+          ) : null}
           {visibleEntries.map(entry => {
           if (entry.kind === "divider") {
             return (
