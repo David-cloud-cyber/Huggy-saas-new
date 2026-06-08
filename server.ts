@@ -127,6 +127,17 @@ import {
   shouldDeliverRecoverableDraft,
   validateExecutionOutputContract,
 } from './src/services/agent-execution-os.ts';
+import {
+  buildDurableCheckpoint,
+  buildDurableRunContract,
+  buildDurableRunPayload,
+  decideDurableRunContinuation,
+  durablePhaseForEvent,
+  nextDurablePhase,
+  shouldResumeRecoverableDraft,
+  type DurableRunCheckpoint,
+  type DurableRunPhase,
+} from './src/services/durable-agent-run.ts';
 import { buildAgentImprovementSignal, buildUserFeedbackImprovementSignal } from './src/services/agent-self-improvement.ts';
 import {
   buildHuggyCloudSchemaName,
@@ -5979,6 +5990,7 @@ async function createAgentRun(project: GeneratedProject, userId: string, request
       auto_plan_required: decision.autoPlanRequired,
       next_action: decision.nextAction,
       routing_source: decision.routingSource,
+      durable_run: (contextPack as any)?.durable_run || null,
     }),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -6050,6 +6062,52 @@ async function saveAgentRunStep(input: {
   if (error && isMissingAgentV2TableError(error)) return row;
   if (error) console.warn('[huggy:agent_run_step_persistence_skipped]', { message: redactSecrets(error.message, '[redacted]') });
   return row;
+}
+
+async function saveDurableRunCheckpoint(input: {
+  agentRunId: string;
+  project: GeneratedProject;
+  userId: string;
+  requestId: string;
+  contract: ReturnType<typeof buildDurableRunContract>;
+  phase: DurableRunPhase;
+  sequenceNumber: number;
+  attempt?: number;
+  nextPhase?: DurableRunPhase | null;
+  message?: string;
+  evidence?: Record<string, unknown>;
+  stopReason?: DurableRunCheckpoint['stop_reason'];
+}) {
+  if (!input.agentRunId || !input.contract.enabled) return null;
+  const checkpoint = buildDurableCheckpoint({
+    contract: input.contract,
+    phase: input.phase,
+    runId: input.agentRunId,
+    projectId: input.project.id,
+    requestId: input.requestId,
+    attempt: input.attempt,
+    nextPhase: input.nextPhase,
+    stopReason: input.stopReason || null,
+    message: input.message,
+    evidence: input.evidence,
+  });
+  await saveAgentRunStep({
+    agent_run_id: input.agentRunId,
+    project: input.project,
+    user_id: input.userId,
+    sequence_number: input.sequenceNumber,
+    event_type: 'durable_checkpoint',
+    status: checkpoint.status === 'active' ? 'completed' : checkpoint.status,
+    message: checkpoint.public_message,
+    payload: buildDurableRunPayload({ contract: input.contract, checkpoint }),
+  }).catch(error => {
+    console.warn('[huggy:durable_checkpoint_skipped]', {
+      project_id: input.project.id,
+      message: redactSecrets(error?.message || String(error), '[redacted]'),
+    });
+  });
+  await updateAgentRunV3Meta(input.agentRunId, buildDurableRunPayload({ contract: input.contract, checkpoint })).catch(() => null);
+  return checkpoint;
 }
 
 async function listAgentRuns(projectId: string, limitValue = 20) {
@@ -6392,10 +6450,12 @@ async function finalReliabilityAutoFix(input: {
   let reliabilitySummary = summarizeReliabilityGate(verificationChecks);
   let qualitySummary = summarizeQualityForMemory(verificationChecks);
   let autoFixPatch: any = null;
+  let attempts = 0;
 
   for (let attempt = 1; reliabilitySummary.status === 'failed' && attempt <= input.maxAttempts; attempt += 1) {
     const fix = applyAutoFix(input.project, files, reliabilitySummaryToAutoFixErrors(reliabilitySummary));
     if (!fix.fixed) break;
+    attempts = attempt;
     autoFixPatch = fix.patch;
     files = fix.files;
     pipeline = runPreviewPipeline(input.project, files);
@@ -6446,6 +6506,7 @@ async function finalReliabilityAutoFix(input: {
     reliabilitySummary,
     qualitySummary,
     autoFixPatch,
+    attempts,
   };
 }
 
@@ -9593,14 +9654,41 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const recentHistory = await getRecentDecisionHistory(project.id, 6);
-  const decision = await resolveAgentDecision({
+  const resumeRecoverableDraftRequested = shouldResumeRecoverableDraft({
+    prompt,
+    previewStatus: project.preview_status,
+  });
+  const initialDecision = await resolveAgentDecision({
     prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
     recentHistory,
   });
+  const decision: IntentDecision = resumeRecoverableDraftRequested && !initialDecision.requiresFileChanges
+    ? {
+      ...initialDecision,
+      intent: 'debug_fix',
+      confidence: Math.max(initialDecision.confidence || 0, 0.96),
+      requiresFileChanges: true,
+      requiresPreviewRebuild: true,
+      requiresCredits: true,
+      nextAction: 'debug_fix',
+      autoPlanRequired: false,
+      userVisibleReason: 'Continuing directly from the recoverable draft.',
+      reason: 'resume_recoverable_draft',
+    }
+    : initialDecision;
   const reliability = buildReliabilityDecision(decision);
+  const durableRunContract = buildDurableRunContract({
+    contract: decision.executionContract || buildExecutionContract({
+      prompt: agentPrompt,
+      requestedMode,
+      hasFiles: existingFiles.length > 0,
+      legacyDecision: decision,
+    }),
+    maxAutoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+  });
   const seniorAgentContext = compileSeniorAgentContext({
     prompt: agentPrompt,
     project,
@@ -9659,6 +9747,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }),
       senior_agent_os: seniorAgentContext,
       deep_reasoning_contract: deepReasoningContract,
+      durable_run: durableRunContract ? buildDurableRunPayload({ contract: durableRunContract }).durable_run : null,
     };
     agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack)).id;
   }
@@ -9921,6 +10010,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         draftSaved: true,
         assistantText: summary,
       });
+      const durableContinuation = decideDurableRunContinuation({
+        reliabilityStatus: reliabilitySummary.status,
+        previewStatus: 'needs_fix',
+        autoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+        maxAutoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+        hasCredits: true,
+      });
       await saveProjectMessage({
         organization_id: recoverableProject.organization_id,
         project_id: recoverableProject.id,
@@ -9947,6 +10043,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           reliability: reliabilitySummary,
           quality: qualitySummary,
           output_contract: outputContract,
+          durable_run: buildDurableRunPayload({
+            contract: durableRunContract,
+            continuation: durableContinuation,
+          }).durable_run,
           browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
         },
       }).catch(() => null);
@@ -9965,6 +10065,11 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         reliability,
         reliability_summary: reliabilitySummary,
         output_contract: outputContract,
+        durable_run: buildDurableRunPayload({
+          contract: durableRunContract,
+          continuation: durableContinuation,
+        }).durable_run,
+        durable_continuation: durableContinuation,
         runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
         preview: {
           status: 'needs_fix',
@@ -10130,6 +10235,8 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const streamIsFrench = isLikelyFrenchPrompt(prompt);
   const streamCopy = (fr: string, en: string) => streamIsFrench ? fr : en;
   let latestVisibleStreamEvent = 'queued';
+  let durableRunContract: ReturnType<typeof buildDurableRunContract> | null = null;
+  let durableRunPhase: DurableRunPhase = 'idle';
   const contextualWorkingStatus = () => {
     const statusByEvent: Record<string, { message: string; label: string; detail: string }> = {
       queued: {
@@ -10249,7 +10356,29 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     if (event_type !== 'working_tick') latestVisibleStreamEvent = event_type;
     sequence += 1;
     const publicMessage = redactSecrets(message);
-    const publicPayload = redactSecretPayload(redactPublicAgentPayload({ request_id: requestId, ...(agentRunId ? { agent_run_id: agentRunId } : {}), ...payload }));
+    const nextPhase = durableRunContract ? nextDurablePhase(durableRunPhase, event_type) : null;
+    if (nextPhase) durableRunPhase = nextPhase;
+    const durableCheckpoint = durableRunContract && nextPhase && event_type !== 'working_tick'
+      ? buildDurableCheckpoint({
+        contract: durableRunContract,
+        phase: nextPhase,
+        runId: agentRunId || null,
+        projectId: project.id,
+        requestId,
+        message: publicMessage,
+        evidence: {
+          event_type,
+          preview_status: (payload as any)?.preview_status || (payload as any)?.preview?.status || null,
+          runner_status: (payload as any)?.runner?.status || (payload as any)?.status || null,
+        },
+      })
+      : null;
+    const publicPayload = redactSecretPayload(redactPublicAgentPayload({
+      request_id: requestId,
+      ...(agentRunId ? { agent_run_id: agentRunId } : {}),
+      ...payload,
+      ...(durableCheckpoint ? { durable_checkpoint: durableCheckpoint } : {}),
+    }));
     let event: any = {
       id: `${requestId}_${sequence}`,
       organization_id: project.organization_id,
@@ -10281,6 +10410,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           message: publicMessage,
           payload: publicPayload,
         });
+        if (durableRunContract && durableCheckpoint) {
+          await updateAgentRunV3Meta(agentRunId, buildDurableRunPayload({
+            contract: durableRunContract,
+            checkpoint: durableCheckpoint,
+          })).catch(() => null);
+        }
       }
     } catch (error: any) {
       console.warn('[huggy:event_persistence_skipped]', {
@@ -10424,6 +10559,10 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   const recentHistory = await getRecentDecisionHistory(project.id, 6);
   const lastPlanForDecision = await getLastProjectPlan(project.id);
+  const resumeRecoverableDraftRequested = shouldResumeRecoverableDraft({
+    prompt,
+    previewStatus: project.preview_status,
+  });
   const quickDecision = await resolveAgentDecision({
     prompt,
     requestedMode,
@@ -10431,7 +10570,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     lastPlan: lastPlanForDecision,
     recentHistory,
   });
-  if (canUseFastAnswerPath(quickDecision, prompt)) {
+  if (!resumeRecoverableDraftRequested && canUseFastAnswerPath(quickDecision, prompt)) {
     const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
     const quickWallet = quickEstimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
     await saveProjectMessage({
@@ -10572,14 +10711,37 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   }
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = lastPlanForDecision;
-  const decision = await resolveAgentDecision({
+  const initialDecision = await resolveAgentDecision({
     prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
     recentHistory,
   });
+  const decision: IntentDecision = resumeRecoverableDraftRequested && !initialDecision.requiresFileChanges
+    ? {
+      ...initialDecision,
+      intent: 'debug_fix',
+      confidence: Math.max(initialDecision.confidence || 0, 0.96),
+      requiresFileChanges: true,
+      requiresPreviewRebuild: true,
+      requiresCredits: true,
+      nextAction: 'debug_fix',
+      autoPlanRequired: false,
+      userVisibleReason: streamCopy('Reprise directe de la draft recuperable.', 'Continuing directly from the recoverable draft.'),
+      reason: 'resume_recoverable_draft',
+    }
+    : initialDecision;
   const reliability = buildReliabilityDecision(decision);
+  durableRunContract = buildDurableRunContract({
+    contract: decision.executionContract || buildExecutionContract({
+      prompt: agentPrompt,
+      requestedMode,
+      hasFiles: existingFiles.length > 0,
+      legacyDecision: decision,
+    }),
+    maxAutoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+  });
   const seniorAgentContext = compileSeniorAgentContext({
     prompt: agentPrompt,
     project,
@@ -10650,6 +10812,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       }),
       senior_agent_os: seniorAgentContext,
       deep_reasoning_contract: deepReasoningContract,
+      durable_run: buildDurableRunPayload({ contract: durableRunContract }).durable_run,
     };
     const contextPack = AGENT_V3_ENABLED
       ? buildAgentV3Context({ baseContext: baseContextPack, runnerHistory, researchHistory, toolBudget: DEFAULT_AGENT_V3_BUDGET })
@@ -11015,47 +11178,87 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
       const effectivePrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
       const messages = buildGenerationMessages({ projectName: project.name, prompt: effectivePrompt, existingFiles, researchContext, seniorAgentContext, deepReasoningContract });
-      const runtimeOptions = createProviderRuntimeOptions({
-        model: selectedModel,
-        prompt: effectivePrompt,
-        decision,
-        files: existingFiles,
-        mode: 'generation',
-        stream: true,
-        timeoutMs: 180_000,
-        maxTokens: 32_000,
-      });
+      const streamFromModel = async (modelToUse: AllowedModelId) => {
+        const runtimeOptions = createProviderRuntimeOptions({
+          model: modelToUse,
+          prompt: effectivePrompt,
+          decision,
+          files: existingFiles,
+          mode: 'generation',
+          stream: true,
+          timeoutMs: 180_000,
+          maxTokens: 32_000,
+        });
 
-      let lastModelProgressAt = Date.now();
-      let lastModelProgressChars = 0;
-      for await (const event of providerGateway.streamChat(selectedModel, messages, {
-        timeoutMs: runtimeOptions.runtime.timeoutMs,
-        runtimeConfig: runtimeOptions.providerConfig,
-      })) {
-        const session = await getBuildSession(buildSessionId);
-        if (session?.status === 'cancelled') {
-          await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId, agent_run_id: agentRunId });
-          await updateAgentRunStatus(agentRunId, 'cancelled', { duration_ms: Date.now() - streamStartedAt });
-          endStream();
-          return;
-        }
-        if (event.type === 'token') {
-          generatedText += event.text;
-          model = event.model;
-          const now = Date.now();
-          if (generatedText.length - lastModelProgressChars >= 1600 || now - lastModelProgressAt >= 2500) {
-            lastModelProgressAt = now;
-            lastModelProgressChars = generatedText.length;
-            await send('model_streaming', streamCopy('Reception des fichiers generes.', 'Receiving generated files.'), {
-              streamed_chars: generatedText.length,
-              step_label: streamCopy('Reception du code.', 'Receiving code.'),
-              step_detail: streamCopy('Je conserve le flux actif pendant que les fichiers arrivent.', 'I keep the stream active while files arrive.'),
-            });
+        let lastModelProgressAt = Date.now();
+        let lastModelProgressChars = 0;
+        for await (const event of providerGateway.streamChat(modelToUse, messages, {
+          timeoutMs: runtimeOptions.runtime.timeoutMs,
+          runtimeConfig: runtimeOptions.providerConfig,
+        })) {
+          const session = await getBuildSession(buildSessionId);
+          if (session?.status === 'cancelled') {
+            await send('cancelled', 'Build cancelled by user.', { build_session_id: buildSessionId, agent_run_id: agentRunId });
+            await updateAgentRunStatus(agentRunId, 'cancelled', { duration_ms: Date.now() - streamStartedAt });
+            endStream();
+            return false;
           }
-        } else {
-          model = event.model;
-          costUsd = event.cost_usd;
+          if (event.type === 'token') {
+            generatedText += event.text;
+            model = event.model;
+            const now = Date.now();
+            if (generatedText.length - lastModelProgressChars >= 1600 || now - lastModelProgressAt >= 2500) {
+              lastModelProgressAt = now;
+              lastModelProgressChars = generatedText.length;
+              await send('model_streaming', streamCopy('Reception des fichiers generes.', 'Receiving generated files.'), {
+                streamed_chars: generatedText.length,
+                step_label: streamCopy('Reception du code.', 'Receiving code.'),
+                step_detail: streamCopy('Je conserve le flux actif pendant que les fichiers arrivent.', 'I keep the stream active while files arrive.'),
+              });
+            }
+          } else {
+            model = event.model;
+            costUsd = event.cost_usd;
+          }
         }
+        return true;
+      };
+
+      try {
+        const completed = await streamFromModel(selectedModel);
+        if (!completed) return;
+      } catch (error: any) {
+        const profile = getAIModelCapabilityProfile(selectedModel);
+        const fallbackModel = profile.fallbackPrimary && profile.fallbackPrimary !== selectedModel
+          ? profile.fallbackPrimary
+          : profile.fallbackSecondary && profile.fallbackSecondary !== selectedModel
+            ? profile.fallbackSecondary
+            : null;
+        const continuation = decideDurableRunContinuation({
+          hasCredits: true,
+          providerError: true,
+          providerFallbackAvailable: Boolean(fallbackModel),
+        });
+        if (!fallbackModel) {
+          await send('provider_unavailable', continuation.public_message, {
+            diagnostic_code: 'PROVIDER_UNAVAILABLE_NO_FALLBACK',
+            durable_continuation: continuation,
+          });
+          throw error;
+        }
+        await send('model_fallback_started', streamCopy(
+          'Le modele selectionne est instable, je continue avec un modele compatible.',
+          'The selected model is unstable, so I am continuing with a compatible model.',
+        ), {
+          durable_continuation: continuation,
+          fallback_available: true,
+        });
+        generatedText = '';
+        costUsd = 0;
+        model = fallbackModel;
+        validateAllowedModel(fallbackModel);
+        const completed = await streamFromModel(fallbackModel);
+        if (!completed) return;
       }
     }
 
@@ -11534,6 +11737,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         issueCount: blockingCount,
       }).catch(() => null);
       await updateBuildSessionStatus(buildSessionId, 'completed').catch(() => null);
+      const durableContinuation = durableRunContract
+        ? decideDurableRunContinuation({
+          reliabilityStatus: reliabilitySummary.status,
+          previewStatus: 'needs_fix',
+          autoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+          maxAutoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+          hasCredits: true,
+        })
+        : null;
       await send('draft_saved', summary, {
         project: recoverableProject,
         files,
@@ -11543,6 +11755,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         errors: pipeline.errors,
         verification: verificationSummary,
         reliability: reliabilitySummary,
+        durable_continuation: durableContinuation,
         quality: qualitySummary,
         output_contract: outputContract,
         step_label: streamCopy('Draft sauvegardee.', 'Draft saved.'),
@@ -11556,10 +11769,12 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         reliability: reliabilitySummary,
         quality: qualitySummary,
         output_contract: outputContract,
+        durable_continuation: durableContinuation,
         next_action: 'fix_remaining_blocker',
       });
       await send('done', streamCopy('Draft sauvegardee pour correction.', 'Draft saved for repair.'), {
         needs_fix: true,
+        durable_continuation: durableContinuation,
         step_label: streamCopy('Draft recuperable.', 'Recoverable draft.'),
         step_detail: streamCopy('Le prochain message peut reprendre depuis cette version.', 'The next message can continue from this version.'),
       });
@@ -11571,12 +11786,24 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
           reliability: reliabilitySummary,
           quality: qualitySummary,
           output_contract: outputContract,
+          durable_run: durableRunContract ? buildDurableRunPayload({
+            contract: durableRunContract,
+            continuation: durableContinuation || undefined,
+          }).durable_run : null,
           runner: summarizeRunnerForMemory(runnerResult),
           browser: browserResult ? { status: browserResult.status, finding_count: browserResult.findings.length } : null,
           research: summarizeResearchForMemory(researchResult),
         },
       }).catch(() => null);
-      await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed', needs_fix: true });
+      await updateAgentRunV3Meta(agentRunId, {
+        runner_status: runnerResult?.status || null,
+        research_used: researchResult?.status === 'completed',
+        needs_fix: true,
+        ...(durableRunContract ? buildDurableRunPayload({
+          contract: durableRunContract,
+          continuation: durableContinuation || undefined,
+        }) : {}),
+      });
       endStream();
       return;
     }
@@ -11659,6 +11886,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       preview_status: pipeline.status,
       auto_fix: autoFix ? { applied: true, patch: autoFix } : { applied: false },
       rollback: { available: true },
+      durable_continuation: durableRunContract ? decideDurableRunContinuation({
+        reliabilityStatus: reliabilitySummary.status,
+        previewStatus: 'ready',
+        autoFixAttempts: finalGate.attempts,
+        maxAutoFixAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+        hasCredits: true,
+      }) : null,
       next_action: pipeline.status === 'ready'
         ? streamCopy('Tester la preview ou publier quand tu es pret.', 'Test the preview or publish when you are ready.')
         : streamCopy('Corriger les blocages restants avant publication.', 'Fix remaining blockers before publishing.'),
@@ -11683,6 +11917,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
       quality: qualitySummary,
       reliability,
       reliability_summary: reliabilitySummary,
+      durable_run: durableRunContract ? buildDurableRunPayload({ contract: durableRunContract }).durable_run : null,
       step_label: streamCopy('Preview prete.', 'Preview ready.'),
       step_detail: streamCopy('Tu peux maintenant tester et demander une modification sur l existant.', 'You can now test and ask for changes on the existing app.'),
     });
@@ -11706,9 +11941,14 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         runner: summarizeRunnerForMemory(runnerResult),
         browser: browserResult ? { status: browserResult.status, finding_count: browserResult.findings.length } : null,
         research: summarizeResearchForMemory(researchResult),
+        durable_run: durableRunContract ? buildDurableRunPayload({ contract: durableRunContract }).durable_run : null,
       },
     });
-    await updateAgentRunV3Meta(agentRunId, { runner_status: runnerResult?.status || null, research_used: researchResult?.status === 'completed' });
+    await updateAgentRunV3Meta(agentRunId, {
+      runner_status: runnerResult?.status || null,
+      research_used: researchResult?.status === 'completed',
+      ...(durableRunContract ? buildDurableRunPayload({ contract: durableRunContract }) : {}),
+    });
     endStream();
   } catch (error: any) {
     await updateBuildSessionStatus(buildSessionId, 'failed').catch(() => null);
