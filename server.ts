@@ -957,6 +957,8 @@ type AgentIntent = 'conversation' | 'clarification_required' | 'plan' | 'build' 
 type AgentNextAction = 'answer' | 'ask_clarification' | 'plan_only' | 'plan_then_build' | 'build' | 'edit' | 'debug_fix' | 'verify' | 'deploy_assist' | 'collect_external_keys' | 'show_upgrade';
 type AgentRequestedMode = 'auto' | 'plan' | 'build';
 type StudioContextKind = 'chat' | 'design' | 'decks' | 'media';
+type RecentHistoryMessage = { role: 'user' | 'assistant'; content: string };
+type AgentDecisionInput = { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string; recentHistory?: RecentHistoryMessage[] };
 
 type IntentDecision = {
   intent: AgentIntent;
@@ -2577,7 +2579,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
 }
 
 class AgentOrchestrator {
-  decide(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }): IntentDecision {
+  decide(input: AgentDecisionInput): IntentDecision {
     const text = input.prompt.trim();
     const lower = text.toLowerCase();
     const requestedMode = normalizeRequestedMode(input.requestedMode);
@@ -2621,6 +2623,20 @@ class AgentOrchestrator {
         confidence: 0.95,
         nextAction: 'answer',
         userVisibleReason: 'This is a greeting, so Huggy will answer without changing files.',
+      });
+    }
+
+    const normalizedForConfirmation = normalizePromptIntentText(text);
+    if (input.lastPlan && /^(ok|okay|go|vas y|vas-y|continue|continu|fais|fais le|fais-le|genere|génère|build|execute|run|lance)$/i.test(normalizedForConfirmation)) {
+      return decision({
+        intent: 'build',
+        confidence: 0.95,
+        requiresFileChanges: true,
+        requiresPreviewRebuild: true,
+        requiresCredits: true,
+        nextAction: 'build',
+        selectedModelPolicy: 'balanced',
+        userVisibleReason: 'The user confirmed the previous plan, so Huggy will build instead of asking again.',
       });
     }
 
@@ -2720,7 +2736,10 @@ class AgentOrchestrator {
       'crée', 'creer', 'create', 'ajoute', 'add', 'modifie', 'change', 'corrige',
       'fix', 'build', 'implémente', 'implemente', 'generate', 'génère', 'genere',
       'page', 'component', 'dashboard', 'landing', 'formulaire', 'deploy', 'supprime',
-      'remove', 'replace', 'met a jour', 'mets a jour', 'update'
+      'remove', 'replace', 'met a jour', 'mets a jour', 'update', 'todo app',
+      'to do app', 'to-do app', 'mini app', 'application web', 'app web',
+      'localstorage', 'local storage', 'filtre', 'filtres', 'responsive',
+      'ajout de tache', 'ajout de tâche', 'supprimer une tache', 'supprimer une tâche'
     ];
     const planHints = [
       'plan', 'roadmap', 'architecture', 'avant de coder', 'avant de build', 'sans coder',
@@ -2757,7 +2776,11 @@ class AgentOrchestrator {
       'reduis', 'réduis', 'smaller', 'spacing', 'espace', 'padding', 'margin', 'radius', 'arrondi',
       'style', 'design', 'animation', 'hover', 'mobile', 'desktop'
     ];
-    const lastPlanHints = ['ok fais', 'fais-le', 'implemente ça', 'implémente ça', 'build this plan', 'continue le plan'];
+    const lastPlanHints = [
+      'ok fais', 'ok build', 'ok genere', 'ok génère', 'fais-le', 'fais le',
+      'vas-y', 'vas y', 'go', 'execute', 'lance', 'implemente ça', 'implémente ça',
+      'build this plan', 'continue le plan', 'continue', 'continu'
+    ];
 
     if (hasAny(lastPlanHints) && input.lastPlan) {
       return decision({
@@ -2970,9 +2993,9 @@ function parseLooseJsonObject(text: string): any | null {
 
 function agentIntentNeedsAiRouter(decision: IntentDecision) {
   if (decision.requestedMode === 'plan') return false;
-  if (decision.confidence < 0.72) return true;
-  if (decision.intent === 'clarification_required' && decision.routingSource === 'fallback') return true;
-  return false;
+  if (decision.intent === 'conversation' && decision.confidence >= 0.93) return false;
+  if (decision.intent === 'clarification_required' && decision.confidence >= 0.95) return false;
+  return true;
 }
 
 function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision | null {
@@ -3024,7 +3047,7 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
 
 function guardAiDecisionWithUnderstanding(
   aiDecision: IntentDecision,
-  input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string },
+  input: AgentDecisionInput,
   fallback: IntentDecision,
 ): IntentDecision {
   const requestedMode = normalizeRequestedMode(input.requestedMode);
@@ -3081,7 +3104,7 @@ function guardAiDecisionWithUnderstanding(
   });
 }
 
-async function classifyIntentWithAi(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }, fallback: IntentDecision): Promise<IntentDecision | null> {
+async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentDecision): Promise<IntentDecision | null> {
   if (!getOpenRouterApiKey() || !agentIntentNeedsAiRouter(fallback)) return null;
   const routerRuntime = buildAIModelRuntimeConfig({
     modelId: DEFAULT_PROVIDER_MODEL_ID,
@@ -3102,12 +3125,13 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
         requestedMode: normalizeRequestedMode(input.requestedMode),
         hasFiles: input.hasFiles,
         hasLastPlan: Boolean(input.lastPlan),
+        recentHistory: input.recentHistory || [],
         localUnderstanding: fallback.intentUnderstanding || null,
         fallbackIntent: fallback.intent,
       }),
     },
   ], {
-    maxAttempts: 1,
+    maxAttempts: 2,
     timeoutMs: routerRuntime.timeoutMs,
     runtimeConfig: buildProviderRequestConfig(routerRuntime),
   });
@@ -3115,7 +3139,7 @@ async function classifyIntentWithAi(input: { prompt: string; requestedMode?: str
   return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
 
-function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }, decision: IntentDecision): IntentDecision {
+function applyTypedIntentLifecycle(input: AgentDecisionInput, decision: IntentDecision): IntentDecision {
   const typedDecision = buildTypedIntentDecision({
     prompt: input.prompt,
     hasFiles: input.hasFiles,
@@ -3140,7 +3164,7 @@ function applyTypedIntentLifecycle(input: { prompt: string; requestedMode?: stri
   return contractedDecision;
 }
 
-async function resolveAgentDecision(input: { prompt: string; requestedMode?: string; hasFiles: boolean; lastPlan?: string }) {
+async function resolveAgentDecision(input: AgentDecisionInput) {
   const fallback = intentRouter.decide(input);
   const finalize = (decision: IntentDecision): IntentDecision => applyTypedIntentLifecycle(input, decision);
   try {
@@ -3571,7 +3595,7 @@ async function createAgentTextResponse(input: {
       selectedModel,
       buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
       {
-        maxAttempts: 1,
+        maxAttempts: decision.intent === 'conversation' ? 1 : 2,
         timeoutMs: runtimeOptions.runtime.timeoutMs,
         runtimeConfig: runtimeOptions.providerConfig,
       },
@@ -4938,7 +4962,7 @@ async function generateFilesWithAi(input: {
       mode: 'generation',
       stream: false,
       timeoutMs: 120_000,
-      maxTokens: 12_000,
+      maxTokens: 32_000,
     })
     : null;
 
@@ -4963,7 +4987,7 @@ async function generateFilesWithAi(input: {
       }),
     },
   ], {
-    maxAttempts: 1,
+    maxAttempts: 2,
     timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
     runtimeConfig: runtimeOptions?.providerConfig,
   });
@@ -6462,6 +6486,16 @@ async function listProjectMessagesPage(projectId: string, limitValue: any, befor
   if (error && /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) return [];
   if (error) throw new Error(`Supabase project message page failed: ${error.message}`);
   return (data || []).reverse().map(sanitizeProjectMessageForUser);
+}
+
+async function getRecentDecisionHistory(projectId: string, limitValue = 6): Promise<RecentHistoryMessage[]> {
+  const rows = await listProjectMessagesPage(projectId, limitValue, null).catch(() => []);
+  return rows
+    .map((row: any) => ({
+      role: row?.role === 'assistant' ? 'assistant' as const : 'user' as const,
+      content: redactSecrets(String(row?.content || '')).replace(/\s+/g, ' ').trim().slice(0, 1200),
+    }))
+    .filter((message: RecentHistoryMessage) => message.content.length > 0);
 }
 
 async function saveAnalyticsEvent(project: GeneratedProject, record: any) {
@@ -8538,11 +8572,13 @@ app.post('/api/projects/:id/estimate', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   const files = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
+  const recentHistory = await getRecentDecisionHistory(project.id, 6);
   const decision = await resolveAgentDecision({
     prompt: sanitizeWorkspaceText(req.body?.prompt || ''),
     requestedMode: normalizeRequestedMode(req.body?.requestedMode),
     hasFiles: files.length > 0,
     lastPlan,
+    recentHistory,
   });
   void decision;
   res.json({
@@ -9072,11 +9108,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
+  const recentHistory = await getRecentDecisionHistory(project.id, 6);
   const decision = await resolveAgentDecision({
     prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
+    recentHistory,
   });
   const reliability = buildReliabilityDecision(decision);
   const seniorAgentContext = compileSeniorAgentContext({
@@ -9890,10 +9928,15 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
   const requestedModelSelection = normalizeModelSelectionId(req.body?.modelId || project.model_id || 'auto');
-  const quickDecision = applyTypedIntentLifecycle(
-    { prompt, requestedMode, hasFiles: false },
-    intentRouter.decide({ prompt, requestedMode, hasFiles: false }),
-  );
+  const recentHistory = await getRecentDecisionHistory(project.id, 6);
+  const lastPlanForDecision = await getLastProjectPlan(project.id);
+  const quickDecision = await resolveAgentDecision({
+    prompt,
+    requestedMode,
+    hasFiles: false,
+    lastPlan: lastPlanForDecision,
+    recentHistory,
+  });
   if (canUseFastAnswerPath(quickDecision, prompt)) {
     const quickEstimate = estimateActionCost(prompt, quickDecision, requestedModelSelection);
     const quickWallet = quickEstimate.finalCredits > 0 ? await helpers.getWallet(userId) : Number.POSITIVE_INFINITY;
@@ -10034,12 +10077,13 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
     return;
   }
   const existingFiles = await loadProjectFiles(project.id);
-  const lastPlan = await getLastProjectPlan(project.id);
+  const lastPlan = lastPlanForDecision;
   const decision = await resolveAgentDecision({
     prompt: agentPrompt,
     requestedMode,
     hasFiles: existingFiles.length > 0,
     lastPlan,
+    recentHistory,
   });
   const reliability = buildReliabilityDecision(decision);
   const seniorAgentContext = compileSeniorAgentContext({
@@ -10476,7 +10520,7 @@ app.post('/api/projects/:id/generate/stream', async (req: any, res: any) => {
         mode: 'generation',
         stream: true,
         timeoutMs: 180_000,
-        maxTokens: 12_000,
+        maxTokens: 32_000,
       });
 
       let lastModelProgressAt = Date.now();
