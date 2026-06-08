@@ -10985,6 +10985,22 @@ app.get('/built-with-huggy/:projectId', async (req, res) => {
   }
 });
 
+function normalizeMalformedAbsolutePath(rawPath: unknown) {
+  const value = String(rawPath || '').trim();
+  const match = value.match(/^\/https?:\/\/(?:www\.)?huggy\.fun(\/[^?#]*)?([?#].*)?$/i);
+  if (!match) return null;
+  const targetPath = match[1] || '/';
+  if (!targetPath.startsWith('/') || targetPath.startsWith('//') || targetPath.includes('\\')) return '/';
+  return `${targetPath}${match[2] || ''}`;
+}
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  const normalizedPath = normalizeMalformedAbsolutePath(req.originalUrl || req.url || req.path);
+  if (!normalizedPath) return next();
+  return res.redirect(302, normalizedPath);
+});
+
 app.use(async (req, res, next) => {
   if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
   const host = normalizeDomainHost(req.hostname || req.headers.host || '');
