@@ -6289,10 +6289,9 @@ function summarizeReliabilityGate(checks: AgentVerificationCheck[]): Reliability
     .slice(0, 12)
     .map(toPublicVerificationIssue);
   if (blocking.length) {
-    const visible = blocking.slice(0, 3).map(item => item.file ? `${item.file}: ${item.message}` : item.message).join(' ');
     return {
       status: 'failed',
-      message: `Huggy stopped before saving because the generated app still has ${blocking.length} blocking issue${blocking.length > 1 ? 's' : ''}. ${visible}`.trim(),
+      message: 'The preview still needs a clean verification before it can be marked ready.',
       blocking,
       notes,
     };

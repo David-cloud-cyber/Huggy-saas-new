@@ -150,17 +150,6 @@ export function sanitizeAssistantOutput(input: {
   return collapseDuplicateParagraphs(removeFalseCompletionClaims(text, contract));
 }
 
-function reliabilityBlockingMessages(summary?: ReliabilityLike) {
-  const items = [
-    ...(Array.isArray(summary?.blocking) ? summary!.blocking! : []),
-    ...(Array.isArray(summary?.failed) ? summary!.failed! : []),
-  ];
-  return items
-    .map(item => String(item?.message || item?.file || item?.source || '').trim())
-    .filter(Boolean)
-    .slice(0, 3);
-}
-
 export function shouldDeliverRecoverableDraft(summary?: ReliabilityLike) {
   return String(summary?.status || '').toLowerCase() === 'failed';
 }
@@ -171,24 +160,9 @@ export function buildRecoverableDraftMessage(input: {
   blockingCount?: number;
 }) {
   const fr = speaksFrench(input.prompt);
-  const blockers = reliabilityBlockingMessages(input.reliabilitySummary);
-  const count = Math.max(Number(input.blockingCount || blockers.length || 1), 1);
-  const blockerLine = blockers.length
-    ? (fr ? `Blocage restant: ${blockers[0]}` : `Remaining blocker: ${blockers[0]}`)
-    : (input.reliabilitySummary?.message || (fr ? 'Un blocage technique reste a corriger.' : 'One technical blocker still needs a fix.'));
   return fr
-    ? [
-        'J ai sauvegarde une draft recuperable, mais je ne marque pas encore la preview comme prete.',
-        `${count} point${count > 1 ? 's' : ''} bloquant${count > 1 ? 's' : ''} reste${count > 1 ? 'nt' : ''}.`,
-        blockerLine,
-        'Demande "corrige le blocage restant" et Huggy reprendra depuis cette draft sans perdre le travail.',
-      ].join('\n')
-    : [
-        'I saved a recoverable draft, but I am not marking the preview as ready yet.',
-        `${count} blocking issue${count > 1 ? 's' : ''} remain${count > 1 ? '' : 's'}.`,
-        blockerLine,
-        'Ask "fix the remaining blocker" and Huggy will continue from this draft without losing the work.',
-      ].join('\n');
+    ? 'Je garde le travail en sécurité. La preview sera affichée seulement après une vérification propre.'
+    : 'I kept the work safe. The preview will only be shown after a clean verification.';
 }
 
 export function buildInternalExecutionPlan(input: {

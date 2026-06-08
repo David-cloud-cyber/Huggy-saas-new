@@ -2271,6 +2271,16 @@ function generatedCodeBlockedText(speaksFrench: boolean) {
     : 'I will not paste raw generated code into chat. A real generation must write project files, refresh the preview, then show a short summary.';
 }
 
+function cleanRecoveryText(speaksFrench: boolean) {
+  return speaksFrench
+    ? 'Je garde le travail en sécurité. La preview sera affichée seulement après une vérification propre.'
+    : 'I kept the work safe. The preview will only be shown after a clean verification.';
+}
+
+function looksLikeInternalRecoveryText(value: string) {
+  return /\b(draft recuperable|draft récupérable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes:\s*0 created|verification:\s*huggy stopped)\b/i.test(value);
+}
+
 function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
   const text = repairTextEncoding(redactSecrets(String(value || '').trim()));
   if (!text) return fallback;
@@ -2278,6 +2288,7 @@ function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallbac
     .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+  if (looksLikeInternalRecoveryText(unfenced)) return fallback || cleanRecoveryText(speaksFrench);
   if (/^[\[{]/.test(unfenced) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(unfenced)) {
     return fallback || (speaksFrench
       ? 'J’ai préparé le travail dans le projet. La preview et les fichiers doivent rester la source de vérité.'
@@ -4169,10 +4180,19 @@ function restoreMessages(payload: ProjectPayload) {
     .filter(message => message.content && !/^Project (synchronized|ready)\./i.test(message.content))
     .slice(-100)
     .forEach(message => {
-    const card = appendMessage(message.role === 'user' ? 'user' : 'assistant', message.content);
-    if (message.intent === 'plan') {
-      lastPlan = message.content;
-    }
+      const role = message.role === 'user' ? 'user' : 'assistant';
+      const content = role === 'assistant'
+        ? safeAssistantDisplayText(
+          message.content,
+          isLikelyFrenchText(message.content),
+          cleanRecoveryText(isLikelyFrenchText(message.content)),
+        )
+        : message.content;
+      const card = appendMessage(role, content);
+      void card;
+      if (message.intent === 'plan') {
+        lastPlan = message.content;
+      }
     });
 }
 
@@ -4413,38 +4433,24 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
     return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
   }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
-  const blockerCount = compact.match(/\b(\d+)\s+points?\s+bloquants?\s+restent\b/i)?.[1]
-    || compact.match(/\b(\d+)\s+blocking\s+issues?\b/i)?.[1]
-    || compact.match(/\bstill\s+has\s+(\d+)\s+blocking\b/i)?.[1];
+  if (looksLikeInternalRecoveryText(compact)) return cleanRecoveryText(speaksFrench);
   if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
-    return speaksFrench
-      ? `Draft récupérable sauvegardée. La preview reste en attente${blockerCount ? `: ${blockerCount} blocage${blockerCount === '1' ? '' : 's'} à corriger` : ''}.`
-      : `Recoverable draft saved. The preview is still waiting${blockerCount ? `: ${blockerCount} blocker${blockerCount === '1' ? '' : 's'} to fix` : ''}.`;
+    return cleanRecoveryText(speaksFrench);
   }
   if (/^i keep the work recoverable without claiming a false ready preview\.?$/i.test(compact)) {
-    return speaksFrench
-      ? 'Je garde le travail récupérable sans annoncer une preview prête trop tôt.'
-      : 'I keep the work recoverable without claiming a false ready preview.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/preview contains a known forced runtime failure marker/i.test(compact)) {
-    return speaksFrench
-      ? 'Blocage principal: un marqueur de crash forcé est encore présent dans la preview.'
-      : 'Main blocker: a forced runtime failure marker is still present in the preview.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/huggy stopped before saving because the generated app still has/i.test(compact)) {
-    return speaksFrench
-      ? 'Draft sauvegardée. Je dois encore corriger les blocages avant d’annoncer la preview prête.'
-      : 'Draft saved. I still need to fix the blockers before marking the preview ready.';
+    return cleanRecoveryText(speaksFrench);
   }
   if (/task app must support adding, completing, and deleting tasks/i.test(compact)) {
-    return speaksFrench
-      ? 'La vérification demande encore des actions visibles: ajouter, terminer et supprimer.'
-      : 'The check still needs visible add, complete and delete actions.';
+    return '';
   }
   if (/commerce app must include cart state/i.test(compact)) {
-    return speaksFrench
-      ? 'La vérification métier a détecté un critère non lié à cette demande. Je l’ignore pour cette app.'
-      : 'A business check detected a criterion unrelated to this request. I will ignore it for this app.';
+    return '';
   }
   const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
     { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
@@ -4976,18 +4982,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       lastPlan = JSON.stringify(responsePayload.plan, null, 2);
     }
 
-    const diffSummary = String(responsePayload.diff?.summary || '').trim();
-    const verificationMessage = String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
+    const hasNeedsFix = Boolean(responsePayload.needs_fix);
+    const diffSummary = hasNeedsFix ? '' : String(responsePayload.diff?.summary || '').trim();
+    const verificationMessage = hasNeedsFix ? '' : String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
     const rawText = String(responsePayload.summary || responsePayload.text || responsePayload.message || '').trim();
     const finalText = safeAssistantDisplayText(
       rawText,
       speaksFrench,
       previewHtml
         ? generationReadyText(speaksFrench)
-        : responsePayload.needs_fix
-          ? (speaksFrench
-            ? 'J ai sauvegarde une draft recuperable. La preview sera marquee prete apres correction du blocage restant.'
-            : 'I saved a recoverable draft. The preview will be marked ready after the remaining blocker is fixed.')
+        : hasNeedsFix
+          ? cleanRecoveryText(speaksFrench)
           : (speaksFrench ? 'Termine.' : 'Done.'),
     );
 
@@ -5007,28 +5012,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         approveLabel: speaksFrench ? 'Repondre' : 'Answer',
         rejectLabel: speaksFrench ? 'Annuler' : 'Cancel',
       });
-    }
-
-    if (previewHtml) {
-      addInlineAction(target, speaksFrench ? 'Garder' : 'Keep', () => {
-        void recordAgentFeedback('keep');
-        appendMessage('system', speaksFrench ? 'Version gardee comme preview actuelle.' : 'Kept as the current preview.');
-      });
-      addInlineAction(target, speaksFrench ? 'Modifier' : 'Modify', () => {
-        void recordAgentFeedback('modify');
-        const promptInput = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
-        promptInput?.focus();
-        if (promptInput && !promptInput.value.trim()) promptInput.placeholder = workshopPlaceholderForFollowUp(speaksFrench);
-      });
-      addInlineAction(target, speaksFrench ? 'Regenerer' : 'Regenerate', () => {
-        void recordAgentFeedback('regenerate');
-        void generateFromPrompt(safePrompt, 'build', false, { regenerate: true }, safeDisplayText);
-      });
-      addInlineAction(target, 'Publish', () => {
-        void recordAgentFeedback('publish');
-        void openPublishPanel();
-      });
-      addInlineAction(target, speaksFrench ? 'Historique' : 'History', () => void openHistoryPanel());
     }
 
     if (Array.isArray(responsePayload.errors) && responsePayload.errors.length) showFixBugBox(responsePayload.errors);
