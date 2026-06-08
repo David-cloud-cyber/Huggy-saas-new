@@ -1122,9 +1122,7 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   frame.dataset.emptyPreviewMode = mode;
   frame.srcdoc = centeredPreviewLoaderHtml(mode, resolvedLabel);
   setPreviewDevice(selectedPreviewDevice, false);
-  const address = document.querySelector('.preview-address-glow span:last-child');
-  const statusSlug = resolvedLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'working';
-  if (address) address.textContent = mode === 'working' ? `${statusSlug}.huggy.local` : 'preview.huggy.local / waiting';
+  syncPreviewAddress(null);
 }
 
 function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
@@ -1179,8 +1177,8 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
   setPreviewDevice(selectedPreviewDevice, false);
-  const address = document.querySelector('.preview-address-glow span:last-child');
-  if (address) address.textContent = addressLabel;
+  void addressLabel;
+  syncPreviewAddress(null);
 }
 
 function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Design canvas') {
@@ -1245,8 +1243,8 @@ function setDesignPreviewHtml(html: string, addressLabel = 'design.huggy.local /
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
   setPreviewDevice(selectedPreviewDevice, false);
-  const address = document.querySelector('.preview-address-glow span:last-child');
-  if (address) address.textContent = addressLabel;
+  void addressLabel;
+  syncPreviewAddress(null);
 }
 
 function syncWorkshopPreview() {
@@ -1445,6 +1443,38 @@ function normalizePreviewDevice(value: unknown): PreviewDevice {
   return value === 'tablet' || value === 'mobile' ? value : 'desktop';
 }
 
+function previewDeviceLabel(device: PreviewDevice) {
+  if (device === 'tablet') return 'Tablet';
+  if (device === 'mobile') return 'Mobile';
+  return 'Desktop';
+}
+
+function previewDeviceIcon(device: PreviewDevice) {
+  if (device === 'tablet') {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="2"></rect><path d="M11.9 17.5h.2"></path></svg>';
+  }
+  if (device === 'mobile') {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2.5" width="8" height="19" rx="2"></rect><path d="M11.9 18h.2"></path></svg>';
+  }
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path></svg>';
+}
+
+function syncPreviewAddress(label?: string | null) {
+  const row = document.querySelector('.preview-address-row') as HTMLElement | null;
+  const address = document.querySelector('.preview-address-glow span:last-child');
+  const cleanLabel = typeof label === 'string' ? label.trim() : '';
+  const hasRealPreviewAddress = Boolean(cleanLabel);
+  row?.classList.toggle('address-hidden', !hasRealPreviewAddress);
+  if (address) address.textContent = hasRealPreviewAddress ? cleanLabel : '';
+}
+
+function closePreviewDeviceMenu() {
+  const wrapper = document.getElementById('preview-device-toggle') as HTMLElement | null;
+  const trigger = document.getElementById('preview-device-trigger') as HTMLButtonElement | null;
+  wrapper?.classList.remove('open');
+  trigger?.setAttribute('aria-expanded', 'false');
+}
+
 function setPreviewDevice(device: PreviewDevice, persist = true) {
   selectedPreviewDevice = normalizePreviewDevice(device);
   const panel = document.getElementById('screen-layout-preview') as HTMLElement | null;
@@ -1453,17 +1483,52 @@ function setPreviewDevice(device: PreviewDevice, persist = true) {
     const active = button.dataset.previewDeviceOption === selectedPreviewDevice;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.setAttribute('aria-checked', active ? 'true' : 'false');
   });
+  const trigger = document.getElementById('preview-device-trigger') as HTMLButtonElement | null;
+  const triggerIcon = document.getElementById('preview-device-trigger-icon');
+  const triggerLabel = document.getElementById('preview-device-trigger-label');
+  const label = previewDeviceLabel(selectedPreviewDevice);
+  if (trigger) {
+    trigger.setAttribute('aria-label', `Preview device: ${label}`);
+    trigger.title = `${label} preview`;
+  }
+  if (triggerIcon) triggerIcon.innerHTML = previewDeviceIcon(selectedPreviewDevice);
+  if (triggerLabel) triggerLabel.textContent = label;
   if (persist) scheduleWorkspaceSave({ preview_device: selectedPreviewDevice });
 }
 
 function bindPreviewDeviceToggle() {
   setPreviewDevice(selectedPreviewDevice, false);
+  const wrapper = document.getElementById('preview-device-toggle') as HTMLElement | null;
+  const trigger = document.getElementById('preview-device-trigger') as HTMLButtonElement | null;
+  if (wrapper && trigger && trigger.dataset.boundPreviewDeviceMenu !== 'true') {
+    trigger.dataset.boundPreviewDeviceMenu = 'true';
+    trigger.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpen = !wrapper.classList.contains('open');
+      wrapper.classList.toggle('open', nextOpen);
+      trigger.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+    });
+  }
+  if (document.documentElement.dataset.previewDeviceOutsideClickBound !== 'true') {
+    document.documentElement.dataset.previewDeviceOutsideClickBound = 'true';
+    document.addEventListener('click', event => {
+      const currentWrapper = document.getElementById('preview-device-toggle');
+      if (!currentWrapper?.contains(event.target as Node)) closePreviewDeviceMenu();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closePreviewDeviceMenu();
+    });
+  }
   document.querySelectorAll<HTMLButtonElement>('[data-preview-device-option]').forEach(button => {
     if (button.dataset.boundPreviewDevice === 'true') return;
     button.dataset.boundPreviewDevice = 'true';
-    button.addEventListener('click', () => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
       setPreviewDevice(normalizePreviewDevice(button.dataset.previewDeviceOption));
+      closePreviewDeviceMenu();
     });
   });
 }
@@ -2508,8 +2573,7 @@ function setPreview(html: string, status = 'ready') {
 
   activateBuilderView('preview');
 
-  const address = document.querySelector('.preview-address-glow span:last-child');
-  if (address) address.textContent = `${status}.huggy.local / ${currentProjectId.slice(0, 8)}`;
+  syncPreviewAddress(`${status}.huggy.local / ${currentProjectId ? currentProjectId.slice(0, 8) : 'app'}`);
 }
 
 function renderFiles(files: GeneratedFile[]) {
