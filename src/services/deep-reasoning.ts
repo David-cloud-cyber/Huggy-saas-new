@@ -142,6 +142,9 @@ function inferRecentBlockers(input: DeepReasoningInput) {
   if (/publish|vercel|deploy|live url|ecran blanc en ligne/i.test(text)) {
     blockers.push('publish_or_live_preview');
   }
+  if (/\b(blocage restant|points bloquants|blocking issue|blocker|needs fix|draft recuperable|recoverable draft)\b/i.test(text)) {
+    blockers.push('recoverable_draft_blocker');
+  }
   return unique(blockers).slice(0, 8);
 }
 

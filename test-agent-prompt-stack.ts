@@ -18,13 +18,15 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v14');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v15');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
   assert.ok(prompt.includes('gross margin'), 'prompt must keep margin-sensitive language in safety/business context');
   assert.ok(prompt.includes('Do not expose internal model policy'), 'prompt must hide internal stream/model details');
   assert.ok(prompt.includes('Architect policy'), 'prompt must include Architect policy');
+  assert.ok(prompt.includes('Deep reasoning policy'), 'prompt must include deep reasoning policy');
+  assert.ok(prompt.includes('Do not expose hidden reasoning'), 'prompt must keep deep reasoning internal');
 }
 
 assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
@@ -65,5 +67,6 @@ assert.ok(generationPrompt.includes('process.exit(isValid ? 0 : 1)'), 'generatio
 assert.ok(generationPrompt.includes('Never generate throw new Error() inside src/App.tsx'), 'generation prompt must forbid runtime throw markers');
 assert.ok(generationPrompt.includes('Never output __HUGGY_FORCE_ERROR__'), 'generation prompt must forbid forced runtime failure markers');
 assert.ok(generationPrompt.includes('Huggy is a general web-app builder'), 'generation prompt must stay general-purpose');
+assert.ok(generationPrompt.includes('Recovery pass is mandatory'), 'generation prompt must require repair/retest before final delivery');
 
 console.log('agent prompt stack ok');
