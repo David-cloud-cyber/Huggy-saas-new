@@ -163,7 +163,7 @@ export class OpenRouterService {
   async *streamChat(
     modelId: string,
     messages: ChatMessage[],
-    timeoutMs = 90000,
+    timeoutMs = 120_000,  // increased from 90s — long code generations can take 2-3min
     runtimeConfig?: ProviderRequestConfig,
   ): AsyncGenerator<StreamChatEvent> {
     validateAllowedModel(modelId);
@@ -199,6 +199,8 @@ export class OpenRouterService {
 
       let buffer = '';
       let model = modelId;
+      // Partial-JSON accumulator for cross-chunk SSE data fragments
+      let partialData = '';
 
       for await (const chunk of response.body as any) {
         buffer += Buffer.from(chunk).toString('utf8');
@@ -206,17 +208,34 @@ export class OpenRouterService {
         buffer = parts.pop() || '';
 
         for (const part of parts) {
+          // Skip SSE comment/heartbeat lines
+          if (!part.trim() || part.trim().startsWith(':')) continue;
+
           const lines = part.split('\n').filter(line => line.startsWith('data:'));
           for (const line of lines) {
             const raw = line.replace(/^data:\s*/, '').trim();
-            if (!raw || raw === '[DONE]') continue;
-
-            let data: any;
-            try {
-              data = JSON.parse(raw);
-            } catch {
+            if (!raw || raw === '[DONE]') {
+              partialData = '';
               continue;
             }
+
+            // Robust JSON parse with partial-data recovery
+            const candidate = partialData + raw;
+            let data: any;
+            try {
+              data = JSON.parse(candidate);
+              partialData = ''; // reset on success
+            } catch {
+              // Accumulate if it looks like a partial JSON object/array
+              if (candidate.trim().startsWith('{') || candidate.trim().startsWith('[')) {
+                partialData = candidate;
+                continue;
+              }
+              // Not recoverable — skip and reset
+              partialData = '';
+              continue;
+            }
+
             if (data?.error) {
               throw new Error(`OpenRouter API Error: ${data.error.message || JSON.stringify(data.error)}`);
             }
@@ -304,25 +323,38 @@ export class OpenRouterService {
   }
 
   private estimateUsdCost(model: string, prompt: number, completion: number): number {
-    let inputRate = 0.000001;  // $1.00 per million
-    let outputRate = 0.000003; // $3.00 per million
-
     const lower = model.toLowerCase();
-    if (lower.includes('sonnet')) {
-      inputRate = 0.000003;  // $3.00 per million
-      outputRate = 0.000015; // $15.00 per million
-    } else if (
-      lower.includes('claude-opus') ||
-      lower.includes('gpt-5.5-pro') ||
-      lower.includes('gpt-5.5')
-    ) {
-      inputRate = 0.000015;  // $15.00 per million
-      outputRate = 0.000075; // $75.00 per million
-    } else if (lower.includes('flash') || lower.includes('nano')) {
-      inputRate = 0.000000075;  // $0.075 per million
-      outputRate = 0.0000003;   // $0.30 per million
+
+    // Rates per token (input / output) — estimated from OpenRouter pricing June 2026
+    // Format: [inputPerToken, outputPerToken]
+    const rates: Array<[RegExp, [number, number]]> = [
+      // Frontier / highest tier
+      [/claude-opus-4\.[89](?!-fast)/,        [0.000015,  0.000075]],  // $15/$75 per M
+      [/gpt-5\.5-pro/,                        [0.000015,  0.000060]],  // $15/$60 per M
+      [/gpt-5\.5(?!-pro)/,                    [0.000010,  0.000040]],  // $10/$40 per M
+      // High tier
+      [/claude-opus-4\.[89]-fast/,            [0.000008,  0.000024]],  // $8/$24 per M
+      [/claude-opus-4\.[67]/,                 [0.000015,  0.000075]],  // $15/$75 per M
+      [/claude-sonnet-4\.[567]/,              [0.000003,  0.000015]],  // $3/$15 per M
+      [/gpt-5(?![-.])/,                       [0.000010,  0.000030]],  // $10/$30 per M
+      [/gemini-3-pro/,                        [0.000007,  0.000021]],  // $7/$21 per M
+      // Mid tier
+      [/gpt-5-mini/,                          [0.000000150, 0.000000600]], // $0.15/$0.60 per M
+      [/deepseek-v4-pro/,                     [0.000000270, 0.000001100]], // $0.27/$1.10 per M
+      [/gemini-3-flash-preview|gemini-3-flash/, [0.000000250, 0.000001000]], // $0.25/$1 per M
+      // Fast / economy tier
+      [/deepseek-v4-flash/,                   [0.000000060, 0.000000280]], // $0.06/$0.28 per M
+      [/gemini-3\.5-flash|gemini-flash/,      [0.000000075, 0.000000300]], // $0.075/$0.30 per M
+      [/flash|nano|mini/,                     [0.000000075, 0.000000300]], // generic flash/nano
+    ];
+
+    for (const [pattern, [inputRate, outputRate]] of rates) {
+      if (pattern.test(lower)) {
+        return (prompt * inputRate) + (completion * outputRate);
+      }
     }
 
-    return (prompt * inputRate) + (completion * outputRate);
+    // Fallback: balanced mid-tier estimate
+    return (prompt * 0.000001) + (completion * 0.000003); // $1/$3 per M
   }
 }

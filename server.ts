@@ -5488,7 +5488,38 @@ async function generateFilesWithAi(input: {
   
   // Extract memory (ADRs) from last actions and build RAG context
   input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Extraction de la mémoire architecturale (RAG)...' });
-  const memoryContext = buildMemoryRagContext({ adrs: [], knownPreferences: ['TailwindCSS'] });
+
+  // Load persisted project memory from Supabase (ADRs, preferences, blockers)
+  let memoryContext = '';
+  try {
+    if (input.project?.id) {
+      const { data: memoryRows } = await supabaseAdmin()
+        .from('project_memory')
+        .select('memory_type, content, created_at')
+        .eq('project_id', input.project.id)
+        .order('created_at', { ascending: false })
+        .limit(24);
+      if (memoryRows && memoryRows.length > 0) {
+        const { rowsToProjectMemory, buildMemoryRagContext: buildRag } = await import('./src/services/agent-memory-rag.ts');
+        const projectMem = rowsToProjectMemory(memoryRows as any);
+        // Also inject known blockers from the deep reasoning contract
+        if (input.deepReasoningContract?.context_builder.recent_blockers.length) {
+          projectMem.recentBlockers = [
+            ...(projectMem.recentBlockers || []),
+            ...input.deepReasoningContract.context_builder.recent_blockers,
+          ];
+        }
+        memoryContext = buildRag(projectMem);
+      }
+    }
+  } catch (memErr: any) {
+    console.warn('[huggy:rag_memory_load_failed]', { message: memErr?.message });
+  }
+
+  // Fallback: static TailwindCSS preference if no persisted memory
+  if (!memoryContext) {
+    memoryContext = buildMemoryRagContext({ adrs: [], knownPreferences: ['TailwindCSS'] });
+  }
   
   // Meta-prompting: enrich the user's prompt
   input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Enrichissement du prompt...' });
@@ -5500,46 +5531,108 @@ async function generateFilesWithAi(input: {
   
   while (attempt < 2) {
     input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
-    result = await providerGateway.chat(selectedModel, [
-      {
-        role: 'system',
-        content: buildGenerationSystemPrompt({
-          prompt: input.prompt,
-          uiPolicySystemPrompt: uiPolicy.systemPrompt,
-          hasExistingFiles: input.existingFiles.length > 0,
-        }),
-      },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          projectName: input.projectName,
-          prompt: currentPrompt,
-          memoryRagContext: memoryContext,
-          existingFiles: fileManifest || 'No existing files yet.',
-          existingFilesContent,
-          uiGenerationPolicy: uiPolicy.userContext,
-          seniorAgentOS: input.seniorAgentContext || undefined,
-          deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
-        }),
-      },
-    ], {
-      maxAttempts: 2,
-      timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
-      runtimeConfig: runtimeOptions?.providerConfig,
-    });
 
-    totalCostUsd += (result.cost_usd || 0);
+    // Stream tokens live so the client sees progress in real time
+    let fullText = '';
+    let streamedModel = selectedModel;
+    let streamedCost = 0;
+
+    try {
+      for await (const event of providerGateway.streamChat(selectedModel, [
+        {
+          role: 'system',
+          content: buildGenerationSystemPrompt({
+            prompt: input.prompt,
+            uiPolicySystemPrompt: uiPolicy.systemPrompt,
+            hasExistingFiles: input.existingFiles.length > 0,
+          }),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            projectName: input.projectName,
+            prompt: currentPrompt,
+            memoryRagContext: memoryContext,
+            existingFiles: fileManifest || 'No existing files yet.',
+            existingFilesContent,
+            uiGenerationPolicy: uiPolicy.userContext,
+            seniorAgentOS: input.seniorAgentContext || undefined,
+            deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
+          }),
+        },
+      ], {
+        timeoutMs: runtimeOptions?.runtime.timeoutMs || 120_000,
+        runtimeConfig: runtimeOptions?.providerConfig,
+      })) {
+        if (event.type === 'token') {
+          fullText += event.text;
+          streamedModel = event.model;
+          // Forward live tokens to SSE client — enables real-time streaming cursor in UI
+          input.onEvent?.({ type: 'token', text: event.text, model: event.model });
+        } else if (event.type === 'usage') {
+          streamedCost = event.cost_usd;
+          streamedModel = event.model;
+        }
+      }
+    } catch (streamErr: any) {
+      // If streaming fails (model doesn't support it), fall back to non-streaming
+      console.warn('[huggy:generate_stream_fallback]', { message: streamErr?.message });
+      const fallbackResult = await providerGateway.chat(selectedModel, [
+        {
+          role: 'system',
+          content: buildGenerationSystemPrompt({
+            prompt: input.prompt,
+            uiPolicySystemPrompt: uiPolicy.systemPrompt,
+            hasExistingFiles: input.existingFiles.length > 0,
+          }),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            projectName: input.projectName,
+            prompt: currentPrompt,
+            memoryRagContext: memoryContext,
+            existingFiles: fileManifest || 'No existing files yet.',
+            existingFilesContent,
+            uiGenerationPolicy: uiPolicy.userContext,
+            seniorAgentOS: input.seniorAgentContext || undefined,
+            deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
+          }),
+        },
+      ], {
+        maxAttempts: 2,
+        timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
+        runtimeConfig: runtimeOptions?.providerConfig,
+      });
+      fullText = fallbackResult.text;
+      streamedModel = fallbackResult.model;
+      streamedCost = fallbackResult.cost_usd;
+    }
+
+    result = { text: fullText, model: streamedModel, cost_usd: streamedCost };
+    totalCostUsd += streamedCost;
     input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Le Juge évalue la qualité du code...' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
-    
+
     if (judgeEval.passed || attempt >= 1) {
       input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'Le code a passé l\'évaluation avec succès.' });
       break;
     }
-    
+
     console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
     input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: `Le Juge a rejeté le code: ${judgeEval.failures[0]}. Auto-correction en cours...` });
+
+    // Use a different model for the judge retry to avoid self-agreement bias
+    const judgeModelId = modelRouter.selectJudgeModel(
+      streamedModel,
+      input.userCredits ?? 999,
+      input.project ? String((input.project as any).plan_key || 'free') : 'free',
+    );
+    if (judgeModelId !== streamedModel) {
+      console.log(`[AGENT_JUDGE] Retrying with judge model: ${judgeModelId}`);
+    }
+
     currentPrompt = buildRetryPrompt(input.prompt, judgeEval);
     attempt++;
   }
@@ -5550,6 +5643,42 @@ async function generateFilesWithAi(input: {
   const files = parsed.files;
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
+  }
+
+  // Persist new architectural decisions extracted from this generation
+  if (input.project?.id) {
+    try {
+      const { extractArchitectureDecisions, projectMemoryToRows } = await import('./src/services/agent-memory-rag.ts');
+      const newAdrs = extractArchitectureDecisions(input.prompt, result.text);
+      if (newAdrs.length > 0) {
+        const rows = projectMemoryToRows({ adrs: newAdrs, knownPreferences: [] }, input.project.id);
+        // Upsert: delete existing ADRs for the same topics, then insert fresh ones
+        const topics = newAdrs.map(a => a.topic);
+        const existingRows = await supabaseAdmin()
+          .from('project_memory')
+          .select('id, content')
+          .eq('project_id', input.project.id)
+          .eq('memory_type', 'adr');
+        if (existingRows.data) {
+          const toDelete = existingRows.data
+            .filter(row => {
+              try {
+                const parsed2 = JSON.parse(row.content);
+                return topics.includes(parsed2.topic);
+              } catch { return false; }
+            })
+            .map(row => row.id);
+          if (toDelete.length > 0) {
+            await supabaseAdmin().from('project_memory').delete().in('id', toDelete);
+          }
+        }
+        await supabaseAdmin().from('project_memory').insert(rows).catch((err: any) => {
+          console.warn('[huggy:memory_persist_failed]', { message: err?.message });
+        });
+      }
+    } catch (persistErr: any) {
+      console.warn('[huggy:memory_persist_error]', { message: persistErr?.message });
+    }
   }
 
   return {
@@ -9879,6 +10008,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering for Railway/Vercel proxies
+    // Heartbeat every 15s to prevent proxy timeouts (Railway, nginx, Vercel all close idle SSE after ~30s)
+    const heartbeat = setInterval(() => {
+      try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); }
+    }, 15_000);
+    res.on('close', () => clearInterval(heartbeat));
   }
 
   const helpers = getDbHelpers();

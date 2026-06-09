@@ -611,3 +611,49 @@
     animation: none !important;
   }
 }
+
+/* ─── Live Token Stream (real-time code generation preview) ─── */
+.huggy-live-token-stream {
+  max-height: 72px;
+  overflow: hidden;
+  margin: 6px 0 2px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  color: var(--text-muted);
+  font: 580 9.8px/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  white-space: pre-wrap;
+  word-break: break-all;
+  position: relative;
+  /* Fade-out top edge so it looks like a live feed, not a full log */
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.4) 18%, #000 60%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.4) 18%, #000 60%);
+  animation: token-stream-in 120ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+/* Blinking cursor at end of stream */
+.huggy-live-token-stream::after {
+  content: '▋';
+  display: inline-block;
+  color: var(--accent-blue, #2563eb);
+  animation: token-cursor-blink 750ms step-end infinite;
+  margin-left: 1px;
+}
+
+@keyframes token-stream-in {
+  from { opacity: 0; transform: translateY(3px); max-height: 0; }
+  to   { opacity: 1; transform: translateY(0);   max-height: 72px; }
+}
+
+@keyframes token-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .huggy-live-token-stream,
+  .huggy-live-token-stream::after {
+    animation: none !important;
+  }
+}

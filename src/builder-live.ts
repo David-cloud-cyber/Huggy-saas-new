@@ -2077,6 +2077,40 @@ function clearMessageShimmer(card: HTMLElement | null) {
   if (id && conversationApi) conversationApi.clearWorking(id);
   card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
+  // Clean up any live-token streaming container
+  card.querySelector('.huggy-live-token-stream')?.remove();
+}
+
+/**
+ * Appends live streaming tokens from the generator into a dedicated streaming
+ * container inside the working card. This creates a real-time "typing" effect
+ * showing the AI generating code token-by-token.
+ */
+function appendToMessageShimmer(card: HTMLElement | null, text: string) {
+  if (!card || !text) return;
+  let streamEl = card.querySelector<HTMLElement>('.huggy-live-token-stream');
+  if (!streamEl) {
+    streamEl = document.createElement('div');
+    streamEl.className = 'huggy-live-token-stream';
+    streamEl.setAttribute('aria-live', 'polite');
+    streamEl.setAttribute('aria-label', 'Generating code');
+    // Insert before the working indicator if present
+    const workingIndicator = card.querySelector('.msg-working-indicator') || card.querySelector('.msg-body-paragraph');
+    if (workingIndicator) {
+      card.insertBefore(streamEl, workingIndicator.nextSibling);
+    } else {
+      card.appendChild(streamEl);
+    }
+  }
+  // Show only a compact preview — last ~300 chars of accumulated stream
+  const current = streamEl.textContent || '';
+  const updated = (current + text).slice(-300);
+  streamEl.textContent = updated;
+  // Auto-scroll the chat panel if user is near bottom
+  const scroll = document.getElementById('sidebar-scroll-area');
+  if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
+    scroll.scrollTop = scroll.scrollHeight;
+  }
 }
 
 function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
@@ -5097,37 +5131,89 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
     let payload: any = null;
+    // Accumulates partial JSON across TCP chunk boundaries
+    let partialJsonBuffer = '';
+    // Live streaming token accumulator — shown in UI while code is being generated
+    let liveTokenBuffer = '';
+    let liveTokenFlushTimer: number | null = null;
+
+    function flushLiveTokens() {
+      if (liveTokenFlushTimer !== null) window.clearTimeout(liveTokenFlushTimer);
+      liveTokenFlushTimer = null;
+      if (!liveTokenBuffer) return;
+      // Show token progress in the shimmer / journal working card
+      appendToMessageShimmer(status, liveTokenBuffer);
+      liveTokenBuffer = '';
+    }
+
     if (reader) {
       let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            const dataStr = trimmed.slice(6).trim();
-            if (!dataStr) continue;
+        // Split on SSE double-newline boundaries
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const part of parts) {
+          // Skip SSE comments (heartbeat keepalives like ": keepalive")
+          const trimmedPart = part.trim();
+          if (!trimmedPart || trimmedPart.startsWith(':')) continue;
+
+          // Collect all data: lines in this SSE block (handles multi-line data)
+          const dataLines = trimmedPart
+            .split('\n')
+            .filter(l => l.startsWith('data:'))
+            .map(l => l.slice(5).trimStart());
+          if (!dataLines.length) continue;
+
+          const dataStr = dataLines.join('\n').trim();
+          if (!dataStr || dataStr === '[DONE]') continue;
+
+          // Robust JSON parsing with partial-chunk recovery
+          let data: any;
+          try {
+            data = JSON.parse(dataStr);
+            partialJsonBuffer = ''; // reset partial buffer on successful parse
+          } catch {
+            // Accumulate partial JSON across chunk boundaries
+            partialJsonBuffer += dataStr;
             try {
-              const data = JSON.parse(dataStr);
-              if (data.type === 'agent_step') {
-                markAgentStep(data.step, data.message);
-              } else if (data.type === 'done') {
-                payload = data.payload;
-              } else if (data.type === 'error') {
-                throw new Error(data.error || 'SSE stream error');
-              }
-            } catch (err: any) {
-              console.error('Failed to parse SSE data:', err, dataStr);
-              if (err.message && err.message !== 'Unexpected end of JSON input') {
-                throw err;
-              }
+              data = JSON.parse(partialJsonBuffer);
+              partialJsonBuffer = ''; // success — reset
+            } catch {
+              continue; // wait for more chunks
+            }
+          }
+
+          try {
+            if (data.type === 'agent_step') {
+              // Flush any accumulated live tokens before showing a new step
+              flushLiveTokens();
+              markAgentStep(data.step, data.message);
+            } else if (data.type === 'token') {
+              // Accumulate live tokens and flush with debounce for smooth rendering
+              liveTokenBuffer += data.text;
+              if (liveTokenFlushTimer !== null) window.clearTimeout(liveTokenFlushTimer);
+              liveTokenFlushTimer = window.setTimeout(flushLiveTokens, 32); // ~2 frames at 60fps
+            } else if (data.type === 'done') {
+              flushLiveTokens();
+              payload = data.payload;
+            } else if (data.type === 'error') {
+              flushLiveTokens();
+              throw new Error(data.error || 'SSE stream error');
+            }
+          } catch (dispatchErr: any) {
+            if (dispatchErr.message && dispatchErr.message !== 'SSE stream error') {
+              console.warn('[huggy:sse_dispatch]', dispatchErr.message);
+            } else {
+              throw dispatchErr;
             }
           }
         }
       }
+      // Flush any remaining tokens at end of stream
+      flushLiveTokens();
     }
     if (!payload) throw new Error('Generation failed or empty response');
 

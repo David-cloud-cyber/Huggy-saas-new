@@ -222,4 +222,47 @@ export class ModelRouter {
 
     return tierValue(userPlan) >= tierValue(requiredPlan);
   }
+
+  /**
+   * Selects the best model to act as LLM-as-judge (second-opinion quality reviewer).
+   * The judge should be a different model from the generator, reasoning-capable,
+   * fast enough to not add major latency, and affordable enough for all plans.
+   *
+   * Logic:
+   * - Prefers a reasoning-capable Balanced model (Claude Sonnet / GPT-5 / Gemini Pro)
+   * - Never picks the same model as the primary generator
+   * - Falls back to the default model if no better option is available
+   */
+  selectJudgeModel(generatorModelId: string, userCredits: number, plan: string): AllowedModelId {
+    // Ordered preference: good reasoning, mid-tier cost, different from generator
+    const judgePreferences: AllowedModelId[] = [
+      'anthropic/claude-sonnet-4.6',
+      'google/gemini-3-pro-preview',
+      'openai/gpt-5.5',
+      'deepseek/deepseek-v4-pro',
+      'google/gemini-3.5-flash',
+      'openai/gpt-5-mini',
+    ];
+
+    const planAccessibleModels = AI_ALLOWED_MODELS.filter(modelId => {
+      const minPlan = AI_MODEL_PLAN_ACCESS[modelId];
+      return this.isPlanSufficient(plan, minPlan);
+    });
+
+    for (const candidate of judgePreferences) {
+      if (
+        candidate !== generatorModelId &&
+        planAccessibleModels.includes(candidate) &&
+        MODEL_ACTION_CREDIT_FLOORS[candidate] <= userCredits
+      ) {
+        return candidate;
+      }
+    }
+
+    // Last resort: any different affordable model
+    const fallback = planAccessibleModels.find(m =>
+      m !== generatorModelId && MODEL_ACTION_CREDIT_FLOORS[m] <= userCredits
+    );
+    return (fallback as AllowedModelId) || DEFAULT_PROVIDER_MODEL_ID;
+  }
 }
