@@ -5147,7 +5147,6 @@ async function generateFilesWithAi(input: {
   let attempt = 0;
   let result: any = null;
   let currentPrompt = enrichedPrompt;
-  let totalCostUsd = 0;
   
   while (attempt < 2) {
     input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
