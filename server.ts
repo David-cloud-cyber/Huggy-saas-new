@@ -3771,7 +3771,7 @@ async function createAgentTextResponse(input: {
         intent: decision.intent,
       }),
       model: result.model,
-      cost_usd: result.cost_usd,
+      cost_usd: totalCostUsd,
     };
   } catch (error) {
     if (decision.intent === 'plan') {
@@ -5177,6 +5177,7 @@ async function generateFilesWithAi(input: {
       runtimeConfig: runtimeOptions?.providerConfig,
     });
 
+    totalCostUsd += (result.cost_usd || 0);
     input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Le Juge évalue la qualité du code...' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
@@ -5204,7 +5205,7 @@ async function generateFilesWithAi(input: {
     files,
     summary: String(parsed.summary || 'Application files generated.'),
     model: result.model,
-    cost_usd: result.cost_usd,
+    cost_usd: totalCostUsd,
   };
 }
 
