@@ -1,6 +1,10 @@
 import express from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
+import { buildMetaPrompt } from './src/services/agent-meta-prompter.ts';
+import { buildDependencyGraph, findDependents } from './src/services/agent-ast-parser.ts';
+import { extractArchitectureDecisions, updateProjectMemory, buildMemoryRagContext } from './src/services/agent-memory-rag.ts';
+import { evaluateAgentOutput, buildRetryPrompt } from './src/services/agent-eval-judge.ts';
 import fs from 'fs';
 import path from 'path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -5125,32 +5129,60 @@ async function generateFilesWithAi(input: {
     })
     : null;
 
-  const result = await providerGateway.chat(selectedModel, [
-    {
-      role: 'system',
-      content: buildGenerationSystemPrompt({
-        prompt: input.prompt,
-        uiPolicySystemPrompt: uiPolicy.systemPrompt,
-        hasExistingFiles: input.existingFiles.length > 0,
-      }),
-    },
-    {
-      role: 'user',
-      content: JSON.stringify({
-        projectName: input.projectName,
-        prompt: input.prompt,
-        existingFiles: fileManifest || 'No existing files yet.',
-        existingFilesContent,
-        uiGenerationPolicy: uiPolicy.userContext,
-        seniorAgentOS: input.seniorAgentContext || undefined,
-        deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
-      }),
-    },
-  ], {
-    maxAttempts: 2,
-    timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
-    runtimeConfig: runtimeOptions?.providerConfig,
-  });
+  // --- AGENTIC AI V3 LOOP ---
+  const depGraph = buildDependencyGraph(input.existingFiles);
+  const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
+  
+  // Extract memory (ADRs) from last actions and build RAG context
+  const memoryContext = buildMemoryRagContext({ adrs: [], knownPreferences: ['TailwindCSS'] });
+  
+  // Meta-prompting: enrich the user's prompt
+  const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
+
+  let attempt = 0;
+  let result: any = null;
+  let currentPrompt = enrichedPrompt;
+  
+  while (attempt < 2) {
+    result = await providerGateway.chat(selectedModel, [
+      {
+        role: 'system',
+        content: buildGenerationSystemPrompt({
+          prompt: input.prompt,
+          uiPolicySystemPrompt: uiPolicy.systemPrompt,
+          hasExistingFiles: input.existingFiles.length > 0,
+        }),
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          projectName: input.projectName,
+          prompt: currentPrompt,
+          memoryRagContext: memoryContext,
+          existingFiles: fileManifest || 'No existing files yet.',
+          existingFilesContent,
+          uiGenerationPolicy: uiPolicy.userContext,
+          seniorAgentOS: input.seniorAgentContext || undefined,
+          deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
+        }),
+      },
+    ], {
+      maxAttempts: 2,
+      timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
+      runtimeConfig: runtimeOptions?.providerConfig,
+    });
+
+    const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
+    const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
+    
+    if (judgeEval.passed || attempt >= 1) {
+      break;
+    }
+    
+    console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
+    currentPrompt = buildRetryPrompt(input.prompt, judgeEval);
+    attempt++;
+  }
 
   const parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
     hasExistingFiles: input.existingFiles.length > 0,
