@@ -3771,7 +3771,7 @@ async function createAgentTextResponse(input: {
         intent: decision.intent,
       }),
       model: result.model,
-      cost_usd: totalCostUsd,
+      cost_usd: result.cost_usd || 0,
     };
   } catch (error) {
     if (decision.intent === 'plan') {
@@ -5146,6 +5146,7 @@ async function generateFilesWithAi(input: {
   let attempt = 0;
   let result: any = null;
   let currentPrompt = enrichedPrompt;
+  let totalCostUsd = 0;
   
   while (attempt < 2) {
     input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
