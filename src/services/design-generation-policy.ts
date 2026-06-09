@@ -640,17 +640,20 @@ const platformIntelligence: Record<GeneratedAppType, PlatformIntelligence> = {
 
 const antiAiDesignRules = [
   'Never produce UI that looks AI-generated, like a Tailwind starter kit, purple-blue gradient page, generic hero, or identical card grid.',
+  'Design Thinking & Tone Commitment: Before styling, choose a bold and extreme aesthetic direction (e.g. brutally minimal, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, industrial/utilitarian). Execute the chosen aesthetic with high intentionality, visual poise, and context-specific character.',
+  'Typography Selection: Use distinctive typography pairing a high-character display font with a clean, readable body font. Avoid generic system fonts and overused, cliched font choices like Inter, Space Grotesk, Roboto, or Arial.',
+  'Cohesive Color & Theme: Select a custom color palette defined by CSS variables. Prioritize a single dominant color with sharp, unexpected accent colors over timid, evenly-distributed palettes. Vary between light/dark themes and customized schemas tailored to the product mood.',
+  'Staggered Motion & Surprise Interactions: Implement CSS-only animations and micro-interactions for high-impact moments. Use staggered reveals (animation-delay) on page load and hover/scroll-triggered transitions that surprise the user, avoiding generic transition-all setups.',
+  'Spatial Composition & Layout Rhythm: Introduce unexpected layouts, grid-breaking elements, asymmetry, overlapping surfaces, diagonal flow, and generous negative space or controlled high density.',
+  'Atmosphere, Depth & Textures: Create immersive background atmosphere and visual depth. Avoid solid background colors; utilize gradient meshes, noise/grain overlays, subtle geometric patterns, layered transparencies, dramatic shadows, custom cursors, and custom borders.',
   'Use a deliberate mini design system: CSS custom properties for color, semantic states, type, spacing, radius, shadows, z-index, and motion.',
   'Define one primary color, one secondary/accent color, neutral surfaces/text/borders, and semantic --success, --warning, --error, and --info tokens.',
-  'Use at least two distinct font roles: display/body or body/mono, with intentional contrast and safe fallbacks.',
   'Use a fixed type scale close to 12 / 14 / 16 / 20 / 24 / 32 / 48px, context-specific line heights, and tabular numbers for metrics or data.',
-  'Use distinctive accent colors that match the product mood; avoid Tailwind default blue, indigo, violet, and the common AI gradient.',
   'Use 4px/8px-grid spacing. Every value must feel deliberate and consistent, never random one-off spacing.',
   'Buttons and core controls must have an accessible touch target close to 44x44px unless the component is a compact secondary icon with a clear surrounding hit area.',
   'Create component states for hover, active, focus-visible, disabled, loading, empty, success, warning, and error.',
   'Use real perceived-performance patterns: skeletons for loading lists/cards and graceful empty states.',
   'Respect WCAG AA contrast, semantic landmarks, visible focus, and reduced motion.',
-  'Use purposeful motion with custom cubic-bezier timings; avoid transition-all and decoration-only animation.',
   'Never include secrets, API keys, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
   'Generate production-ready code that is self-contained for preview and would pass a senior product design review.',
 ];
