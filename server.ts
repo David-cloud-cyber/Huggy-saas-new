@@ -5089,6 +5089,7 @@ async function generateFilesWithAi(input: {
   existingFiles: GeneratedFile[];
   seniorAgentContext?: SeniorAgentContext;
   deepReasoningContract?: DeepReasoningContract;
+  onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(getOpenRouterApiKey());
   if (!hasLiveKey) {
@@ -5130,13 +5131,16 @@ async function generateFilesWithAi(input: {
     : null;
 
   // --- AGENTIC AI V3 LOOP ---
+  input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Analyse des dépendances (AST)...' });
   const depGraph = buildDependencyGraph(input.existingFiles);
   const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
   
   // Extract memory (ADRs) from last actions and build RAG context
+  input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Extraction de la mémoire architecturale (RAG)...' });
   const memoryContext = buildMemoryRagContext({ adrs: [], knownPreferences: ['TailwindCSS'] });
   
   // Meta-prompting: enrich the user's prompt
+  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Enrichissement du prompt...' });
   const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
 
   let attempt = 0;
@@ -5144,6 +5148,7 @@ async function generateFilesWithAi(input: {
   let currentPrompt = enrichedPrompt;
   
   while (attempt < 2) {
+    input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
     result = await providerGateway.chat(selectedModel, [
       {
         role: 'system',
@@ -5172,14 +5177,17 @@ async function generateFilesWithAi(input: {
       runtimeConfig: runtimeOptions?.providerConfig,
     });
 
+    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Le Juge évalue la qualité du code...' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
     
     if (judgeEval.passed || attempt >= 1) {
+      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'Le code a passé l\'évaluation avec succès.' });
       break;
     }
     
     console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
+    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: `Le Juge a rejeté le code: ${judgeEval.failures[0]}. Auto-correction en cours...` });
     currentPrompt = buildRetryPrompt(input.prompt, judgeEval);
     attempt++;
   }
@@ -9483,6 +9491,12 @@ app.post('/api/import/prepare', async (req: any, res: any) => {
 });
 
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
+  const isStream = req.query.stream === 'true';
+  if (isStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+  }
   const requestId = `req_${randomUUID()}`;
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
@@ -9724,6 +9738,11 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
     const generation = await generateFilesWithAi({
+      onEvent: (event) => {
+        if (isStream) {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+      },
       projectName: project.name,
       prompt: executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt,
       project,
