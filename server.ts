@@ -8,6 +8,9 @@ import { evaluateAgentOutput, buildRetryPrompt } from './src/services/agent-eval
 import { buildSmartContextInjection } from './src/services/smart-context-injector.ts';
 import { extractDesignTokens, buildDesignTokenContext, designSystemToMemoryRows, designSystemFromMemoryRow } from './src/services/design-token-store.ts';
 import { detectPromptConflict, conflictToPromptContext } from './src/services/conflict-detector.ts';
+import { SemanticRag } from './src/services/semantic-rag.ts';
+import { runParallelAgents, mergeAgentOutputs, selectAgentsForContext, type ParallelAgentContext } from './src/services/parallel-agent-runner.ts';
+import { initJobQueue, startJobWorker, enqueueJob, getJobStatus, cancelJob, shouldUseJobQueue, registerJobHandler } from './src/services/async-job-queue.ts';
 import fs from 'fs';
 import path from 'path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -5517,7 +5520,72 @@ async function generateFilesWithAi(input: {
   input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Analyse des dépendances (AST)...' });
   const depGraph = buildDependencyGraph(input.existingFiles);
   const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
-  
+
+  // ✅ Semantic RAG — upgrade context injection with TF-IDF relevance scoring
+  // Replaces the positional file selection with semantically relevant files
+  const semanticContext = (() => {
+    try {
+      if (input.existingFiles.length >= 8) {
+        const ragFiles = SemanticRag.selectRelevantFiles(
+          input.existingFiles,
+          input.prompt,
+          { topK: 22, tokenBudget: 75_000 },
+        );
+        // Return as formatted context (same shape as buildExistingFilesContextForGeneration)
+        const chunks = ragFiles.map(f =>
+          `--- ${f.path} (${f.language || 'text'}, rag_score=${f.ragScore.toFixed(3)}) ---\n${f.content || ''}`,
+        );
+        return chunks.join('\n\n') || null;
+      }
+      return null;
+    } catch { return null; }
+  })();
+
+  // ✅ Parallel specialist agents — run concurrently before main generation
+  let parallelAgentContext = '';
+  if (input.existingFiles.length >= 0 && ['build', 'edit'].includes(input.decision?.intent || '')) {
+    input.onEvent?.({ type: 'agent_step', step: 'parallel_agents', message: 'Agents spécialisés en parallèle...' });
+    try {
+      const agentCtx: ParallelAgentContext = {
+        projectName: input.projectName,
+        userPrompt: input.prompt,
+        appType,
+        fileCount: input.existingFiles.length,
+        hasAuth: /auth|login|signup|session/i.test(input.prompt),
+        hasDatabase: /database|supabase|sql|schema/i.test(input.prompt),
+        hasPayments: /stripe|payment|billing|checkout/i.test(input.prompt),
+        language: input.deepReasoningContract?.language || 'auto',
+      };
+      const agentRoles = selectAgentsForContext(agentCtx);
+
+      if (agentRoles.length > 0) {
+        // Parallel agent executor — uses a fast model for sub-analyses
+        const agentExecutor = async (task: import('./src/services/parallel-agent-runner.ts').AgentTask) => {
+          const fastModel = 'google/gemini-3.5-flash' as import('./src/config/ai-models.ts').AllowedModelId;
+          const result = await providerGateway.chat(fastModel, [
+            { role: 'system', content: task.systemContext },
+            { role: 'user', content: task.prompt },
+          ], { timeoutMs: 15_000, maxAttempts: 1 });
+          return result.text;
+        };
+
+        const agentResults = await runParallelAgents(agentCtx, agentExecutor, agentRoles, 15_000);
+        parallelAgentContext = mergeAgentOutputs(agentResults);
+        totalCostUsd += agentResults.length * 0.001; // nominal cost tracking
+
+        const successCount = agentResults.filter(r => r.success).length;
+        input.onEvent?.({
+          type: 'agent_step',
+          step: 'parallel_agents_done',
+          message: `${successCount}/${agentRoles.length} agents spécialisés complétés.`,
+        });
+      }
+    } catch (parallelErr: any) {
+      // Never block generation if parallel agents fail
+      console.warn('[huggy:parallel_agents_failed]', { message: parallelErr?.message });
+    }
+  }
+
   // Extract memory (ADRs) from last actions and build RAG context
   input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Extraction de la mémoire architecturale (RAG)...' });
 
@@ -5597,6 +5665,7 @@ async function generateFilesWithAi(input: {
     enrichedPrompt,
     designTokenContext,
     conflictContext,
+    parallelAgentContext,   // ✅ parallel agent pre-analysis
   ].filter(Boolean).join('\n\n');
 
   let attempt = 0;
@@ -5628,7 +5697,8 @@ async function generateFilesWithAi(input: {
             prompt: currentPrompt,
             memoryRagContext: memoryContext,
             existingFiles: fileManifest || 'No existing files yet.',
-            existingFilesContent,
+            // ✅ Semantic RAG: most relevant files first, others in manifest
+            existingFilesContent: semanticContext || existingFilesContent,
             uiGenerationPolicy: uiPolicy.userContext,
             seniorAgentOS: input.seniorAgentContext || undefined,
             deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
@@ -5667,7 +5737,8 @@ async function generateFilesWithAi(input: {
             prompt: currentPrompt,
             memoryRagContext: memoryContext,
             existingFiles: fileManifest || 'No existing files yet.',
-            existingFilesContent,
+            // ✅ Semantic RAG on fallback path too
+            existingFilesContent: semanticContext || existingFilesContent,
             uiGenerationPolicy: uiPolicy.userContext,
             seniorAgentOS: input.seniorAgentContext || undefined,
             deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
@@ -11664,6 +11735,83 @@ app.use((req, res, next) => {
   return res.redirect(302, normalizedPath);
 });
 
+// ─── Async Job Queue API ──────────────────────────────────────────────────────
+
+// GET /api/jobs/:id — poll job status
+app.get('/api/jobs/:id', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const job = await getJobStatus(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
+  // Security: only job owner or org member can see it
+  if (job.user_id !== auth.userId && job.organization_id !== auth.userId) {
+    return res.status(403).json({ success: false, error: 'Access denied.' });
+  }
+  return res.json({ success: true, job: {
+    id: job.id, type: job.type, status: job.status, priority: job.priority,
+    project_id: job.project_id, attempts: job.attempts, max_attempts: job.max_attempts,
+    created_at: job.created_at, started_at: job.started_at, completed_at: job.completed_at,
+    result: job.result || null, error: job.error || null,
+  }});
+});
+
+// GET /api/jobs/:id/events — SSE stream of job progress events
+app.get('/api/jobs/:id/events', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const job = await getJobStatus(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'Job not found.' });
+  if (job.user_id !== auth.userId && job.organization_id !== auth.userId) {
+    return res.status(403).json({ success: false, error: 'Access denied.' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const heartbeat = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); }
+  }, 15_000);
+  res.on('close', () => clearInterval(heartbeat));
+
+  let lastEventId = 0;
+  const pollEvents = async () => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      const { data: events } = await supabase
+        .from('agent_job_events')
+        .select('id, step, message, created_at')
+        .eq('job_id', req.params.id)
+        .gt('id', lastEventId)
+        .order('created_at', { ascending: true });
+      if (events?.length) {
+        for (const event of events) {
+          res.write(`data: ${JSON.stringify({ type: 'progress', step: event.step, message: event.message })}\n\n`);
+          lastEventId = event.id;
+        }
+      }
+      // Check if job is done
+      const currentJob = await getJobStatus(req.params.id);
+      if (currentJob && ['completed', 'failed', 'cancelled'].includes(currentJob.status)) {
+        res.write(`data: ${JSON.stringify({ type: 'done', status: currentJob.status, result: currentJob.result, error: currentJob.error })}\n\n`);
+        clearInterval(heartbeat);
+        clearInterval(poller);
+        res.end();
+      }
+    } catch { /* ignore polling errors */ }
+  };
+
+  const poller = setInterval(pollEvents, 2_000);
+  await pollEvents();
+});
+
+// DELETE /api/jobs/:id — cancel a pending job
+app.delete('/api/jobs/:id', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const cancelled = await cancelJob(req.params.id, auth.userId);
+  return res.json({ success: cancelled });
+});
+
 app.use(async (req, res, next) => {
   if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
   const host = normalizeDomainHost(req.hostname || req.headers.host || '');
@@ -11727,4 +11875,14 @@ function pathExists(target: string): boolean {
 
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
+
+  // ✅ Initialize async job queue worker — picks up long-running jobs from Supabase
+  const supabaseClient = getSupabase();
+  if (supabaseClient) {
+    initJobQueue(supabaseClient);
+    startJobWorker();
+    console.log('[huggy:job_queue] Worker initialized');
+  } else {
+    console.warn('[huggy:job_queue] Skipped — Supabase not configured');
+  }
 });
