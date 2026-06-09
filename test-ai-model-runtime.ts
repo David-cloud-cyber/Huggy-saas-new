@@ -153,5 +153,5 @@ for (const modelId of AI_ALLOWED_MODELS) {
     assert.ok(extras.thinking, 'OpenRouter extras should forward thinking params');
   }
 }
-
 console.log('ai-model-runtime tests passed');
+

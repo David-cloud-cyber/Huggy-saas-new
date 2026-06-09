@@ -150,9 +150,6 @@ function knownLimitsForProvider(provider: ModelProvider, modelId: AllowedModelId
 }
 
 function supportsReasoningControl(provider: ModelProvider, modelId: AllowedModelId) {
-  // Expanded reasoning control detection for all major providers.
-  // Huggy sends provider-specific reasoning/thinking parameters only when
-  // the model is explicitly known to support them.
   if (provider === 'openai' && /gpt-5\.5|gpt-5-pro|o[1-4]/i.test(modelId)) return true;
   if (provider === 'anthropic' && /claude-opus|claude-sonnet-4/i.test(modelId)) return true;
   if (provider === 'google' && /gemini-3-pro|gemini-3-ultra/i.test(modelId)) return true;

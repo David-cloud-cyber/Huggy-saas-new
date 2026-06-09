@@ -43,6 +43,15 @@ export type DeepReasoningContract = {
     vision: boolean;
     streaming: boolean;
   };
+  quality_critic: {
+    checks: string[];
+    no_fake_success: string[];
+  };
+  communication: {
+    user_language: 'fr' | 'en' | 'auto';
+    max_public_sentences: number;
+    show_internal_reasoning: false;
+  };
   architecture_critic: {
     max_component_depth: number;
     max_file_count: number;
@@ -59,15 +68,6 @@ export type DeepReasoningContract = {
     auto_repair_strategies: string[];
     escalation_threshold: number;
     max_retry_cycles: number;
-  };
-  quality_critic: {
-    checks: string[];
-    no_fake_success: string[];
-  };
-  communication: {
-    user_language: 'fr' | 'en' | 'auto';
-    max_public_sentences: number;
-    show_internal_reasoning: false;
   };
 };
 
@@ -241,135 +241,6 @@ function stage(key: DeepReasoningStageKey, objective: string, output: string, us
   return { key, objective, output, user_visible };
 }
 
-function inferArchitectureCritic(input: DeepReasoningInput, appType: string) {
-  const fileCount = input.files?.length || 0;
-  const patterns: string[] = ['single_responsibility'];
-  if (fileCount > 8) patterns.push('feature_folder_structure');
-  if (/dashboard|admin|crm|saas/i.test(appType)) patterns.push('container_presenter_split', 'state_colocation');
-  if (/ecommerce|marketplace|booking/i.test(appType)) patterns.push('optimistic_updates', 'server_state_sync');
-  if (/social|communication|chat/i.test(appType)) patterns.push('event_driven', 'pub_sub');
-  if (/analytics|inventory/i.test(appType)) patterns.push('data_pipeline', 'memoized_selectors');
-  patterns.push('no_prop_drilling', 'clean_data_boundaries');
-  return {
-    max_component_depth: fileCount > 20 ? 4 : 3,
-    max_file_count: Math.max(30, fileCount * 2),
-    separation_of_concerns: true,
-    patterns: unique(patterns),
-  };
-}
-
-function inferInteractionSimulator(appType: string, prompt: string) {
-  const scenarios: string[] = [];
-  const edgeCases: string[] = [];
-  const flows: string[] = [];
-
-  // Universal scenarios
-  scenarios.push('Page loads without errors and displays meaningful content.');
-  scenarios.push('User can navigate between all primary views.');
-  edgeCases.push('Empty state is handled gracefully with actionable messaging.');
-  edgeCases.push('Network failure during data fetch shows error state, not blank screen.');
-  flows.push('First visit → onboarding or primary action → feedback.');
-
-  // App-type specific scenarios
-  if (/todo|task|project/i.test(appType)) {
-    scenarios.push('User creates, completes, and deletes a task.');
-    edgeCases.push('Very long task title wraps without breaking layout.');
-    flows.push('Create task → mark complete → filter completed → delete.');
-  }
-  if (/pomodoro|timer/i.test(appType)) {
-    scenarios.push('Timer starts, counts down, and triggers break notification.');
-    edgeCases.push('Tab switch does not freeze timer; timer survives page focus loss.');
-    flows.push('Start focus → pause → resume → break → next session.');
-  }
-  if (/ecommerce|marketplace|shop/i.test(appType)) {
-    scenarios.push('User browses products, adds to cart, and proceeds to checkout.');
-    edgeCases.push('Cart persists across page reloads; out-of-stock item shows clear status.');
-    flows.push('Browse → add to cart → review cart → checkout → confirmation.');
-  }
-  if (/dashboard|analytics|saas/i.test(appType)) {
-    scenarios.push('Dashboard loads metrics and charts without layout shift.');
-    edgeCases.push('Missing data shows placeholder, not broken chart.');
-    flows.push('Login → dashboard overview → drill into metric → export/share.');
-  }
-  if (/booking|reservation|calendar/i.test(appType)) {
-    scenarios.push('User selects a date, time slot, and confirms booking.');
-    edgeCases.push('Double-booking is prevented; past dates are disabled.');
-    flows.push('Select service → pick date/time → confirm → receive confirmation.');
-  }
-  if (/chat|messaging|communication/i.test(appType)) {
-    scenarios.push('User sends a message and sees it appear in the conversation.');
-    edgeCases.push('Very long message does not overflow; reconnection after disconnect.');
-    flows.push('Open conversation → type message → send → see delivery status.');
-  }
-  if (/crm|lead|pipeline/i.test(appType)) {
-    scenarios.push('User creates a lead and moves it through pipeline stages.');
-    edgeCases.push('Drag-and-drop across stages updates data persistently.');
-    flows.push('Add lead → qualify → move to next stage → close deal.');
-  }
-  if (/ai_tool|chatbot|generator/i.test(appType)) {
-    scenarios.push('User submits a prompt and receives a streaming AI response.');
-    edgeCases.push('Cancelling mid-stream stops cleanly; error retries gracefully.');
-    flows.push('Enter prompt → submit → see streaming response → copy/save result.');
-  }
-
-  return {
-    test_scenarios: unique(scenarios).slice(0, 8),
-    edge_cases: unique(edgeCases).slice(0, 6),
-    expected_user_flows: unique(flows).slice(0, 5),
-  };
-}
-
-function inferRecoveryDiagnostics(recentBlockers: string[]) {
-  const failureModes: string[] = [
-    'blank_preview_no_root_element',
-    'missing_vite_entrypoint',
-    'broken_import_chain',
-    'unhandled_runtime_exception',
-  ];
-  const strategies: string[] = [
-    'verify_index_html_has_root_div',
-    'verify_main_tsx_renders_app',
-    'check_package_json_dependencies',
-    'rebuild_vite_config_if_missing',
-  ];
-
-  if (recentBlockers.includes('cors_or_cross_origin')) {
-    failureModes.push('cors_blocked_api_call');
-    strategies.push('add_cors_proxy_or_headers');
-  }
-  if (recentBlockers.includes('typescript_type_error')) {
-    failureModes.push('typescript_compilation_failure');
-    strategies.push('fix_type_annotations_and_imports');
-  }
-  if (recentBlockers.includes('ssr_hydration_error')) {
-    failureModes.push('ssr_client_mismatch');
-    strategies.push('use_client_directive_or_dynamic_import');
-  }
-  if (recentBlockers.includes('database_migration_error')) {
-    failureModes.push('schema_out_of_sync');
-    strategies.push('regenerate_migration_from_blueprint');
-  }
-  if (recentBlockers.includes('websocket_or_realtime')) {
-    failureModes.push('realtime_connection_dropped');
-    strategies.push('implement_reconnection_with_backoff');
-  }
-  if (recentBlockers.includes('memory_or_performance')) {
-    failureModes.push('memory_leak_in_effect_or_listener');
-    strategies.push('audit_useEffect_cleanup_and_subscriptions');
-  }
-  if (recentBlockers.includes('auth_session_or_client')) {
-    failureModes.push('auth_session_expired_or_missing');
-    strategies.push('refresh_token_or_redirect_to_login');
-  }
-
-  return {
-    known_failure_modes: unique(failureModes),
-    auto_repair_strategies: unique(strategies),
-    escalation_threshold: 3,
-    max_retry_cycles: 2,
-  };
-}
-
 export function buildDeepReasoningContract(input: DeepReasoningInput): DeepReasoningContract {
   const execution = input.executionContract;
   const intent = execution?.mode || input.decision?.intent || 'auto';
@@ -378,6 +249,7 @@ export function buildDeepReasoningContract(input: DeepReasoningInput): DeepReaso
   const shouldVerify = Boolean(execution?.requires_runner || input.decision?.requiresPreviewRebuild || canMutate);
   const recentBlockers = inferRecentBlockers(input);
   const workflow = execution?.model_workflow;
+  const fileCount = input.files?.length || 0;
   const appType = inferAppType(input.prompt);
 
   return {
@@ -388,7 +260,7 @@ export function buildDeepReasoningContract(input: DeepReasoningInput): DeepReaso
     app_type: appType,
     context_builder: {
       project_name: compactText(input.projectName || 'Untitled Huggy project', 120),
-      file_count: input.files?.length || 0,
+      file_count: fileCount,
       critical_files: criticalFiles(input.files),
       recent_blockers: recentBlockers,
       assumptions: inferAssumptions(input),
@@ -413,13 +285,10 @@ export function buildDeepReasoningContract(input: DeepReasoningInput): DeepReaso
       reasoning: workflow?.reasoning ?? true,
       structured_output: workflow?.structured_output ?? canMutate,
       tool_loop: workflow?.tool_calling ?? canMutate,
-      long_context: workflow?.long_context ?? Boolean((input.files?.length || 0) > 12),
+      long_context: workflow?.long_context ?? Boolean(fileCount > 12),
       vision: workflow?.vision ?? false,
       streaming: workflow?.streaming ?? canMutate,
     },
-    architecture_critic: inferArchitectureCritic(input, appType),
-    interaction_simulator: inferInteractionSimulator(appType, input.prompt),
-    recovery_diagnostics: inferRecoveryDiagnostics(recentBlockers),
     quality_critic: {
       checks: [
         'The generated app renders with index.html, src/main.tsx, src/App.tsx and a root element when using React/Vite.',
@@ -427,22 +296,83 @@ export function buildDeepReasoningContract(input: DeepReasoningInput): DeepReaso
         'Persistence is honest: localStorage works locally; database persistence includes schema/RLS/auth guards when requested.',
         'No raw JSON, model chatter, hidden prompts, provider details or code blocks should appear as the final user answer.',
         'If preview/build/browser checks fail, fix and retest before claiming ready.',
-        'Architecture depth does not exceed max_component_depth; no god components or circular dependencies.',
-        'Every user-facing interactive element has loading, error, and empty states.',
-        'Accessibility audit passes: focus indicators, aria labels, keyboard navigation, color contrast.',
       ],
       no_fake_success: [
         'No preview_ready without a real preview-ready event or successful preview pipeline.',
         'No production-ready claim without build/check/security evidence.',
         'No publish success unless Vercel deployment and Supabase persistence both succeeded.',
         'No recoverable draft message repeated twice.',
-        'No security-ok claim without verifying secrets, auth guards, and input validation.',
       ],
     },
     communication: {
       user_language: language,
       max_public_sentences: canMutate ? 5 : 3,
       show_internal_reasoning: false,
+    },
+    architecture_critic: {
+      max_component_depth: fileCount > 30 ? 4 : 3,
+      max_file_count: fileCount > 50 ? 80 : 40,
+      separation_of_concerns: true,
+      patterns: appType === 'saas_dashboard'
+        ? ['feature-based modules', 'shared services layer', 'container/presenter split']
+        : appType === 'ecommerce' || appType === 'marketplace'
+        ? ['domain-driven layout', 'cart/checkout isolation', 'product catalog module']
+        : appType === 'crm'
+        ? ['entity-based modules', 'pipeline state machine', 'contact graph isolation']
+        : ['component colocation', 'hooks for shared logic', 'flat feature folders'],
+    },
+    interaction_simulator: {
+      test_scenarios: appType === 'todo_task_app'
+        ? ['create task', 'complete task', 'delete task', 'filter tasks', 'persist across reload']
+        : appType === 'pomodoro_timer'
+        ? ['start timer', 'pause timer', 'switch to break', 'view history', 'reset session']
+        : appType === 'ecommerce' || appType === 'marketplace'
+        ? ['browse products', 'add to cart', 'checkout flow', 'payment confirmation', 'order history']
+        : appType === 'booking_app'
+        ? ['select date', 'choose time slot', 'confirm booking', 'cancel booking', 'view bookings']
+        : appType === 'social_platform'
+        ? ['create post', 'like post', 'follow user', 'view feed', 'edit profile']
+        : appType === 'project_management'
+        ? ['create project', 'add task to board', 'move task between columns', 'assign member', 'view roadmap']
+        : appType === 'education_platform'
+        ? ['enroll in course', 'watch lesson', 'take quiz', 'view progress', 'submit assignment']
+        : appType === 'healthcare_app'
+        ? ['book appointment', 'view patient record', 'issue prescription', 'check schedule', 'send notification']
+        : ['load app', 'primary action', 'secondary action', 'error recovery', 'data persistence'],
+      edge_cases: [
+        'empty state on first load',
+        'rapid repeated clicks',
+        'network timeout or failure',
+        'very long text input',
+        'concurrent modifications',
+      ],
+      expected_user_flows: appType === 'pomodoro_timer'
+        ? ['start focus session → complete → short break → repeat', 'view history of past sessions']
+        : appType === 'ecommerce' || appType === 'marketplace'
+        ? ['browse → add to cart → checkout → payment → confirmation', 'search → filter → compare → buy']
+        : appType === 'social_platform'
+        ? ['sign up → create profile → post content → engage with feed', 'discover users → follow → interact']
+        : appType === 'project_management'
+        ? ['create project → add tasks → assign → track progress → deliver', 'review board → update status → report']
+        : ['open app → perform main task → verify result → close'],
+    },
+    recovery_diagnostics: {
+      known_failure_modes: recentBlockers.length
+        ? recentBlockers.map(b => `blocker:${b}`)
+        : ['no known failures'],
+      auto_repair_strategies: [
+        'verify entry point files exist and are correctly linked',
+        'check import paths and module resolution',
+        'validate environment variables and secrets are not client-exposed',
+        'ensure CSS/style imports are present and not circular',
+        'confirm state initialization and default values',
+        ...(recentBlockers.includes('cors_or_cross_origin') ? ['add CORS headers or proxy configuration'] : []),
+        ...(recentBlockers.includes('typescript_type_error') ? ['fix type annotations and generic constraints'] : []),
+        ...(recentBlockers.includes('ssr_hydration_error') ? ['wrap client-only code in useEffect or dynamic import'] : []),
+        ...(recentBlockers.includes('database_migration_error') ? ['verify schema migrations are applied in order'] : []),
+      ],
+      escalation_threshold: recentBlockers.length > 3 ? 2 : 3,
+      max_retry_cycles: recentBlockers.length > 5 ? 4 : 3,
     },
   };
 }
