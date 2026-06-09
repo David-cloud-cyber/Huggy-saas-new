@@ -1902,6 +1902,10 @@ function ensureChatShimmerStyle() {
     .message-card.message-card-shimmer {
       overflow: hidden;
       position: relative;
+      /* Effet de lueur (glow) pendant la réflexion/génération */
+      box-shadow: 0 0 15px var(--accent-blue-soft);
+      border-color: var(--accent-blue-active);
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
     }
 
     .message-card.message-card-shimmer .msg-body-paragraph {
@@ -1910,26 +1914,34 @@ function ensureChatShimmerStyle() {
       gap: 8px;
       color: var(--text-sub, #52525b);
       font-weight: 650;
+      animation: text-reveal 0.3s ease-in-out;
     }
 
+    /* Le curseur clignotant (blinking cursor) */
+    .message-card.message-card-shimmer .msg-body-paragraph::after {
+      content: "▮";
+      color: var(--accent-blue);
+      animation: huggy-blinking-cursor 1s step-start infinite;
+      margin-left: 2px;
+      font-size: 1.1em;
+    }
+
+    /* Suppression des vieux points de chargement s'ils interfèrent */
     .message-card.message-card-shimmer .msg-body-paragraph::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: currentColor;
-      opacity: .68;
-      box-shadow: 12px 0 0 currentColor, 24px 0 0 currentColor;
-      transform: translateX(0);
-      animation: huggy-chat-dots 900ms cubic-bezier(.22, 1, .36, 1) infinite;
-    }
-
-    .message-card.message-card-shimmer::after {
       content: none;
     }
 
     [data-theme="dark"] .message-card.message-card-shimmer::after {
-      content: none;
+      content: none; /* Le after originel du theme, on le laisse vide car on utilise ::after sur msg-body-paragraph */
+    }
+
+    @keyframes text-reveal {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes huggy-blinking-cursor {
+      50% { opacity: 0; }
     }
 
     @keyframes huggy-chat-shimmer {
@@ -1937,14 +1949,9 @@ function ensureChatShimmerStyle() {
       to { background-position: -100% 0; }
     }
 
-    @keyframes huggy-chat-dots {
-      0%, 100% { opacity: .34; transform: translateX(0); }
-      50% { opacity: .82; transform: translateX(2px); }
-    }
-
     @media (prefers-reduced-motion: reduce) {
-      .message-card.message-card-shimmer::after,
-      .message-card.message-card-shimmer .msg-body-paragraph::before {
+      .message-card.message-card-shimmer,
+      .message-card.message-card-shimmer .msg-body-paragraph::after {
         animation: none !important;
       }
     }
@@ -2037,7 +2044,7 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, opti
     card.setAttribute('aria-busy', 'true');
   }
   scroll.appendChild(card);
-  scroll.scrollTop = scroll.scrollHeight;
+  scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
   return card;
 }
 
@@ -2096,12 +2103,20 @@ function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
 function updateMessage(card: HTMLElement | null, body: string) {
   const safeBody = repairTextEncoding(redactSecrets(body));
   const id = messageHandleId(card);
+  
+  const scroll = document.getElementById("sidebar-scroll-area");
+  const isAtBottom = scroll ? Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 60 : false;
+
   if (id && conversationApi) {
     conversationApi.updateMessage(id, safeBody);
-    return;
+  } else {
+    const paragraph = card?.querySelector('.msg-body-paragraph');
+    if (paragraph) paragraph.textContent = safeBody;
   }
-  const paragraph = card?.querySelector('.msg-body-paragraph');
-  if (paragraph) paragraph.textContent = safeBody;
+
+  if (isAtBottom && scroll) {
+    scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
+  }
 }
 
 function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock | null) {
