@@ -5,6 +5,9 @@ import { buildMetaPrompt } from './src/services/agent-meta-prompter.ts';
 import { buildDependencyGraph, findDependents } from './src/services/agent-ast-parser.ts';
 import { extractArchitectureDecisions, updateProjectMemory, buildMemoryRagContext } from './src/services/agent-memory-rag.ts';
 import { evaluateAgentOutput, buildRetryPrompt } from './src/services/agent-eval-judge.ts';
+import { buildSmartContextInjection } from './src/services/smart-context-injector.ts';
+import { extractDesignTokens, buildDesignTokenContext, designSystemToMemoryRows, designSystemFromMemoryRow } from './src/services/design-token-store.ts';
+import { detectPromptConflict, conflictToPromptContext } from './src/services/conflict-detector.ts';
 import fs from 'fs';
 import path from 'path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -3273,11 +3276,20 @@ class AgentOrchestrator {
       'vercel', 'domain', 'domaine', 'dns', 'cloudflare', 'production'
     ];
     const complexHints = [
-      'auth', 'login', 'signup', 'supabase', 'database', 'db', 'schema', 'migration',
-      'billing', 'stripe', 'subscription', 'abonnement', 'credits', 'crédits',
-      'deploy', 'deployment', 'railway', 'vercel', 'domain', 'analytics', 'seo',
-      'admin', 'roles', 'rls', 'storage', 'multi page', 'plusieurs pages', 'dashboard',
-      'settings', 'api', 'webhook', 'export code', 'database visible'
+      // Only truly architectural changes that CANNOT be executed without planning
+      // Removed: 'auth', 'login', 'signup', 'analytics', 'seo', 'dashboard', 'settings', 'api'
+      // These are common requests Huggy should handle directly without forcing a plan
+      'supabase', 'database', 'db', 'schema', 'migration', 'rls',
+      'billing', 'stripe', 'subscription', 'abonnement',
+      'deploy', 'deployment', 'railway', 'vercel', 'domain',
+      'multi page', 'plusieurs pages',
+      'admin roles', 'role-based', 'rbac',
+      'webhook', 'export code', 'database visible'
+    ];
+    // Signals that are complex BUT Huggy can handle autonomously (no forced plan)
+    const autonomousComplexHints = [
+      'auth', 'login', 'signup', 'analytics', 'seo', 'dashboard', 'settings', 'api',
+      'admin', 'roles', 'storage', 'crud', 'real-time', 'realtime'
     ];
     const editHints = [
       'modifie', 'change', 'ajoute', 'remove', 'supprime', 'replace', 'mets a jour', 'met a jour', 'update',
@@ -3326,7 +3338,7 @@ class AgentOrchestrator {
     const wantsVerify = hasAny(verifyHints);
     const wantsDeployAssist = hasAny(deployHints)
       && !/(crée|creer|create|ajoute|add|modifie|change|corrige|fix|build|implémente|implemente|generate|génère|genere|page|component|dashboard|landing|formulaire|supprime|remove|replace|update|met a jour|mets a jour)/i.test(lower);
-    const wantsComplexWork = hasAny(complexHints) || words.length > 28;
+    const wantsComplexWork = hasAny(complexHints) || words.length > 38; // was 28 — raised threshold so shorter prompts go direct
     const wantsEdit = wantsShortFeedbackIteration || (input.hasFiles && hasAny(editHints) && understanding.allowsFileAction);
 
     if (!forceBuild && wantsConversation && !hasAny(buildHints)) {
@@ -3799,8 +3811,19 @@ function summarizeProjectFilesForAgent(files: GeneratedFile[]) {
     .join('\n') || 'No generated files yet.';
 }
 
-function buildExistingFilesContextForGeneration(files: GeneratedFile[]) {
+function buildExistingFilesContextForGeneration(files: GeneratedFile[], prompt?: string) {
   if (!files.length) return 'No existing files yet.';
+
+  // Use smart context injection for projects with 5+ files
+  if (files.length >= 5 && prompt) {
+    const result = buildSmartContextInjection(files, prompt, {
+      tokenBudget: 80_000,
+      maxFiles: 25,
+    });
+    return result.contextText;
+  }
+
+  // Small project fallback — include everything
   const important = [...files].sort((a, b) => {
     const score = (file: GeneratedFile) => file.path === 'index.html' ? 0 : file.path.endsWith('.css') ? 1 : file.path.endsWith('.js') ? 2 : 3;
     return score(a) - score(b) || a.path.localeCompare(b.path);
@@ -3946,17 +3969,24 @@ function createProviderRuntimeOptions(input: {
   maxTokens?: number;
 }) {
   const task = inferRuntimeTaskForPrompt(input.prompt, input.decision, input.mode || 'text');
+  const estimatedInputTokens = Math.ceil((
+    String(input.prompt || '').length +
+    (input.files || []).reduce((total, file) => total + String(file.content || '').length, 0)
+  ) / 4);
+
+  // ✅ For generation mode: override maxTokens to match model capability
+  // The profile.recommended.maxTokens already accounts for frontier vs standard tiers
+  // Only override with explicit input.maxTokens if provided
   const runtime = buildAIModelRuntimeConfig({
     modelId: input.model,
     task,
     stream: input.stream,
     timeoutMs: input.timeoutMs,
-    maxTokens: input.maxTokens,
+    maxTokens: input.maxTokens, // undefined = use profile default (now properly sized)
     hasVisionInput: /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel)\b/i.test(input.prompt),
-    estimatedInputTokens: Math.ceil((
-      String(input.prompt || '').length +
-      (input.files || []).reduce((total, file) => total + String(file.content || '').length, 0)
-    ) / 4),
+    estimatedInputTokens,
+    // ✅ Use structured output for generation tasks on capable models
+    preferStructuredOutput: input.mode === 'generation' ? true : undefined,
   });
   return {
     runtime,
@@ -5439,6 +5469,7 @@ async function generateFilesWithAi(input: {
   existingFiles: GeneratedFile[];
   seniorAgentContext?: SeniorAgentContext;
   deepReasoningContract?: DeepReasoningContract;
+  recentHistory?: string[];  // last N user messages for conflict detection
   onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
   const hasLiveKey = Boolean(getOpenRouterApiKey());
@@ -5465,7 +5496,8 @@ async function generateFilesWithAi(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
-  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles);
+  // ✅ Smart context injection: relevance-ranked, import-aware, token-budget-respecting
+  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles, input.prompt);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
   const runtimeOptions = input.decision
     ? createProviderRuntimeOptions({
@@ -5520,14 +5552,56 @@ async function generateFilesWithAi(input: {
   if (!memoryContext) {
     memoryContext = buildMemoryRagContext({ adrs: [], knownPreferences: ['TailwindCSS'] });
   }
-  
+
+  // ✅ Load persisted design tokens for visual consistency across sessions
+  input.onEvent?.({ type: 'agent_step', step: 'design_tokens', message: 'Chargement des tokens design...' });
+  let designTokenContext = '';
+  try {
+    if (input.project?.id) {
+      const { data: tokenRows } = await supabaseAdmin()
+        .from('project_memory')
+        .select('content')
+        .eq('project_id', input.project.id)
+        .eq('memory_type', 'design_token')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (tokenRows?.[0]?.content) {
+        const designSystem = designSystemFromMemoryRow(tokenRows[0].content);
+        if (designSystem) {
+          designTokenContext = buildDesignTokenContext(designSystem);
+        }
+      }
+    }
+  } catch (dtErr: any) {
+    console.warn('[huggy:design_token_load_failed]', { message: dtErr?.message });
+  }
+
+  // ✅ Conflict detection — warn the LLM if new prompt contradicts recent history
+  const conflictContext = (() => {
+    try {
+      const conflict = detectPromptConflict(
+        input.prompt,
+        (input.recentHistory || []).slice(-4),
+        input.existingFiles.slice(0, 6),
+      );
+      return conflictToPromptContext(conflict);
+    } catch { return ''; }
+  })();
+
   // Meta-prompting: enrich the user's prompt
   input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Enrichissement du prompt...' });
   const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
 
+  // Compose final prompt with all context layers
+  const composedPrompt = [
+    enrichedPrompt,
+    designTokenContext,
+    conflictContext,
+  ].filter(Boolean).join('\n\n');
+
   let attempt = 0;
   let result: any = null;
-  let currentPrompt = enrichedPrompt;
+  let currentPrompt = composedPrompt;
   
   while (attempt < 2) {
     input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
@@ -5679,6 +5753,29 @@ async function generateFilesWithAi(input: {
     } catch (persistErr: any) {
       console.warn('[huggy:memory_persist_error]', { message: persistErr?.message });
     }
+
+    // ✅ Persist design tokens extracted from generated files for visual consistency
+    try {
+      const designSystem = extractDesignTokens(files);
+      if (designSystem.tokens.length > 0) {
+        const designRows = designSystemToMemoryRows(designSystem, input.project.id);
+        // Replace existing design token entry
+        await supabaseAdmin()
+          .from('project_memory')
+          .delete()
+          .eq('project_id', input.project.id)
+          .eq('memory_type', 'design_token')
+          .catch(() => null);
+        await supabaseAdmin()
+          .from('project_memory')
+          .insert(designRows)
+          .catch((err: any) => {
+            console.warn('[huggy:design_token_persist_failed]', { message: err?.message });
+          });
+      }
+    } catch (dtPersistErr: any) {
+      console.warn('[huggy:design_token_persist_error]', { message: dtPersistErr?.message });
+    }
   }
 
   return {
@@ -5701,7 +5798,8 @@ function buildGenerationMessages(input: {
     .map(file => `${file.path} (${file.content.length} chars)`)
     .slice(0, 40)
     .join('\n');
-  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles);
+  // ✅ Smart context injection for external callers of buildGenerationMessages
+  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles, input.prompt);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
 
   return [
@@ -10240,6 +10338,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       existingFiles,
       seniorAgentContext,
       deepReasoningContract,
+      // ✅ Pass recent history for conflict detection
+      recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
     });
 
     const mergedByPath = new Map<string, GeneratedFile>();

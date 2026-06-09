@@ -14,6 +14,14 @@ export type GeneratedAppType =
   | 'fintech_billing'
   | 'healthcare_education'
   | 'gaming_creative'
+  // ─── Universal open-ended types ──────────────────────────────────────────────
+  | 'productivity_tool'
+  | 'social_platform'
+  | 'education_platform'
+  | 'communication_tool'
+  | 'data_tool'
+  | 'creative_tool'
+  | 'directory_listing'
   | 'generic_web_app';
 
 export type DesignDirection =
@@ -293,6 +301,13 @@ const keywordGroups: Record<GeneratedAppType, string[]> = {
     'dessin',
   ],
   generic_web_app: [],
+  productivity_tool: ['todo', 'task', 'tache', 'taches', 'kanban', 'pomodoro', 'timer', 'minuteur', 'note', 'notes', 'checklist', 'planner', 'agenda', 'reminder', 'rappel', 'habit', 'habitude'],
+  social_platform: ['social', 'feed', 'post', 'follow', 'followers', 'like', 'reaction', 'community', 'reseau social', 'forum', 'timeline', 'network', 'profile', 'profil'],
+  education_platform: ['course', 'cours', 'learning', 'lms', 'quiz', 'lesson', 'lecon', 'module', 'student', 'teacher', 'education', 'formation', 'e-learning', 'apprentissage'],
+  communication_tool: ['chat', 'message', 'messagerie', 'notification', 'inbox', 'email client', 'discussion', 'conversation', 'direct message', 'dm'],
+  data_tool: ['csv', 'json', 'xml', 'data explorer', 'converter', 'convertisseur', 'parser', 'viewer', 'import', 'data tool', 'spreadsheet', 'table viewer'],
+  creative_tool: ['canvas', 'drawing', 'dessin', 'paint', 'image editor', 'music', 'audio', 'creative', 'creation', 'design tool', 'whiteboard', 'tableau blanc', 'generateur'],
+  directory_listing: ['directory', 'annuaire', 'job board', 'real estate', 'immobilier', 'yellow pages', 'catalogue entreprises', 'listing', 'annonce', 'petites annonces'],
 };
 
 const appTypeRules: Record<GeneratedAppType, string[]> = {
@@ -376,6 +391,41 @@ const appTypeRules: Record<GeneratedAppType, string[]> = {
     'Infer the most likely product type from the prompt and make the first screen immediately useful.',
     'Avoid generic template composition; choose one clear focal point and app-specific controls.',
     'If the platform is ambiguous, still create a coherent product experience with working controls and honest placeholder states.',
+  ],
+  productivity_tool: [
+    'Create a focused, fast utility: primary action area, clean item list, filters/tabs, empty state.',
+    'Persist to localStorage unless Supabase is requested. Show a clear empty state with a CTA to add the first item.',
+    'Every item must be deletable and togglable. Keyboard shortcuts (Enter to add, Delete to remove) are expected.',
+  ],
+  social_platform: [
+    'Create a scrollable feed with post cards, engagement actions (like, comment, share), and a profile surface.',
+    'Use optimistic UI for reactions — show immediate visual feedback before any backend confirmation.',
+    'Always include an empty feed state that guides the first action (create post, follow users).',
+  ],
+  education_platform: [
+    'Create a clear course/lesson hierarchy with visible progress indicators (percentage, steps, badges).',
+    'Quizzes must show immediate feedback per answer. Progress bars must reflect real completion state.',
+    'Use calm typography and accessibility-first design. Avoid flashy visuals that compete with content.',
+  ],
+  communication_tool: [
+    'Create a split-pane layout: conversation list on left, active thread on right (stack on mobile).',
+    'Message input must support Enter to send and Shift+Enter for new lines.',
+    'Show unread badges, typing indicators, and timestamp grouping. Empty state must invite starting a conversation.',
+  ],
+  data_tool: [
+    'Create a functional import → inspect → transform → export workflow.',
+    'Table must support column sorting, row filtering, and CSV/JSON export.',
+    'Handle malformed input gracefully with a clear error message near the import area.',
+  ],
+  creative_tool: [
+    'Create an interactive stage as the centerpiece. Controls are secondary and compact.',
+    'Undo/redo and reset are mandatory. Export/download is expected for any output.',
+    'Motion and animation should serve the creative action, not decorate the interface.',
+  ],
+  directory_listing: [
+    'Create a searchable, filterable grid of listings with consistent card format.',
+    'Each listing card shows: title, category, key metadata, and a primary action (view, contact, apply).',
+    'Always include a no-results state with a suggestion to clear filters or submit a new entry.',
   ],
 };
 
@@ -717,11 +767,18 @@ export function classifyGeneratedAppType(prompt: string): GeneratedAppType {
     'portfolio',
     'mobile_first_app',
     'restaurant',
+    'productivity_tool',
+    'social_platform',
+    'education_platform',
+    'communication_tool',
+    'data_tool',
+    'creative_tool',
+    'directory_listing',
     'saas_dashboard',
   ];
 
   for (const appType of explicitOrder) {
-    if (hasAny(text, keywordGroups[appType])) return appType;
+    if (keywordGroups[appType] && hasAny(text, keywordGroups[appType])) return appType;
   }
 
   return 'generic_web_app';

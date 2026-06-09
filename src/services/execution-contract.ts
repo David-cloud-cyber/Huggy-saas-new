@@ -209,13 +209,18 @@ function isContinuationBuild(text: string, hasLastPlan: boolean) {
 }
 
 function isExplicitAppBuildRequest(text: string) {
-  const action = /\b(agis en tant que|je souhaite creer|je veux creer|j aimerais creer|i want to create|i need to build|cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b/i;
-  const target = /\b(app|application|mini application|mini app|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|task|tache|taches|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calendar|calendrier|notes)\b/i;
-  const featureBundle = /\b(fonctionnalites indispensables|ajout|suppression|marquage|filtres|localstorage|stockage local|completed|active|termin[eé]es|taches)\b/i;
-  const genericAppTarget = /\b(app|application|mini application|mini app|site web|web app|outil|tool)\b[\s\S]{0,160}\b(de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i;
-  return (action.test(text) && target.test(text))
-    || (action.test(text) && genericAppTarget.test(text))
-    || (target.test(text) && featureBundle.test(text))
+  const hasAction = /\b(agis en tant que|je souhaite creer|je veux creer|j aimerais creer|i want to create|i need to build|cree|creer|create|build|make|genere|generer|generate|construis|fabrique|fais moi|realise|developpe)\b/i.test(text);
+
+  // ✅ EXPANDED: explicit known targets
+  const hasKnownTarget = /\b(app|application|mini application|mini app|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|task|tache|taches|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calculator|calendar|calendrier|notes|blog|cms|forum|chat|messaging|booking|reservation|planning|scheduler|inventory|stock|gestion|management|tracker|monitor|analytics|reporting|directory|annuaire|listing|kanban|board|roadmap|project|sprint|survey|form builder|feedback|review|shop|store|boutique|catalog|catalogue|invoice|facturation|hr|rh|recruitment|cv|gallery|media|video|podcast|map|delivery|logistics|fleet|chatbot|assistant|generator|summarizer|translator|data viz|chart|leaderboard|tournament|schedule|event|community|network|social|feed|wallet|payment|billing|loyalty|reward|auction|rental|subscription|membership|ticketing|helpdesk|support|poll|vote|wiki|knowledge base|faq|comparator|configurator|wizard|onboarding|wishlist|employee|compliance|document|file manager|drive|backup|connector|plugin|widget|hub|portal|platform|exchange|trading|coupon|discount|promo|referral|affiliate)\b/i.test(text);
+
+  // ✅ NEW: open-ended "une app de/pour [anything]" — zero assumptions about domain
+  const hasGenericAppDesc = /\b(app|application|outil|tool|site|plateforme|platform|systeme|system|logiciel|software|interface|solution)\b[\s\S]{0,250}\b(de|pour|qui|avec|permettant|capable de|permettant de|dedié|dédiée|specialise|pour gerer|pour organiser|pour suivre|for|to manage|to track|to organize|that allows|that helps|to help)\b/i.test(text);
+
+  const hasFeatureBundle = /\b(fonctionnalites indispensables|ajout|suppression|marquage|filtres|localstorage|stockage local|completed|active|termin[eé]es|taches|with add|with delete|with filters|with crud|avec crud)\b/i.test(text);
+
+  return (hasAction && (hasKnownTarget || hasGenericAppDesc || hasFeatureBundle))
+    || (hasKnownTarget && hasFeatureBundle)
     || /\b(todo|to do|to-do)\b[\s\S]{0,220}\b(ajout|add|suppression|delete|filtre|filter|localstorage|stockage local)\b/i.test(text);
 }
 

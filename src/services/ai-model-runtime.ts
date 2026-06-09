@@ -164,9 +164,17 @@ export function getAIModelCapabilityProfile(modelId: AllowedModelId): AIModelCap
   }
   const caps = AI_MODEL_CAPABILITIES[modelId];
   const fallbacks = AI_MODEL_FALLBACKS[modelId]?.filter(Boolean) || [DEFAULT_PROVIDER_MODEL_ID];
-  const isReasoningHeavy = caps.reasoningLevel === 'frontier' || caps.reasoningLevel === 'high';
-  const isCodeHeavy = caps.codeLevel === 'frontier' || caps.codeLevel === 'high';
-  const maxTokens = isCodeHeavy ? 9000 : isReasoningHeavy ? 6500 : 3600;
+  const isFrontier = caps.reasoningLevel === 'frontier' || caps.codeLevel === 'frontier';
+  const isHigh = caps.reasoningLevel === 'high' || caps.codeLevel === 'high';
+
+  // ✅ Properly sized maxTokens per model tier — frontier models can generate large apps
+  const maxTokens = isFrontier ? 32_000 : isHigh ? 16_000 : caps.speed === 'fast' ? 8_000 : 12_000;
+
+  // ✅ Temperature tuned per model personality
+  // - Frontier reasoning models: lower temperature for precision
+  // - Fast/creative models: slightly higher for variety
+  // - Code generation: always keep low to avoid hallucination
+  const temperature = isFrontier ? 0.15 : isHigh ? 0.20 : caps.speed === 'fast' ? 0.35 : 0.25;
 
   return {
     id: modelId,
@@ -191,10 +199,11 @@ export function getAIModelCapabilityProfile(modelId: AllowedModelId): AIModelCap
       reasoningControl: supportsReasoningControl(definition.provider, modelId),
     },
     recommended: {
-      temperature: caps.speed === 'fast' ? 0.35 : 0.25,
+      temperature,
       maxTokens,
-      timeoutMs: caps.speed === 'deliberate' ? 120_000 : caps.speed === 'balanced' ? 75_000 : 45_000,
-      streamingTimeoutMs: caps.speed === 'deliberate' ? 180_000 : caps.speed === 'balanced' ? 120_000 : 75_000,
+      // ✅ Timeout scaled to model speed AND output size expectations
+      timeoutMs: isFrontier ? 180_000 : caps.speed === 'deliberate' ? 120_000 : caps.speed === 'balanced' ? 75_000 : 45_000,
+      streamingTimeoutMs: isFrontier ? 240_000 : caps.speed === 'deliberate' ? 180_000 : caps.speed === 'balanced' ? 120_000 : 75_000,
     },
     limits: {
       contextTokens: caps.maxContextTokens,
@@ -282,6 +291,36 @@ function toolsForTask(profile: AIModelCapabilityProfile, task: AIWorkflowTask): 
       parameters: { type: 'object', properties: { diagnostic: { type: 'string' }, likely_file: { type: 'string' } } },
     });
   }
+  // ✅ Design-specific tools for frontier models on design tasks
+  if (task === 'design' && (profile.design === 'frontier' || profile.design === 'high')) {
+    shared.push({
+      name: 'audit_design_system',
+      description: 'Evaluate visual hierarchy, spacing consistency, responsive breakpoints, and accessibility contrast before finalizing UI.',
+      parameters: {
+        type: 'object',
+        properties: {
+          platform_type: { type: 'string', description: 'e.g. saas_dashboard, ecommerce, landing_page' },
+          issues_found: { type: 'array', items: { type: 'string' } },
+          fixes_applied: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    });
+  }
+  // ✅ Security audit tool for security/backend tasks on capable models
+  if ((task === 'security' || task === 'backend_generation') && (profile.security === 'frontier' || profile.security === 'high')) {
+    shared.push({
+      name: 'security_audit_checklist',
+      description: 'Run an OWASP-aligned security check on the generated code before delivery.',
+      parameters: {
+        type: 'object',
+        properties: {
+          checks_passed: { type: 'array', items: { type: 'string' } },
+          vulnerabilities_found: { type: 'array', items: { type: 'string' } },
+          mitigations_applied: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    });
+  }
   return shared;
 }
 
@@ -307,6 +346,27 @@ export function buildAIModelRuntimeConfig(input: {
     taskNeedsLongContext(task) || Number(input.estimatedInputTokens || 0) > 90_000
   );
 
+  // ✅ Reasoning enabled for ALL non-trivial tasks (not just when effort='low')
+  // frontier/high models always use their reasoning capability for generation tasks
+  const reasoningEnabled = profile.supports.reasoningControl && (
+    reasoningEffort === 'high' || reasoningEffort === 'medium' ||
+    (reasoningEffort === 'low' && ['frontend_generation', 'backend_generation', 'debug', 'design'].includes(task))
+  );
+
+  // ✅ Temperature: use model-recommended base, nudged per task
+  const taskTemperature = (() => {
+    if (task === 'conversation') return Math.min(0.60, profile.recommended.temperature + 0.15);
+    // Code generation needs low temperature for precision
+    if (['frontend_generation', 'backend_generation', 'debug', 'security', 'database'].includes(task)) {
+      return Math.max(0.10, profile.recommended.temperature - 0.05);
+    }
+    // Design/planning allows slightly higher creativity
+    if (['design', 'planning'].includes(task)) {
+      return Math.min(0.40, profile.recommended.temperature + 0.05);
+    }
+    return profile.recommended.temperature;
+  })();
+
   const notes: string[] = [
     `adapter:${profile.adapter}`,
     `task:${task}`,
@@ -317,24 +377,24 @@ export function buildAIModelRuntimeConfig(input: {
   if (tools.length) notes.push(`tools:${tools.length}`);
   if (input.hasVisionInput && profile.supports.vision) notes.push('vision:enabled');
   if (longContextEnabled) notes.push('long_context:enabled');
-  if (profile.supports.reasoningControl) notes.push(`thinking_budget:${thinkingBudgetForTask(profile, task)}`);
+  if (reasoningEnabled) notes.push(`thinking_budget:${thinkingBudgetForTask(profile, task)}`);
 
   return {
     profile,
     task,
     stream,
-    temperature: task === 'conversation' ? Math.min(0.55, profile.recommended.temperature + 0.15) : profile.recommended.temperature,
+    temperature: input.preferStructuredOutput === false ? taskTemperature : taskTemperature,
     maxTokens: input.maxTokens || profile.recommended.maxTokens,
     timeoutMs: input.timeoutMs || (stream ? profile.recommended.streamingTimeoutMs : profile.recommended.timeoutMs),
     responseFormat,
     tools,
     toolChoice: tools.length ? 'auto' : 'none',
     reasoning: {
-      enabled: profile.supports.reasoningControl && reasoningEffort !== 'low',
+      enabled: reasoningEnabled,
       effort: reasoningEffort,
     },
     thinking: {
-      enabled: profile.supports.reasoningControl && reasoningEffort !== 'low',
+      enabled: reasoningEnabled,
       budgetTokens: thinkingBudgetForTask(profile, task),
       includeInResponse: false,
     },

@@ -7,7 +7,19 @@ export type ProductionBlueprintType =
   | 'admin_dashboard'
   | 'internal_tool'
   | 'ai_tool'
-  | 'blog_cms';
+  | 'blog_cms'
+  // ─── Universal open-ended types ──────────────────────────────────────────────
+  | 'productivity_tool'   // todo, task manager, kanban, notes, timer, pomodoro
+  | 'social_platform'     // feed, posts, follows, comments, reactions
+  | 'education_platform'  // courses, quizzes, progress, LMS
+  | 'healthcare_app'      // patients, appointments, prescriptions, clinics
+  | 'finance_tool'        // calculator, budget tracker, invoice, invoicing
+  | 'creative_tool'       // canvas, image editor, music, drawing, design tool
+  | 'game_interactive'    // games, simulations, quizzes, interactive experiences
+  | 'directory_listing'   // yellow pages, profiles, job board, real estate
+  | 'communication_tool'  // chat, messaging, notifications, email client
+  | 'data_tool'           // CSV import, JSON viewer, converter, data explorer
+  | 'generic_web_app';    // catch-all for anything else — no assumptions injected
 
 export type ProductionBlueprintTable = {
   name: string;
@@ -254,19 +266,226 @@ const BLUEPRINTS: Record<ProductionBlueprintType, ProductionBlueprint> = {
     risks: ['unsafe uploads', 'unmoderated public content', 'private draft leakage'],
     acceptanceCriteria: [...COMMON_ACCEPTANCE, 'Drafts are private and published content is intentionally public.'],
   },
+
+  // ─── Universal open-ended blueprints ─────────────────────────────────────────
+
+  productivity_tool: {
+    type: 'productivity_tool',
+    label: 'Productivity Tool',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['local_state', 'optional_persistence'], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['main workspace', 'history or archive', 'settings'],
+    tables: [],
+    components: ['primary action area', 'item list', 'filters/tabs', 'empty state', 'settings panel'],
+    workflows: ['create item', 'complete/toggle item', 'delete item', 'filter items', 'persist to localStorage'],
+    tests: [...COMMON_TESTS, 'primary_action_creates_item', 'filter_affects_list', 'localStorage_persists'],
+    risks: ['localStorage corrupted state', 'no empty state', 'no keyboard support'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Primary workflow works with local state before any backend is connected.'],
+  },
+
+  social_platform: {
+    type: 'social_platform',
+    label: 'Social Platform',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['auth', 'database', 'realtime', 'storage'], requiresAuth: true, requiresDatabase: true, requiresStorage: true, requiresBilling: false },
+    pages: ['feed', 'profile', 'notifications', 'explore', 'settings'],
+    tables: [
+      table('app_profiles', 'User profiles', ['username text not null', 'bio text', 'avatar_url text'], 'owner', { sensitive: true }),
+      table('app_posts', 'User posts', ['body text not null', "visibility text not null default 'public'"], 'owner'),
+      table('app_follows', 'Follow relationships', ['follower_id uuid', 'following_id uuid'], 'owner'),
+      table('app_reactions', 'Post reactions', ['post_id uuid', "kind text not null default 'like'"], 'owner'),
+      table('app_comments', 'Post comments', ['post_id uuid', 'body text not null'], 'owner'),
+    ],
+    components: ['feed', 'post card', 'profile header', 'follow button', 'reaction bar', 'notifications list'],
+    workflows: ['create post', 'like post', 'follow user', 'view profile', 'view notifications'],
+    tests: [...COMMON_TESTS, 'feed_updates', 'follow_state_changes', 'notification_appears'],
+    risks: ['private post leakage', 'unscoped notifications', 'infinite scroll without pagination'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE, 'Posts are visibility-scoped and reactions are owner-only.'],
+  },
+
+  education_platform: {
+    type: 'education_platform',
+    label: 'Education Platform',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['auth', 'database'], requiresAuth: true, requiresDatabase: true, requiresStorage: false, requiresBilling: false },
+    pages: ['course catalog', 'course detail', 'lesson viewer', 'progress dashboard', 'quiz', 'settings'],
+    tables: [
+      table('app_courses', 'Course catalog', ['title text not null', 'description text', "status text not null default 'draft'"], 'public_read_private_write'),
+      table('app_lessons', 'Course lessons', ['course_id uuid', 'title text not null', 'content text not null', 'order_index integer not null default 0'], 'public_read_private_write'),
+      table('app_enrollments', 'Student enrollments', ['course_id uuid', "status text not null default 'active'"], 'owner', { sensitive: true }),
+      table('app_progress', 'Lesson completion tracking', ['lesson_id uuid', 'completed_at timestamptz'], 'owner', { sensitive: true }),
+      table('app_quiz_responses', 'Quiz answers', ['quiz_id uuid', 'score integer'], 'owner', { sensitive: true }),
+    ],
+    components: ['course card', 'lesson list', 'progress bar', 'quiz component', 'certificate state'],
+    workflows: ['enroll in course', 'watch/read lesson', 'mark complete', 'take quiz', 'view progress'],
+    tests: [...COMMON_TESTS, 'enrollment_creates_progress', 'quiz_scoring_works', 'progress_persists'],
+    risks: ['quiz answers visible to other students', 'progress not persisted', 'no empty enrolled state'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE, 'Progress and quiz responses are owner-scoped.'],
+  },
+
+  healthcare_app: {
+    type: 'healthcare_app',
+    label: 'Healthcare App',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['auth', 'database', 'audit_logs'], requiresAuth: true, requiresDatabase: true, requiresStorage: false, requiresBilling: false },
+    pages: ['dashboard', 'patients', 'appointments', 'records', 'settings'],
+    tables: [
+      table('app_patients', 'Patient records', ['full_name text not null', 'date_of_birth date', 'contact_info jsonb'], 'organization', { sensitive: true }),
+      table('app_appointments', 'Appointments', ['patient_id uuid', 'scheduled_at timestamptz not null', "status text not null default 'scheduled'"], 'organization', { sensitive: true }),
+      table('app_records', 'Clinical notes (demo only)', ['patient_id uuid', "note text not null", 'is_demo boolean not null default true'], 'organization', { sensitive: true }),
+    ],
+    components: ['patient list', 'appointment calendar', 'record form', 'status badges', 'demo disclaimer'],
+    workflows: ['view patients', 'book appointment', 'add note (demo)', 'cancel appointment'],
+    tests: [...COMMON_TESTS, 'patient_data_org_scoped', 'demo_disclaimer_visible'],
+    risks: ['real medical data without proper security', 'missing HIPAA/GDPR disclaimers', 'clinical claims'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE, 'All patient data is clearly labeled as demo. No real medical advice is implied.'],
+  },
+
+  finance_tool: {
+    type: 'finance_tool',
+    label: 'Finance Tool',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['local_state', 'optional_auth'], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['dashboard', 'transactions', 'budgets', 'reports', 'settings'],
+    tables: [],
+    components: ['balance summary', 'transaction list', 'budget bars', 'category filters', 'export button'],
+    workflows: ['add transaction', 'set budget', 'filter by category', 'view report', 'export CSV'],
+    tests: [...COMMON_TESTS, 'transaction_mutates_balance', 'budget_shows_progress', 'export_generates_data'],
+    risks: ['fake bank behavior', 'missing confirmation on delete', 'unclear currency formatting'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Financial amounts are formatted with currency and locale. Destructive actions require confirmation.'],
+  },
+
+  creative_tool: {
+    type: 'creative_tool',
+    label: 'Creative Tool',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['local_state', 'optional_storage'], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['canvas/workspace', 'gallery/history', 'settings'],
+    tables: [],
+    components: ['interactive canvas/stage', 'tool controls', 'color/style picker', 'history/undo', 'export/save'],
+    workflows: ['create', 'edit', 'undo/redo', 'export result', 'clear/reset'],
+    tests: [...COMMON_TESTS, 'primary_create_action_works', 'undo_reverts_state', 'export_produces_output'],
+    risks: ['controls that do nothing', 'no undo/reset', 'no save/export'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Primary creative action produces visible output. Undo and reset work.'],
+  },
+
+  game_interactive: {
+    type: 'game_interactive',
+    label: 'Game / Interactive',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['local_state'], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['game screen', 'score/leaderboard', 'settings'],
+    tables: [],
+    components: ['game stage', 'score counter', 'controls', 'game over state', 'restart button', 'how-to-play'],
+    workflows: ['start game', 'play action', 'score update', 'game over', 'restart'],
+    tests: [...COMMON_TESTS, 'game_starts', 'score_increments', 'game_over_triggers', 'restart_works'],
+    risks: ['game loop not working', 'no restart', 'no score', 'no keyboard/touch support'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Core game loop runs. Score updates. Game over and restart work.'],
+  },
+
+  directory_listing: {
+    type: 'directory_listing',
+    label: 'Directory / Listing',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['database', 'optional_auth'], requiresAuth: false, requiresDatabase: true, requiresStorage: false, requiresBilling: false },
+    pages: ['directory home', 'listing detail', 'submit listing', 'search results'],
+    tables: [
+      table('app_listings', 'Directory entries', ['title text not null', 'description text', 'category text', "status text not null default 'active'"], 'public_read_private_write'),
+      table('app_categories', 'Directory categories', ['name text not null', 'slug text not null'], 'public_read_private_write'),
+    ],
+    components: ['search bar', 'filters', 'listing cards', 'listing detail', 'submit form', 'no-results state'],
+    workflows: ['search/filter listings', 'view detail', 'submit new listing', 'contact listing'],
+    tests: [...COMMON_TESTS, 'search_filters_listings', 'listing_detail_renders', 'submit_form_validates'],
+    risks: ['no no-results state', 'dead contact action', 'missing category filter'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE, 'Search and category filters affect listings. Listing detail shows all relevant info.'],
+  },
+
+  communication_tool: {
+    type: 'communication_tool',
+    label: 'Communication Tool',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['auth', 'database', 'realtime'], requiresAuth: true, requiresDatabase: true, requiresStorage: false, requiresBilling: false },
+    pages: ['conversations list', 'conversation/chat view', 'notifications', 'settings'],
+    tables: [
+      table('app_conversations', 'Conversation threads', ['title text', "kind text not null default 'direct'"], 'organization'),
+      table('app_messages', 'Messages in conversations', ['conversation_id uuid', 'body text not null', "status text not null default 'sent'"], 'owner', { sensitive: true }),
+      table('app_participants', 'Conversation participants', ['conversation_id uuid', 'user_id uuid'], 'organization', { sensitive: true }),
+    ],
+    components: ['conversation list', 'message thread', 'message input', 'typing indicator', 'unread badge'],
+    workflows: ['start conversation', 'send message', 'receive message', 'mark read', 'search conversations'],
+    tests: [...COMMON_TESTS, 'send_message_appears', 'unread_count_updates', 'conversation_list_loads'],
+    risks: ['messages visible across conversations', 'no optimistic UI', 'no empty state'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE, 'Messages are scoped to conversation participants. Unread state updates.'],
+  },
+
+  data_tool: {
+    type: 'data_tool',
+    label: 'Data Tool',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    backend: { provider: 'huggy-cloud-supabase', features: ['local_state', 'optional_storage'], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['input/import view', 'data table/preview', 'transform/filter view', 'export view'],
+    tables: [],
+    components: ['file upload or paste area', 'data table', 'column filters', 'transform controls', 'export button'],
+    workflows: ['import data', 'inspect data', 'filter/sort/transform', 'export result'],
+    tests: [...COMMON_TESTS, 'import_produces_table', 'filter_reduces_rows', 'export_downloads_file'],
+    risks: ['large file browser freeze', 'no error for malformed input', 'no export action'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Import, transform, and export work end-to-end with demo data.'],
+  },
+
+  generic_web_app: {
+    type: 'generic_web_app',
+    label: 'Web App',
+    frontend: { framework: 'vite-react-ts', requiredFiles: COMMON_REQUIRED_FILES, requiredStates: COMMON_STATES },
+    // No backend assumptions — the LLM infers what is needed from the prompt
+    backend: { provider: 'huggy-cloud-supabase', features: [], requiresAuth: false, requiresDatabase: false, requiresStorage: false, requiresBilling: false },
+    pages: ['main screen', 'secondary screens as needed'],
+    tables: [],
+    components: ['inferred from prompt'],
+    workflows: ['inferred from prompt'],
+    tests: COMMON_TESTS,
+    risks: ['blank preview if requirements are unclear'],
+    acceptanceCriteria: [
+      'The generated app renders without a blank screen.',
+      'Primary controls have visible behavior.',
+      'No service role key or provider secret is present in frontend files.',
+      'The app matches the product type described in the prompt, not a generic template.',
+    ],
+  },
 };
 
 export function inferProductionBlueprint(prompt: string): ProductionBlueprint {
   const text = String(prompt || '').toLowerCase();
+
+  // ── Known specific types (most precise match wins) ──────────────────────────
   if (/\b(marketplace|seller|buyer|listing|vendeur|acheteur|annonce)\b/.test(text)) return BLUEPRINTS.marketplace;
-  if (/\b(crm|client|pipeline|deal|lead|contact|prospect)\b/.test(text)) return BLUEPRINTS.crm;
-  if (/\b(booking|reservation|appointment|calendar|availability|rendez-vous|calendrier)\b/.test(text)) return BLUEPRINTS.booking;
+  if (/\b(crm|pipeline|deal|lead|prospect)\b/.test(text)) return BLUEPRINTS.crm;
+  if (/\b(booking|reservation|appointment|availability|rendez-vous)\b/.test(text)) return BLUEPRINTS.booking;
   if (/\b(e-?commerce|shop|store|cart|catalog|checkout|inventory|boutique|panier|catalogue)\b/.test(text)) return BLUEPRINTS.ecommerce;
   if (/\b(admin dashboard|admin panel|back office|back-office|operations dashboard)\b/.test(text)) return BLUEPRINTS.admin_dashboard;
   if (/\b(internal tool|outil interne|approval|approbation|ops tool)\b/.test(text)) return BLUEPRINTS.internal_tool;
   if (/\b(ai tool|chatbot|prompt|agent|generator|generateur ia|outil ia)\b/.test(text)) return BLUEPRINTS.ai_tool;
   if (/\b(blog|cms|article|editorial|content management|publication)\b/.test(text)) return BLUEPRINTS.blog_cms;
-  return BLUEPRINTS.saas;
+
+  // ── Universal open-ended types ──────────────────────────────────────────────
+  if (/\b(todo|task|tache|taches|kanban|pomodoro|timer|minuteur|note|notes|checklist|planner|agenda)\b/.test(text)) return BLUEPRINTS.productivity_tool;
+  if (/\b(social|feed|post|posts|follow|followers|like|reaction|community|reseau social|forum|timeline)\b/.test(text)) return BLUEPRINTS.social_platform;
+  if (/\b(course|cours|learning|lms|quiz|lesson|module|student|teacher|education|formation|e-learning)\b/.test(text)) return BLUEPRINTS.education_platform;
+  if (/\b(patient|doctor|clinic|medical|health|prescription|appointment|sante|clinique|hopital)\b/.test(text)) return BLUEPRINTS.healthcare_app;
+  if (/\b(budget|calculator|calculatrice|invoice|facture|expense|depense|finance|comptabilite|salary|salaire)\b/.test(text)) return BLUEPRINTS.finance_tool;
+  if (/\b(canvas|drawing|dessin|paint|image editor|music|audio|creative|creation|design tool|whiteboard)\b/.test(text)) return BLUEPRINTS.creative_tool;
+  if (/\b(game|jeu|simulation|quiz|puzzle|interactive|trivia|tetris|snake|chess|echecs)\b/.test(text)) return BLUEPRINTS.game_interactive;
+  if (/\b(directory|annuaire|listing|job board|real estate|immobilier|profile|profiles|yellow pages|catalogue d entreprises)\b/.test(text)) return BLUEPRINTS.directory_listing;
+  if (/\b(chat|message|messagerie|notification|inbox|email client|communication|discussion)\b/.test(text)) return BLUEPRINTS.communication_tool;
+  if (/\b(csv|json|xml|data explorer|converter|convertisseur|parser|viewer|import|export|data tool)\b/.test(text)) return BLUEPRINTS.data_tool;
+
+  // ── SaaS only when explicitly mentioned ─────────────────────────────────────
+  if (/\b(saas|workspace|subscription|multi.?tenant|tableau de bord saas)\b/.test(text)) return BLUEPRINTS.saas;
+
+  // ── True universal fallback — no category assumptions injected ───────────────
+  // Don't default to 'saas'. Use generic_web_app which gives the LLM
+  // freedom to infer the correct product shape from the prompt alone.
+  return BLUEPRINTS.generic_web_app;
+}
 }
 
 export function listProductionBlueprints() {

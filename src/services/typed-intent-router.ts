@@ -161,8 +161,21 @@ function isDiscussFirst(text: string) {
 }
 
 function isExplicitAppBuildRequest(text: string) {
-  return /\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)\b[\s\S]{0,140}\b(app|application|mini app|mini application|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calendar|calendrier|notes)\b/i.test(text)
-    || /\b(app|application|mini app|mini application|site web|web app|outil|tool|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|admin panel|saas)\b[\s\S]{0,140}\b(cree|creer|create|build|make|genere|generer|generate|construis|fabrique|de|pour|avec|qui|fonctionnel|fonctionnelle|complete|complet)\b/i.test(text);
+  // Core action verbs (build intent)
+  const hasAction = /\b(agis en tant que|je souhaite creer|je veux creer|j aimerais creer|i want to create|i need to build|cree|creer|create|build|make|genere|generer|generate|construis|fabrique|fais moi|realise|developpe)\b/i.test(text);
+
+  // ✅ EXPANDED: 100+ app types — from known templates to any open-ended domain
+  const hasKnownTarget = /\b(app|application|mini application|mini app|site web|web app|landing page|dashboard|marketplace|crm|portfolio|ecommerce|e-commerce|restaurant|todo|to do|to-do|task|tache|taches|admin panel|saas|outil|tool|pomodoro|pomodero|timer|minuteur|quiz|game|jeu|calculatrice|calculator|calendar|calendrier|notes|blog|cms|forum|chat|messaging|booking|reservation|planning|scheduler|inventory|stock|gestion|management|tracker|monitor|analytics|reporting|directory|annuaire|listing|kanban|board|roadmap|project|sprint|survey|form builder|feedback|review|shop|store|boutique|catalog|catalogue|invoice|facturation|hr|rh|recruitment|cv|gallery|media|video|podcast|map|delivery|logistics|fleet|chatbot|assistant|generator|summarizer|translator|data viz|chart|leaderboard|tournament|schedule|event|community|network|social|feed|wallet|payment|billing|loyalty|reward|auction|rental|subscription|membership|ticketing|helpdesk|support|poll|vote|wiki|knowledge base|faq|comparator|configurator|wizard|onboarding|wishlist|employee|compliance|document|file manager|drive|backup|connector|plugin|widget|sensor|dashboard|hub|portal|platform|exchange|trading|coupon|discount|promo|referral|affiliate)\b/i.test(text);
+
+  // ✅ NEW: Generic "une app de/pour X" — catches any domain the user describes
+  const hasGenericAppDesc = /\b(app|application|outil|tool|site|plateforme|platform|systeme|system|logiciel|software|interface|solution)\b[\s\S]{0,250}\b(de|pour|qui|avec|permettant|capable de|permettant de|dedié|dédiée|specialise|pour gerer|pour organiser|pour suivre|for|to manage|to track|to organize|that allows|that helps|to help)\b/i.test(text);
+
+  // Feature-bundle signals
+  const hasFeatureBundle = /\b(fonctionnalites|features|avec ajout|avec suppression|avec filtres|with add|with delete|with filters|with crud|avec crud|avec auth|with auth)\b/i.test(text);
+
+  return (hasAction && (hasKnownTarget || hasGenericAppDesc || hasFeatureBundle))
+    || (hasKnownTarget && hasFeatureBundle)
+    || /\b(todo|to do|to-do)\b[\s\S]{0,220}\b(ajout|add|suppression|delete|filtre|filter|localstorage|stockage local)\b/i.test(text);
 }
 
 function isBareBuildCommand(text: string) {

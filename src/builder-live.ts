@@ -2082,10 +2082,156 @@ function clearMessageShimmer(card: HTMLElement | null) {
 }
 
 /**
- * Appends live streaming tokens from the generator into a dedicated streaming
- * container inside the working card. This creates a real-time "typing" effect
- * showing the AI generating code token-by-token.
+ * Pro streaming UI helpers — manage the phase timeline, progress bar,
+ * model badge, elapsed timer, and token counter.
  */
+const STREAM_PHASE_ORDER = ['ast','rag','meta_prompt','generation','eval','eval_ok','eval_fail','preview','done'];
+const STREAM_PHASE_LABELS: Record<string, string> = {
+  ast: 'Analyse',
+  rag: 'Mémoire',
+  meta_prompt: 'Enrichissement',
+  generation: 'Génération',
+  eval: 'Révision',
+  eval_ok: 'Validé',
+  eval_fail: 'Correction',
+  preview: 'Aperçu',
+  done: 'Livraison',
+  // English aliases
+  analyzing: 'Analysis',
+  memory: 'Memory',
+  enriching: 'Enriching',
+  generating: 'Generating',
+  reviewing: 'Review',
+  validated: 'Validated',
+  correcting: 'Fixing',
+  rendering: 'Preview',
+  delivering: 'Delivery',
+};
+const STEP_SVG_SPIN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+const STEP_SVG_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+const STEP_SVG_FAIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+
+let streamStartedAt = 0;
+let streamElapsedTimer: number | null = null;
+let streamTotalTokens = 0;
+let streamActivePhase = '';
+
+function getOrCreateStreamUI(card: HTMLElement | null) {
+  if (!card) return null;
+  let ui = card.querySelector<HTMLElement>('.huggy-stream-ui');
+  if (!ui) {
+    ui = document.createElement('div');
+    ui.className = 'huggy-stream-ui';
+    ui.innerHTML = `
+      <div class="huggy-stream-meta">
+        <span class="huggy-stream-model-badge" aria-label="AI model">
+          ${STEP_SVG_SPIN}<span class="huggy-stream-model-name">Auto</span>
+        </span>
+        <span class="huggy-stream-token-count" aria-label="Token count"></span>
+        <span class="huggy-stream-elapsed" aria-label="Elapsed time">0s</span>
+      </div>
+      <div class="huggy-stream-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="huggy-stream-progress-bar" style="width:4%"></div>
+      </div>
+      <div class="huggy-stream-phases" role="list" aria-label="Generation phases"></div>
+    `;
+    const ref = card.querySelector('.huggy-live-token-stream') || card.firstChild;
+    card.insertBefore(ui, ref);
+    streamStartedAt = Date.now();
+    // Start elapsed timer
+    if (streamElapsedTimer !== null) window.clearInterval(streamElapsedTimer);
+    streamElapsedTimer = window.setInterval(() => {
+      const elapsed = Math.round((Date.now() - streamStartedAt) / 1000);
+      const el = card.querySelector<HTMLElement>('.huggy-stream-elapsed');
+      if (el) el.textContent = `${elapsed}s`;
+    }, 1000);
+  }
+  return ui;
+}
+
+function updateStreamPhase(key: string, label: string, status: 'active' | 'done' | 'failed') {
+  const card = document.querySelector<HTMLElement>('.message-card-shimmer');
+  if (!card) return;
+  const ui = getOrCreateStreamUI(card);
+  if (!ui) return;
+  const phasesEl = ui.querySelector<HTMLElement>('.huggy-stream-phases');
+  if (!phasesEl) return;
+
+  // Mark previous active phase as done
+  if (streamActivePhase && streamActivePhase !== key) {
+    const prev = phasesEl.querySelector<HTMLElement>(`[data-phase="${CSS.escape(streamActivePhase)}"]`);
+    if (prev && prev.dataset.status === 'active') {
+      prev.dataset.status = 'done';
+      prev.innerHTML = `${STEP_SVG_CHECK} ${STREAM_PHASE_LABELS[streamActivePhase] || streamActivePhase}`;
+    }
+  }
+
+  // Create or update current phase pill
+  let pill = phasesEl.querySelector<HTMLElement>(`[data-phase="${CSS.escape(key)}"]`);
+  if (!pill) {
+    pill = document.createElement('div');
+    pill.className = 'huggy-stream-phase';
+    pill.setAttribute('role', 'listitem');
+    pill.dataset.phase = key;
+    phasesEl.appendChild(pill);
+  }
+  pill.dataset.status = status;
+  const icon = status === 'done' ? STEP_SVG_CHECK : status === 'failed' ? STEP_SVG_FAIL : STEP_SVG_SPIN;
+  pill.innerHTML = `${icon} ${STREAM_PHASE_LABELS[key] || label.slice(0, 20)}`;
+
+  if (status === 'active') streamActivePhase = key;
+}
+
+function advanceStreamProgress(key: string) {
+  const card = document.querySelector<HTMLElement>('.message-card-shimmer');
+  if (!card) return;
+  const progressBar = card.querySelector<HTMLElement>('.huggy-stream-progress-bar');
+  if (!progressBar) return;
+  const idx = STREAM_PHASE_ORDER.indexOf(key);
+  const pct = idx >= 0 ? Math.min(95, Math.round(((idx + 1) / STREAM_PHASE_ORDER.length) * 100)) : 15;
+  progressBar.style.width = `${pct}%`;
+  card.querySelector('.huggy-stream-progress')?.setAttribute('aria-valuenow', String(pct));
+}
+
+function updateStreamModelBadge(model: string) {
+  document.querySelectorAll<HTMLElement>('.huggy-stream-model-name').forEach(el => {
+    const short = model.split('/').pop() || model;
+    el.textContent = short.slice(0, 22);
+  });
+}
+
+function updateStreamTokenCount(delta: number) {
+  streamTotalTokens += delta;
+  document.querySelectorAll<HTMLElement>('.huggy-stream-token-count').forEach(el => {
+    el.textContent = streamTotalTokens > 0 ? `${streamTotalTokens.toLocaleString()} tk` : '';
+  });
+}
+
+function finalizeStreamUI(card: HTMLElement | null, status: 'done' | 'failed', elapsedMs?: number) {
+  if (!card) return;
+  if (streamElapsedTimer !== null) { window.clearInterval(streamElapsedTimer); streamElapsedTimer = null; }
+  const progressEl = card.querySelector<HTMLElement>('.huggy-stream-progress');
+  if (progressEl) progressEl.dataset.status = status;
+  const bar = card.querySelector<HTMLElement>('.huggy-stream-progress-bar');
+  if (bar) bar.style.width = status === 'done' ? '100%' : bar.style.width;
+  // Mark last active phase as done
+  card.querySelectorAll<HTMLElement>('.huggy-stream-phase[data-status="active"]').forEach(p => {
+    p.dataset.status = status === 'done' ? 'done' : 'failed';
+    p.innerHTML = (status === 'done' ? STEP_SVG_CHECK : STEP_SVG_FAIL) + ' ' + (p.textContent || '').trim().split(' ').slice(1).join(' ');
+  });
+  // Update elapsed
+  if (elapsedMs) {
+    const elapsed = Math.round(elapsedMs / 1000);
+    card.querySelectorAll<HTMLElement>('.huggy-stream-elapsed').forEach(el => { el.textContent = `${elapsed}s`; });
+  }
+  // Mark token stream as done (removes cursor)
+  card.querySelectorAll<HTMLElement>('.huggy-live-token-stream').forEach(el => { el.dataset.done = 'true'; });
+  // Reset counters
+  streamTotalTokens = 0;
+  streamActivePhase = '';
+}
+
+
 function appendToMessageShimmer(card: HTMLElement | null, text: string) {
   if (!card || !text) return;
   let streamEl = card.querySelector<HTMLElement>('.huggy-live-token-stream');
@@ -4993,6 +5139,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     void key;
     setJournalActive(headline);
     addJournalLine(label, detail || '', `step:${key}`);
+    // Pro streaming UI: update phase pills and progress bar
+    updateStreamPhase(key, label, 'active');
+    advanceStreamProgress(key);
   };
   const finishAgentStep = (key: string, label?: string, detail?: string) => {
     if (label) addJournalLine(label, detail || '', `step_done:${key}`);
@@ -5194,8 +5343,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
             } else if (data.type === 'token') {
               // Accumulate live tokens and flush with debounce for smooth rendering
               liveTokenBuffer += data.text;
+              streamTotalTokens += Math.ceil(data.text.length / 4); // rough token estimate
               if (liveTokenFlushTimer !== null) window.clearTimeout(liveTokenFlushTimer);
               liveTokenFlushTimer = window.setTimeout(flushLiveTokens, 32); // ~2 frames at 60fps
+              // Update model badge and token count in streaming UI
+              if (data.model) updateStreamModelBadge(data.model);
+              updateStreamTokenCount(0); // counter already updated above
             } else if (data.type === 'done') {
               flushLiveTokens();
               payload = data.payload;

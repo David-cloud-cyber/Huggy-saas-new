@@ -449,3 +449,237 @@
     animation: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUGGY PRO STREAMING UI — v2
+   Professional real-time generation timeline with live token stream,
+   phase progress, model badge, and elapsed timer.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Timeline progress bar ── */
+.huggy-stream-progress {
+  height: 2px;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--border-light, var(--border));
+  overflow: hidden;
+  margin: 6px 0 2px;
+}
+.huggy-stream-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-blue, #2563eb), color-mix(in srgb, var(--accent-blue, #2563eb) 60%, #7c3aed));
+  transition: width 420ms cubic-bezier(.22, 1, .36, 1);
+  transform-origin: left;
+}
+.huggy-stream-progress[data-status="done"] .huggy-stream-progress-bar {
+  width: 100% !important;
+  background: linear-gradient(90deg, #16a34a, #15803d);
+}
+.huggy-stream-progress[data-status="failed"] .huggy-stream-progress-bar {
+  background: #dc2626;
+}
+
+/* ── Model + elapsed badge row ── */
+.huggy-stream-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  margin-bottom: 4px;
+}
+.huggy-stream-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  padding: 0 6px;
+  font: 760 9.4px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.huggy-stream-model-badge svg {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  opacity: .72;
+}
+.huggy-stream-elapsed {
+  margin-left: auto;
+  color: var(--text-sub, var(--text-muted));
+  font: 720 9.8px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  white-space: nowrap;
+  opacity: .75;
+}
+
+/* ── Token counter (live) ── */
+.huggy-stream-token-count {
+  color: var(--text-sub, var(--text-muted));
+  font: 700 9.4px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  white-space: nowrap;
+  opacity: .65;
+}
+
+/* ── Phase timeline ── */
+.huggy-stream-phases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 2px;
+}
+.huggy-stream-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  padding: 0 7px;
+  font: 760 9.8px/1 "Instrument Sans", Inter, system-ui, sans-serif;
+  transition: border-color 180ms, background 180ms, color 180ms;
+  white-space: nowrap;
+}
+.huggy-stream-phase svg {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+.huggy-stream-phase[data-status="active"] {
+  border-color: color-mix(in srgb, var(--accent-blue, #2563eb) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue, #2563eb) 9%, var(--bg-surface));
+  color: var(--text);
+  font-weight: 820;
+}
+.huggy-stream-phase[data-status="active"] svg {
+  color: var(--accent-blue, #2563eb);
+  animation: huggy-spin 1s linear infinite;
+}
+.huggy-stream-phase[data-status="done"] {
+  border-color: rgba(22, 101, 52, .18);
+  background: #ecfdf3;
+  color: #166534;
+}
+.huggy-stream-phase[data-status="done"] svg {
+  color: #16a34a;
+  animation: huggy-check-pop 160ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.huggy-stream-phase[data-status="failed"] {
+  border-color: rgba(153, 27, 27, .18);
+  background: #fff1f2;
+  color: #991b1b;
+}
+
+/* ── Live token stream (improved from v1) ── */
+.huggy-live-token-stream {
+  max-height: 64px;
+  overflow: hidden;
+  margin: 4px 0 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-input) 90%, transparent);
+  color: var(--text-muted);
+  font: 580 9.4px/1.6 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  white-space: pre-wrap;
+  word-break: break-all;
+  position: relative;
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.3) 15%, #000 55%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.3) 15%, #000 55%);
+  animation: huggy-token-stream-in 140ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.huggy-live-token-stream::after {
+  content: '▋';
+  display: inline;
+  color: var(--accent-blue, #2563eb);
+  animation: huggy-cursor-blink 680ms step-end infinite;
+  font-size: 10px;
+  margin-left: 1px;
+  vertical-align: middle;
+}
+/* Remove cursor when stream is done */
+.huggy-live-token-stream[data-done="true"]::after { display: none; }
+
+/* ── Generation complete banner ── */
+.huggy-stream-done-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  border: 1px solid rgba(22, 101, 52, .18);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ecfdf3, color-mix(in srgb, #ecfdf3 80%, var(--bg-surface)));
+  color: #166534;
+  padding: 5px 9px;
+  font: 800 10.4px/1.3 "Instrument Sans", Inter, system-ui, sans-serif;
+  margin-top: 5px;
+  animation: huggy-check-pop 200ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.huggy-stream-done-banner svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.huggy-stream-done-banner span {
+  font-weight: 700;
+  opacity: .8;
+  margin-left: auto;
+  font-size: 9.4px;
+}
+
+/* ── Error state ── */
+.huggy-stream-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  border: 1px solid rgba(153, 27, 27, .18);
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #991b1b;
+  padding: 5px 9px;
+  font: 800 10.4px/1.3 "Instrument Sans", Inter, system-ui, sans-serif;
+  margin-top: 5px;
+}
+.huggy-stream-error-banner svg { width: 13px; height: 13px; flex: 0 0 auto; }
+
+/* ── Keyframes ── */
+@keyframes huggy-spin { to { transform: rotate(360deg); } }
+@keyframes huggy-cursor-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes huggy-token-stream-in {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 64px; }
+}
+@keyframes huggy-check-pop {
+  from { opacity: 0; transform: scale(.72); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 520px) {
+  .huggy-stream-phases { gap: 3px; }
+  .huggy-stream-phase { height: 20px; font-size: 9px; padding: 0 6px; }
+  .huggy-live-token-stream { max-height: 48px; font-size: 9px; }
+  .huggy-stream-model-badge { max-width: 110px; }
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .huggy-stream-progress-bar,
+  .huggy-stream-phase,
+  .huggy-stream-done-banner,
+  .huggy-live-token-stream,
+  .huggy-stream-phase[data-status="active"] svg,
+  .huggy-stream-phase[data-status="done"] svg,
+  .huggy-live-token-stream::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
