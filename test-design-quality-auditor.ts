@@ -122,6 +122,43 @@ const weakDesign = auditGeneratedDesign({
 assert.equal(weakDesign.find(check => check.key === 'design_no_ai_gradient')?.status, 'fail');
 assert.notEqual(weakDesign.find(check => check.key === 'design_score')?.status, 'pass');
 
+// Test New UI/UX Pro Max rules
+const emojiFiles = [
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: 'export default function App() { return <button>🎨 Design Mode</button>; }'
+  },
+  {
+    path: 'src/index.css',
+    language: 'css',
+    content: ':root { --bg: #fff; }'
+  }
+];
+const emojiDesignAudit = auditGeneratedDesign({
+  files: emojiFiles,
+  platformType: 'generic_web_app'
+});
+assert.equal(emojiDesignAudit.find(check => check.key === 'design_no_emoji_icons')?.status, 'fail');
+
+const noCursorPointerFiles = [
+  {
+    path: 'src/App.tsx',
+    language: 'tsx',
+    content: 'export default function App() { return <div onClick={() => {}}>Clickable Card</div>; }'
+  },
+  {
+    path: 'src/index.css',
+    language: 'css',
+    content: 'div { background: #fff; }'
+  }
+];
+const cursorDesignAudit = auditGeneratedDesign({
+  files: noCursorPointerFiles,
+  platformType: 'generic_web_app'
+});
+assert.equal(cursorDesignAudit.find(check => check.key === 'design_cursor_pointer')?.status, 'fail');
+
 const weakFunctionality = auditGeneratedFunctionality({
   files: weakFiles,
   previewHtml: weakFiles[0].content,

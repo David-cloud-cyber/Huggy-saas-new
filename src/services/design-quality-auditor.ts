@@ -52,6 +52,7 @@ const RESTAURANT_APP_RE = /\b(restaurant|menu|reservation|réservation|booking|h
 const AUTH_APP_RE = /\b(login|signup|sign in|sign up|auth|password|forgot|register|connexion|inscription)\b/i;
 const OPERATIONAL_APP_RE = /\b(dashboard|admin|crm|erp|analytics|kpi|table|pipeline|invoice|inventory|settings)\b/i;
 const AI_TOOL_APP_RE = /\b(ai tool|prompt|message|stream|preview|output|model selector|assistant)\b/i;
+const EMOJI_ICON_RE = /[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/;
 
 const appRequiredComponentKeywords: Partial<Record<GeneratedAppType, string[]>> = {
   landing_page: ['hero', 'cta', 'proof', 'pricing', 'testimonial', 'faq', 'prompt'],
@@ -165,6 +166,23 @@ export function auditGeneratedDesign(input: GeneratedQualityAuditInput): AgentVe
     'medium',
     'Generic placeholder copy was avoided.',
     'Generated UI still contains generic placeholder copy.',
+  ));
+
+  checks.push(result(
+    'design_no_emoji_icons',
+    !EMOJI_ICON_RE.test(bundle.all),
+    'medium',
+    'No emojis are used as UI icons (vector SVG preferred).',
+    'Generated UI uses emoji icons instead of professional SVG/Lucide icons.',
+  ));
+
+  const hasCursorPointer = !bundle.tsx.includes('onClick') || bundle.all.includes('cursor-pointer') || bundle.all.includes('cursor: pointer') || bundle.all.includes('cursor:pointer');
+  checks.push(result(
+    'design_cursor_pointer',
+    hasCursorPointer,
+    'medium',
+    'Interactive elements configure proper cursor pointer states.',
+    'Generated UI contains clickable elements with default/non-interactive cursors.',
   ));
 
   const requiredPlatformKeywords = appRequiredComponentKeywords[platform] || [];
