@@ -1,4 +1,5 @@
 import { apiFetch } from './lib/api';
+import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import {
@@ -993,7 +994,7 @@ function isUsablePreviewHtml(html: unknown) {
   if (!source) return false;
   if (/data-preview-state=["'](?:idle|working)["']/i.test(source)) return false;
   if (/Preview is waiting for a real generated application/i.test(source)) return false;
-  if (/data-huggy-preview-fallback="true"/i.test(source)) return false;
+  if (/data-huggy-preview-fallback="true"/i.test(source) && !source.includes('window.__modules__')) return false;
   if (/Preview ready\. Generate or edit this project/i.test(source)) return false;
   return true;
 }
@@ -5070,11 +5071,65 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
     }
 
-    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+    let verified = await getVerifiedSession();
+    if (!verified?.session?.access_token) {
+      verified = await refreshVerifiedSession();
+    }
+    const token = verified?.session?.access_token || '';
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+    const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       signal: activeAbort.signal,
       body: JSON.stringify(requestBody),
     });
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      const msg = typeof errorPayload?.message === 'string' ? errorPayload.message : (typeof errorPayload?.error === 'string' ? errorPayload.error : `Request failed with ${response.status}`);
+      throw new Error(msg);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let payload: any = null;
+    if (reader) {
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            const dataStr = trimmed.slice(6).trim();
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.type === 'agent_step') {
+                markAgentStep(data.step, data.message);
+              } else if (data.type === 'done') {
+                payload = data.payload;
+              } else if (data.type === 'error') {
+                throw new Error(data.error || 'SSE stream error');
+              }
+            } catch (err: any) {
+              console.error('Failed to parse SSE data:', err, dataStr);
+              if (err.message && err.message !== 'Unexpected end of JSON input') {
+                throw err;
+              }
+            }
+          }
+        }
+      }
+    }
+    if (!payload) throw new Error('Generation failed or empty response');
 
     const responsePayload = redactInternalModelFields(payload || {});
     if (responsePayload.project?.id) {

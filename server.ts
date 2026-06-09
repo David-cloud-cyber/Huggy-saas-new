@@ -5130,6 +5130,7 @@ async function generateFilesWithAi(input: {
     })
     : null;
 
+  let totalCostUsd = 0;
   // --- AGENTIC AI V3 LOOP ---
   input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Analyse des dépendances (AST)...' });
   const depGraph = buildDependencyGraph(input.existingFiles);
@@ -9494,11 +9495,6 @@ app.post('/api/import/prepare', async (req: any, res: any) => {
 
 app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const isStream = req.query.stream === 'true';
-  if (isStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-  }
   const requestId = `req_${randomUUID()}`;
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
@@ -9528,6 +9524,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   }
   if (isAbusivePrompt(prompt)) {
     return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
+  }
+
+  if (isStream) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
   }
 
   const helpers = getDbHelpers();
@@ -9938,7 +9940,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
         },
       }).catch(() => null);
-      return res.json({
+      const finalPayload = {
         success: true,
         needs_fix: true,
         intent: decision,
@@ -9963,7 +9965,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           status: 'needs_fix',
           html: previewHtml,
         },
-      });
+      };
+      if (isStream) {
+        res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
+        return res.end();
+      } else {
+        return res.json(finalPayload);
+      }
     }
     const updatedProject: GeneratedProject = {
       ...project,
@@ -10020,7 +10028,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       },
     });
 
-    res.json({
+    const finalPayload = {
       success: true,
       intent: decision,
       project: updatedProject,
@@ -10044,7 +10052,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         status: pipeline.status,
         html: previewHtml,
       },
-    });
+    };
+    if (isStream) {
+      res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
+      return res.end();
+    } else {
+      return res.json(finalPayload);
+    }
   } catch (error: any) {
     await helpers.addLedger(userId, 'refund', cost.finalCredits, await helpers.getWallet(userId), `Generation failed: ${error.message}`, refId);
     await helpers.addAudit({
@@ -10061,14 +10075,19 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       diagnostic_code: diagnostic.diagnostic_code,
       suggested_action: diagnostic.suggested_action,
     });
-    res.status(diagnostic.status).json({
-      success: false,
-      error: diagnostic.message,
-      message: diagnostic.message,
-      diagnostic_code: diagnostic.diagnostic_code,
-      request_id: requestId,
-      suggested_action: diagnostic.suggested_action,
-    });
+    if (isStream) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: diagnostic.message, diagnostic_code: diagnostic.diagnostic_code })}\n\n`);
+      return res.end();
+    } else {
+      res.status(diagnostic.status).json({
+        success: false,
+        error: diagnostic.message,
+        message: diagnostic.message,
+        diagnostic_code: diagnostic.diagnostic_code,
+        request_id: requestId,
+        suggested_action: diagnostic.suggested_action,
+      });
+    }
   }
 });
 
