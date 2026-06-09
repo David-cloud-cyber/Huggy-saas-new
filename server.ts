@@ -5551,18 +5551,27 @@ async function generateFilesWithAi(input: {
         userPrompt: input.prompt,
         appType,
         fileCount: input.existingFiles.length,
+        files: input.existingFiles.slice(0, 30),  // cap for memory
         hasAuth: /auth|login|signup|session/i.test(input.prompt),
         hasDatabase: /database|supabase|sql|schema/i.test(input.prompt),
         hasPayments: /stripe|payment|billing|checkout/i.test(input.prompt),
         language: input.deepReasoningContract?.language || 'auto',
+        // ✅ Dynamic model resolution — each agent gets the best model for its tier
+        availableModels: {
+          fast:      'google/gemini-3.5-flash',
+          balanced:  'deepseek/deepseek-v4-pro',
+          reasoning: selectedModel, // use the already-resolved primary model for reasoning tasks
+          design:    /gemini-3-pro|opus|gpt-5\.5/i.test(selectedModel)
+                       ? selectedModel
+                       : 'google/gemini-3-pro-preview',
+        },
       };
       const agentRoles = selectAgentsForContext(agentCtx);
 
       if (agentRoles.length > 0) {
-        // Parallel agent executor — uses a fast model for sub-analyses
-        const agentExecutor = async (task: import('./src/services/parallel-agent-runner.ts').AgentTask) => {
-          const fastModel = 'google/gemini-3.5-flash' as import('./src/config/ai-models.ts').AllowedModelId;
-          const result = await providerGateway.chat(fastModel, [
+        // ✅ Agent executor: each agent receives the model resolved for its tier
+        const agentExecutor = async (task: import('./src/services/parallel-agent-runner.ts').AgentTask, modelId: import('./src/config/ai-models.ts').AllowedModelId) => {
+          const result = await providerGateway.chat(modelId, [
             { role: 'system', content: task.systemContext },
             { role: 'user', content: task.prompt },
           ], { timeoutMs: 15_000, maxAttempts: 1 });
