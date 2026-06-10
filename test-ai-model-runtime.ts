@@ -24,7 +24,7 @@ for (const modelId of AI_ALLOWED_MODELS) {
 
 {
   const runtime = buildAIModelRuntimeConfig({
-    modelId: 'openai/gpt-5-mini',
+    modelId: 'google/gemini-3.5-flash',
     task: 'conversation',
     stream: true,
   });
@@ -119,11 +119,25 @@ for (const modelId of AI_ALLOWED_MODELS) {
 }
 
 {
-  const runtime = buildAIModelRuntimeConfig({ modelId: 'openai/gpt-5-mini', task: 'conversation' });
+  const runtime = buildAIModelRuntimeConfig({ modelId: 'google/gemini-3.5-flash', task: 'conversation' });
   assert.ok('thinking' in runtime, 'All runtime configs should include thinking section');
 }
 
 // Expanded reasoning control detection
+{
+  const fableProfile = getAIModelCapabilityProfile('anthropic/claude-fable-5');
+  assert.equal(fableProfile.reasoning, 'frontier', 'Claude Fable 5 should be treated as a frontier reasoning model');
+  assert.equal(fableProfile.code, 'frontier', 'Claude Fable 5 should be treated as a frontier coding model');
+  assert.equal(fableProfile.supports.reasoningControl, true, 'Claude Fable 5 should support reasoning control');
+  assert.equal(fableProfile.supports.longContext, true, 'Claude Fable 5 should expose its 1M context capability');
+}
+
+{
+  const latestFableProfile = getAIModelCapabilityProfile('~anthropic/claude-fable-latest');
+  assert.equal(latestFableProfile.supports.toolCalling, true, 'Latest Fable alias should support tool calling');
+  assert.equal(latestFableProfile.supports.structuredOutput, true, 'Latest Fable alias should support structured output');
+}
+
 {
   const anthropicProfile = getAIModelCapabilityProfile('anthropic/claude-opus-4.8');
   assert.equal(anthropicProfile.supports.reasoningControl, true, 'Claude Opus should support reasoning control');

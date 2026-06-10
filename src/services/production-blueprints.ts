@@ -486,7 +486,6 @@ export function inferProductionBlueprint(prompt: string): ProductionBlueprint {
   // freedom to infer the correct product shape from the prompt alone.
   return BLUEPRINTS.generic_web_app;
 }
-}
 
 export function listProductionBlueprints() {
   return Object.values(BLUEPRINTS);

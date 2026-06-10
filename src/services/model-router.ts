@@ -99,11 +99,11 @@ export class ModelRouter {
 
       switch (context.mode) {
         case 'Fast':
-          selectedModel = firstAffordable(['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash']);
+          selectedModel = firstAffordable(['deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
           break;
 
         case 'Balanced':
-          selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
+          selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'deepseek/deepseek-v4-pro']);
           break;
 
         case 'Pro':
@@ -112,7 +112,7 @@ export class ModelRouter {
 
         case 'Premium':
         case 'Max Quality':
-          selectedModel = firstAffordable(['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-opus-4.7']);
+          selectedModel = firstAffordable(['anthropic/claude-fable-5', '~anthropic/claude-fable-latest', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-opus-4.7']);
           break;
 
         case 'Auto':
@@ -140,15 +140,15 @@ export class ModelRouter {
     const complexity = context.taskComplexity || 'medium';
     if (!this.hasSpecificCapabilityNeeds(context)) {
       if (complexity === 'simple') {
-        return this.firstAvailable(models, ['openai/gpt-5-mini', 'deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
+        return this.firstAvailable(models, ['deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
       }
       if (complexity === 'complex') {
         return this.firstAvailable(models, ['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'openai/gpt-5.5']);
       }
       if (complexity === 'extreme') {
-        return this.firstAvailable(models, ['anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
+        return this.firstAvailable(models, ['anthropic/claude-fable-5', '~anthropic/claude-fable-latest', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
       }
-      return this.firstAvailable(models, ['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'openai/gpt-5-mini', 'deepseek/deepseek-v4-pro']);
+      return this.firstAvailable(models, ['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'deepseek/deepseek-v4-pro']);
     }
     const scored = models.map(modelId => ({
       modelId,
@@ -241,7 +241,7 @@ export class ModelRouter {
       'openai/gpt-5.5',
       'deepseek/deepseek-v4-pro',
       'google/gemini-3.5-flash',
-      'openai/gpt-5-mini',
+      'deepseek/deepseek-v4-flash',
     ];
 
     const planAccessibleModels = AI_ALLOWED_MODELS.filter(modelId => {

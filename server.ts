@@ -5597,12 +5597,13 @@ async function generateFilesWithAi(input: {
 
   // Extract memory (ADRs) from last actions and build RAG context
   input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Extraction de la mémoire architecturale (RAG)...' });
+  const persistenceClient = getSupabase();
 
   // Load persisted project memory from Supabase (ADRs, preferences, blockers)
   let memoryContext = '';
   try {
-    if (input.project?.id) {
-      const { data: memoryRows } = await supabaseAdmin()
+    if (input.project?.id && persistenceClient) {
+      const { data: memoryRows } = await persistenceClient
         .from('project_memory')
         .select('memory_type, content, created_at')
         .eq('project_id', input.project.id)
@@ -5634,8 +5635,8 @@ async function generateFilesWithAi(input: {
   input.onEvent?.({ type: 'agent_step', step: 'design_tokens', message: 'Chargement des tokens design...' });
   let designTokenContext = '';
   try {
-    if (input.project?.id) {
-      const { data: tokenRows } = await supabaseAdmin()
+    if (input.project?.id && persistenceClient) {
+      const { data: tokenRows } = await persistenceClient
         .from('project_memory')
         .select('content')
         .eq('project_id', input.project.id)
@@ -5686,7 +5687,7 @@ async function generateFilesWithAi(input: {
 
     // Stream tokens live so the client sees progress in real time
     let fullText = '';
-    let streamedModel = selectedModel;
+    let streamedModel: string = selectedModel;
     let streamedCost = 0;
 
     try {
@@ -5800,7 +5801,7 @@ async function generateFilesWithAi(input: {
   }
 
   // Persist new architectural decisions extracted from this generation
-  if (input.project?.id) {
+  if (input.project?.id && persistenceClient) {
     try {
       const { extractArchitectureDecisions, projectMemoryToRows } = await import('./src/services/agent-memory-rag.ts');
       const newAdrs = extractArchitectureDecisions(input.prompt, result.text);
@@ -5808,25 +5809,25 @@ async function generateFilesWithAi(input: {
         const rows = projectMemoryToRows({ adrs: newAdrs, knownPreferences: [] }, input.project.id);
         // Upsert: delete existing ADRs for the same topics, then insert fresh ones
         const topics = newAdrs.map(a => a.topic);
-        const existingRows = await supabaseAdmin()
+        const existingRows = await persistenceClient
           .from('project_memory')
           .select('id, content')
           .eq('project_id', input.project.id)
           .eq('memory_type', 'adr');
         if (existingRows.data) {
           const toDelete = existingRows.data
-            .filter(row => {
+            .filter((row: any) => {
               try {
                 const parsed2 = JSON.parse(row.content);
                 return topics.includes(parsed2.topic);
               } catch { return false; }
             })
-            .map(row => row.id);
+            .map((row: any) => row.id);
           if (toDelete.length > 0) {
-            await supabaseAdmin().from('project_memory').delete().in('id', toDelete);
+            await persistenceClient.from('project_memory').delete().in('id', toDelete);
           }
         }
-        await supabaseAdmin().from('project_memory').insert(rows).catch((err: any) => {
+        await persistenceClient.from('project_memory').insert(rows).catch((err: any) => {
           console.warn('[huggy:memory_persist_failed]', { message: err?.message });
         });
       }
@@ -5840,13 +5841,13 @@ async function generateFilesWithAi(input: {
       if (designSystem.tokens.length > 0) {
         const designRows = designSystemToMemoryRows(designSystem, input.project.id);
         // Replace existing design token entry
-        await supabaseAdmin()
+        await persistenceClient
           .from('project_memory')
           .delete()
           .eq('project_id', input.project.id)
           .eq('memory_type', 'design_token')
           .catch(() => null);
-        await supabaseAdmin()
+        await persistenceClient
           .from('project_memory')
           .insert(designRows)
           .catch((err: any) => {

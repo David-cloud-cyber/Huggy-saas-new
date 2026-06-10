@@ -6,14 +6,14 @@ const report = buildAgentMoatIntelligence({
     {
       id: 'run_1',
       intent: 'build',
-      model_id: 'openai/gpt-5-mini',
+      model_id: 'google/gemini-3.5-flash',
       status: 'completed',
       duration_ms: 42000,
     },
     {
       id: 'run_2',
       intent: 'debug_fix',
-      model_id: 'openai/gpt-5-mini',
+      model_id: 'google/gemini-3.5-flash',
       status: 'failed',
       diagnostic_code: 'OPENROUTER_TIMEOUT',
       suggested_action: 'retry_later',
@@ -79,10 +79,10 @@ assert.notEqual(runnerReputation?.status, 'strong', 'runner should be watch/weak
 const publishReputation = report.module_reputation.find(item => item.module === 'publish');
 assert.ok(publishReputation?.signals.some(signal => signal.includes('DEPLOYMENT_PERSISTENCE')));
 
-const miniModel = report.model_performance.find(item => item.model_id === 'openai/gpt-5-mini');
-assert.equal(miniModel?.attempts, 2);
-assert.equal(miniModel?.failures, 1);
-assert.equal(miniModel?.recommendation, 'avoid_for_now');
+const economyModel = report.model_performance.find(item => item.model_id === 'google/gemini-3.5-flash');
+assert.equal(economyModel?.attempts, 2);
+assert.equal(economyModel?.failures, 1);
+assert.equal(economyModel?.recommendation, 'avoid_for_now');
 
 assert.ok(report.recurring_risks.some(risk => risk.key.includes('OPENROUTER_TIMEOUT')));
 assert.ok(report.improvement_backlog.some(item => item.title.includes('runner failures')));

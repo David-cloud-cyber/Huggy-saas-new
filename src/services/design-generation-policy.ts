@@ -429,7 +429,7 @@ const appTypeRules: Record<GeneratedAppType, string[]> = {
   ],
 };
 
-const platformIntelligence: Record<GeneratedAppType, PlatformIntelligence> = {
+const platformIntelligence: Partial<Record<GeneratedAppType, PlatformIntelligence>> = {
   landing_page: {
     platformType: 'landing_page',
     designStrategy: 'Product-led marketing with a strong first screen, proof, and a clear path to action.',
@@ -826,7 +826,7 @@ export function getAppTypeUxRules(appType: GeneratedAppType) {
 }
 
 export function getPlatformIntelligence(appType: GeneratedAppType) {
-  return platformIntelligence[appType];
+  return platformIntelligence[appType] || platformIntelligence.generic_web_app!;
 }
 
 export function buildGeneratedDesignBrief(input: {

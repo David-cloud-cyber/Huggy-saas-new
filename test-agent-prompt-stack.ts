@@ -18,7 +18,7 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v16');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v17');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');

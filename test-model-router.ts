@@ -10,7 +10,7 @@ assert.equal(
     userCredits: 10,
     taskComplexity: 'simple',
   }),
-  'openai/gpt-5-mini',
+  'deepseek/deepseek-v4-flash',
   'Auto simple tasks should prefer the lightweight economy model.',
 );
 
@@ -40,11 +40,22 @@ assert.equal(
   await router.selectModel({
     plan: 'scale',
     mode: 'Auto',
-    userCredits: 100,
+    userCredits: 120,
     taskComplexity: 'extreme',
   }),
-  'anthropic/claude-opus-4.8-fast',
-  'Auto extreme tasks should use the premium fast model when available.',
+  'anthropic/claude-fable-5',
+  'Auto extreme tasks should use the frontier Fable model when available.',
+);
+
+assert.equal(
+  await router.selectModel({
+    plan: 'scale',
+    mode: 'Custom',
+    userCredits: 120,
+    taskComplexity: 'extreme',
+  }, '~anthropic/claude-fable-latest'),
+  '~anthropic/claude-fable-latest',
+  'Manual selection must respect the latest Fable alias.',
 );
 
 assert.equal(

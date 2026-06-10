@@ -30,7 +30,7 @@ function parseSseField(line: string) {
   };
 }
 
-function dispatchBlock(block: string, onEvent: JsonSseEventHandler, partialJsonRef: { value: string }) {
+function dispatchBlock(block: string, onEvent: JsonSseEventHandler) {
   const lines = normalizeNewlines(block).split('\n');
   const dataLines: string[] = [];
   let eventType = 'message';
@@ -52,38 +52,24 @@ function dispatchBlock(block: string, onEvent: JsonSseEventHandler, partialJsonR
 
   const rawData = dataLines.join('\n').trim();
   if (!rawData || rawData === '[DONE]') {
-    partialJsonRef.value = '';
     return;
   }
 
-  // Try parsing accumulated + new data (handles cross-chunk JSON fragments)
-  const candidate = partialJsonRef.value + rawData;
   try {
-    const parsed = JSON.parse(candidate);
-    partialJsonRef.value = ''; // reset on success
+    const parsed = JSON.parse(rawData);
     const normalizedType = eventType === 'message' && typeof parsed?.event_type === 'string'
       ? parsed.event_type
       : eventType;
     onEvent(normalizedType, parsed);
   } catch {
-    // Check if it looks like a partial JSON (starts with `{` but doesn't close)
-    const trimmed = candidate.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      // Accumulate for next chunk
-      partialJsonRef.value = candidate;
-    } else {
-      // Not recoverable JSON — emit error and reset
-      partialJsonRef.value = '';
-      onEvent('error', { ...malformedStreamEvent, raw: rawData.slice(0, 200) });
-    }
+    // Blocks are dispatched only after an SSE boundary or an explicit flush.
+    // Invalid JSON here is malformed, not an incomplete network chunk.
+    onEvent('error', { ...malformedStreamEvent, raw: rawData.slice(0, 200) });
   }
 }
 
 export function createJsonSseParser(onEvent: JsonSseEventHandler) {
   let buffer = '';
-  // Shared mutable ref for partial JSON state across chunks
-  const partialJsonRef = { value: '' };
-
   return {
     push(chunk: string) {
       buffer = normalizeNewlines(`${buffer}${chunk}`);
@@ -94,16 +80,14 @@ export function createJsonSseParser(onEvent: JsonSseEventHandler) {
 
         const block = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
-        dispatchBlock(block, onEvent, partialJsonRef);
+        dispatchBlock(block, onEvent);
       }
     },
 
     flush() {
       const remaining = buffer.trim();
       buffer = '';
-      if (remaining) dispatchBlock(remaining, onEvent, partialJsonRef);
-      // Clear any lingering partial JSON on stream end
-      partialJsonRef.value = '';
+      if (remaining) dispatchBlock(remaining, onEvent);
     },
 
     /**
@@ -111,7 +95,7 @@ export function createJsonSseParser(onEvent: JsonSseEventHandler) {
      * Useful for diagnostics / detecting prematurely closed streams.
      */
     hasPendingData() {
-      return buffer.length > 0 || partialJsonRef.value.length > 0;
+      return buffer.length > 0;
     },
   };
 }

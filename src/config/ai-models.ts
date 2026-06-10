@@ -82,18 +82,6 @@ export const MODEL_REGISTRY = [
     capabilities: { supportsVision: true },
   },
   {
-    id: 'openai/gpt-5-mini',
-    label: 'GPT-5 Mini',
-    provider: 'openai',
-    contextWindow: 128000,
-    tier: AIModelTier.ECONOMY,
-    minPlan: UserPlan.FREE,
-    creditFloor: 1.5,
-    isFast: true,
-    description: 'Efficient OpenAI model for quick prompts, fixes and lightweight builds.',
-    capabilities: { supportsVision: true },
-  },
-  {
     id: 'deepseek/deepseek-v4-flash',
     label: 'DeepSeek V4 Flash',
     provider: 'deepseek',
@@ -149,6 +137,60 @@ export const MODEL_REGISTRY = [
     isPremium: true,
     description: 'Premium Claude model for demanding architecture and coding tasks.',
     capabilities: { supportsVision: true },
+  },
+  {
+    id: 'anthropic/claude-fable-5',
+    label: 'Claude Fable 5',
+    provider: 'anthropic',
+    contextWindow: 1000000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.SCALE,
+    creditFloor: 20,
+    isPremium: true,
+    isNew: true,
+    description: 'Frontier Claude model for autonomous knowledge work, complex coding and long-horizon agent workflows.',
+    capabilities: {
+      supportsStreaming: true,
+      supportsTools: true,
+      supportsVision: true,
+      supportsJsonMode: true,
+      supportsStructuredOutput: true,
+      supportsToolCalling: true,
+      supportsLongContext: true,
+      reasoningLevel: 'frontier',
+      codeLevel: 'frontier',
+      agenticLevel: 'frontier',
+      designLevel: 'frontier',
+      securityLevel: 'frontier',
+      reliability: 'experimental',
+    },
+  },
+  {
+    id: '~anthropic/claude-fable-latest',
+    label: 'Claude Fable Latest',
+    provider: 'anthropic',
+    contextWindow: 1000000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.SCALE,
+    creditFloor: 20,
+    isPremium: true,
+    isNew: true,
+    description: 'OpenRouter alias that follows the latest available Claude Fable model.',
+    capabilities: {
+      supportsStreaming: true,
+      supportsTools: true,
+      supportsVision: true,
+      supportsJsonMode: true,
+      supportsStructuredOutput: true,
+      supportsToolCalling: true,
+      supportsLongContext: true,
+      reasoningLevel: 'frontier',
+      codeLevel: 'frontier',
+      agenticLevel: 'frontier',
+      designLevel: 'frontier',
+      securityLevel: 'frontier',
+      reliability: 'experimental',
+    },
   },
   {
     id: 'anthropic/claude-opus-4.8',
@@ -208,20 +250,9 @@ export type ModelSelectionId = AllowedModelId | 'auto';
 
 export const DEFAULT_PROVIDER_MODEL_ID: AllowedModelId = 'google/gemini-3.5-flash';
 
-export const AI_ALLOWED_MODELS = [
-  'google/gemini-3-flash-preview',
-  'google/gemini-3.5-flash',
-  'openai/gpt-5-mini',
-  'google/gemini-3-pro-preview',
-  'anthropic/claude-sonnet-4.6',
-  'anthropic/claude-opus-4.7',
-  'openai/gpt-5.5',
-  'openai/gpt-5.5-pro',
-  'deepseek/deepseek-v4-flash',
-  'deepseek/deepseek-v4-pro',
-  'anthropic/claude-opus-4.8',
-  'anthropic/claude-opus-4.8-fast',
-] as AllowedModelId[];
+// The registry is the single source of truth. Deriving the provider whitelist
+// prevents the UI, router and API validator from drifting apart.
+export const AI_ALLOWED_MODELS = MODEL_REGISTRY.map(model => model.id) as AllowedModelId[];
 
 export const AI_AUTO_MODEL_OPTION = {
   id: 'auto',
@@ -273,7 +304,7 @@ const buildRecord = <T>(mapper: (model: ModelDefinition) => T) => (
 
 function strengthForModel(model: ModelDefinition, kind: 'reasoning' | 'code' | 'agentic' | 'design' | 'security'): ModelStrength {
   const id = model.id.toLowerCase();
-  if (id.includes('opus') || id.includes('gpt-5.5-pro')) return 'frontier';
+  if (id.includes('fable') || id.includes('opus') || id.includes('gpt-5.5-pro')) return 'frontier';
   if (id.includes('sonnet') || id.includes('gpt-5.5') || id.includes('gemini-3-pro')) return 'high';
   if (id.includes('deepseek-v4-pro')) return kind === 'code' ? 'high' : 'medium';
   if (model.tier === AIModelTier.STANDARD || model.tier === AIModelTier.PRO) return 'medium';
@@ -287,13 +318,14 @@ function speedForModel(model: ModelDefinition): ModelSpeed {
 }
 
 function reliabilityForModel(model: ModelDefinition): ModelReliability {
-  if (model.id.includes('preview') || model.id.includes('4.8')) return 'experimental';
+  if (model.id.includes('preview') || model.id.includes('fable') || model.id.includes('4.8')) return 'experimental';
   if (model.provider === 'anthropic' || model.provider === 'openai') return 'high';
   return 'standard';
 }
 
 function bestUsesForModel(model: ModelDefinition): string[] {
   const id = model.id.toLowerCase();
+  if (id.includes('fable')) return ['autonomous_agent', 'architecture', 'complex_reasoning', 'full_stack_generation', 'long_context', 'debug', 'security'];
   if (id.includes('opus')) return ['architecture', 'complex_reasoning', 'design_critique', 'full_stack_generation', 'debug'];
   if (id.includes('sonnet')) return ['code_generation', 'refactor', 'debug', 'product_reasoning'];
   if (id.includes('gpt-5.5-pro')) return ['full_stack_generation', 'security', 'structured_planning', 'debug'];

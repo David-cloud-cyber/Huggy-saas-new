@@ -329,6 +329,7 @@ export class OpenRouterService {
     // Format: [inputPerToken, outputPerToken]
     const rates: Array<[RegExp, [number, number]]> = [
       // Frontier / highest tier
+      [/claude-fable-(?:5|latest)/,           [0.000010,  0.000050]],  // $10/$50 per M
       [/claude-opus-4\.[89](?!-fast)/,        [0.000015,  0.000075]],  // $15/$75 per M
       [/gpt-5\.5-pro/,                        [0.000015,  0.000060]],  // $15/$60 per M
       [/gpt-5\.5(?!-pro)/,                    [0.000010,  0.000040]],  // $10/$40 per M
@@ -339,7 +340,6 @@ export class OpenRouterService {
       [/gpt-5(?![-.])/,                       [0.000010,  0.000030]],  // $10/$30 per M
       [/gemini-3-pro/,                        [0.000007,  0.000021]],  // $7/$21 per M
       // Mid tier
-      [/gpt-5-mini/,                          [0.000000150, 0.000000600]], // $0.15/$0.60 per M
       [/deepseek-v4-pro/,                     [0.000000270, 0.000001100]], // $0.27/$1.10 per M
       [/gemini-3-flash-preview|gemini-3-flash/, [0.000000250, 0.000001000]], // $0.25/$1 per M
       // Fast / economy tier

@@ -146,12 +146,15 @@ function knownLimitsForProvider(provider: ModelProvider, modelId: AllowedModelId
   if (modelId.includes('4.8')) {
     limits.push('new premium model; keep fallback ready for availability changes');
   }
+  if (modelId.includes('fable')) {
+    limits.push('new frontier model; keep a stable fallback ready while provider availability matures');
+  }
   return limits;
 }
 
 function supportsReasoningControl(provider: ModelProvider, modelId: AllowedModelId) {
   if (provider === 'openai' && /gpt-5\.5|gpt-5-pro|o[1-4]/i.test(modelId)) return true;
-  if (provider === 'anthropic' && /claude-opus|claude-sonnet-4/i.test(modelId)) return true;
+  if (provider === 'anthropic' && /claude-fable|claude-opus|claude-sonnet-4/i.test(modelId)) return true;
   if (provider === 'google' && /gemini-3-pro|gemini-3-ultra/i.test(modelId)) return true;
   if (provider === 'deepseek' && /deepseek-r1|deepseek-v4/i.test(modelId)) return true;
   return false;

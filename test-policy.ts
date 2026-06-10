@@ -12,7 +12,6 @@ import {
 const EXPECTED_ALLOWED_MODELS = [
   'google/gemini-3-flash-preview',
   'google/gemini-3.5-flash',
-  'openai/gpt-5-mini',
   'google/gemini-3-pro-preview',
   'anthropic/claude-sonnet-4.6',
   'anthropic/claude-opus-4.7',
@@ -20,6 +19,8 @@ const EXPECTED_ALLOWED_MODELS = [
   'openai/gpt-5.5-pro',
   'deepseek/deepseek-v4-flash',
   'deepseek/deepseek-v4-pro',
+  'anthropic/claude-fable-5',
+  '~anthropic/claude-fable-latest',
   'anthropic/claude-opus-4.8',
   'anthropic/claude-opus-4.8-fast',
 ] as const;
@@ -35,6 +36,7 @@ async function runTests() {
   EXPECTED_ALLOWED_MODELS.forEach(validateAllowedModel);
   [
     'google/gemini-2.5-flash',
+    'openai/gpt-5-mini',
     'openai/gpt-4o',
     'meta-llama/llama-4-maverick',
     'mistralai/codestral-2501',
