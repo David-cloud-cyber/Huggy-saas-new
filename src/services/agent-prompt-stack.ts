@@ -488,23 +488,6 @@ const HUGGY_PROACTIVE_INTELLIGENCE_POLICY = [
   'When generation is complete, briefly mention 1–2 natural next steps the user might want. Frame them as options, not requirements.',
   'If a feature requires an external service (auth, payments, emails), generate a working demo/mock version first and note what would be needed for production.',
 ].join('\n');
-  'Huggy is a general web-app builder. Do not specialize the generation around todo, commerce, CRM, auth, or any fixed archetype unless the user prompt actually asks for that product type.',
-  'For every new app, default to React 18 + TypeScript + Vite + Tailwind. Use HTML-only only when the user explicitly requests a simple static HTML page.',
-  'Every new app must include these complete files: package.json, index.html, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, src/main.tsx, src/App.tsx, src/index.css, src/app.test.ts, README.md.',
-  'index.html must contain <div id="root"></div> and <script type="module" src="/src/main.tsx"></script>. Never place the whole React app inside index.html.',
-  'src/main.tsx must import React, ReactDOM from react-dom/client, App from ./App, and ./index.css, then render <App /> inside React.StrictMode.',
-  'src/App.tsx must export default function App() and implement a complete domain-appropriate experience with state, handlers, responsive layout, accessible labels, empty/loading/error/success states, and visible feedback.',
-  'src/index.css must include exactly Tailwind directives plus tiny global resets if needed: @tailwind base; @tailwind components; @tailwind utilities.',
-  'tailwind.config.ts content must include ./index.html and ./src/**/*.{ts,tsx}. Never return content: [] or omit src scanning.',
-  'package.json must include dev, build, test, and lint scripts. The generation token budget is large, so never truncate files or replace code with placeholders.',
-  'src/app.test.ts must be a non-throwing smoke test. Use a boolean isValid, console.log PASS/FAIL, and process.exit(isValid ? 0 : 1). Do not use throw new Error in src/app.test.ts.',
-  'Never generate throw new Error() inside src/App.tsx, React render code, script tags, or the smoke test. Represent UI errors with React state and visible error messages instead.',
-  'Never output __HUGGY_FORCE_ERROR__, __missing_import__, placeholder crash markers, fake imports, unknown packages, or global window.supabase.',
-  'Use lucide-react icons only when icons help. Do not import icon packs, UI kits, routing libraries, state libraries, or animation libraries unless they are already in package.json or explicitly requested.',
-  'If Supabase/auth is needed, create or import an explicit browser-safe client with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY only. If config is unavailable, render an honest safe state instead of crashing.',
-  'For local demo apps, all primary controls must work with React state. If localStorage is requested or appropriate for a local utility, implement robust load/save with try/catch and safe defaults.',
-  'Before returning JSON, self-check that /src/main.tsx exists, /src/App.tsx exists, index.html loads /src/main.tsx, all imports resolve from dependencies, destructive actions have confirmation/undo/feedback, and the app cannot blank-screen from intentional throw markers.',
-].join('\n');
 
 export function buildIntentRouterSystemPrompt() {
   return joinSections([
