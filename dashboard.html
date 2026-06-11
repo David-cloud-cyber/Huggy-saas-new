@@ -62,29 +62,29 @@
   <script type="module" src="/src/auth-guard.ts"></script>
   <style>
     :root[data-theme="dark"] {
-      --bg           : #171613;
-      --bg-surface   : #201f1b;
-      --bg-elevated  : #2a2822;
-      --bg-input     : #201f1b;
-      --bg-panel     : #191814;
+      --bg           : #0f1014;
+      --bg-surface   : #15171c;
+      --bg-elevated  : #1b1e25;
+      --bg-input     : #181b21;
+      --bg-panel     : #13151a;
 
-      --accent       : #f8f4eb;
-      --accent-blue  : #93c5fd;
-      --accent-blue-deep: #bfdbfe;
-      --accent-blue-soft: rgba(147,197,253,0.12);
-      --accent-blue-hover: rgba(147,197,253,0.16);
-      --accent-blue-active: rgba(147,197,253,0.22);
-      --accent-dim   : rgba(248,244,235,0.08);
-      --accent-hover : rgba(248,244,235,0.12);
-      --accent-active: rgba(248,244,235,0.16);
+      --accent       : #f5f7fb;
+      --accent-blue  : #4f8cff;
+      --accent-blue-deep: #8ab4ff;
+      --accent-blue-soft: rgba(79,140,255,0.16);
+      --accent-blue-hover: rgba(79,140,255,0.22);
+      --accent-blue-active: rgba(79,140,255,0.30);
+      --accent-dim   : rgba(245,247,251,0.07);
+      --accent-hover : rgba(245,247,251,0.11);
+      --accent-active: rgba(245,247,251,0.15);
 
-      --text         : #f8f4eb;
-      --text-muted   : #d8d1c3;
-      --text-sub     : #a79f90;
+      --text         : #f5f7fb;
+      --text-muted   : #c6cad3;
+      --text-sub     : #8d95a3;
 
-      --border       : rgba(252,251,248,0.14);
-      --border-mid   : rgba(252,251,248,0.18);
-      --border-focus : rgba(191,219,254,0.42);
+      --border       : rgba(226,232,240,0.12);
+      --border-mid   : rgba(226,232,240,0.18);
+      --border-focus : rgba(79,140,255,0.46);
 
       --success      : #4ADE80;
       --success-dim  : rgba(74,222,128,0.10);
@@ -92,7 +92,7 @@
       --warning-dim  : rgba(251,191,36,0.10);
       --error        : #F87171;
       --error-dim    : rgba(248,113,113,0.10);
-      --blue         : #93C5FD;
+      --blue         : #4f8cff;
       --blue-dim     : var(--accent-blue-soft);
       --grain-opacity: 0.022;
     }
@@ -2209,7 +2209,7 @@
       const current = html.getAttribute('data-theme');
       const nextTheme = current === 'dark' ? 'light' : 'dark';
       
-      curtain.style.background = nextTheme === 'light' ? '#fcfbf8' : '#171613';
+      curtain.style.background = nextTheme === 'light' ? '#fcfbf8' : '#0f1014';
       curtain.style.transformOrigin = 'top';
       curtain.classList.add('falling');
 

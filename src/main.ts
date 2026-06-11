@@ -614,7 +614,7 @@ function init() {
         localStorage.setItem('huggy-theme', newTheme);
         
         // Set curtain color to the NEW theme background
-        curtain.style.background = newTheme === 'light' ? '#fcfbf8' : '#171613';
+        curtain.style.background = newTheme === 'light' ? '#fcfbf8' : '#0f1014';
         curtain.style.transformOrigin = 'top';
         curtain.classList.add('falling');
 

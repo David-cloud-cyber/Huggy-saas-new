@@ -560,7 +560,7 @@ function initBuilder() {
     localStorage.setItem('huggy-theme', newTheme);
     
     if (curtain) {
-      curtain.style.background = isDark ? '#fcfbf8' : '#171613';
+      curtain.style.background = isDark ? '#fcfbf8' : '#0f1014';
       curtain.style.transformOrigin = 'top';
       curtain.classList.add('falling');
       setTimeout(() => {

@@ -63,18 +63,18 @@
         @import "tailwindcss";
 
         :root[data-theme="dark"] {
-            --bg: #171613;
-            --bg-surface: #201f1b;
-            --bg-elevated: #2a2822;
-            --bg-input: #201f1b;
-            --accent: #f8f4eb;
-            --accent-dim: rgba(248, 244, 235, 0.08);
-            --accent-hover: rgba(248, 244, 235, 0.12);
-            --text: #f8f4eb;
-            --text-muted: #d8d1c3;
-            --text-sub: #a79f90;
-            --border: rgba(252, 251, 248, 0.14);
-            --border-focus: rgba(147, 197, 253, 0.36);
+            --bg: #0f1014;
+            --bg-surface: #15171c;
+            --bg-elevated: #1b1e25;
+            --bg-input: #181b21;
+            --accent: #f5f7fb;
+            --accent-dim: rgba(245, 247, 251, 0.07);
+            --accent-hover: rgba(245, 247, 251, 0.11);
+            --text: #f5f7fb;
+            --text-muted: #c6cad3;
+            --text-sub: #8d95a3;
+            --border: rgba(226, 232, 240, 0.12);
+            --border-focus: rgba(79, 140, 255, 0.46);
             --error: #F87171;
         }
 
@@ -426,8 +426,8 @@
 
         [data-theme="dark"] body {
             background:
-                radial-gradient(circle at 10% 5%, rgba(147, 197, 253, 0.10), transparent 34%),
-                linear-gradient(180deg, #171613 0%, #201f1b 100%);
+                radial-gradient(circle at 10% 5%, rgba(79, 140, 255, 0.12), transparent 34%),
+                linear-gradient(180deg, #0f1014 0%, #15171c 100%);
         }
 
         .auth-container {
@@ -454,7 +454,7 @@
         }
 
         [data-theme="dark"] .auth-panel {
-            background: rgba(23, 22, 19, 0.94);
+            background: rgba(19, 21, 26, 0.94);
         }
 
         .auth-panel .logo-area {
@@ -731,8 +731,8 @@
 
         [data-theme="dark"] body {
             background:
-                radial-gradient(circle at 50% 0%, rgba(147, 197, 253, 0.10), transparent 34%),
-                linear-gradient(180deg, #171613 0%, #11110f 100%);
+                radial-gradient(circle at 50% 0%, rgba(79, 140, 255, 0.12), transparent 34%),
+                linear-gradient(180deg, #0f1014 0%, #13151a 100%);
         }
 
         .auth-container {
@@ -1025,7 +1025,7 @@
                 const current = html.getAttribute('data-theme');
                 const next = current === 'dark' ? 'light' : 'dark';
                 if (curtain) {
-                    curtain.style.background = next === 'dark' ? '#171613' : '#fcfbf8';
+                    curtain.style.background = next === 'dark' ? '#0f1014' : '#fcfbf8';
                     curtain.style.transformOrigin = 'top';
                     curtain.classList.add('falling');
                 }
