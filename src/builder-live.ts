@@ -1000,10 +1000,14 @@ function applyVisualEditTarget(target: VisualEditTarget) {
 function bindVisualEditMode() {
   const toggle = document.getElementById('btn-visual-edit');
   if (!toggle) return;
+  const detectFrenchUi = () => {
+    const lang = (document.documentElement.lang || navigator.language || '').toLowerCase();
+    return lang.startsWith('fr');
+  };
   const options = {
     getIframe: () => document.getElementById('preview-iframe-element') as HTMLIFrameElement | null,
     onPick: applyVisualEditTarget,
-    isFrench: () => speaksFrenchUi(),
+    isFrench: detectFrenchUi,
   };
   toggle.setAttribute('aria-pressed', String(isVisualEditModeActive()));
   toggle.addEventListener('click', () => {
