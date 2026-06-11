@@ -1,6 +1,7 @@
 import { apiFetch } from './lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { openHuggyStream, createSmoothTextRenderer } from './lib/stream-client';
+import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import {
@@ -980,9 +981,48 @@ function syncInternalPreviewTheme() {
   }
 }
 
+/**
+ * When the user picks an element in visual edit mode, prefill the composer
+ * with a scoped edit instruction and focus it. The normal autonomous edit
+ * path then turns this into a targeted patch — no full prompt required.
+ */
+function applyVisualEditTarget(target: VisualEditTarget) {
+  const composer = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  if (!composer) return;
+  const existing = composer.value.trim();
+  composer.value = existing ? `${target.instruction}${existing}` : target.instruction;
+  composer.dispatchEvent(new Event('input', { bubbles: true }));
+  composer.focus();
+  // Place the caret at the end so the user types the change right after the target.
+  composer.setSelectionRange(composer.value.length, composer.value.length);
+}
+
+function bindVisualEditMode() {
+  const toggle = document.getElementById('btn-visual-edit');
+  if (!toggle) return;
+  const detectFrenchUi = () => {
+    const lang = (document.documentElement.lang || navigator.language || '').toLowerCase();
+    return lang.startsWith('fr');
+  };
+  const options = {
+    getIframe: () => document.getElementById('preview-iframe-element') as HTMLIFrameElement | null,
+    onPick: applyVisualEditTarget,
+    isFrench: detectFrenchUi,
+  };
+  toggle.setAttribute('aria-pressed', String(isVisualEditModeActive()));
+  toggle.addEventListener('click', () => {
+    // Only meaningful when a real generated preview is mounted.
+    if (!isUsablePreviewHtml(currentPreviewHtml)) return;
+    const next = !isVisualEditModeActive();
+    setVisualEditMode(next, options);
+    toggle.setAttribute('aria-pressed', String(isVisualEditModeActive()));
+  });
+}
+
 function bindPreviewThemeSync() {
   if (previewThemeSyncBound) return;
   previewThemeSyncBound = true;
+  bindVisualEditMode();
   if ('MutationObserver' in window) {
     const observer = new MutationObserver(() => syncInternalPreviewTheme());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
