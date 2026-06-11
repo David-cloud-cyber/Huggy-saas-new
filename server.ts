@@ -10338,7 +10338,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       qualityStatus: 'not_applicable',
     });
     await updateAgentRunStatus(agentRunId, 'completed');
-    return res.json({
+    return respondJson(200, {
       success: true,
       intent: decision,
       text: content,
