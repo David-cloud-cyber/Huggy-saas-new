@@ -7,7 +7,7 @@ import {
   universalProductContractPromptContext,
 } from './universal-product-contract.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v18';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v19';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -493,6 +493,21 @@ const HUGGY_PROACTIVE_INTELLIGENCE_POLICY = [
   'If a feature requires an external service (auth, payments, emails), generate the real integration contract when configured; otherwise render an honest setup-required state and never fake success.',
 ].join('\n');
 
+const HUGGY_DESIGN_EXCELLENCE_POLICY = [
+  'Design excellence policy (Claude-grade or better):',
+  'Every generated app must reach the visual and UX quality bar of the best modern product interfaces (Claude, Linear, Stripe, Vercel) or better, while staying original and domain-true. This bar is mandatory, not aspirational.',
+  'Typography first: choose an intentional type system with a distinct heading personality and a highly readable body. Use a modular scale (about 1.25 ratio), slightly tight heading letter-spacing, 1.5-1.7 body line-height, and 65-75ch maximum reading width for long text.',
+  'Color discipline: one deliberately chosen neutral family (warm or cool), one primary accent used sparingly for the main action, and semantic tokens for success/warning/error/info. Use subtle layered background tints to separate zones instead of flat pure white/black blocks, unless the design direction demands stark contrast.',
+  'Spacing system: strict 4/8px rhythm with generous whitespace. Related elements group tightly, unrelated elements separate clearly. Sections must breathe; cramped layouts and uniform gap-4-everywhere spacing are rejected.',
+  'Depth and surfaces: soft layered shadows, hairline 1px borders with low-contrast tints, and one consistent radius scale. No heavy glassmorphism, no random elevation, no lifeless flat cards.',
+  'Visual hierarchy must be obvious in 3 seconds: one focal point per screen, the primary action visually dominant, secondary actions discreet, tertiary actions minimal. If everything looks important, nothing is.',
+  'Structure UX as a product, not a page: clear information architecture, persistent predictable navigation, a logical user journey from first paint to primary action, progressive disclosure for complexity, sensible defaults, and zero dead ends.',
+  'Micro-interactions everywhere they add clarity: hover/focus-visible/active transitions on all interactive elements (150-250ms ease-out), subtle entrance reveals, skeleton loading, and tactile button feedback. Quality over quantity; respect prefers-reduced-motion.',
+  'Copywriting is part of design: specific, confident, benefit-driven text in the user language. No lorem ipsum, no vague filler, no template-sounding headlines, no "Welcome to our platform".',
+  'Empty, loading, and error states are designed moments, not afterthoughts: a helpful icon or illustration, a clear one-line explanation, and one constructive next action.',
+  'Final quality bar: if a screenshot of the generated app could be mistaken for a generic AI template, silently redesign before returning. The result must look like a funded product team with a dedicated designer shipped it.',
+].join('\n');
+
 export function buildIntentRouterSystemPrompt() {
   return joinSections([
     HUGGY_IDENTITY,
@@ -602,6 +617,7 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_PLATFORM_INTELLIGENCE_POLICY,
     input.uiPolicySystemPrompt,
     HUGGY_GENERATED_APP_DESIGN_SYSTEM_POLICY,
+    HUGGY_DESIGN_EXCELLENCE_POLICY,
     HUGGY_FRONTEND_CRAFT_POLICY,
     HUGGY_RESPONSIVE_ACCESSIBILITY_POLICY,
     HUGGY_MOTION_POLISH_POLICY,
