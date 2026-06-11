@@ -10361,7 +10361,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   if (wallet < cost.finalCredits) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
-    return res.status(200).json({
+    return respondJson(200, {
       ...publicCreditGateResponse(),
     });
   }
