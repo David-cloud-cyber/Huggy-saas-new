@@ -10254,7 +10254,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       userCredits: walletForRouting,
     });
   } catch (error: any) {
-    return res.status(200).json({
+    return respondJson(200, {
       ...publicCreditGateResponse(),
       message: error?.message || 'This action is unavailable with the current plan or credit balance.',
     });
