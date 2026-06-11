@@ -165,6 +165,12 @@ export function setVisualEditMode(enabled: boolean, options: VisualEditOptions):
     // Picking an element exits the mode so the user can type the change.
     setVisualEditMode(false, options);
     options.onPick(target);
+    // Let the host UI re-sync any toggle button state.
+    try {
+      document.dispatchEvent(new CustomEvent('huggy:visual-edit-picked'));
+    } catch {
+      /* CustomEvent unavailable */
+    }
   };
 
   doc.addEventListener('mouseover', onMove, true);

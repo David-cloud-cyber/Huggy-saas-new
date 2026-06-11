@@ -1009,14 +1009,29 @@ function bindVisualEditMode() {
     onPick: applyVisualEditTarget,
     isFrench: detectFrenchUi,
   };
-  toggle.setAttribute('aria-pressed', String(isVisualEditModeActive()));
-  toggle.addEventListener('click', () => {
+  const reflect = () => {
+    const on = isVisualEditModeActive();
+    toggle.setAttribute('aria-pressed', String(on));
+    toggle.classList.toggle('active', on);
+  };
+  const toggleMode = () => {
     // Only meaningful when a real generated preview is mounted.
     if (!isUsablePreviewHtml(currentPreviewHtml)) return;
-    const next = !isVisualEditModeActive();
-    setVisualEditMode(next, options);
-    toggle.setAttribute('aria-pressed', String(isVisualEditModeActive()));
+    setVisualEditMode(!isVisualEditModeActive(), options);
+    reflect();
+  };
+  reflect();
+  toggle.addEventListener('click', toggleMode);
+  toggle.addEventListener('keydown', (event) => {
+    const key = (event as KeyboardEvent).key;
+    if (key === 'Enter' || key === ' ') {
+      event.preventDefault();
+      toggleMode();
+    }
   });
+  // Picking an element exits the mode inside the module; keep the button in sync.
+  const refresh = () => reflect();
+  document.addEventListener('huggy:visual-edit-picked', refresh);
 }
 
 function bindPreviewThemeSync() {
