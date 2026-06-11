@@ -10156,7 +10156,26 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); }
     }, 15_000);
     res.on('close', () => clearInterval(heartbeat));
+    // Flush headers right away so the client starts reading the stream immediately,
+    // and emit a first step so the UI reacts in <1s.
+    res.flushHeaders?.();
+    res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Request received.' })}\n\n`);
   }
+
+  // Stream-aware terminal response. In SSE mode every final/early return MUST be
+  // delivered as a `done` event: a raw res.json() after the event-stream headers
+  // leaves the client SSE parser without any `data:` line, which surfaces as
+  // "Generation failed or empty response".
+  const respondJson = (status: number, payload: any) => {
+    if (isStream) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'done', payload: { status_code: status, ...payload } })}\n\n`);
+        res.end();
+      }
+      return;
+    }
+    return res.status(status).json(payload);
+  };
 
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
