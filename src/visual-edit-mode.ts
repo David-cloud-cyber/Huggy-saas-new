@@ -37,7 +37,7 @@ export interface VisualEditOptions {
 const OVERLAY_ID = 'huggy-visual-edit-overlay';
 const STYLE_ID = 'huggy-visual-edit-style';
 
-function truncate(value: string, max = 60) {
+export function truncate(value: string, max = 60) {
   const clean = value.replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}\u2026` : clean;
 }
@@ -70,7 +70,7 @@ function describeSelector(el: Element): string {
   return tag;
 }
 
-function buildInstruction(target: Omit<VisualEditTarget, 'instruction'>, french: boolean): string {
+export function buildInstruction(target: Omit<VisualEditTarget, 'instruction'>, french: boolean): string {
   const label = target.text ? `"${target.text}"` : target.tag;
   const where = target.text
     ? `${target.tag} ${label} (${target.selector})`
