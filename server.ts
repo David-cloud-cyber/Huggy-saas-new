@@ -10190,19 +10190,28 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
   }
 
+  // Huggy Stream v2 typed emitter (sequenced id: for Last-Event-ID resume).
+  // Emitted alongside the legacy event shape so the v2 client understands
+  // both while the server migrates its internal emitters incrementally.
+  let streamV2: HuggyStreamEmitter | null = null;
+  let streamAborted = false;
   if (isStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering for Railway/Vercel proxies
+    Object.entries(HUGGY_SSE_HEADERS).forEach(([key, value]) => res.setHeader(key, value));
+    streamV2 = createHuggyStreamEmitter((chunk: string) => {
+      try { res.write(chunk); } catch { /* client closed */ }
+    });
     // Heartbeat every 15s to prevent proxy timeouts (Railway, nginx, Vercel all close idle SSE after ~30s)
     const heartbeat = setInterval(() => {
-      try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); }
-    }, 15_000);
-    res.on('close', () => clearInterval(heartbeat));
+      try { streamV2?.heartbeat(); } catch { clearInterval(heartbeat); }
+    }, HUGGY_SSE_HEARTBEAT_INTERVAL_MS);
+    res.on('close', () => {
+      streamAborted = true;
+      clearInterval(heartbeat);
+    });
     // Flush headers right away so the client starts reading the stream immediately,
-    // and emit a first step so the UI reacts in <1s.
+    // and emit a first milestone so the UI reacts in <1s.
     res.flushHeaders?.();
+    streamV2.emit('milestone', { milestone: 'understanding', state: 'active' });
     res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Request received.' })}\n\n`);
   }
 
@@ -10213,6 +10222,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const respondJson = (status: number, payload: any) => {
     if (isStream) {
       if (!res.writableEnded) {
+        // Typed v2 terminal event + legacy done for backward compatibility.
+        streamV2?.emit('done', { payload: { status_code: status, ...payload } });
         res.write(`data: ${JSON.stringify({ type: 'done', payload: { status_code: status, ...payload } })}\n\n`);
         res.end();
       }
@@ -10432,8 +10443,23 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
     const generation = await generateFilesWithAi({
       onEvent: (event) => {
-        if (isStream) {
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        if (!isStream || streamAborted) return;
+        // Legacy event for current consumers.
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+        // Mirror onto the typed v2 protocol so the new client renders a
+        // fluid milestone timeline without changing every emitter below.
+        if (streamV2 && event && typeof event === 'object') {
+          const anyEvent = event as { type?: string; step?: string; message?: string; text?: string; content?: string };
+          if (anyEvent.type === 'agent_step') {
+            streamV2.emit('milestone', {
+              milestone: mapLegacyStepToMilestone(anyEvent.step),
+              state: 'active',
+              label: anyEvent.message,
+            });
+          } else if (anyEvent.type === 'token') {
+            const text = String(anyEvent.text ?? anyEvent.content ?? '');
+            if (text) streamV2.emit('assistant_delta', { text });
+          }
         }
       },
       projectName: project.name,
