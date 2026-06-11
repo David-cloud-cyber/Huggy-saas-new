@@ -2759,6 +2759,8 @@ function buildReactVitePreviewHtml(
     '      }',
     '      const mod = window.__modules__[resolved];',
     '      if (!mod) {',
+    '        const cdnMod = window.__cdn_modules__ && (window.__cdn_modules__[importPath] || window.__cdn_modules__[resolved]);',
+    '        if (cdnMod) return cdnMod;',
     '        console.warn("Module not found: " + importPath + " (resolved to: " + resolved + "). Creating a dummy mock.");',
     '        const reactElementSymbol = window.React.createElement("div").$$typeof;',
     '        const createDummyObject = function() {',
