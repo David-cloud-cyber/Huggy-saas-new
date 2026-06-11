@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import ts from 'typescript';
 import {
   createGeneratedRescueAppTsx,
+  extractActionablePromptText,
   inferGeneratedRescueAppKind,
 } from './src/services/generated-app-rescue.ts';
 
@@ -80,6 +81,22 @@ assertInteractiveApp('create a CRM dashboard with filters and KPIs', 'dashboard'
   'Revenue',
   'setFeedback',
 ]);
+
+const pollutedBudgetPrompt = [
+  '{"plan":{"title":"Plan de création de l application Budget Pulse","steps":[{"phase":"1. Modélisation et Persistance","details":"Définir l interface TypeScript pour les transactions"}]},"message":"Bonjour ! Voici le plan."}',
+  'Build request: Crée une application web complète de suivi de budget personnel avec ajout recette ou dépense, suppression avec confirmation, filtres, solde, totaux et sauvegarde localStorage.',
+].join(' ');
+assert.equal(inferGeneratedRescueAppKind({ projectName: 'Budget Pulse Smoke Test', prompt: pollutedBudgetPrompt }), 'finance');
+assert.match(extractActionablePromptText(pollutedBudgetPrompt), /^Crée une application web complète de suivi de budget personnel/i);
+{
+  const app = createGeneratedRescueAppTsx({ projectName: 'Budget Pulse Smoke Test', prompt: pollutedBudgetPrompt });
+  assertParsesAsTsx(app, pollutedBudgetPrompt);
+  assert.match(app, /Transaction/);
+  assert.match(app, /localStorage/);
+  assert.match(app, /deleteTransaction/);
+  assert.match(app, /currency/);
+  assert.doesNotMatch(app, /"plan"|Build request|Voici le plan|Modélisation et Persistance/);
+}
 
 assertInteractiveApp('make an AI prompt generator with history', 'ai_tool', [
   'prompt',
