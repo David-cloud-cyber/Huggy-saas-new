@@ -2,8 +2,12 @@ import {
   buildProductionBlueprintPromptContext,
   inferProductionBlueprint,
 } from './production-blueprints.ts';
+import {
+  buildUniversalProductContract,
+  universalProductContractPromptContext,
+} from './universal-product-contract.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v17';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v18';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -224,7 +228,7 @@ const HUGGY_FRONTEND_CRAFT_POLICY = [
   'For dashboards and operational tools, prioritize scanability: restrained surfaces, compact controls, aligned tables/lists, filters, bulk/action affordances, and calm hierarchy.',
   'For marketing or landing experiences, prioritize conversion: specific offer, proof, differentiated sections, clear CTAs, trust signals, and no vague filler.',
   'For creative/media experiences, allow more expressive motion and composition, but keep the workflow usable and accessible.',
-  'Use realistic demo data that matches the product domain. Do not leave lorem ipsum, "Feature 1", "Card title", or template-sounding copy in final files.',
+  'Never invent user-facing records, users, products, transactions, metrics, or activity. Start with an honest empty state until the user creates data or a real backend returns it.',
 ].join('\n');
 
 const HUGGY_RESPONSIVE_ACCESSIBILITY_POLICY = [
@@ -323,10 +327,10 @@ const HUGGY_GENERATION_PRODUCT_POLICY = [
   'src/App.tsx must contain a real product experience with stateful behavior and meaningful content tailored to the prompt.',
   'src/App.tsx must export default function App(). Type every business entity and handler. Avoid any for business data. Forms need onSubmit and preventDefault. Lists need empty states. Buttons need real handlers.',
   'Infer the requested app type from the whole prompt, not isolated words. Do not apply todo, commerce, auth, CRM, or marketplace requirements unless that app type is explicitly requested or clearly implied by the core user goal.',
-  'For unknown app categories, create a complete domain-appropriate experience: core state, primary workflow, visible feedback, empty/loading/error/success states, responsive layout, and safe local demo data when no backend is requested.',
+  'For unknown app categories, infer a complete domain-appropriate experience from the full request: core state, primary workflow, visible feedback, empty/loading/error/success states, and responsive layout.',
   'Use Tailwind CSS utility classes in all React components. src/index.css should contain only @tailwind base; @tailwind components; @tailwind utilities; no custom component CSS, no inline style attributes, and no style objects unless unavoidable for a browser API.',
   'Use self-contained React, TypeScript, and Tailwind classes. Do not depend on remote assets, private UI libraries, or unavailable packages.',
-  'For local-only demo apps, all primary controls must work with React state and realistic seed data. localStorage is allowed only when the user explicitly asks for local browser persistence or the app is clearly a local demo.',
+  'For local-only apps, all primary controls must work with React state and begin from an honest empty state. localStorage is allowed only when the user explicitly asks for local browser persistence.',
   'If the app needs persistent backend data or auth, include @supabase/supabase-js ^2.106.0, src/lib/supabaseClient.ts with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY only, src/lib/types.ts, src/lib/api.ts, and supabase/schema.sql with RLS, policies, indexes, timestamps, and owner/user scoping.',
   'Every app should be SEO and AI-search ready when relevant: semantic HTML, one useful H1, title/meta description, Open Graph/Twitter metadata, descriptive alt text, JSON-LD when appropriate, and robots/sitemap for multi-page public apps.',
   'Use modern browser APIs and React state where they make the app actually interactive. Avoid pretending a static preview is a working product when the prompt asks for app behavior.',
@@ -403,7 +407,7 @@ const HUGGY_JSON_OUTPUT_POLICY = [
   'The summary must mention the detected app type and chosen design direction in one concise sentence.',
   'For a new app, files must include package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.cjs, index.html, src/main.tsx, src/App.tsx, src/index.css, README.md, and src/app.test.ts.',
   'Valid language values are tsx, ts, js, json, css, html, markdown, and sql.',
-  'Before returning, mentally verify: App has a default export, all imports exist, package scripts are complete, Tailwind files are present, index.html loads /src/main.tsx, primary buttons have handlers, forms prevent default, lists have empty states, seed data is realistic, no file is truncated, and the JSON is valid.',
+  'Before returning, mentally verify: App has a default export, all imports exist, package scripts are complete, Tailwind files are present, index.html loads /src/main.tsx, primary buttons have handlers, forms prevent default, lists have honest empty states, no invented user-facing data exists, no file is truncated, and the JSON is valid.',
   'Never return standalone HTML as the only deliverable for a normal app request. Use HTML-only only when the user explicitly asks for a static one-page HTML file.',
   'Every generated app must include working primary controls or honest disabled/empty states. A visually polished but non-functional app is not complete.',
 ].join('\n');
@@ -486,7 +490,7 @@ const HUGGY_PROACTIVE_INTELLIGENCE_POLICY = [
   '  - If building a form, add input validation and success feedback proactively (users always complain when missing).',
   'Do not add features that go beyond the product scope. Anticipate only the most obvious, low-effort additions that make the delivered product feel complete.',
   'When generation is complete, briefly mention 1–2 natural next steps the user might want. Frame them as options, not requirements.',
-  'If a feature requires an external service (auth, payments, emails), generate a working demo/mock version first and note what would be needed for production.',
+  'If a feature requires an external service (auth, payments, emails), generate the real integration contract when configured; otherwise render an honest setup-required state and never fake success.',
 ].join('\n');
 
 export function buildIntentRouterSystemPrompt() {
@@ -579,6 +583,7 @@ export function buildGenerationSystemPrompt(input: {
   hasResearchContext?: boolean;
 }) {
   const productionBlueprint = inferProductionBlueprint(input.prompt || '');
+  const universalProductContract = buildUniversalProductContract(input.prompt || '');
   return joinSections([
     HUGGY_IDENTITY,
     [
@@ -605,6 +610,7 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_CLOUD_POLICY,
     HUGGY_PRODUCTION_READINESS_POLICY,
     HUGGY_AI_CONNECTOR_POLICY,
+    universalProductContractPromptContext(universalProductContract),
     buildProductionBlueprintPromptContext(productionBlueprint),
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,

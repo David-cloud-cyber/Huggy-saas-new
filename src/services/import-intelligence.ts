@@ -124,7 +124,7 @@ function figmaPrompt(url: string, status: HuggyImportStatus) {
     'Goal: transform the Figma mockup into a real, responsive, editable web app.',
     'Do not merely copy a static visual. Convert frames into product screens, components, design tokens, and usable interactions.',
     'Read or infer colors, fonts, spacing, hierarchy, repeated components, breakpoints, and layout relationships.',
-    'Add missing hover/focus/active states, responsive behavior, functional buttons, forms, navigation, empty/loading/error/success states, and honest demo data.',
+    'Add missing hover/focus/active states, responsive behavior, functional buttons, forms, navigation, and honest empty/loading/error/success states without inventing user-facing data.',
     'Add auth, database, or backend only when the product flow truly requires it.',
     status === 'needs_connection'
       ? 'Figma API is not connected in this environment. Ask for Figma connection or screenshots if direct frame access is required, and do not pretend frames were fetched.'

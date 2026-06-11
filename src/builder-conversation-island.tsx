@@ -1804,13 +1804,6 @@ function workJournalCompareText(value = "") {
 }
 
 function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
-  const statusLabel = block.status === "done"
-    ? "Terminé"
-    : block.status === "failed"
-      ? "À corriger"
-      : block.status === "cancelled"
-        ? "Arrêté"
-        : "En cours";
   const elapsed = block.elapsed ? block.elapsed : "";
   const maxVisibleEntries = block.status === "active" ? 9 : 11;
   const hiddenEntryCount = Math.max(0, block.entries.length - maxVisibleEntries);
@@ -1832,17 +1825,12 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
         : "Version prête à vérifier.";
 
   return (
-    <div className="huggy-workline" data-status={block.status} aria-live={block.status === "active" ? "polite" : undefined}>
-      <div className="huggy-workline-rail" aria-hidden="true">
-        <span />
-      </div>
+    <div className="huggy-workline huggy-conversation-stream" data-status={block.status} aria-live={block.status === "active" ? "polite" : undefined}>
       <div className="huggy-workline-body">
-        <div className="huggy-workline-head">
-          <span>Huggy</span>
-          <strong>{statusLabel}</strong>
+        <p className="huggy-workline-current">
+          <span>{currentLine}</span>
           {elapsed ? <em>{elapsed}</em> : null}
-        </div>
-        <p className="huggy-workline-current">{currentLine}</p>
+        </p>
         <div className="huggy-workline-feed">
           {hiddenEntryCount > 0 ? (
             <p className="huggy-workline-note" data-status="muted">
@@ -1911,12 +1899,6 @@ function renderWorkJournalBlock(block: Extract<HuggyConversationBlock, { type: "
             </p>
           );
         })}
-          {block.status === "active" ? (
-            <p className="huggy-workline-live">
-              <span className="huggy-workline-live-dot" aria-hidden="true" />
-              <span>{block.activeText || "Huggy avance"}</span>
-            </p>
-          ) : null}
           {block.finalText && !finalAlreadyVisible ? (
             <p className="huggy-workline-final">{block.finalText}</p>
           ) : null}

@@ -6,10 +6,12 @@ const messages: ChatMessage[] = [{ role: 'user', content: 'hello' }];
 
 class FakeOpenRouter {
   calls: string[] = [];
+  runtimeConfigs: any[] = [];
   failures: Error[] = [];
 
-  async chat(modelId: string) {
+  async chat(modelId: string, _messages?: ChatMessage[], _attempts?: number, _timeout?: number, runtimeConfig?: any) {
     this.calls.push(modelId);
+    this.runtimeConfigs.push(runtimeConfig);
     const failure = this.failures.shift();
     if (failure) throw failure;
     return {
@@ -26,6 +28,19 @@ class FakeOpenRouter {
     if (failure) throw failure;
     yield { type: 'token' as const, text: 'ok', model: modelId };
   }
+}
+
+{
+  const fake = new FakeOpenRouter();
+  fake.failures.push(new Error('OpenRouter HTTP 404: model not available'));
+  const gateway = new ProviderGateway(fake as any);
+  await gateway.chat('google/gemini-3-pro-preview', messages, {
+    maxAttempts: 1,
+    runtimeConfig: { adapter: 'gemini', metadata: { model_id: 'primary' } },
+    runtimeConfigForModel: modelId => ({ adapter: modelId.startsWith('anthropic/') ? 'anthropic' : 'gemini', metadata: { model_id: modelId } }),
+  });
+  assert.notDeepEqual(fake.runtimeConfigs[0], fake.runtimeConfigs[1], 'Fallback candidates should receive their own runtime configuration.');
+  assert.equal(fake.runtimeConfigs[1]?.metadata?.model_id, fake.calls[1]);
 }
 
 {

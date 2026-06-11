@@ -429,7 +429,7 @@ const BLUEPRINTS: Record<ProductionBlueprintType, ProductionBlueprint> = {
     workflows: ['import data', 'inspect data', 'filter/sort/transform', 'export result'],
     tests: [...COMMON_TESTS, 'import_produces_table', 'filter_reduces_rows', 'export_downloads_file'],
     risks: ['large file browser freeze', 'no error for malformed input', 'no export action'],
-    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Import, transform, and export work end-to-end with demo data.'],
+    acceptanceCriteria: [...COMMON_ACCEPTANCE.filter(c => !c.includes('Private data')), 'Import, transform, and export work end-to-end using user-provided or real source data.'],
   },
 
   generic_web_app: {
@@ -493,7 +493,8 @@ export function listProductionBlueprints() {
 
 export function buildProductionBlueprintPromptContext(blueprint: ProductionBlueprint) {
   return [
-    'Production architecture blueprint:',
+    'Optional production architecture reference:',
+    'This reference may suggest proven engineering checks, but it must never constrain the product shape, add unrequested category features, or override the universal product contract.',
     JSON.stringify({
       type: blueprint.type,
       label: blueprint.label,

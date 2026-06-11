@@ -28,9 +28,41 @@ export function resolveOpenRouterApiKey(env: OpenRouterEnv = process.env, fallba
   return '';
 }
 
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
+
+export type ToolCall = {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | ChatContentPart[];
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: ToolCall[];
+}
+
+export function buildVisionMessageContent(
+  text: string,
+  images: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }> = [],
+): ChatContentPart[] {
+  return [
+    { type: 'text', text: String(text || '') },
+    ...images
+      .filter(image => /^https?:\/\/|^data:image\//i.test(String(image.url || '')))
+      .slice(0, 8)
+      .map(image => ({
+        type: 'image_url' as const,
+        image_url: { url: image.url, detail: image.detail || 'auto' },
+      })),
+  ];
 }
 
 export interface OpenRouterConfig {
@@ -42,6 +74,7 @@ export interface OpenRouterConfig {
 export interface ChatCompletionResult {
   text: string;
   model: string;
+  tool_calls?: ToolCall[];
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -116,7 +149,19 @@ export class OpenRouterService {
         }
 
         const choice = data?.choices?.[0];
-        const text = choice?.message?.content || choice?.text || '';
+        const text = typeof choice?.message?.content === 'string' ? choice.message.content : choice?.text || '';
+        const tool_calls = Array.isArray(choice?.message?.tool_calls)
+          ? choice.message.tool_calls
+            .filter((call: any) => call?.id && call?.function?.name)
+            .map((call: any) => ({
+              id: String(call.id),
+              type: 'function' as const,
+              function: {
+                name: String(call.function.name),
+                arguments: String(call.function.arguments || '{}'),
+              },
+            }))
+          : undefined;
         
         // Extract token usage metrics
         const usage = data?.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -132,6 +177,7 @@ export class OpenRouterService {
         return {
           text,
           model: data?.model || modelId,
+          tool_calls,
           usage: {
             prompt_tokens,
             completion_tokens,

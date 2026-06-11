@@ -18,7 +18,7 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v17');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v18');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
@@ -55,7 +55,10 @@ assert.ok(generationPrompt.includes('The 16 blueprint sections are an internal c
 assert.ok(generationPrompt.includes('No fake success'), 'generation prompt must enforce no-fake-success delivery');
 assert.ok(generationPrompt.includes('decompose tasks'), 'generation prompt must require task decomposition before execution');
 assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
-assert.ok(generationPrompt.includes('Production architecture blueprint'), 'generation prompt must include production blueprint context');
+assert.ok(generationPrompt.includes('Universal product contract (binding)'), 'generation prompt must be driven by the universal product contract');
+assert.ok(generationPrompt.includes('Optional production architecture reference'), 'generation prompt may keep blueprints as optional engineering references');
+assert.ok(generationPrompt.includes('must never constrain the product shape'), 'blueprints must never constrain the requested product');
+assert.ok(generationPrompt.includes('Never invent user-facing data'), 'generation prompt must forbid invented user-facing records');
 assert.ok(generationPrompt.includes('Every private table needs RLS'), 'generation prompt must enforce private table RLS');
 assert.ok(generationPrompt.includes('A builder agent should not over-explain before acting'), 'generation prompt must keep builder behavior action-first');
 assert.ok(generationPrompt.includes('Never answer a clear build request with a generic plan'), 'generation prompt must reject generic plan detours for build requests');

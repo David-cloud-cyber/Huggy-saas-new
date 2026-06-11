@@ -91,7 +91,7 @@ assert.ok(promptContext.includes('Huggy Architect Blueprint context'), 'prompt c
 assert.ok(promptContext.includes('required_blueprint_sections'), 'prompt context should include blueprint completeness sections');
 assert.ok(promptContext.includes('known_failure_memory'), 'prompt context should include failure memory');
 assert.ok(promptContext.includes('SUPABASE_AUTH_CLIENT_UNDEFINED'), 'prompt context should include known Supabase auth failure');
-assert.ok(promptContext.includes('Production architecture blueprint'), 'prompt context should include production blueprint');
+assert.ok(promptContext.includes('Optional production architecture reference'), 'prompt context should include an optional production architecture reference');
 assert.ok(promptContext.includes('Every private table needs RLS'), 'production blueprint should carry hard security rules');
 
 const upgradedPrompt = applySeniorAgentContextToPrompt('Build the app.', context);

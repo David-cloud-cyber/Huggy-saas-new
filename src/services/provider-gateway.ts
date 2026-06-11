@@ -58,13 +58,19 @@ export class ProviderGateway {
     return DEFAULT_PROVIDER_MODEL_ID;
   }
 
-  async chat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number; maxAttempts?: number; runtimeConfig?: ProviderRequestConfig } = {}): Promise<ChatCompletionResult> {
+  async chat(modelId: string, messages: ChatMessage[], options: {
+    timeoutMs?: number;
+    maxAttempts?: number;
+    runtimeConfig?: ProviderRequestConfig;
+    runtimeConfigForModel?: (modelId: AllowedModelId) => ProviderRequestConfig | undefined;
+  } = {}): Promise<ChatCompletionResult> {
     const primary = this.requireProviderModel(modelId);
     const candidates = this.candidatesFor(primary);
     const maxAttempts = Math.max(1, options.maxAttempts || 2);
     let lastError: any = null;
 
     for (const candidate of candidates) {
+      const candidateRuntimeConfig = options.runtimeConfigForModel?.(candidate) || options.runtimeConfig;
       if (candidate !== primary) this.noteFallbackUse(candidate);
       const circuitError = this.getCircuitError(candidate);
       if (circuitError) {
@@ -75,14 +81,14 @@ export class ProviderGateway {
         const startedAt = Date.now();
         this.noteRequest(candidate);
         try {
-          const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000, options.runtimeConfig);
+          const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000, candidateRuntimeConfig);
           this.noteMetricSuccess(candidate, Date.now() - startedAt);
           this.noteSuccess(candidate);
           return result;
         } catch (error: any) {
           lastError = error;
           const classified = this.classifyError(error, candidate);
-          if (classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && options.runtimeConfig) {
+          if (classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
             try {
               this.noteRetry(candidate);
               const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000);
@@ -106,12 +112,17 @@ export class ProviderGateway {
     throw this.classifyError(lastError, primary);
   }
 
-  async *streamChat(modelId: string, messages: ChatMessage[], options: { timeoutMs?: number; runtimeConfig?: ProviderRequestConfig } = {}): AsyncGenerator<StreamChatEvent> {
+  async *streamChat(modelId: string, messages: ChatMessage[], options: {
+    timeoutMs?: number;
+    runtimeConfig?: ProviderRequestConfig;
+    runtimeConfigForModel?: (modelId: AllowedModelId) => ProviderRequestConfig | undefined;
+  } = {}): AsyncGenerator<StreamChatEvent> {
     const primary = this.requireProviderModel(modelId);
     const candidates = this.candidatesFor(primary);
     let lastError: any = null;
 
     for (const candidate of candidates) {
+      const candidateRuntimeConfig = options.runtimeConfigForModel?.(candidate) || options.runtimeConfig;
       if (candidate !== primary) this.noteFallbackUse(candidate);
       const circuitError = this.getCircuitError(candidate);
       if (circuitError) {
@@ -122,7 +133,7 @@ export class ProviderGateway {
       const startedAt = Date.now();
       this.noteRequest(candidate);
       try {
-        for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000, options.runtimeConfig)) {
+        for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000, candidateRuntimeConfig)) {
           yieldedAnyEvent = true;
           yield event;
         }
@@ -132,7 +143,7 @@ export class ProviderGateway {
       } catch (error: any) {
         lastError = error;
         const classified = this.classifyError(error, candidate);
-        if (!yieldedAnyEvent && classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && options.runtimeConfig) {
+        if (!yieldedAnyEvent && classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
           try {
             this.noteRetry(candidate);
             for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {

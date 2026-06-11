@@ -28,6 +28,8 @@ type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 type PlanKey = 'free' | 'pro' | 'scale' | 'enterprise';
 
+let activePromptAttachments: PendingPromptAttachment[] = [];
+
 type GeneratedFile = {
   path: string;
   content: string;
@@ -4385,6 +4387,20 @@ async function uploadPromptAttachments(attachments: PendingPromptAttachment[]) {
   }
 }
 
+function promptVisionInputs() {
+  // Keep the base64-expanded request safely below the server's 8 MB JSON limit.
+  const maxVisionBytes = 4 * 1024 * 1024;
+  let totalBytes = 0;
+  return activePromptAttachments
+    .filter(attachment => attachment.type?.startsWith('image/') && attachment.dataUrl)
+    .slice(0, 4)
+    .flatMap(attachment => {
+      if (totalBytes + attachment.size > maxVisionBytes) return [];
+      totalBytes += attachment.size;
+      return [{ url: attachment.dataUrl!, detail: 'high' as const }];
+    });
+}
+
 async function flushPendingPromptAttachments() {
   if (!currentProjectId) return;
   const pending = await consumePendingPromptAttachments();
@@ -5239,11 +5255,13 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       });
       return;
     }
+    const visionInputs = promptVisionInputs();
     const requestBody = {
       prompt: safePrompt,
       requestedMode,
       useLastPlan,
       modelId: selectedModel(),
+      ...(visionInputs.length ? { visionInputs } : {}),
       ...effectiveExtra,
     };
 
@@ -5283,18 +5301,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     // Accumulates partial JSON across TCP chunk boundaries
     let partialJsonBuffer = '';
     // Live streaming token accumulator — shown in UI while code is being generated
-    let liveTokenBuffer = '';
-    let liveTokenFlushTimer: number | null = null;
-
-    function flushLiveTokens() {
-      if (liveTokenFlushTimer !== null) window.clearTimeout(liveTokenFlushTimer);
-      liveTokenFlushTimer = null;
-      if (!liveTokenBuffer) return;
-      // Show token progress in the shimmer / journal working card
-      appendToMessageShimmer(status, liveTokenBuffer);
-      liveTokenBuffer = '';
-    }
-
     if (reader) {
       let buffer = '';
       while (true) {
@@ -5338,22 +5344,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           try {
             if (data.type === 'agent_step') {
               // Flush any accumulated live tokens before showing a new step
-              flushLiveTokens();
               markAgentStep(data.step, data.message);
             } else if (data.type === 'token') {
-              // Accumulate live tokens and flush with debounce for smooth rendering
-              liveTokenBuffer += data.text;
-              streamTotalTokens += Math.ceil(data.text.length / 4); // rough token estimate
-              if (liveTokenFlushTimer !== null) window.clearTimeout(liveTokenFlushTimer);
-              liveTokenFlushTimer = window.setTimeout(flushLiveTokens, 32); // ~2 frames at 60fps
-              // Update model badge and token count in streaming UI
-              if (data.model) updateStreamModelBadge(data.model);
-              updateStreamTokenCount(0); // counter already updated above
+              setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
             } else if (data.type === 'done') {
-              flushLiveTokens();
               payload = data.payload;
             } else if (data.type === 'error') {
-              flushLiveTokens();
               throw new Error(data.error || 'SSE stream error');
             }
           } catch (dispatchErr: any) {
@@ -5366,7 +5362,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         }
       }
       // Flush any remaining tokens at end of stream
-      flushLiveTokens();
     }
     if (!payload) throw new Error('Generation failed or empty response');
 
@@ -6253,6 +6248,9 @@ function init() {
   initPromptInputActions({
     persistForBuilder: false,
     onFiles: uploadPromptAttachments,
+    onAttachmentsChange: attachments => {
+      activePromptAttachments = attachments;
+    },
     onNotice: (message, kind) => appendMessage(kind === 'error' ? 'system' : 'system', message),
   });
   normalizeAiChatInputs();

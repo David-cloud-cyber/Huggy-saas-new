@@ -135,7 +135,7 @@ function getCategoryRequirements(category: AppCategory): string[] {
       return [
         'Use calm, high-readability typography (min 16px body, generous line-height 1.6+).',
         'Meet WCAG 2.1 AA contrast requirements across all text.',
-        'Include content that is clearly labeled as demo/sample data.',
+        'Do not invent patient, student, progress, or medical records. Render an honest empty state until real data exists.',
         'Implement progress tracking for education apps (completion percentage, badges).',
         'Add accessible form controls with descriptive labels and error messages near fields.',
         'Never generate or suggest real medical advice, dosages, or diagnoses.',
@@ -198,7 +198,7 @@ export function buildMetaPrompt(rawPrompt: string, appType: string, knownIssues:
   const universalRules = [
     'Design mobile-first (390px base) with graceful scaling to tablet (768px) and desktop (1280px+).',
     'Every interactive element must have hover, focus-visible, active, disabled, and loading states.',
-    'Use realistic demo data that matches the domain — no lorem ipsum or "Feature 1" placeholder text.',
+    'Never invent user-facing records or statistics. Use specific interface copy and honest empty states instead of lorem ipsum or sample records.',
     'Apply consistent design tokens: semantic color roles, spacing scale (4px base), radius scale, and typography hierarchy.',
     'All forms require field-level validation with error messages displayed near the field, not in a generic alert.',
     'Handle network errors gracefully: show retry option, never crash with an unhandled promise rejection.',

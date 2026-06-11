@@ -20,8 +20,10 @@ import fetch from 'node-fetch';
 import WebSocket from 'ws';
 
 // Import our custom services
-import { OpenRouterService, resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
+import { OpenRouterService, buildVisionMessageContent, resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
+import { runLlmToolLoop } from './src/services/llm-tool-loop.ts';
+import { parseOrRepairStructuredObject } from './src/services/structured-output.ts';
 import {
   buildAIModelRuntimeConfig,
   getAllAIModelCapabilityProfiles,
@@ -3505,17 +3507,6 @@ class AgentOrchestrator {
 const agentOrchestrator = new AgentOrchestrator();
 const intentRouter = agentOrchestrator;
 
-function parseLooseJsonObject(text: string): any | null {
-  const cleaned = String(text || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-  const objectText = cleaned.startsWith('{') ? cleaned : cleaned.match(/\{[\s\S]*\}/)?.[0] || '';
-  if (!objectText) return null;
-  try {
-    return JSON.parse(objectText);
-  } catch {
-    return null;
-  }
-}
-
 function agentIntentNeedsAiRouter(decision: IntentDecision) {
   if (decision.requestedMode === 'plan') return false;
   if (decision.intent === 'conversation' && decision.confidence >= 0.93) return false;
@@ -3568,6 +3559,12 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
         }
       : undefined,
   };
+}
+
+function isIntentRouterStructuredOutput(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const allowedIntents: AgentIntent[] = ['conversation', 'clarification_required', 'plan', 'build', 'edit', 'debug_fix', 'verify', 'deploy_assist', 'external_keys_required', 'credits_required'];
+  return allowedIntents.includes((value as any).intent);
 }
 
 function guardAiDecisionWithUnderstanding(
@@ -3638,7 +3635,7 @@ async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentD
     timeoutMs: 18_000,
     maxTokens: 1600,
   });
-  const result = await providerGateway.chat(DEFAULT_PROVIDER_MODEL_ID, [
+  const routerMessages: ChatMessage[] = [
     {
       role: 'system',
       content: buildIntentRouterSystemPrompt(),
@@ -3655,12 +3652,41 @@ async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentD
         fallbackIntent: fallback.intent,
       }),
     },
-  ], {
+  ];
+  const runtimeConfig = buildProviderRequestConfig(routerRuntime);
+  const runtimeConfigForModel = (modelId: AllowedModelId) => buildProviderRequestConfig(buildAIModelRuntimeConfig({
+    modelId,
+    task: 'intent',
+    stream: false,
+    timeoutMs: 18_000,
+    maxTokens: 1600,
+  }));
+  const result = await providerGateway.chat(DEFAULT_PROVIDER_MODEL_ID, routerMessages, {
     maxAttempts: 2,
     timeoutMs: routerRuntime.timeoutMs,
-    runtimeConfig: buildProviderRequestConfig(routerRuntime),
+    runtimeConfig,
+    runtimeConfigForModel,
   });
-  const aiDecision = buildDecisionFromAi(parseLooseJsonObject(result.text), fallback);
+  const rawDecision = await parseOrRepairStructuredObject(
+    result.text,
+    isIntentRouterStructuredOutput,
+    async invalidText => {
+      const repaired = await providerGateway.chat(DEFAULT_PROVIDER_MODEL_ID, [
+        {
+          role: 'system',
+          content: `${buildIntentRouterSystemPrompt()}\nRepair the invalid router output below. Return one valid JSON object only, matching the required intent contract.`,
+        },
+        { role: 'user', content: String(invalidText || '').slice(0, 8_000) },
+      ], {
+        maxAttempts: 1,
+        timeoutMs: routerRuntime.timeoutMs,
+        runtimeConfig,
+        runtimeConfigForModel,
+      });
+      return repaired.text;
+    },
+  ).catch(() => null);
+  const aiDecision = buildDecisionFromAi(rawDecision, fallback);
   return aiDecision ? guardAiDecisionWithUnderstanding(aiDecision, input, fallback) : null;
 }
 
@@ -3814,14 +3840,17 @@ function summarizeProjectFilesForAgent(files: GeneratedFile[]) {
     .join('\n') || 'No generated files yet.';
 }
 
-function buildExistingFilesContextForGeneration(files: GeneratedFile[], prompt?: string) {
+function buildExistingFilesContextForGeneration(files: GeneratedFile[], prompt?: string, modelId?: AllowedModelId) {
   if (!files.length) return 'No existing files yet.';
+  const modelContextTokens = modelId ? getAIModelCapabilityProfile(modelId).limits.contextTokens : 128_000;
+  const contextTokenBudget = Math.max(24_000, Math.min(180_000, Math.floor(modelContextTokens * 0.42)));
+  const contextFileBudget = modelContextTokens >= 500_000 ? 55 : modelContextTokens >= 200_000 ? 38 : 25;
 
   // Use smart context injection for projects with 5+ files
   if (files.length >= 5 && prompt) {
     const result = buildSmartContextInjection(files, prompt, {
-      tokenBudget: 80_000,
-      maxFiles: 25,
+      tokenBudget: contextTokenBudget,
+      maxFiles: contextFileBudget,
     });
     return result.contextText;
   }
@@ -3831,7 +3860,7 @@ function buildExistingFilesContextForGeneration(files: GeneratedFile[], prompt?:
     const score = (file: GeneratedFile) => file.path === 'index.html' ? 0 : file.path.endsWith('.css') ? 1 : file.path.endsWith('.js') ? 2 : 3;
     return score(a) - score(b) || a.path.localeCompare(b.path);
   });
-  let budget = 85_000;
+  let budget = contextTokenBudget * 4;
   const chunks: string[] = [];
   for (const file of important.slice(0, 18)) {
     if (budget <= 0) break;
@@ -3970,6 +3999,7 @@ function createProviderRuntimeOptions(input: {
   stream?: boolean;
   timeoutMs?: number;
   maxTokens?: number;
+  hasVisionInput?: boolean;
 }) {
   const task = inferRuntimeTaskForPrompt(input.prompt, input.decision, input.mode || 'text');
   const estimatedInputTokens = Math.ceil((
@@ -3986,7 +4016,7 @@ function createProviderRuntimeOptions(input: {
     stream: input.stream,
     timeoutMs: input.timeoutMs,
     maxTokens: input.maxTokens, // undefined = use profile default (now properly sized)
-    hasVisionInput: /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel)\b/i.test(input.prompt),
+    hasVisionInput: Boolean(input.hasVisionInput || /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel)\b/i.test(input.prompt)),
     estimatedInputTokens,
     // ✅ Use structured output for generation tasks on capable models
     preferStructuredOutput: input.mode === 'generation' ? true : undefined,
@@ -3994,6 +4024,16 @@ function createProviderRuntimeOptions(input: {
   return {
     runtime,
     providerConfig: buildProviderRequestConfig(runtime),
+    runtimeConfigForModel: (modelId: AllowedModelId) => buildProviderRequestConfig(buildAIModelRuntimeConfig({
+      modelId,
+      task,
+      stream: input.stream,
+      timeoutMs: input.timeoutMs,
+      maxTokens: input.maxTokens,
+      hasVisionInput: Boolean(input.hasVisionInput || /\b(image|screenshot|capture|figma|maquette|mockup|wireframe|visuel)\b/i.test(input.prompt)),
+      estimatedInputTokens,
+      preferStructuredOutput: input.mode === 'generation' ? true : undefined,
+    })),
   };
 }
 
@@ -4143,6 +4183,7 @@ async function createAgentTextResponse(input: {
         maxAttempts: decision.intent === 'conversation' ? 1 : 2,
         timeoutMs: runtimeOptions.runtime.timeoutMs,
         runtimeConfig: runtimeOptions.providerConfig,
+        runtimeConfigForModel: runtimeOptions.runtimeConfigForModel,
       },
     );
 
@@ -4240,7 +4281,11 @@ async function streamAgentTextResponse(input: {
     for await (const event of providerGateway.streamChat(
       selectedModel,
       buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
-      { timeoutMs: runtimeOptions.runtime.timeoutMs, runtimeConfig: runtimeOptions.providerConfig },
+      {
+        timeoutMs: runtimeOptions.runtime.timeoutMs,
+        runtimeConfig: runtimeOptions.providerConfig,
+        runtimeConfigForModel: runtimeOptions.runtimeConfigForModel,
+      },
     )) {
       if (event.type === 'token') {
         const chunk = event.text || '';
@@ -5472,6 +5517,7 @@ async function generateFilesWithAi(input: {
   existingFiles: GeneratedFile[];
   seniorAgentContext?: SeniorAgentContext;
   deepReasoningContract?: DeepReasoningContract;
+  visionInputs?: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }>;
   recentHistory?: string[];  // last N user messages for conflict detection
   onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
@@ -5500,7 +5546,7 @@ async function generateFilesWithAi(input: {
     .slice(0, 40)
     .join('\n');
   // ✅ Smart context injection: relevance-ranked, import-aware, token-budget-respecting
-  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles, input.prompt);
+  const existingFilesContent = buildExistingFilesContextForGeneration(input.existingFiles, input.prompt, selectedModel);
   const uiPolicy = buildWorldClassUiPolicy({ prompt: input.prompt });
   const runtimeOptions = input.decision
     ? createProviderRuntimeOptions({
@@ -5512,6 +5558,7 @@ async function generateFilesWithAi(input: {
       stream: false,
       timeoutMs: 120_000,
       maxTokens: 32_000,
+      hasVisionInput: Boolean(input.visionInputs?.length),
     })
     : null;
 
@@ -5529,7 +5576,10 @@ async function generateFilesWithAi(input: {
         const ragFiles = SemanticRag.selectRelevantFiles(
           input.existingFiles,
           input.prompt,
-          { topK: 22, tokenBudget: 75_000 },
+          {
+            topK: getAIModelCapabilityProfile(selectedModel).limits.contextTokens >= 500_000 ? 44 : 22,
+            tokenBudget: Math.max(24_000, Math.min(180_000, Math.floor(getAIModelCapabilityProfile(selectedModel).limits.contextTokens * 0.42))),
+          },
         );
         // Return as formatted context (same shape as buildExistingFilesContextForGeneration)
         const chunks = ragFiles.map(f =>
@@ -5571,11 +5621,52 @@ async function generateFilesWithAi(input: {
       if (agentRoles.length > 0) {
         // ✅ Agent executor: each agent receives the model resolved for its tier
         const agentExecutor = async (task: import('./src/services/parallel-agent-runner.ts').AgentTask, modelId: import('./src/config/ai-models.ts').AllowedModelId) => {
-          const result = await providerGateway.chat(modelId, [
-            { role: 'system', content: task.systemContext },
-            { role: 'user', content: task.prompt },
-          ], { timeoutMs: 15_000, maxAttempts: 1 });
-          return result.text;
+          const agentRuntime = createProviderRuntimeOptions({
+            model: modelId,
+            prompt: task.prompt,
+            decision: input.decision!,
+            files: input.existingFiles,
+            mode: 'text',
+            stream: false,
+            timeoutMs: 15_000,
+            maxTokens: 4_000,
+          });
+          const filesByPath = new Map(input.existingFiles.map(file => [file.path, file]));
+          const loop = await runLlmToolLoop({
+            gateway: providerGateway,
+            modelId,
+            messages: [
+              { role: 'system', content: task.systemContext },
+              { role: 'user', content: task.prompt },
+            ],
+            runtimeConfig: agentRuntime.providerConfig,
+            runtimeConfigForModel: agentRuntime.runtimeConfigForModel,
+            timeoutMs: agentRuntime.runtime.timeoutMs,
+            maxSteps: 3,
+            handlers: {
+              inspect_project_files: ({ paths }) => {
+                const requested = Array.isArray(paths) ? paths.map(String).slice(0, 12) : [];
+                const selected = requested.length
+                  ? requested.map(path => filesByPath.get(path)).filter(Boolean)
+                  : input.existingFiles.slice(0, 8);
+                return selected.map(file => ({
+                  path: file!.path,
+                  content: String(file!.content || '').slice(0, 12_000),
+                }));
+              },
+              summarize_change_plan: ({ goal, files }) => ({
+                goal: String(goal || input.prompt).slice(0, 500),
+                files: Array.isArray(files) ? files.map(String).slice(0, 20) : [],
+                constraint: 'Preserve working behavior and change only what the user requested.',
+              }),
+              interpret_check_failure: ({ diagnostic, likely_file }) => ({
+                diagnostic: String(diagnostic || '').slice(0, 1_000),
+                likely_file: String(likely_file || '').slice(0, 240),
+                instruction: 'Propose the smallest repair and a concrete retest.',
+              }),
+            },
+          });
+          return loop.result.text;
         };
 
         const agentResults = await runParallelAgents(agentCtx, agentExecutor, agentRoles, 15_000);
@@ -5677,6 +5768,19 @@ async function generateFilesWithAi(input: {
     conflictContext,
     parallelAgentContext,   // ✅ parallel agent pre-analysis
   ].filter(Boolean).join('\n\n');
+  const buildGenerationUserContent = (prompt: string) => {
+    const payload = JSON.stringify({
+      projectName: input.projectName,
+      prompt,
+      memoryRagContext: memoryContext,
+      existingFiles: fileManifest || 'No existing files yet.',
+      existingFilesContent: semanticContext || existingFilesContent,
+      uiGenerationPolicy: uiPolicy.userContext,
+      seniorAgentOS: input.seniorAgentContext || undefined,
+      deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
+    });
+    return input.visionInputs?.length ? buildVisionMessageContent(payload, input.visionInputs) : payload;
+  };
 
   let attempt = 0;
   let result: any = null;
@@ -5714,9 +5818,14 @@ async function generateFilesWithAi(input: {
             deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
           }),
         },
+        ...(input.visionInputs?.length ? [{
+          role: 'user' as const,
+          content: buildGenerationUserContent('Use these visual references as real multimodal input for this generation.'),
+        }] : []),
       ], {
         timeoutMs: runtimeOptions?.runtime.timeoutMs || 120_000,
         runtimeConfig: runtimeOptions?.providerConfig,
+        runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
       })) {
         if (event.type === 'token') {
           fullText += event.text;
@@ -5754,10 +5863,15 @@ async function generateFilesWithAi(input: {
             deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
           }),
         },
+        ...(input.visionInputs?.length ? [{
+          role: 'user' as const,
+          content: buildGenerationUserContent('Use these visual references as real multimodal input for this generation.'),
+        }] : []),
       ], {
         maxAttempts: 2,
         timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
         runtimeConfig: runtimeOptions?.providerConfig,
+        runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
       });
       fullText = fallbackResult.text;
       streamedModel = fallbackResult.model;
@@ -5928,11 +6042,7 @@ function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOr
         'type TodoItem = { id: number; title: string; completed: boolean };',
         "const STORAGE_KEY = 'huggy-generated-todos';",
         '',
-        'const starterTodos: TodoItem[] = [',
-        "  { id: 1, title: 'Plan the first useful version', completed: true },",
-        "  { id: 2, title: 'Add real interactions', completed: false },",
-        "  { id: 3, title: 'Test the responsive preview', completed: false },",
-        '];',
+        'const starterTodos: TodoItem[] = [];',
         '',
         'function readTodos(): TodoItem[] {',
         '  if (typeof window === "undefined") return starterTodos;',
@@ -6101,30 +6211,23 @@ function parseGeneratedOutput(
   options: { hasExistingFiles?: boolean } = {},
 ) {
   const isStandaloneHtml = looksLikeStandaloneHtml(rawText);
-  let parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
+  const parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
     isStandaloneHtml
       ? {
           summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
           files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
         }
-      : buildDeterministicFallbackGeneratedOutput(projectName, promptOrDescription)
+      : null
   );
   if (!parsed) {
     throw new GeneratedOutputParseError();
   }
 
-  let rawFiles = parsed.files || (parsed.html
+  const rawFiles = parsed.files || (parsed.html
     ? [{ path: 'index.html', content: String(parsed.html), language: 'html' }]
     : null);
   if (!rawFiles || !Array.isArray(rawFiles) || rawFiles.length === 0) {
-    const fallback = buildDeterministicFallbackGeneratedOutput(projectName, promptOrDescription);
-    parsed = {
-      ...fallback,
-      summary: parsed?.plan || parsed?.steps
-        ? 'The model returned a plan without files, so Huggy generated a safe React/Vite app instead.'
-        : fallback.summary,
-    };
-    rawFiles = parsed.files;
+    throw new GeneratedOutputParseError('The model returned a plan or incomplete output instead of project files.');
   }
 
   const normalizedFiles = withProjectSeoSupport(
@@ -10174,6 +10277,15 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     figmaConfigured: Boolean(process.env.FIGMA_ACCESS_TOKEN || process.env.FIGMA_TOKEN || importContext?.status === 'ready'),
     githubConfigured: Boolean(process.env.GITHUB_TOKEN || process.env.GITHUB_IMPORT_TOKEN || importContext?.status === 'ready'),
   }) || importContext;
+  const visionInputs = Array.isArray(req.body?.visionInputs)
+    ? req.body.visionInputs
+      .map((item: any) => ({
+        url: String(item?.url || '').trim(),
+        detail: ['low', 'high'].includes(item?.detail) ? item.detail : 'auto',
+      }))
+      .filter((item: any) => /^https?:\/\/|^data:image\//i.test(item.url))
+      .slice(0, 8)
+    : [];
   const agentPrompt = applyRequestContextToPrompt(prompt, studioContext, preparedImportContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
@@ -10419,6 +10531,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       existingFiles,
       seniorAgentContext,
       deepReasoningContract,
+      visionInputs,
       // ✅ Pass recent history for conflict detection
       recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
     });

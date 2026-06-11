@@ -12,6 +12,7 @@ type PromptInputActionsOptions = {
   root?: ParentNode;
   persistForBuilder?: boolean;
   onFiles?: (attachments: PendingPromptAttachment[]) => void | Promise<void>;
+  onAttachmentsChange?: (attachments: PendingPromptAttachment[]) => void;
   onNotice?: (message: string, kind?: 'info' | 'success' | 'error') => void;
 };
 
@@ -408,9 +409,11 @@ export function initPromptInputActions(options: PromptInputActionsOptions = {}) 
 
       const sync = async (next: PendingPromptAttachment[], selected: PendingPromptAttachment[] = next) => {
         attachments = next;
+        options.onAttachmentsChange?.([...attachments]);
         const removeAttachment = async (id: string) => {
           attachments = attachments.filter(item => item.id !== id);
           renderChips(wrapper, attachments, removeAttachment);
+          options.onAttachmentsChange?.([...attachments]);
           if (options.persistForBuilder !== false && !options.onFiles) {
             await storePendingPromptAttachments(attachments);
           }
@@ -478,8 +481,10 @@ export function initPromptInputActions(options: PromptInputActionsOptions = {}) 
             status: 'pending' as const,
           }));
           attachments = [...attachments, ...fallback];
+          options.onAttachmentsChange?.([...attachments]);
           renderChips(wrapper, attachments, id => {
             attachments = attachments.filter(item => item.id !== id);
+            options.onAttachmentsChange?.([...attachments]);
           });
           await storePendingPromptAttachments(fallback);
           notice('Files attached by name only because the browser could not read them.', 'error');
