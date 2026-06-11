@@ -683,3 +683,54 @@
     transition: none !important;
   }
 }
+
+/* ─── Stream v2 — fluid milestone timeline ─── */
+.huggy-stream-phase {
+  will-change: transform, opacity;
+  transition:
+    background 200ms cubic-bezier(.22, 1, .36, 1),
+    border-color 200ms cubic-bezier(.22, 1, .36, 1),
+    color 200ms cubic-bezier(.22, 1, .36, 1),
+    transform 200ms cubic-bezier(.22, 1, .36, 1),
+    box-shadow 200ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.huggy-stream-phase[data-status="active"] {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-blue, #2563eb) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue, #2563eb) 9%, var(--bg-surface));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent-blue, #2563eb) 12%, transparent);
+}
+
+.huggy-stream-phase[data-status="done"] {
+  animation: huggy-check-pop 220ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+/* Progress bar: smooth width tracking + subtle sheen while active */
+.huggy-stream-progress-bar {
+  transition: width 320ms cubic-bezier(.22, 1, .36, 1);
+  background-size: 200% 100%;
+}
+
+[data-status="active"] .huggy-stream-progress-bar {
+  animation: stream-v2-sheen 1.6s linear infinite;
+}
+
+@keyframes stream-v2-sheen {
+  from { background-position: 0% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* Stable banner heights: no layout jump when done/error states appear */
+.huggy-stream-done-banner,
+.huggy-stream-error-banner {
+  min-height: 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .huggy-stream-phase,
+  .huggy-stream-progress-bar {
+    transition: none !important;
+    animation: none !important;
+  }
+}
