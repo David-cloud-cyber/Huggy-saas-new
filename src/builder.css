@@ -1146,3 +1146,15 @@ body {
 .log-success { color: var(--success); }
 .log-warning { color: var(--warning); }
 .log-error { color: var(--error); }
+
+/* ── Visual edit toggle (preview toolbar) ── */
+#btn-visual-edit { transition: color 150ms ease, background 150ms ease; }
+#btn-visual-edit.active {
+  color: var(--accent-blue, #2f6df6);
+  background: color-mix(in srgb, var(--accent-blue, #2f6df6) 12%, transparent);
+  border-radius: 6px;
+}
+#btn-visual-edit:focus-visible {
+  outline: 2px solid var(--accent-blue, #2f6df6);
+  outline-offset: 2px;
+}
