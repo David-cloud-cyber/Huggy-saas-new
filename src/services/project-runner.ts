@@ -43,6 +43,7 @@ export interface RunnerAdapter {
     projectId: string;
     files: RunnerFile[];
     previewHtml?: string;
+    prompt?: string;
     timeoutMs?: number;
   }): Promise<RunnerResult>;
 }
@@ -63,6 +64,7 @@ export class HybridProjectRunner implements RunnerAdapter {
     projectId: string;
     files: RunnerFile[];
     previewHtml?: string;
+    prompt?: string;
     timeoutMs?: number;
   }): Promise<RunnerResult> {
     const startedAt = Date.now();
@@ -78,7 +80,7 @@ export class HybridProjectRunner implements RunnerAdapter {
       }
 
       const packageFile = input.files.find(file => normalizePath(file.path) === 'package.json');
-      checks.push(...this.projectTopologyChecks(input.files, input.previewHtml || '', Boolean(packageFile)));
+      checks.push(...this.projectTopologyChecks(input.files, input.previewHtml || '', Boolean(packageFile), input.prompt || ''));
       checks.push(...verificationChecksToRunnerChecks(await runBrowserInteractionAudit({
         files: input.files,
         previewHtml: input.previewHtml,
@@ -168,7 +170,7 @@ export class HybridProjectRunner implements RunnerAdapter {
     return checks;
   }
 
-  private projectTopologyChecks(files: RunnerFile[], previewHtml: string, hasPackageJson: boolean): RunnerCheck[] {
+  private projectTopologyChecks(files: RunnerFile[], previewHtml: string, hasPackageJson: boolean, prompt = ''): RunnerCheck[] {
     const checks: RunnerCheck[] = [];
     const byPath = new Map(files.map(file => [normalizePath(file.path).toLowerCase(), file]));
     const source = files.map(file => `${file.path}\n${file.content || ''}`).join('\n\n');
@@ -191,9 +193,9 @@ export class HybridProjectRunner implements RunnerAdapter {
     checks.push(...this.localImportChecks(files));
     checks.push(...this.interactionChecks(source));
     checks.push(...this.fullstackChecks(files, source));
-    checks.push(...verificationChecksToRunnerChecks(scanGeneratedSecurity(files).checks));
+    checks.push(...verificationChecksToRunnerChecks(scanGeneratedSecurity(files, { prompt }).checks));
     checks.push(...this.previewRuntimeChecks(html));
-    checks.push(...this.productionReadinessChecks(files, source, hasPackageJson));
+    checks.push(...this.productionReadinessChecks(files, source, hasPackageJson, prompt));
     return checks;
   }
 
@@ -298,13 +300,13 @@ export class HybridProjectRunner implements RunnerAdapter {
     return checks;
   }
 
-  private productionReadinessChecks(files: RunnerFile[], source: string, hasPackageJson: boolean): RunnerCheck[] {
+  private productionReadinessChecks(files: RunnerFile[], source: string, hasPackageJson: boolean, prompt = ''): RunnerCheck[] {
     const checks: RunnerCheck[] = [];
     const paths = new Set(files.map(file => normalizePath(file.path).toLowerCase()));
     const hasModernReact = hasPackageJson && paths.has('index.html') && Array.from(paths).some(file => /^src\/main\.(tsx|ts|jsx|js)$/.test(file)) && Array.from(paths).some(file => /^src\/app\.(tsx|jsx)$/.test(file));
     const hasCss = Array.from(paths).some(file => /\.(css|scss)$/.test(file));
     const hasResponsiveCss = /@media|clamp\(|minmax\(|grid-template|flex-wrap|container-type|max-width/i.test(source);
-    const hasDataIntent = /\b(auth|login|sign in|signup|database|crud|orders?|products?|customers?|clients?|bookings?|reservations?|payments?|invoices?|contacts?|deals?|tasks?|notes?|storage|upload|seller|buyer)\b/i.test(source);
+    const explicitBackendIntent = /\b(auth|login|sign in|signup|database|supabase|postgres|backend|api|server|rls|roles?|team|admin|private|secure|paiement|payment|stripe|subscription|invoice|facture|storage|upload|multi-user|multi user|account|workspace|organization|organisation|realtime|real-time)\b/i.test(prompt);
     const hasLocalStorage = /\blocalStorage\b/i.test(source);
     const hasSupabaseSchema = paths.has('supabase/schema.sql');
     const schemaFile = files.find(file => normalizePath(file.path).toLowerCase() === 'supabase/schema.sql');
@@ -315,7 +317,9 @@ export class HybridProjectRunner implements RunnerAdapter {
     const hasValidation = paths.has('src/lib/validation.ts') && /zod|z\.object/i.test(source);
     const hasRateLimit = /assertRateLimit|rate limit|RATE_LIMITED/i.test(source);
     const hasWebhookSignature = /assertWebhookSignature|stripe-signature|webhook signature/i.test(source);
-    const hasStripe = /\b(stripe|checkout|subscription|payment|invoice)\b/i.test(source);
+    const hasStripe = /\b(stripe|subscription|payment|invoice|paiement|facture)\b/i.test(source);
+    const hasExplicitFullstackSurface = hasSupabaseSchema || /@supabase\/supabase-js|Huggy Cloud|huggyCloud|supabase\s*\.|getHuggyCloudClient|from\(['"`]app_/i.test(source);
+    const hasDataIntent = explicitBackendIntent || hasStripe || hasExplicitFullstackSurface;
     const hasRouteGuard = /getHuggyCloudClient|auth\.getUser|onAuthStateChange|ProtectedRoute|requireAuth|session/i.test(source);
     const hasDeployScript = /"build"\s*:|"preview"\s*:|vite build|next build/i.test(source);
     const noSecrets = !containsSecret(source) && !/service[_-]?role|SUPABASE_SERVICE_ROLE|sbp_[a-z0-9]|secret eyJ/i.test(source);

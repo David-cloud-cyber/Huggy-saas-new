@@ -61,6 +61,7 @@ const goodHtml = '<!doctype html><html><head><title>Demo</title><meta name="desc
     runId: 'run_fake_backend',
     projectId: 'project_fake_backend',
     previewHtml: goodHtml,
+    prompt: 'create a private CRM with database customers and authenticated client records',
     files: [
       { path: 'index.html', language: 'html', content: goodHtml },
       { path: 'package.json', language: 'json', content: JSON.stringify({ scripts: { build: 'vite build' } }) },

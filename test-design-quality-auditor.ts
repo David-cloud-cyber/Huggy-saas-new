@@ -200,6 +200,7 @@ const weakTodoFunctionality = auditGeneratedFunctionality({
   previewHtml: todoBaseFiles.find(file => file.path === 'index.html')?.content,
   platformType: 'generic_web_app',
   hasExistingFiles: false,
+  prompt: 'cree une todo app avec ajout suppression filtres et localStorage',
 });
 assert.equal(weakTodoFunctionality.find(check => check.key === 'functionality_no_unimplemented_copy')?.status, 'fail');
 assert.equal(weakTodoFunctionality.find(check => check.key === 'functionality_todo_core_loop')?.status, 'fail');
@@ -268,6 +269,7 @@ const strongTodoFunctionality = auditGeneratedFunctionality({
   previewHtml: todoBaseFiles.find(file => file.path === 'index.html')?.content,
   platformType: 'generic_web_app',
   hasExistingFiles: false,
+  prompt: 'cree une todo app avec ajout suppression filtres et localStorage',
 });
 assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_todo_core_loop')?.status, 'pass');
 assert.equal(strongTodoFunctionality.find(check => check.key === 'functionality_todo_management_tools')?.status, 'pass');

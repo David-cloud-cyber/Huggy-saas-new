@@ -48,9 +48,10 @@ function isEdgeFunctionFile(file: AgentGeneratedFile) {
   return path.startsWith('supabase/functions/') || path.startsWith('functions/');
 }
 
-export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScanResult {
+export function scanGeneratedSecurity(files: AgentGeneratedFile[], options: { prompt?: string } = {}): SecurityScanResult {
   const findings: SecurityFinding[] = [];
   const source = sourceBundle(files);
+  const prompt = String(options.prompt || '');
   const schema = fileByPath(files, 'supabase/schema.sql')?.content || '';
   const paths = files.map(file => normalizePath(file.path));
   const frontendSource = files.filter(isFrontendFile).map(file => `--- ${normalizePath(file.path)} ---\n${file.content || ''}`).join('\n\n');
@@ -63,8 +64,9 @@ export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScan
   }
 
   const usesSupabase = /@supabase\/supabase-js|createClient\(|\bsupabase\s*\.|Huggy Cloud|getHuggyCloudClient/i.test(source);
-  const usesPrivateData = /\b(auth|login|signup|database|crud|orders?|products?|customers?|clients?|bookings?|reservations?|payments?|invoices?|contacts?|deals?|tasks?|notes?|storage|upload|seller|buyer)\b/i.test(source);
+  const explicitBackendIntent = /\b(auth|login|signup|database|supabase|postgres|backend|api|server|rls|roles?|team|admin|private|secure|paiement|payment|stripe|subscription|invoice|facture|storage|upload|multi-user|multi user|account|workspace|organization|organisation|realtime|real-time)\b/i.test(prompt);
   const createTables = Array.from(schema.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-zA-Z0-9_]+)/gi)).map(match => match[1]);
+  const usesPrivateData = explicitBackendIntent || usesSupabase || createTables.length > 0;
 
   if (usesPrivateData || usesSupabase || createTables.length) {
     findings.push(schema.trim()
@@ -109,7 +111,7 @@ export function scanGeneratedSecurity(files: AgentGeneratedFile[]): SecurityScan
       : fail('security_server_validation', 'Sensitive data workflows need validation before writes.'));
   }
 
-  const hasStripe = /\b(stripe|checkout|subscription|payment|invoice)\b/i.test(source);
+  const hasStripe = /\b(stripe|subscription|payment|invoice|paiement|facture)\b/i.test(source);
   if (hasStripe) {
     findings.push(/stripe-signature|webhook signature|assertWebhookSignature/i.test(source)
       ? pass('security_webhook_signature', 'Payment webhook signature verification is represented.')

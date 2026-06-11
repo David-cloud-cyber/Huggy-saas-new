@@ -53,6 +53,13 @@ assertInteractiveApp('genere une mini app de pomodoro avec start pause reset', '
   'Pause',
 ]);
 
+assertInteractiveApp('genere une mini app de pomodero', 'timer', [
+  '25 \\* 60',
+  'setSeconds',
+  'Start',
+  'Pause',
+]);
+
 assertInteractiveApp('create an ecommerce store with cart quantity and checkout', 'commerce', [
   'cart',
   'quantity',

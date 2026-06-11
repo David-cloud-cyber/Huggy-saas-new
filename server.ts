@@ -5906,9 +5906,29 @@ async function generateFilesWithAi(input: {
     attempt++;
   }
 
-  const parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
-    hasExistingFiles: input.existingFiles.length > 0,
-  });
+  let parsed: ReturnType<typeof parseGeneratedOutput>;
+  try {
+    parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
+      hasExistingFiles: input.existingFiles.length > 0,
+    });
+  } catch (error: any) {
+    if (!(error instanceof GeneratedOutputParseError)) {
+      throw error;
+    }
+    console.warn('[huggy:generation_parse_repair]', {
+      project_id: input.project?.id,
+      message: error?.message || 'model output parse failed',
+    });
+    input.onEvent?.({
+      type: 'agent_step',
+      step: 'parse_repair',
+      message: 'La sortie du modele etait incomplete. Huggy reconstruit un projet React/Vite valide avant la preview.',
+    });
+    const fallbackOutput = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
+    parsed = parseGeneratedOutput(input.projectName, JSON.stringify(fallbackOutput), input.prompt, {
+      hasExistingFiles: input.existingFiles.length > 0,
+    });
+  }
   const files = parsed.files;
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
@@ -7295,6 +7315,7 @@ async function finalReliabilityAutoFix(input: {
         projectId: input.project.id,
         files,
         previewHtml,
+        prompt: input.project.prompt || input.project.name,
         timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
       });
       await saveAgentRunnerResults(input.project, input.userId, input.agentRunId, runnerResult);
@@ -10569,6 +10590,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         projectId: project.id,
         files: finalFiles,
         previewHtml,
+        prompt,
         timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
       });
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
@@ -10589,6 +10611,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           projectId: project.id,
           files: finalFiles,
           previewHtml,
+          prompt,
           timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
         });
         await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);

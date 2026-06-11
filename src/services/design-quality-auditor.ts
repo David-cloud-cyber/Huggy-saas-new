@@ -344,17 +344,14 @@ function hasTimerIntent(bundle: SourceBundle) {
 function hasTodoIntent(bundle: SourceBundle, platform: GeneratedAppType) {
   if (hasTimerIntent(bundle)) return false;
   if (/\b(todo|to-do|to do|gestion de taches|gestion de tâches|liste de taches|liste de tâches)\b/i.test(bundle.prompt)) return true;
-  if (platform !== 'generic_web_app') return false;
-  return TODO_APP_RE.test([bundle.tsx, bundle.html].join('\n'));
+  return false;
 }
 
 function hasCommerceIntent(bundle: SourceBundle, platform: GeneratedAppType) {
   if (hasTimerIntent(bundle)) return false;
   if (platform === 'ecommerce') return true;
   if (/\b(ecommerce|e-commerce|shop|store|cart|checkout|catalog|panier|boutique|paiement|catalogue)\b/i.test(bundle.prompt)) return true;
-  if (platform !== 'generic_web_app') return false;
-  const source = [bundle.tsx, bundle.html].join('\n');
-  return ECOMMERCE_APP_RE.test(source) && /\b(cart|checkout|price|variant|quantity|panier|paiement)\b/i.test(source);
+  return false;
 }
 
 function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppType): AgentVerificationCheck[] {
