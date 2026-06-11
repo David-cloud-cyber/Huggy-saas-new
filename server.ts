@@ -10301,7 +10301,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const wallet = cost.finalCredits > 0 ? walletForRouting : Number.POSITIVE_INFINITY;
     if (wallet < cost.finalCredits) {
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
-      return res.status(200).json(publicCreditGateResponse());
+      return respondJson(200, publicCreditGateResponse());
     }
     let agentText: any;
     let content = '';
