@@ -51,6 +51,29 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
 }
 
 {
+  // Autonomous edit: short directional feedback on an EXISTING project must
+  // become an edit action, not a conversation.
+  const autoEdit = typed('non, trop grand, fais plus propre', {
+    requiresFileChanges: true,
+  });
+  assert.equal(autoEdit.typedDecision.primary_intent, 'EDIT');
+  assert.equal(autoEdit.typedDecision.requires_code_changes, true);
+  assert.equal(autoEdit.gated.requiresFileChanges, true);
+}
+
+{
+  // The same feedback with NO existing project must NOT silently build.
+  const noProject = typed('non, trop grand, fais plus propre');
+  assert.notEqual(noProject.typedDecision.primary_intent, 'EDIT');
+}
+
+{
+  // A pure thanks on an existing project stays conversation.
+  const thanks = typed('merci, parfait', { requiresFileChanges: true });
+  assert.equal(thanks.typedDecision.primary_intent, 'CHAT');
+}
+
+{
   const { typedDecision, gated } = typed('genere', {
     intent: 'clarification_required',
     confidence: 0.78,
