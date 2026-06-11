@@ -10200,7 +10200,26 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       try { res.write(': keepalive\n\n'); } catch { clearInterval(heartbeat); }
     }, 15_000);
     res.on('close', () => clearInterval(heartbeat));
+    // Flush headers right away so the client starts reading the stream immediately,
+    // and emit a first step so the UI reacts in <1s.
+    res.flushHeaders?.();
+    res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Request received.' })}\n\n`);
   }
+
+  // Stream-aware terminal response. In SSE mode every final/early return MUST be
+  // delivered as a `done` event: a raw res.json() after the event-stream headers
+  // leaves the client SSE parser without any `data:` line, which surfaces as
+  // "Generation failed or empty response".
+  const respondJson = (status: number, payload: any) => {
+    if (isStream) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: 'done', payload: { status_code: status, ...payload } })}\n\n`);
+        res.end();
+      }
+      return;
+    }
+    return res.status(status).json(payload);
+  };
 
   const helpers = getDbHelpers();
   const requestedMode = normalizeRequestedMode(req.body?.requestedMode);
@@ -10279,7 +10298,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       userCredits: walletForRouting,
     });
   } catch (error: any) {
-    return res.status(200).json({
+    return respondJson(200, {
       ...publicCreditGateResponse(),
       message: error?.message || 'This action is unavailable with the current plan or credit balance.',
     });
@@ -10326,7 +10345,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const wallet = cost.finalCredits > 0 ? walletForRouting : Number.POSITIVE_INFINITY;
     if (wallet < cost.finalCredits) {
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
-      return res.status(200).json(publicCreditGateResponse());
+      return respondJson(200, publicCreditGateResponse());
     }
     let agentText: any;
     let content = '';
@@ -10342,7 +10361,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: diagnostic.diagnostic_code, suggested_action: diagnostic.suggested_action });
-      return res.status(message.includes('not configured') ? 503 : 200).json({ success: false, error: message, message });
+      return respondJson(message.includes('not configured') ? 503 : 200, { success: false, error: message, message });
     }
     await saveProjectMessage({
       organization_id: project.organization_id,
@@ -10363,7 +10382,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       qualityStatus: 'not_applicable',
     });
     await updateAgentRunStatus(agentRunId, 'completed');
-    return res.json({
+    return respondJson(200, {
       success: true,
       intent: decision,
       text: content,
@@ -10378,7 +10397,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   if (decision.requiresFileChanges && !hasProjectCapability(req, 'build', project)) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
-    return res.status(403).json({ success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
+    return respondJson(403, { success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
   }
 
   const wallet = walletForRouting;
@@ -10386,7 +10405,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   if (wallet < cost.finalCredits) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'CREDITS_REQUIRED', suggested_action: 'use_auto' });
-    return res.status(200).json({
+    return respondJson(200, {
       ...publicCreditGateResponse(),
     });
   }

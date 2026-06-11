@@ -5358,6 +5358,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
               markAgentStep(data.step, data.message);
             } else if (data.type === 'token') {
               setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
+              const tokenText = String(data.text ?? data.content ?? '');
+              if (tokenText) appendToMessageShimmer(status, tokenText);
             } else if (data.type === 'done') {
               payload = data.payload;
             } else if (data.type === 'error') {
