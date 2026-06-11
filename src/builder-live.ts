@@ -1,5 +1,6 @@
 import { apiFetch } from './lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
+import { openHuggyStream, createSmoothTextRenderer } from './lib/stream-client';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import {
@@ -5290,92 +5291,75 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const token = verified?.session?.access_token || '';
     const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-    const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      signal: activeAbort.signal,
-      body: JSON.stringify(requestBody),
+    let payload: any = null;
+    let streamError: Error | null = null;
+
+    // Smooth, jank-free token rendering: queue incoming chunks and reveal them
+    // progressively via requestAnimationFrame (respects prefers-reduced-motion).
+    let smoothTokens = '';
+    const smoothText = createSmoothTextRenderer((visible) => {
+      const delta = visible.slice(smoothTokens.length);
+      smoothTokens = visible;
+      if (delta) appendToMessageShimmer(status, delta);
     });
 
-    if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({}));
-      const msg = typeof errorPayload?.message === 'string' ? errorPayload.message : (typeof errorPayload?.error === 'string' ? errorPayload.error : `Request failed with ${response.status}`);
-      throw new Error(msg);
-    }
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let payload: any = null;
-    // Accumulates partial JSON across TCP chunk boundaries
-    let partialJsonBuffer = '';
-    // Live streaming token accumulator — shown in UI while code is being generated
-    if (reader) {
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        // Split on SSE double-newline boundaries
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() || '';
-        for (const part of parts) {
-          // Skip SSE comments (heartbeat keepalives like ": keepalive")
-          const trimmedPart = part.trim();
-          if (!trimmedPart || trimmedPart.startsWith(':')) continue;
-
-          // Collect all data: lines in this SSE block (handles multi-line data)
-          const dataLines = trimmedPart
-            .split('\n')
-            .filter(l => l.startsWith('data:'))
-            .map(l => l.slice(5).trimStart());
-          if (!dataLines.length) continue;
-
-          const dataStr = dataLines.join('\n').trim();
-          if (!dataStr || dataStr === '[DONE]') continue;
-
-          // Robust JSON parsing with partial-chunk recovery
-          let data: any;
-          try {
-            data = JSON.parse(dataStr);
-            partialJsonBuffer = ''; // reset partial buffer on successful parse
-          } catch {
-            // Accumulate partial JSON across chunk boundaries
-            partialJsonBuffer += dataStr;
-            try {
-              data = JSON.parse(partialJsonBuffer);
-              partialJsonBuffer = ''; // success — reset
-            } catch {
-              continue; // wait for more chunks
-            }
+    // Huggy Stream v2 client: spec-compliant SSE parsing, automatic
+    // reconnection with Last-Event-ID, AbortController cancellation.
+    // Understands both the typed v2 protocol and the legacy event shape,
+    // so the server can migrate its emitters incrementally.
+    const stream = openHuggyStream({
+      url: `${API_BASE_URL}/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`,
+      init: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestBody),
+      },
+      // The build stream is a single POST job; reconnecting would replay it.
+      maxRetries: 0,
+      onEvent: (eventType, data) => {
+        if (!data || typeof data !== 'object') return;
+        try {
+          // ── Huggy Stream v2 typed events ──
+          if (eventType === 'milestone' || data.type === 'milestone') {
+            markAgentStep(String(data.milestone || ''), data.label || '');
+            return;
           }
-
-          try {
-            if (data.type === 'agent_step') {
-              // Flush any accumulated live tokens before showing a new step
-              markAgentStep(data.step, data.message);
-            } else if (data.type === 'token') {
-              setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
-              const tokenText = String(data.text ?? data.content ?? '');
-              if (tokenText) appendToMessageShimmer(status, tokenText);
-            } else if (data.type === 'done') {
-              payload = data.payload;
-            } else if (data.type === 'error') {
-              throw new Error(data.error || 'SSE stream error');
-            }
-          } catch (dispatchErr: any) {
-            if (dispatchErr.message && dispatchErr.message !== 'SSE stream error') {
-              console.warn('[huggy:sse_dispatch]', dispatchErr.message);
-            } else {
-              throw dispatchErr;
-            }
+          if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
+            setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
+            smoothText.push(String(data.text ?? ''));
+            return;
           }
+          if (eventType === 'done' || data.type === 'done') {
+            payload = data.payload;
+            return;
+          }
+          if (eventType === 'error' || data.type === 'error') {
+            streamError = new Error(String(data.message || data.error || 'SSE stream error'));
+            return;
+          }
+          // ── Legacy event shape (still emitted by the server) ──
+          if (data.type === 'agent_step') {
+            markAgentStep(data.step, data.message);
+          } else if (data.type === 'token') {
+            setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
+            const tokenText = String(data.text ?? data.content ?? '');
+            if (tokenText) smoothText.push(tokenText);
+          }
+        } catch (dispatchErr: any) {
+          console.warn('[huggy:sse_dispatch]', dispatchErr?.message);
         }
-      }
-      // Flush any remaining tokens at end of stream
-    }
+      },
+    });
+
+    // Cancellation flows through the existing AbortController.
+    activeAbort.signal.addEventListener('abort', () => stream.cancel(), { once: true });
+
+    await stream.done;
+    await smoothText.finish();
+    if (streamError) throw streamError;
     if (!payload) throw new Error('Generation failed or empty response');
 
     const responsePayload = redactInternalModelFields(payload || {});
