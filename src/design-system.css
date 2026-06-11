@@ -38,21 +38,24 @@
 }
 
 :root[data-theme="dark"] {
-  --huggy-bg: #171613;
-  --huggy-bg-warm: #201f1b;
-  --huggy-surface: #201f1b;
-  --huggy-surface-raised: #24231f;
-  --huggy-text: #f8f4eb;
-  --huggy-muted: #d8d1c3;
-  --huggy-subtle: #a79f90;
-  --huggy-border: rgba(252, 251, 248, 0.14);
-  --huggy-border-strong: rgba(252, 251, 248, 0.20);
-  --huggy-blue-soft: rgba(147, 197, 253, 0.12);
-  --huggy-blue-hover: rgba(147, 197, 253, 0.16);
-  --huggy-blue-active: rgba(147, 197, 253, 0.22);
-  --huggy-focus: rgba(147, 197, 253, 0.30);
-  --huggy-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.26);
-  --huggy-shadow-card: 0 24px 76px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  --huggy-bg: #0f1014;
+  --huggy-bg-warm: #13151a;
+  --huggy-surface: #15171c;
+  --huggy-surface-raised: #1b1e25;
+  --huggy-text: #f5f7fb;
+  --huggy-muted: #c6cad3;
+  --huggy-subtle: #8d95a3;
+  --huggy-border: rgba(226, 232, 240, 0.12);
+  --huggy-border-strong: rgba(226, 232, 240, 0.18);
+  --huggy-blue: #4f8cff;
+  --huggy-blue-deep: #8ab4ff;
+  --huggy-blue-ink: #cfe0ff;
+  --huggy-blue-soft: rgba(79, 140, 255, 0.16);
+  --huggy-blue-hover: rgba(79, 140, 255, 0.22);
+  --huggy-blue-active: rgba(79, 140, 255, 0.30);
+  --huggy-focus: rgba(79, 140, 255, 0.34);
+  --huggy-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.30);
+  --huggy-shadow-card: 0 24px 76px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255, 255, 255, 0.07) inset;
 }
 
 :where(button, a, input, textarea, select, summary) {

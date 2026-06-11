@@ -1023,64 +1023,64 @@ function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
 <style>
 :root {
   color-scheme: light dark;
-  --loader-text: #1c1c1c;
-  --loader-bg-a: #fcfbf8;
-  --loader-bg-b: #f7f4ed;
-  --loader-bg-c: #fffdf8;
-  --ring-a: #dbeafe;
-  --ring-b: #93c5fd;
+  --loader-text: #111827;
+  --loader-bg-a: #f8fbff;
+  --loader-bg-b: #eef5ff;
+  --loader-bg-c: #ffffff;
+  --ring-a: #e0ecff;
+  --ring-b: #76a7ff;
   --ring-c: #2f6df6;
-  --ring-mid-a: #bfdbfe;
-  --ring-mid-b: #60a5fa;
+  --ring-mid-a: #c7dcff;
+  --ring-mid-b: #4f8cff;
   --ring-mid-c: #173f8f;
-  --ring-glow-a: rgba(96,165,250,.22);
-  --ring-glow-b: rgba(47,109,246,.14);
+  --ring-glow-a: rgba(79,140,255,.30);
+  --ring-glow-b: rgba(47,109,246,.18);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --loader-text: #f8f4eb;
-    --loader-bg-a: #171613;
-    --loader-bg-b: #201f1b;
-    --loader-bg-c: #2a2822;
-    --ring-a: #d8d1c3;
-    --ring-b: #93c5fd;
-    --ring-c: #93c5fd;
-    --ring-mid-a: #f8f4eb;
-    --ring-mid-b: #bfdbfe;
-    --ring-mid-c: #60a5fa;
-    --ring-glow-a: rgba(147,197,253,.22);
-    --ring-glow-b: rgba(191,219,254,.12);
+    --loader-text: #f5f7fb;
+    --loader-bg-a: #0f1014;
+    --loader-bg-b: #15171c;
+    --loader-bg-c: #1b1e25;
+    --ring-a: #243b66;
+    --ring-b: #4f8cff;
+    --ring-c: #8ab4ff;
+    --ring-mid-a: #31568f;
+    --ring-mid-b: #76a7ff;
+    --ring-mid-c: #cfe0ff;
+    --ring-glow-a: rgba(79,140,255,.34);
+    --ring-glow-b: rgba(138,180,255,.18);
   }
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --loader-text: #1c1c1c;
-  --loader-bg-a: #fcfbf8;
-  --loader-bg-b: #f7f4ed;
-  --loader-bg-c: #fffdf8;
-  --ring-a: #dbeafe;
-  --ring-b: #93c5fd;
+  --loader-text: #111827;
+  --loader-bg-a: #f8fbff;
+  --loader-bg-b: #eef5ff;
+  --loader-bg-c: #ffffff;
+  --ring-a: #e0ecff;
+  --ring-b: #76a7ff;
   --ring-c: #2f6df6;
-  --ring-mid-a: #bfdbfe;
-  --ring-mid-b: #60a5fa;
+  --ring-mid-a: #c7dcff;
+  --ring-mid-b: #4f8cff;
   --ring-mid-c: #173f8f;
-  --ring-glow-a: rgba(96,165,250,.22);
-  --ring-glow-b: rgba(47,109,246,.14);
+  --ring-glow-a: rgba(79,140,255,.30);
+  --ring-glow-b: rgba(47,109,246,.18);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --loader-text: #f8f4eb;
-  --loader-bg-a: #171613;
-  --loader-bg-b: #201f1b;
-  --loader-bg-c: #2a2822;
-  --ring-a: #d8d1c3;
-  --ring-b: #93c5fd;
-  --ring-c: #93c5fd;
-  --ring-mid-a: #f8f4eb;
-  --ring-mid-b: #bfdbfe;
-  --ring-mid-c: #60a5fa;
-  --ring-glow-a: rgba(147,197,253,.22);
-  --ring-glow-b: rgba(191,219,254,.12);
+  --loader-text: #f5f7fb;
+  --loader-bg-a: #0f1014;
+  --loader-bg-b: #15171c;
+  --loader-bg-c: #1b1e25;
+  --ring-a: #243b66;
+  --ring-b: #4f8cff;
+  --ring-c: #8ab4ff;
+  --ring-mid-a: #31568f;
+  --ring-mid-b: #76a7ff;
+  --ring-mid-c: #cfe0ff;
+  --ring-glow-a: rgba(79,140,255,.34);
+  --ring-glow-b: rgba(138,180,255,.18);
 }
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
@@ -1088,7 +1088,9 @@ body {
   margin: 0;
   overflow: hidden;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
-  background: linear-gradient(180deg, var(--loader-bg-a), var(--loader-bg-b) 52%, var(--loader-bg-c));
+  background:
+    radial-gradient(circle at 50% 38%, rgba(79,140,255,.08), transparent 32%),
+    linear-gradient(180deg, var(--loader-bg-a), var(--loader-bg-b) 52%, var(--loader-bg-c));
   color: var(--loader-text);
 }
 .preview-loader {
@@ -1132,6 +1134,9 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255,255,255,.44), transparent 17%),
+    radial-gradient(circle at 42% 42%, rgba(79,140,255,.12), transparent 48%);
   animation: loaderCircle 5s linear infinite;
 }
 .idle .loader-circle { animation-duration: 8s; opacity: .88; }

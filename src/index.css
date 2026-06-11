@@ -3,28 +3,28 @@
 @import "./styles/huggy-ux-polish.css";
 
 :root[data-theme="dark"] {
-    --bg: #171613;
-    --bg-surface: #201f1b;
-    --bg-elevated: #2a2822;
-    --bg-input: #201f1b;
-    --accent: #f8f4eb;
-    --accent-blue: #93c5fd;
-    --accent-blue-deep: #bfdbfe;
-    --accent-blue-soft: rgba(147, 197, 253, 0.12);
-    --accent-blue-hover: rgba(147, 197, 253, 0.16);
-    --accent-blue-active: rgba(147, 197, 253, 0.22);
-    --accent-dim: rgba(248, 244, 235, 0.08);
-    --accent-hover: rgba(248, 244, 235, 0.12);
-    --text: #f8f4eb;
-    --text-muted: #d8d1c3;
-    --text-sub: #a79f90;
-    --border: rgba(252, 251, 248, 0.14);
-    --border-focus: rgba(191, 219, 254, 0.42);
-    --caret: #f8f4eb;
+    --bg: #0f1014;
+    --bg-surface: #15171c;
+    --bg-elevated: #1b1e25;
+    --bg-input: #181b21;
+    --accent: #f5f7fb;
+    --accent-blue: #4f8cff;
+    --accent-blue-deep: #8ab4ff;
+    --accent-blue-soft: rgba(79, 140, 255, 0.16);
+    --accent-blue-hover: rgba(79, 140, 255, 0.22);
+    --accent-blue-active: rgba(79, 140, 255, 0.30);
+    --accent-dim: rgba(245, 247, 251, 0.07);
+    --accent-hover: rgba(245, 247, 251, 0.11);
+    --text: #f5f7fb;
+    --text-muted: #c6cad3;
+    --text-sub: #8d95a3;
+    --border: rgba(226, 232, 240, 0.12);
+    --border-focus: rgba(79, 140, 255, 0.46);
+    --caret: #4f8cff;
     --blue: var(--accent-blue);
     --blue-dim: var(--accent-blue-soft);
-    --nav-bg: rgba(23, 22, 19, 0.82);
-    --nav-line: rgba(252, 251, 248, 0.13);
+    --nav-bg: rgba(15, 16, 20, 0.84);
+    --nav-line: rgba(226, 232, 240, 0.10);
 }
 
 :root[data-theme="light"] {
@@ -2112,6 +2112,35 @@ h1 {
     margin: 0 auto 48px;
     letter-spacing: -0.055em;
     max-width: 1180px;
+}
+
+.scroll-text-reveal {
+    color: var(--text);
+}
+
+.scroll-reveal-word {
+    display: inline-block;
+    opacity: var(--word-opacity, 0.22);
+    filter: blur(var(--word-blur, 2.5px));
+    transform: translateY(var(--word-lift, 8px));
+    will-change: opacity, filter, transform;
+    transition:
+        opacity 160ms linear,
+        filter 160ms linear,
+        transform 160ms linear;
+}
+
+.scroll-reveal-space {
+    white-space: pre;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .scroll-reveal-word {
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+        transition: none !important;
+    }
 }
 
 .founder-info {

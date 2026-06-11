@@ -64,6 +64,87 @@ function init() {
         }, 3000);
     }
 
+    function installScrollTextReveal() {
+        const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll-text-reveal]'));
+        if (!targets.length) return;
+
+        const entries = targets.map(target => {
+            if (target.dataset.scrollRevealReady !== 'true') {
+                const source = target.textContent?.trim();
+                if (!source) return null;
+
+                target.dataset.scrollRevealReady = 'true';
+                target.classList.add('scroll-text-reveal');
+                target.setAttribute('aria-label', source);
+                target.textContent = '';
+
+                const fragment = document.createDocumentFragment();
+                source.split(/(\s+)/).forEach(part => {
+                    const span = document.createElement('span');
+                    if (/^\s+$/.test(part)) {
+                        span.className = 'scroll-reveal-space';
+                        span.textContent = part;
+                    } else {
+                        span.className = 'scroll-reveal-word';
+                        span.textContent = part;
+                    }
+                    fragment.appendChild(span);
+                });
+
+                target.appendChild(fragment);
+            }
+
+            return {
+                target,
+                words: Array.from(target.querySelectorAll<HTMLSpanElement>('.scroll-reveal-word')),
+            };
+        }).filter((entry): entry is { target: HTMLElement; words: HTMLSpanElement[] } => Boolean(entry?.words.length));
+
+        if (!entries.length) return;
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (prefersReducedMotion) {
+            entries.forEach(({ words }) => {
+                words.forEach(word => {
+                    word.style.setProperty('--word-opacity', '1');
+                    word.style.setProperty('--word-blur', '0px');
+                    word.style.setProperty('--word-lift', '0px');
+                });
+            });
+            return;
+        }
+
+        const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
+        let revealFrame = 0;
+
+        const updateReveal = () => {
+            revealFrame = 0;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
+
+            entries.forEach(({ target, words }) => {
+                const rect = target.getBoundingClientRect();
+                const progress = clamp((viewportHeight * 0.82 - rect.top) / (viewportHeight * 0.54 + rect.height));
+                const softness = Math.max(4, Math.ceil(words.length * 0.14));
+
+                words.forEach((word, index) => {
+                    const wordProgress = clamp((progress * words.length - index) / softness);
+                    word.style.setProperty('--word-opacity', (0.18 + wordProgress * 0.82).toFixed(3));
+                    word.style.setProperty('--word-blur', `${(2.8 - wordProgress * 2.8).toFixed(2)}px`);
+                    word.style.setProperty('--word-lift', `${(8 - wordProgress * 8).toFixed(2)}px`);
+                });
+            });
+        };
+
+        const requestRevealUpdate = () => {
+            if (revealFrame) return;
+            revealFrame = window.requestAnimationFrame(updateReveal);
+        };
+
+        updateReveal();
+        window.addEventListener('scroll', requestRevealUpdate, { passive: true });
+        window.addEventListener('resize', requestRevealUpdate);
+    }
+
     function installMarketingEnhancements() {
         const path = window.location.pathname;
         const isProductShell = /\/(builder|dashboard|auth)\.html$/.test(path);
@@ -162,6 +243,7 @@ function init() {
             footer.insertAdjacentElement('beforebegin', prompt);
         }
 
+        installScrollTextReveal();
     }
 
     installMarketingEnhancements();
