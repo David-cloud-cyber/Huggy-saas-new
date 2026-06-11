@@ -10317,7 +10317,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: diagnostic.diagnostic_code, suggested_action: diagnostic.suggested_action });
-      return res.status(message.includes('not configured') ? 503 : 200).json({ success: false, error: message, message });
+      return respondJson(message.includes('not configured') ? 503 : 200, { success: false, error: message, message });
     }
     await saveProjectMessage({
       organization_id: project.organization_id,
