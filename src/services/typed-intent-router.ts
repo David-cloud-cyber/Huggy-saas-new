@@ -182,6 +182,43 @@ function isBareBuildCommand(text: string) {
   return /^(cree|creer|create|build|make|genere|generer|generate|construis|fabrique)(\s+(app|site|application))?$/i.test(text.trim());
 }
 
+/**
+ * Short directional feedback on an EXISTING project. When a preview already
+ * exists, phrases like "non pas comme ca", "trop grand", "change la couleur",
+ * "plus propre", "continue", "refais" are concrete edit instructions, not
+ * conversation. Used only when hasFiles is true so a fresh chat is never
+ * mistaken for an edit.
+ */
+function isIterationFeedback(text: string) {
+  const trimmed = text.trim();
+  // Pure emotional comments or questions are not edits.
+  if (/\?\s*$/.test(trimmed)) return false;
+  if (/^(merci|thanks|thank you|super|parfait|nice|cool|ok|d accord|genial|excellent|bravo)\b[\s!.]*$/i.test(trimmed)) return false;
+  return (
+    /\b(plus|moins|trop|encore|mieux|propre|premium|grand|petit|gros|large|serre|espace|aligne|centre|couleur|color|police|font|taille|size|marge|padding|bouton|button|texte|text|titre|header|footer|section|fond|background|ombre|shadow|bord|border|arrondi|radius|sombre|clair|dark|light)\b/i.test(trimmed)
+    || /\b(non|pas comme ca|pas comme ça|pas premium|trop ia|too ai|fais autrement|autre chose|change|modifie|enleve|retire|supprime|remove|ajoute|add|deplace|move|remplace|replace)\b/i.test(trimmed)
+    || /^(continue|refais|recommence|encore|again|redo|retry|ameliore|improve|fix|corrige)\b/i.test(trimmed)
+  );
+}
+
+/**
+ * Autonomous generation decision: returns the action Huggy should take on its
+ * own, without forcing the user to pick Build/Plan. Centralizes the
+ * "generate or not" judgment.
+ * - 'build'  : explicit new app/feature request with enough product context.
+ * - 'edit'   : clear change or short directional feedback on an existing project.
+ * - 'clarify': bare creation verb with no concrete target.
+ * - null     : let the base intent (chat/plan/debug/verify) stand.
+ */
+function decideAutoGeneration(text: string, hasFiles: boolean): 'build' | 'edit' | 'clarify' | null {
+  if (isCriticalPlatformAction(text) || isDiscussFirst(text)) return null;
+  if (isBareBuildCommand(text)) return 'clarify';
+  if (isExplicitAppBuildRequest(text)) return hasFiles ? 'edit' : 'build';
+  // Concrete UI edit verbs always act on the current project when one exists.
+  if (hasFiles && isIterationFeedback(text)) return 'edit';
+  return null;
+}
+
 function isCriticalPlatformAction(text: string) {
   return /\b(publie|publier|publish|deploie|deployer|deploy|rollback|restaure|restore|delete project|supprime le projet|reset database|supprime la base|apply migration|applique la migration|custom domain|domaine|billing|stripe live|production)\b/i.test(text);
 }
@@ -218,11 +255,15 @@ function targetFilesFor(text: string, category: UserIntentCategory): string[] {
   return unique(files).slice(0, 8);
 }
 
-function primaryIntentFor(decision: BaseIntent, promptText: string): TypedPrimaryIntent {
+function primaryIntentFor(decision: BaseIntent, promptText: string, hasFiles = false): TypedPrimaryIntent {
   if (isCriticalPlatformAction(promptText)) return 'CRITICAL_ACTION';
   if (isDiscussFirst(promptText)) return 'DISCUSS_FIRST';
-  if (isExplicitAppBuildRequest(promptText)) return decision.intent === 'debug_fix' ? 'DEBUG' : 'BUILD';
-  if (isBareBuildCommand(promptText)) return 'CLARIFY';
+  // Autonomous generation decision: Huggy decides on its own whether to run
+  // a generation action, edit the current project, or ask one focused question.
+  const auto = decideAutoGeneration(promptText, hasFiles);
+  if (auto === 'build') return decision.intent === 'debug_fix' ? 'DEBUG' : 'BUILD';
+  if (auto === 'edit') return decision.intent === 'debug_fix' ? 'DEBUG' : 'EDIT';
+  if (auto === 'clarify') return 'CLARIFY';
   if (decision.intent === 'conversation') return 'CHAT';
   if (decision.intent === 'clarification_required') return 'CLARIFY';
   if (decision.intent === 'plan') return 'PLAN_ONLY';
@@ -314,7 +355,7 @@ export function buildTypedIntentDecision(input: BuildInput): TypedIntentDecision
   const prompt = String(input.prompt || '');
   const text = normalize(prompt);
   const category = input.decision.intentUnderstanding?.category || 'other';
-  const primary = primaryIntentFor(input.decision, text);
+  const primary = primaryIntentFor(input.decision, text, Boolean(input.hasFiles));
   const code = requiresCode(primary, input.decision);
   const infrastructure: TypedInfrastructureNeed[] = code ? infrastructureFor(text) : ['NONE'];
   const targets = code ? targetFilesFor(text, category) : [];
