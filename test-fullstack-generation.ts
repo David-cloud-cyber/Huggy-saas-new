@@ -87,6 +87,22 @@ assert.ok(checks.some(check => check.key === 'fullstack_backend_plan_present'));
 assert.ok(checks.some(check => check.key === 'fullstack_versioned_migration_present'));
 assert.ok(checks.some(check => check.key === 'fullstack_storage_policies'));
 
+const crmFilesWithPromptLanguage = [
+  ...files,
+  {
+    path: 'docs/product-notes.md',
+    language: 'markdown',
+    content: 'The onboarding copy mentions prompt workspace, app_prompts, app_generations and streamAiResponse as examples, but this CRM is not an AI streaming product.',
+  },
+];
+const crmPromptLanguageChecks = validateHuggyFullstackFiles(crmFilesWithPromptLanguage, requirement);
+assert.equal(
+  crmPromptLanguageChecks.filter(check => check.status === 'fail').length,
+  0,
+  crmPromptLanguageChecks.map(check => `${check.key}: ${check.message}`).join('\n'),
+);
+assert.ok(!crmPromptLanguageChecks.some(check => /^fullstack_ai_stream_/.test(check.key)), 'Non-AI apps must not be blocked by AI stream connector checks.');
+
 const marketplace = inferProductionBlueprint('Build a marketplace with sellers products orders payments and reviews');
 assert.equal(marketplace.type, 'marketplace');
 assert.ok(marketplace.tables.some(table => table.name === 'app_sellers'));

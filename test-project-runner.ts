@@ -38,6 +38,28 @@ const goodHtml = '<!doctype html><html><head><title>Demo</title><meta name="desc
 
 {
   const runner = new HybridProjectRunner({ executeScripts: false });
+  const result = await runner.run({
+    runId: 'run_tailwind_responsive',
+    projectId: 'project_tailwind_responsive',
+    previewHtml: goodHtml,
+    files: [
+      { path: 'index.html', language: 'html', content: goodHtml },
+      { path: 'package.json', language: 'json', content: JSON.stringify({ scripts: { build: 'vite build' } }) },
+      { path: 'src/main.tsx', language: 'tsx', content: 'import App from "./App"; import "./index.css"; console.log(App);' },
+      {
+        path: 'src/App.tsx',
+        language: 'tsx',
+        content: 'import { useState } from "react"; export default function App(){ const [saved,setSaved]=useState(false); return <main className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><h1>Responsive workspace</h1><button onClick={()=>setSaved(true)}>Save</button><p>{saved ? "success saved" : "empty ready"}</p></main> }',
+      },
+      { path: 'src/index.css', language: 'css', content: ':root{--bg:#fff;--text:#111}button:focus-visible{outline:2px solid #111}' },
+    ],
+  });
+
+  assert.ok(result.checks.some(check => check.check_type === 'production_responsive' && check.status === 'passed'));
+}
+
+{
+  const runner = new HybridProjectRunner({ executeScripts: false });
   const stalePreview = '<!doctype html><html><body><main><h1>Old preview</h1></main></body></html>';
   const result = await runner.run({
     runId: 'run_source_index_over_preview',

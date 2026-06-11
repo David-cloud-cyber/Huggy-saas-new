@@ -1,6 +1,7 @@
 import type { HuggyCloudRequirement } from './huggy-cloud.ts';
 import { hasHuggyCloudRequirement } from './huggy-cloud.ts';
 import {
+  getProductionBlueprintByType,
   inferProductionBlueprint,
   isPaymentBlueprint,
   isStorageBlueprint,
@@ -58,6 +59,16 @@ function inferLanguage(filePath: string) {
 function fileByPath(files: FullstackGeneratedFile[], filePath: string) {
   const target = normalizePath(filePath).toLowerCase();
   return files.find(file => normalizePath(file.path).toLowerCase() === target);
+}
+
+function blueprintFromBackendPlan(content: string): ProductionBlueprint | null {
+  try {
+    const parsed = JSON.parse(String(content || '{}'));
+    const type = parsed?.blueprint?.type || parsed?.blueprint_type || parsed?.type;
+    return getProductionBlueprintByType(type);
+  } catch {
+    return null;
+  }
 }
 
 function hasSupabaseUsage(files: FullstackGeneratedFile[]) {
@@ -1361,8 +1372,8 @@ export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], req
   const schema = fileByPath(files, 'supabase/schema.sql');
   const packageFile = fileByPath(files, 'package.json');
   const allSource = files.map(file => `${file.path}\n${file.content || ''}`).join('\n\n');
-  const blueprint = inferProductionBlueprint(allSource);
-  const isAiToolProject = blueprint.type === 'ai_tool' || Boolean(aiStreamClient || aiStreamFunction) || /app_prompts|app_generations|ai-stream|streamAiResponse|prompt workspace/i.test(allSource);
+  const blueprint = blueprintFromBackendPlan(backendPlan?.content || '') || inferProductionBlueprint(allSource);
+  const isAiToolProject = blueprint.type === 'ai_tool' || Boolean(aiStreamClient || aiStreamFunction);
 
   checks.push(client ? pass('fullstack_client_present', 'Generated app includes a browser-safe Huggy Cloud client.', 'src/lib/huggyCloud.ts') : fail('fullstack_client_present', 'Missing src/lib/huggyCloud.ts browser-safe backend client.', 'src/lib/huggyCloud.ts'));
   checks.push(data ? pass('fullstack_data_layer_present', 'Generated app includes a CRUD data layer.', 'src/lib/appData.ts') : fail('fullstack_data_layer_present', 'Missing src/lib/appData.ts CRUD data layer.', 'src/lib/appData.ts'));

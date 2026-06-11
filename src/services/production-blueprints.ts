@@ -491,6 +491,10 @@ export function listProductionBlueprints() {
   return Object.values(BLUEPRINTS);
 }
 
+export function getProductionBlueprintByType(type: string): ProductionBlueprint | null {
+  return BLUEPRINTS[String(type || '').trim() as ProductionBlueprintType] || null;
+}
+
 export function buildProductionBlueprintPromptContext(blueprint: ProductionBlueprint) {
   return [
     'Optional production architecture reference:',

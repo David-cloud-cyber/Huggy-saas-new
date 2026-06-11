@@ -305,7 +305,7 @@ export class HybridProjectRunner implements RunnerAdapter {
     const paths = new Set(files.map(file => normalizePath(file.path).toLowerCase()));
     const hasModernReact = hasPackageJson && paths.has('index.html') && Array.from(paths).some(file => /^src\/main\.(tsx|ts|jsx|js)$/.test(file)) && Array.from(paths).some(file => /^src\/app\.(tsx|jsx)$/.test(file));
     const hasCss = Array.from(paths).some(file => /\.(css|scss)$/.test(file));
-    const hasResponsiveCss = /@media|clamp\(|minmax\(|grid-template|flex-wrap|container-type|max-width/i.test(source);
+    const hasResponsiveCss = /@media|clamp\(|minmax\(|grid-template|flex-wrap|container-type|max-width|\b(?:sm|md|lg|xl|2xl):/i.test(source);
     const explicitBackendIntent = /\b(auth|login|sign in|signup|database|supabase|postgres|backend|api|server|rls|roles?|team|admin|private|secure|paiement|payment|stripe|subscription|invoice|facture|storage|upload|multi-user|multi user|account|workspace|organization|organisation|realtime|real-time)\b/i.test(prompt);
     const hasLocalStorage = /\blocalStorage\b/i.test(source);
     const hasSupabaseSchema = paths.has('supabase/schema.sql');
