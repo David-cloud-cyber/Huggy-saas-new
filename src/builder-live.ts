@@ -2140,6 +2140,13 @@ function clearMessageShimmer(card: HTMLElement | null) {
   if (id && conversationApi) conversationApi.clearWorking(id);
   card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
+  // Flush and release the smooth renderer for this card.
+  const renderer = shimmerRenderers.get(card);
+  if (renderer) {
+    renderer.stop();
+    shimmerRenderers.delete(card);
+    shimmerBuffers.delete(card);
+  }
   // Clean up any live-token streaming container
   card.querySelector('.huggy-live-token-stream')?.remove();
 }
@@ -2148,8 +2155,16 @@ function clearMessageShimmer(card: HTMLElement | null) {
  * Pro streaming UI helpers — manage the phase timeline, progress bar,
  * model badge, elapsed timer, and token counter.
  */
-const STREAM_PHASE_ORDER = ['ast','rag','meta_prompt','generation','eval','eval_ok','eval_fail','preview','done'];
+const STREAM_PHASE_ORDER = ['understanding','inspecting','planning','ast','rag','meta_prompt','generating','generation','eval','eval_ok','checking','eval_fail','fixing','preview','preview_ready','done'];
 const STREAM_PHASE_LABELS: Record<string, string> = {
+  // v2 typed milestones (clear, user-facing)
+  understanding: 'Compréhension',
+  inspecting: 'Inspection',
+  planning: 'Plan',
+  generating: 'Génération',
+  checking: 'Vérification',
+  fixing: 'Correction',
+  preview_ready: 'Aperçu prêt',
   ast: 'Analyse',
   rag: 'Mémoire',
   meta_prompt: 'Enrichissement',
@@ -2295,6 +2310,11 @@ function finalizeStreamUI(card: HTMLElement | null, status: 'done' | 'failed', e
 }
 
 
+// Per-card smooth renderer registry so streamed code reveals fluidly
+// (one DOM write per animation frame) instead of jumping on every chunk.
+const shimmerRenderers = new WeakMap<HTMLElement, ReturnType<typeof createSmoothTextRenderer>>();
+const shimmerBuffers = new WeakMap<HTMLElement, string>();
+
 function appendToMessageShimmer(card: HTMLElement | null, text: string) {
   if (!card || !text) return;
   let streamEl = card.querySelector<HTMLElement>('.huggy-live-token-stream');
@@ -2311,15 +2331,22 @@ function appendToMessageShimmer(card: HTMLElement | null, text: string) {
       card.appendChild(streamEl);
     }
   }
-  // Show only a compact preview — last ~300 chars of accumulated stream
-  const current = streamEl.textContent || '';
-  const updated = (current + text).slice(-300);
-  streamEl.textContent = updated;
-  // Auto-scroll the chat panel if user is near bottom
-  const scroll = document.getElementById('sidebar-scroll-area');
-  if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
-    scroll.scrollTop = scroll.scrollHeight;
+  const target = streamEl;
+  let renderer = shimmerRenderers.get(card);
+  if (!renderer) {
+    shimmerBuffers.set(card, '');
+    renderer = createSmoothTextRenderer((visible) => {
+      shimmerBuffers.set(card, visible);
+      // Keep only a compact, stable-height preview of the live feed.
+      target.textContent = visible.slice(-300);
+      const scroll = document.getElementById('sidebar-scroll-area');
+      if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
+        scroll.scrollTop = scroll.scrollHeight;
+      }
+    });
+    shimmerRenderers.set(card, renderer);
   }
+  renderer.push(text);
 }
 
 function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
