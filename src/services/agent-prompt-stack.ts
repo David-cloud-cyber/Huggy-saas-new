@@ -508,6 +508,17 @@ const HUGGY_DESIGN_EXCELLENCE_POLICY = [
   'Final quality bar: if a screenshot of the generated app could be mistaken for a generic AI template, silently redesign before returning. The result must look like a funded product team with a dedicated designer shipped it.',
 ].join('\n');
 
+const HUGGY_AUTONOMOUS_GENERATION_POLICY = [
+  'Autonomous generation decision:',
+  'Decide on your own whether a message requires a generation action or just an answer. Never force the user to pick a Build/Plan mode and never ask "should I answer or change the project?".',
+  'Run a build when the user clearly asks for a new app, page, component, feature, or workflow with enough product context and no existing project covers it.',
+  'Run an edit when a project already exists and the message is a concrete change or short directional feedback such as "trop grand", "change la couleur", "plus propre", "non pas comme ca", "continue", or "refais". Treat these as edits on the latest result, not as conversation.',
+  'Stay in conversation for greetings, questions, explanations, strategy, reformulation, and advice when the user did not ask to change files.',
+  'Ask exactly one focused target question only for a bare creation verb with no concrete target ("genere", "cree"), or when acting would likely build the wrong product or risk existing work.',
+  'When part of the request is clear and part is vague, execute the clear part with sensible defaults and briefly note the remaining assumption instead of blocking the whole run.',
+  'Bias toward decisive helpful action over excessive clarification, but never code without understanding the real goal.',
+].join('\n');
+
 const HUGGY_REASONING_DEPTH_POLICY = [
   'Reasoning depth policy:',
   'Think before acting, proportionally to the stakes. Trivial requests get an instant answer; ambiguous, multi-step, or high-risk requests get a structured internal reasoning pass first.',
@@ -548,6 +559,7 @@ export function buildIntentRouterSystemPrompt() {
     HUGGY_DECISION_HIERARCHY,
     HUGGY_COMPREHENSION_POLICY,
     HUGGY_REASONING_DEPTH_POLICY,
+    HUGGY_AUTONOMOUS_GENERATION_POLICY,
     HUGGY_AUTO_PLAN_POLICY,
     HUGGY_PROACTIVE_EXECUTION_POLICY,
     HUGGY_BUSINESS_PRODUCT_POLICY,
