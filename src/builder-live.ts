@@ -2689,6 +2689,12 @@ function addInlineAction(card: HTMLElement | null, label: string, action: () => 
 function formatAgentErrorMessage(event: any) {
   const payload = event?.payload || {};
   const base = String(event?.message || payload.message || 'Generation failed.').trim();
+  if (/generation failed or empty response/i.test(base)) {
+    return 'Huggy n’a pas reçu de fichiers valides à afficher. Le travail reste récupérable et une nouvelle tentative peut repartir proprement.';
+  }
+  if (/preview contains a known forced runtime failure marker/i.test(base)) {
+    return 'La preview contient encore un marqueur de crash. Huggy doit le retirer, reconstruire, puis retester avant de livrer.';
+  }
   const diagnostic = typeof payload.diagnostic_code === 'string' && payload.diagnostic_code.trim()
     ? ` Code: ${payload.diagnostic_code.trim()}.`
     : '';

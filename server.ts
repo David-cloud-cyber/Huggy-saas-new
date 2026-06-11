@@ -5758,7 +5758,7 @@ async function generateFilesWithAi(input: {
   })();
 
   // Meta-prompting: enrich the user's prompt
-  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Enrichissement du prompt...' });
+  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Brief affiné.' });
   const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
 
   // Compose final prompt with all context layers
@@ -5787,7 +5787,7 @@ async function generateFilesWithAi(input: {
   let currentPrompt = composedPrompt;
   
   while (attempt < 2) {
-    input.onEvent?.({ type: 'agent_step', step: 'generation', message: `Génération du code (Essai ${attempt + 1})...` });
+    input.onEvent?.({ type: 'agent_step', step: 'generation', message: attempt === 0 ? 'Première version générée.' : 'Version corrigée générée.' });
 
     // Stream tokens live so the client sees progress in real time
     let fullText = '';
@@ -5880,17 +5880,17 @@ async function generateFilesWithAi(input: {
 
     result = { text: fullText, model: streamedModel, cost_usd: streamedCost };
     totalCostUsd += streamedCost;
-    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Le Juge évalue la qualité du code...' });
+    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Qualité vérifiée.' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
 
     if (judgeEval.passed || attempt >= 1) {
-      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'Le code a passé l\'évaluation avec succès.' });
+      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'Code validé.' });
       break;
     }
 
     console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
-    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: `Le Juge a rejeté le code: ${judgeEval.failures[0]}. Auto-correction en cours...` });
+    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: 'La première version était trop légère. Huggy la renforce automatiquement.' });
 
     // Use a different model for the judge retry to avoid self-agreement bias
     const judgeModelId = modelRouter.selectJudgeModel(

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { Check, ChevronDown, Copy, FileText, ListChecks, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { Check, ChevronDown, Copy, ListChecks, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -501,15 +501,13 @@ function ensureConversationStyles() {
     }
 
     .huggy-buildstream-card {
-      display: grid;
-      gap: 8px;
       margin-left: 12px;
-      border: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 82%, transparent);
-      border-radius: 9px;
-      background: color-mix(in srgb, var(--bg-input) 82%, transparent);
+      border: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 58%, transparent);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg-input) 42%, transparent);
       box-shadow: 0 1px 0 color-mix(in srgb, var(--surface) 8%, transparent) inset;
-      padding: 10px;
       animation: huggy-buildstream-in 210ms cubic-bezier(.22,1,.36,1) both;
+      overflow: hidden;
     }
 
     .huggy-buildstream-card-head {
@@ -517,10 +515,22 @@ function ensureConversationStyles() {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      cursor: pointer;
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 90%, transparent);
       font-size: 12px;
       font-weight: 680;
       font-variant-numeric: tabular-nums;
+      list-style: none;
+      padding: 10px 11px;
+      user-select: none;
+    }
+
+    .huggy-buildstream-card-head::-webkit-details-marker {
+      display: none;
+    }
+
+    .huggy-buildstream-card[open] .huggy-buildstream-card-head {
+      border-bottom: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 46%, transparent);
     }
 
     .huggy-buildstream-card-title,
@@ -538,8 +548,13 @@ function ensureConversationStyles() {
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 72%, transparent);
     }
 
+    .huggy-buildstream-card[open] .huggy-buildstream-card-actions svg {
+      transform: rotate(180deg);
+    }
+
     .huggy-buildstream-card-actions svg {
       opacity: .72;
+      transition: transform 180ms cubic-bezier(.22,1,.36,1), opacity 180ms ease;
     }
 
     .huggy-buildstream-card-head svg {
@@ -549,11 +564,30 @@ function ensureConversationStyles() {
       color: currentColor;
     }
 
-    .huggy-buildstream-task {
+    .huggy-buildstream-progress {
+      position: relative;
+      height: 3px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--text-sub, var(--text-muted)) 12%, transparent);
+    }
+
+    .huggy-buildstream-progress span {
+      display: block;
+      height: 100%;
+      width: var(--huggy-progress, 0%);
+      border-radius: inherit;
+      background: linear-gradient(90deg, #60a5fa, #22c55e);
+      transition: width 420ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .huggy-buildstream-task-list {
       display: grid;
-      grid-template-columns: 18px minmax(0, 1fr);
-      gap: 8px;
-      align-items: center;
+      gap: 7px;
+      padding: 10px 11px 11px;
+    }
+
+    .huggy-buildstream-task {
       min-height: 24px;
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
       font-size: 12.5px;
@@ -562,16 +596,30 @@ function ensureConversationStyles() {
       animation: huggy-buildstream-in 220ms cubic-bezier(.22,1,.36,1) forwards;
     }
 
+    .huggy-buildstream-task-summary {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .huggy-buildstream-task-summary::-webkit-details-marker {
+      display: none;
+    }
+
     .huggy-buildstream-task-detail {
       display: block;
-      margin-top: 3px;
+      margin: 6px 0 0 26px;
+      border-left: 1px solid color-mix(in srgb, var(--border-light, var(--border)) 62%, transparent);
+      padding-left: 9px;
       color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 76%, transparent);
       font-size: 11px;
       font-weight: 520;
       line-height: 1.35;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      animation: huggy-buildstream-open 180ms cubic-bezier(.22,1,.36,1) both;
     }
 
     .huggy-buildstream-task[data-status="active"] {
@@ -580,14 +628,7 @@ function ensureConversationStyles() {
     }
 
     .huggy-buildstream-task[data-status="done"] {
-      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 78%, transparent);
-    }
-
-    .huggy-buildstream-task[data-status="done"] > span:last-child {
-      text-decoration: line-through;
-      text-decoration-thickness: 1px;
-      text-decoration-color: color-mix(in srgb, currentColor 70%, transparent);
-      opacity: .72;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 82%, transparent);
     }
 
     .huggy-buildstream-task[data-status="failed"] {
@@ -605,6 +646,29 @@ function ensureConversationStyles() {
       color: inherit;
       font-size: 10px;
       line-height: 1;
+    }
+
+    .huggy-buildstream-task-badge {
+      border: 1px solid color-mix(in srgb, #22c55e 32%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, #22c55e 10%, transparent);
+      color: color-mix(in srgb, #16a34a 86%, var(--text));
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .huggy-buildstream-task[data-status="active"] .huggy-buildstream-task-badge {
+      border-color: color-mix(in srgb, #60a5fa 38%, transparent);
+      background: color-mix(in srgb, #60a5fa 12%, transparent);
+      color: color-mix(in srgb, #2563eb 88%, var(--text));
+    }
+
+    .huggy-buildstream-task[data-status="failed"] .huggy-buildstream-task-badge {
+      border-color: color-mix(in srgb, #f59e0b 44%, transparent);
+      background: color-mix(in srgb, #f59e0b 12%, transparent);
+      color: color-mix(in srgb, #b45309 90%, var(--text));
     }
 
     .huggy-buildstream-mark svg {
@@ -678,6 +742,11 @@ function ensureConversationStyles() {
     @keyframes huggy-buildstream-pop {
       from { transform: scale(.82); }
       to { transform: scale(1); }
+    }
+
+    @keyframes huggy-buildstream-open {
+      from { opacity: 0; transform: translateY(-3px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .huggy-flowline[data-restored="true"] *,
@@ -1917,8 +1986,66 @@ function streamTextLooksFrench(block: Extract<HuggyConversationBlock, { type: "w
   return /\b(je|tu|vous|nous|pret|prêt|preview|fichier|corrige|verifie|vérifie|application|generation|génération|termine|terminé|bloque|bloqué)\b/.test(sample);
 }
 
+function humanizeStreamTask(value: string, isFrench: boolean) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  const lower = compact.toLowerCase();
+  if (/enrichissement du prompt|brief.*affin|prompt.*enrich|prompt.*refin/.test(lower)) return isFrench ? "Brief affiné" : "Brief refined";
+  if (/g[ée]n[ée]ration du code.*1|generation du code.*1|essai 1|first version/.test(lower)) return isFrench ? "Première version générée" : "First version generated";
+  if (/g[ée]n[ée]ration du code.*2|generation du code.*2|essai 2|second version/.test(lower)) return isFrench ? "Version corrigée générée" : "Corrected version generated";
+  if (/juge.*qualit|quality.*code|quality gate|evaluation/.test(lower)) return isFrench ? "Qualité vérifiée" : "Quality checked";
+  if (/rejet|too minimal|blank|auto-correction|auto correction|renforce/.test(lower)) return isFrench ? "Version renforcée automatiquement" : "Version strengthened automatically";
+  if (/pass[ée].*succ|passe.*evaluation|passed.*evaluation|checks.*passed|code.*valid/.test(lower)) return isFrench ? "Code validé" : "Code validated";
+  if (/preview.*ready|preview.*pr[êe]te|preview prete/.test(lower)) return isFrench ? "Preview prête" : "Preview ready";
+  if (/generation failed|empty response|fichiers valides/.test(lower)) return isFrench ? "Réponse modèle incomplète" : "Incomplete model response";
+  return compact;
+}
+
+function humanizeStreamDetail(value: string, label: string, isFrench: boolean) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  const source = `${label} ${compact}`.toLowerCase();
+  if (/too minimal|preview would likely be blank|auto-correction|auto correction|rejet/.test(source)) {
+    return isFrench
+      ? "La première version était trop légère. Huggy la renforce puis relance la vérification."
+      : "The first version was too light. Huggy is strengthening it and rerunning verification.";
+  }
+  if (/generation failed|empty response/.test(source)) {
+    return isFrench
+      ? "Le modèle n’a pas renvoyé assez de fichiers valides pour afficher une preview fiable."
+      : "The model did not return enough valid files to show a reliable preview.";
+  }
+  if (/forced runtime failure marker/.test(source)) {
+    return isFrench
+      ? "Un marqueur de crash de test est encore présent. Huggy doit le retirer avant d’afficher la preview."
+      : "A test crash marker is still present. Huggy must remove it before showing the preview.";
+  }
+  return compact;
+}
+
+function recoveryCopyFromBlock(block: Extract<HuggyConversationBlock, { type: "work_journal" }>, isFrench: boolean) {
+  const raw = [block.finalText || "", block.activeText || "", ...block.entries.flatMap(entry => [entry.text || "", entry.detail || ""])].join(" ");
+  const lower = raw.toLowerCase();
+  if (/generation failed|empty response/.test(lower)) {
+    return isFrench
+      ? "Huggy n’a pas reçu de fichiers valides à afficher. Le travail reste récupérable, et une nouvelle tentative peut repartir proprement."
+      : "Huggy did not receive valid files to display. The work is recoverable, and a new attempt can restart cleanly.";
+  }
+  if (/forced runtime failure marker|crash marker/.test(lower)) {
+    return isFrench
+      ? "La preview contient encore un marqueur de crash. Huggy doit le retirer, reconstruire, puis retester avant de livrer."
+      : "The preview still contains a crash marker. Huggy must remove it, rebuild, and retest before delivery.";
+  }
+  if (/blocking issue|points bloquants|blocage/.test(lower)) {
+    return isFrench
+      ? "Un point bloque encore la livraison. Huggy a sauvegardé la draft et isole la correction la plus sûre."
+      : "One point is still blocking delivery. Huggy saved the draft and is isolating the safest fix.";
+  }
+  return isFrench
+    ? "Je garde le travail récupérable et j’isole le blocage restant."
+    : "I am keeping the work recoverable and isolating the remaining blocker.";
+}
+
 function buildStreamTasks(block: Extract<HuggyConversationBlock, { type: "work_journal" }>, isFrench: boolean) {
-  const tasks: Array<{ label: string; detail?: string; status: "pending" | "active" | "done" | "failed" }> = [];
+  const tasks: Array<{ label: string; detail?: string; status: "pending" | "active" | "done" | "failed"; badge?: string }> = [];
   const seen = new Set<string>();
   const clean = (value = "") => value.replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
   const statusFor = (status?: HuggyWorklineEntry["status"]) => status === "failed"
@@ -1929,13 +2056,20 @@ function buildStreamTasks(block: Extract<HuggyConversationBlock, { type: "work_j
         ? "failed"
         : "done";
   const push = (label: string, status: "pending" | "active" | "done" | "failed", detail = "") => {
-    const nextLabel = clean(label);
-    const nextDetail = clean(detail);
+    const nextLabel = humanizeStreamTask(clean(label), isFrench);
+    const nextDetail = humanizeStreamDetail(clean(detail), nextLabel, isFrench);
     if (!nextLabel) return;
     const key = nextLabel.toLowerCase() + "|" + nextDetail.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    tasks.push({ label: nextLabel, detail: nextDetail || undefined, status });
+    const badge = status === "active"
+      ? (isFrench ? "En cours" : "Active")
+      : status === "failed"
+        ? (isFrench ? "À corriger" : "Needs fix")
+        : /renforcée|strengthened|corrigée|corrected/i.test(nextLabel)
+          ? (isFrench ? "Corrigé" : "Fixed")
+          : undefined;
+    tasks.push({ label: nextLabel, detail: nextDetail || undefined, status, badge });
   };
 
   block.entries.forEach(entry => {
@@ -1974,28 +2108,31 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
   const tasks = buildStreamTasks(block, isFrench);
   const doneCount = tasks.filter(task => task.status === "done").length;
   const lastTask = tasks[tasks.length - 1];
+  const progressPercent = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
   const phaseTitle = block.status === "failed"
-    ? (isFrench ? "Point bloquant detecte" : "Blocking point detected")
+    ? (isFrench ? "Correction nécessaire" : "Recovery needed")
     : block.status === "done"
-      ? (isFrench ? "Version prete a tester" : "Version ready to test")
+      ? (isFrench ? "Version vérifiée" : "Version verified")
       : lastTask?.label || block.activeText || (isFrench ? "Huggy travaille" : "Huggy is working");
   const body = block.status === "failed"
-    ? block.finalText || (isFrench ? "Je garde le travail recuperable et j'isole le blocage restant." : "I am keeping the work recoverable and isolating the remaining blocker.")
+    ? recoveryCopyFromBlock(block, isFrench)
     : block.status === "done"
-      ? block.finalText || (isFrench ? "La generation est terminee. Tu peux tester la preview." : "The generation is complete. You can test the preview.")
+      ? block.finalText || (isFrench ? "La version est prête. Tu peux tester la preview ou publier quand tu es satisfait." : "The version is ready. You can test the preview or publish when satisfied.")
       : lastTask?.detail || block.activeText || "";
-  const featureTitle = isFrench ? "Progression reelle :" : "Real progress:";
+  const featureTitle = block.status === "failed"
+    ? (isFrench ? "Ce que Huggy a déjà tenté :" : "What Huggy already tried:")
+    : isFrench ? "Étapes vérifiées :" : "Verified steps:";
   const features = tasks.slice(0, 4).map(task => task.label);
   const thinkingLabel = block.status === "active"
-    ? "Thinking..."
+    ? (isFrench ? "En cours" : "Working")
     : block.status === "failed"
-      ? (isFrench ? "A corriger" : "Needs fix")
+      ? (isFrench ? "À corriger" : "Needs fix")
       : block.status === "cancelled"
-        ? (isFrench ? "Arrete" : "Stopped")
-        : (isFrench ? "Termine" : "Done");
+        ? (isFrench ? "Arrêté" : "Stopped")
+        : (isFrench ? "Terminé" : "Done");
   const progressLabel = tasks.length
     ? (isFrench
-      ? doneCount + "/" + tasks.length + " taches terminees"
+      ? doneCount + "/" + tasks.length + " étapes vérifiées"
       : doneCount + "/" + tasks.length + " tasks done")
     : (isFrench ? "En attente des vrais evenements" : "Waiting for real events");
   const commitLine = block.status === "active"
@@ -2029,45 +2166,54 @@ function renderBuildStreamBlock(block: Extract<HuggyConversationBlock, { type: "
         </div>
       ) : null}
       {tasks.length ? (
-        <div className="huggy-buildstream-card">
-          <div className="huggy-buildstream-card-head">
+        <details className="huggy-buildstream-card" open={block.status !== "done"}>
+          <summary className="huggy-buildstream-card-head">
             <span className="huggy-buildstream-card-title">
               <ListChecks aria-hidden="true" />
               <span>{progressLabel}</span>
             </span>
             <span className="huggy-buildstream-card-actions" aria-hidden="true">
               <ChevronDown />
-              <XIcon />
             </span>
+          </summary>
+          <div className="huggy-buildstream-progress" aria-hidden="true">
+            <span style={{ "--huggy-progress": progressPercent + "%" } as React.CSSProperties} />
           </div>
-          {tasks.map((task, index) => (
-            <div
-              className="huggy-buildstream-task"
-              data-status={task.status}
-              key={task.label}
-              style={block.restored ? undefined : { animationDelay: Math.min(index * 75, 300) + "ms" }}
-            >
-              <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? <Check /> : ""}</span>
-              <span>
-                {task.label}
-                {task.detail ? <small className="huggy-buildstream-task-detail">{task.detail}</small> : null}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {tasks.length ? (
-        <div className="huggy-buildstream-statusbar">
-          <span className="huggy-buildstream-status-left">
-            <span className="huggy-buildstream-status-icons" aria-hidden="true">
-              <ListChecks />
-              <FileText />
-            </span>
-            <span>{progressLabel}</span>
-          </span>
-          <span className="huggy-buildstream-status-spacer" />
-          <ChevronDown aria-hidden="true" />
-        </div>
+          <div className="huggy-buildstream-task-list">
+            {tasks.map((task, index) => {
+              const hasDetail = Boolean(task.detail);
+              const content = (
+                <>
+                  <span className="huggy-buildstream-mark" aria-hidden="true">{task.status === "done" ? <Check /> : ""}</span>
+                  <span>{task.label}</span>
+                  {task.badge ? <span className="huggy-buildstream-task-badge">{task.badge}</span> : null}
+                </>
+              );
+              const style = block.restored ? undefined : { animationDelay: Math.min(index * 75, 300) + "ms" };
+              return hasDetail ? (
+                <details
+                  className="huggy-buildstream-task"
+                  data-status={task.status}
+                  key={`${task.label}_${index}`}
+                  open={task.status === "active" || task.status === "failed"}
+                  style={style}
+                >
+                  <summary className="huggy-buildstream-task-summary">{content}</summary>
+                  <small className="huggy-buildstream-task-detail">{task.detail}</small>
+                </details>
+              ) : (
+                <div
+                  className="huggy-buildstream-task"
+                  data-status={task.status}
+                  key={`${task.label}_${index}`}
+                  style={style}
+                >
+                  <span className="huggy-buildstream-task-summary">{content}</span>
+                </div>
+              );
+            })}
+          </div>
+        </details>
       ) : null}
     </div>
   );
