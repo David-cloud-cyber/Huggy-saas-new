@@ -10353,7 +10353,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
 
   if (decision.requiresFileChanges && !hasProjectCapability(req, 'build', project)) {
     await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
-    return res.status(403).json({ success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
+    return respondJson(403, { success: false, error: 'Action unavailable with your current project role.', diagnostic_code: 'PERMISSION_DENIED', suggested_action: 'ask_project_owner' });
   }
 
   const wallet = walletForRouting;
