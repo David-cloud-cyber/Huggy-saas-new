@@ -25,6 +25,29 @@ import { ProviderGateway } from './src/services/provider-gateway.ts';
 import { runLlmToolLoop } from './src/services/llm-tool-loop.ts';
 import { parseOrRepairStructuredObject } from './src/services/structured-output.ts';
 import {
+  createHuggyStreamEmitter,
+  HUGGY_SSE_HEADERS,
+  HUGGY_SSE_HEARTBEAT_INTERVAL_MS,
+  type HuggyStreamEmitter,
+  type HuggyStreamMilestone,
+} from './src/lib/stream-protocol.ts';
+
+/**
+ * Maps a legacy generation step name to a Huggy Stream v2 milestone so the
+ * new typed client renders a clean timeline. Unknown steps fold into the
+ * closest active phase rather than inventing new milestones.
+ */
+function mapLegacyStepToMilestone(step?: string): HuggyStreamMilestone {
+  const value = String(step || '').toLowerCase();
+  if (/run_started|context_loaded|routing|understand|intent/.test(value)) return 'understanding';
+  if (/index|codebase|inspect|load/.test(value)) return 'inspecting';
+  if (/plan|decompos|blueprint/.test(value)) return 'planning';
+  if (/runner|check|eval|quality|verify|test|visual/.test(value)) return 'checking';
+  if (/fix|patch|retest|recover|repair/.test(value)) return 'fixing';
+  if (/preview_ready|done|memory_updated|complete/.test(value)) return 'preview_ready';
+  return 'generating';
+}
+import {
   buildAIModelRuntimeConfig,
   getAllAIModelCapabilityProfiles,
   getAIModelCapabilityProfile,
