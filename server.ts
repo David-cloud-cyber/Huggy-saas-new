@@ -158,6 +158,12 @@ import {
   type ExecutionContract,
 } from './src/services/execution-contract.ts';
 import {
+  decideHuggyAction,
+  describeDecisionForStream,
+} from './src/services/decision-core.ts';
+import { guardDecision } from './src/services/decision-guard.ts';
+import { decisionToLegacyDecision } from './src/services/decision-bridge.ts';
+import {
   buildRecoverableDraftMessage,
   sanitizeAssistantOutput,
   shouldDeliverRecoverableDraft,
@@ -3765,20 +3771,35 @@ function applyTypedIntentLifecycle(input: AgentDecisionInput, decision: IntentDe
     decision,
   });
   const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
+  // Unified DecisionCore runs in the hot path as a self-monitored, deterministic
+  // layer. It enriches the contract input (filling gaps only — gatedDecision
+  // keeps priority so existing routing is unchanged) and is attached to the
+  // decision so the MIX activity stream can render the decision + rationale.
+  const huggyDecision = guardDecision(
+    decideHuggyAction({
+      prompt: input.prompt,
+      requestedMode: input.requestedMode,
+      project: { hasFiles: input.hasFiles, hasLastPlan: Boolean(input.lastPlan) },
+    }),
+    { hasFiles: input.hasFiles },
+  ).decision;
   const executionContract = buildExecutionContract({
     prompt: input.prompt,
     requestedMode: input.requestedMode,
     hasFiles: input.hasFiles,
     hasLastPlan: Boolean(input.lastPlan),
     legacyDecision: {
+      ...decisionToLegacyDecision(huggyDecision),
       ...gatedDecision,
       typedDecision,
-    } as IntentDecision,
+    } as any,
   });
   const contractedDecision = applyExecutionContractToDecision({
     ...gatedDecision,
     typedDecision,
   }, executionContract) as IntentDecision;
+  (contractedDecision as any).huggyDecision = huggyDecision;
+  (contractedDecision as any).huggyDecisionLine = describeDecisionForStream(huggyDecision);
   return contractedDecision;
 }
 

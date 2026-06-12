@@ -12,7 +12,10 @@ import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
+import { AgentActivityStream } from "./components/ai-elements/agent-activity-stream";
+import { workJournalToActivityState } from "./lib/agent-activity-stream-adapter";
 import "./styles/huggy-ai-elements.css";
+import "./styles/agent-activity-stream.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
 
@@ -2224,7 +2227,8 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   if (!block) return null;
 
   if (block.type === "work_journal") {
-    return renderBuildStreamBlock(block);
+    // New MIX agent activity stream (replaces the legacy DOM-driven buildstream).
+    return <AgentActivityStream state={workJournalToActivityState(block)} />;
   }
 
   if (block.type === "reasoning") {
