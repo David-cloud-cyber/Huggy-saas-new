@@ -35,6 +35,28 @@ const baseFiles = [
 
 assert.equal(shouldApplyHuggyFullstackKit({ prompt, files: baseFiles, requirement }), true);
 
+// Deterministic, blueprint-driven detection: any prompt the production blueprint
+// engine classifies as data-backed must trigger the fullstack kit, even with no
+// generated files yet and without relying on the brittle keyword list.
+for (const dataBackedPrompt of [
+  'Build a social network feed where users follow each other and post updates',
+  'Create a patient records system for a small clinic',
+  'An online education platform with courses, lessons and quizzes',
+]) {
+  const blueprint = inferProductionBlueprint(dataBackedPrompt);
+  if (blueprint.backend.requiresDatabase || blueprint.backend.requiresAuth) {
+    assert.equal(
+      shouldApplyHuggyFullstackKit({
+        prompt: dataBackedPrompt,
+        files: [],
+        requirement: detectHuggyCloudRequirements(dataBackedPrompt),
+      }),
+      true,
+      `Expected fullstack kit for data-backed blueprint: ${dataBackedPrompt}`,
+    );
+  }
+}
+
 const files = applyHuggyFullstackKit({
   files: baseFiles,
   projectName: 'CRM',
