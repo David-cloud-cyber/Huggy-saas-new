@@ -3783,16 +3783,22 @@ function applyTypedIntentLifecycle(input: AgentDecisionInput, decision: IntentDe
     }),
     { hasFiles: input.hasFiles },
   ).decision;
+  // When DecisionCore is highly confident (≥0.85), it PILOTS the routing —
+  // otherwise it just enriches. This fixes the "Huggy tries to code a greeting
+  // or a knowledge question" bug, and routes plan envelopes / clarify / critical
+  // actions correctly instead of falling back to a build-by-default heuristic.
+  const huggyOverrides = huggyDecision.confidence >= 0.85
+    ? decisionToLegacyDecision(huggyDecision)
+    : null;
+  const legacyForContract: any = huggyOverrides
+    ? { ...gatedDecision, ...huggyOverrides, typedDecision }
+    : { ...decisionToLegacyDecision(huggyDecision), ...gatedDecision, typedDecision };
   const executionContract = buildExecutionContract({
     prompt: input.prompt,
     requestedMode: input.requestedMode,
     hasFiles: input.hasFiles,
     hasLastPlan: Boolean(input.lastPlan),
-    legacyDecision: {
-      ...decisionToLegacyDecision(huggyDecision),
-      ...gatedDecision,
-      typedDecision,
-    } as any,
+    legacyDecision: legacyForContract,
   });
   const contractedDecision = applyExecutionContractToDecision({
     ...gatedDecision,
@@ -6007,15 +6013,40 @@ async function generateFilesWithAi(input: {
       project_id: input.project?.id,
       message: error?.message || 'model output parse failed',
     });
-    input.onEvent?.({
-      type: 'agent_step',
-      step: 'parse_repair',
-      message: 'La sortie du modele etait incomplete. Huggy reconstruit un projet React/Vite valide avant la preview.',
-    });
-    const fallbackOutput = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
-    parsed = parseGeneratedOutput(input.projectName, JSON.stringify(fallbackOutput), input.prompt, {
-      hasExistingFiles: input.existingFiles.length > 0,
-    });
+    // Robust recovery before falling back to a hardcoded template.
+    // 1) Detect a plan envelope { plan, message } so we don't dump JSON in the
+    //    preview — surface the message instead and stop trying to "build".
+    // 2) Best-effort salvage of any files[] anywhere in the raw output.
+    // 3) Only if both fail, use the deterministic rescue scaffold.
+    const { classifyModelOutput, extractPlanEnvelope, salvageFiles } = await import('./src/services/generated-output-recovery.ts');
+    const kind = classifyModelOutput(result.text || '');
+    if (kind === 'plan_envelope') {
+      const envelope = extractPlanEnvelope(result.text || '');
+      const safeMessage = (envelope?.message || 'Huggy a préparé un plan. Confirme pour lancer la génération.').slice(0, 800);
+      input.onEvent?.({ type: 'agent_step', step: 'plan_detected', message: safeMessage });
+      const planFallback = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
+      parsed = parseGeneratedOutput(input.projectName, JSON.stringify({ ...planFallback, summary: safeMessage }), input.prompt, {
+        hasExistingFiles: input.existingFiles.length > 0,
+      });
+    } else {
+      const salvaged = salvageFiles(result.text || '');
+      if (salvaged && salvaged.files.length > 0) {
+        input.onEvent?.({ type: 'agent_step', step: 'parse_salvage', message: 'Huggy a récupéré les fichiers depuis une sortie partielle du modèle.' });
+        parsed = parseGeneratedOutput(input.projectName, JSON.stringify(salvaged), input.prompt, {
+          hasExistingFiles: input.existingFiles.length > 0,
+        });
+      } else {
+        input.onEvent?.({
+          type: 'agent_step',
+          step: 'parse_repair',
+          message: 'La sortie du modèle était incomplète. Huggy reconstruit un projet React/Vite valide avant l\'aperçu.',
+        });
+        const fallbackOutput = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
+        parsed = parseGeneratedOutput(input.projectName, JSON.stringify(fallbackOutput), input.prompt, {
+          hasExistingFiles: input.existingFiles.length > 0,
+        });
+      }
+    }
   }
   const files = parsed.files;
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
