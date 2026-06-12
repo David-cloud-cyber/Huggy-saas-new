@@ -27,9 +27,11 @@ export type ActivityFile = {
 };
 
 export type ActivityMilestone = {
-  key: HuggyStreamMilestone;
+  // HuggyStreamMilestone for protocol events; free-form id when adapted from
+  // the builder's work_journal entries.
+  key: string;
   label: string;
-  state: 'active' | 'done';
+  state: 'active' | 'done' | 'failed' | 'cancelled';
   order: number;
 };
 
