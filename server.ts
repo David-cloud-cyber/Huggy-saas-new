@@ -11220,6 +11220,73 @@ app.get('/api/projects/:id/database/secrets', async (req: any, res: any) => {
   res.json({ success: true, secrets });
 });
 
+app.get('/api/projects/:id/integrations', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+  const client = requireSupabase('Project integrations');
+  const { data, error } = await client
+    .from('project_integrations')
+    .select('id,service,status,created_at,updated_at')
+    .eq('project_id', project.id)
+    .order('updated_at', { ascending: false });
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, integrations: data || [] });
+});
+
+app.patch('/api/projects/:id/integrations', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'secrets', project)) return;
+  const service = String(req.body?.service || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 80);
+  const rawStatus = String(req.body?.status || '').trim().toLowerCase();
+  const status = ['enabled', 'setup_required', 'disabled'].includes(rawStatus) ? rawStatus : 'disabled';
+  if (!service) return res.status(400).json({ success: false, error: 'Connector service is required.' });
+  const client = requireSupabase('Project integration update');
+  const row = {
+    organization_id: project.organization_id || userId,
+    project_id: project.id,
+    service,
+    status,
+    updated_at: new Date().toISOString(),
+  };
+  let { data, error } = await client
+    .from('project_integrations')
+    .upsert(row, { onConflict: 'project_id,service' })
+    .select('id,service,status,created_at,updated_at')
+    .single();
+  if (error && /unique|constraint|on conflict|schema cache/i.test(error.message || '')) {
+    const existing = await client
+      .from('project_integrations')
+      .select('id')
+      .eq('project_id', project.id)
+      .eq('service', service)
+      .maybeSingle();
+    if (existing.data?.id) {
+      const updated = await client
+        .from('project_integrations')
+        .update({ status, updated_at: row.updated_at })
+        .eq('id', existing.data.id)
+        .select('id,service,status,created_at,updated_at')
+        .single();
+      data = updated.data;
+      error = updated.error;
+    } else {
+      const inserted = await client
+        .from('project_integrations')
+        .insert(row)
+        .select('id,service,status,created_at,updated_at')
+        .single();
+      data = inserted.data;
+      error = inserted.error;
+    }
+  }
+  if (error) return res.status(500).json({ success: false, error: error.message });
+  res.json({ success: true, integration: data });
+});
+
 app.post('/api/projects/:id/database/secrets', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);

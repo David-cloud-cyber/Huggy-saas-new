@@ -5,6 +5,7 @@ import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
+import { openConnectorsPanel } from './connectors-panel';
 import { startCreateProjectFlow } from './services/create-project-flow';
 
 type ProjectListResponse = {
@@ -1047,6 +1048,22 @@ function bindAiUsageSettings() {
   });
 }
 
+function bindDashboardConnectors() {
+  document.querySelectorAll<HTMLButtonElement>('#btn-connectors, [data-open-connectors]').forEach(button => {
+    if (button.dataset.huggyConnectorsBound === 'true') return;
+    button.dataset.huggyConnectorsBound = 'true';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      openConnectorsPanel();
+    });
+  });
+  document.addEventListener('huggy:open-connectors', () => openConnectorsPanel());
+  document.addEventListener('huggy:open-settings', event => {
+    const tab = String((event as CustomEvent).detail?.tab || 'connectors');
+    openSettings(tab as any);
+  });
+}
+
 function initDashboardChrome() {
   if (dashboardChromeInitialized) return;
   dashboardChromeInitialized = true;
@@ -1058,6 +1075,7 @@ function initDashboardChrome() {
   initProviderModelSelectors();
   normalizeAiChatInputs();
   bindAiUsageSettings();
+  bindDashboardConnectors();
 }
 
 function bindLiveProjectCreation() {

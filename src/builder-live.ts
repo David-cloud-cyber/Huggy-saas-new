@@ -13,6 +13,7 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
+import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
 import { buildExecutionContract } from './services/execution-contract';
@@ -293,6 +294,7 @@ let currentPlanKey: PlanKey = 'free';
 let conversationApi: HuggyConversationApi | null = null;
 let conversationFeedbackBridgeBound = false;
 let modelSelectionBridgeBound = false;
+let connectorsBridgeBound = false;
 let settingsPanelModulePromise: Promise<typeof import('./settings-panel')> | null = null;
 const LAST_BUILDER_PROJECT_STORAGE_KEY = 'huggy-last-builder-project-id';
 const SELECTED_MODEL_STORAGE_KEY = 'huggy-selected-model';
@@ -2178,7 +2180,6 @@ const STREAM_PHASE_LABELS: Record<string, string> = {
   analyzing: 'Analysis',
   memory: 'Memory',
   enriching: 'Enriching',
-  generating: 'Generating',
   reviewing: 'Review',
   validated: 'Validated',
   correcting: 'Fixing',
@@ -2930,6 +2931,26 @@ function bindProjectMenu() {
     if (event.key === 'Escape') closeProjectMenu();
   });
   window.addEventListener('resize', positionProjectMenu);
+}
+
+function bindConnectorsButton() {
+  document.querySelectorAll<HTMLButtonElement>('#btn-connectors, [data-open-connectors]').forEach(button => {
+    if (button.dataset.huggyConnectorsBound === 'true') return;
+    button.dataset.huggyConnectorsBound = 'true';
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      openConnectorsPanel({ projectId: currentProjectId || undefined });
+    });
+  });
+  if (connectorsBridgeBound) return;
+  connectorsBridgeBound = true;
+  document.addEventListener('huggy:open-connectors', () => {
+    openConnectorsPanel({ projectId: currentProjectId || undefined });
+  });
+  document.addEventListener('huggy:open-settings', event => {
+    const tab = String((event as CustomEvent).detail?.tab || 'connectors');
+    void openBuilderSettings(tab);
+  });
 }
 
 function setPreview(html: string, status = 'ready') {
@@ -6318,6 +6339,7 @@ function init() {
   ensureDatabaseView();
   ensureResizableSidebar();
   bindProjectMenu();
+  bindConnectorsButton();
   syncBuilderPlanBadges(currentPlanKey);
   void loadProjectMenuCredits();
   bindPreviewDeviceToggle();

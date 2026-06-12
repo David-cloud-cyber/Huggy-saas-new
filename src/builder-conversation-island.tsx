@@ -12,10 +12,7 @@ import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "./components/ai-elements/reasoning";
 import { ShiningText } from "./components/ai-elements/shining-text";
-import { AgentActivityStream } from "./components/ai-elements/agent-activity-stream";
-import { workJournalToActivityState } from "./lib/agent-activity-stream-adapter";
 import "./styles/huggy-ai-elements.css";
-import "./styles/agent-activity-stream.css";
 
 export type HuggyConversationRole = "user" | "assistant" | "system";
 
@@ -1875,13 +1872,98 @@ function workJournalCompareText(value = "") {
     .trim();
 }
 
+function renderWorklineEntry(entry: HuggyWorklineEntry) {
+  const status = entry.status || "done";
+  const text = entry.text || entry.detail || "";
+
+  if (entry.kind === "divider") {
+    return <div key={entry.id} className="huggy-workline-divider">{text}</div>;
+  }
+
+  if (entry.kind === "group") {
+    return (
+      <details key={entry.id} className="huggy-workline-group">
+        <summary>{text}</summary>
+        {entry.items?.length ? (
+          <ul>
+            {entry.items.map((item, index) => <li key={`${entry.id}_${index}`}>{item}</li>)}
+          </ul>
+        ) : entry.detail ? (
+          <p>{entry.detail}</p>
+        ) : null}
+      </details>
+    );
+  }
+
+  if (entry.kind === "file_edit") {
+    const label = entry.action === "created" ? "Creation de" : entry.action === "deleted" ? "Suppression de" : "Modification de";
+    const additions = typeof entry.additions === "number" ? entry.additions : 0;
+    const deletions = typeof entry.deletions === "number" ? entry.deletions : 0;
+    return (
+      <div key={entry.id} className="huggy-workline-file" data-status={status}>
+        <Pencil size={16} aria-hidden="true" />
+        <span>{label}</span>
+        <code>{entry.path || text}</code>
+        <span className="huggy-workline-diff-add">+{additions}</span>
+        <span className="huggy-workline-diff-del">-{deletions}</span>
+      </div>
+    );
+  }
+
+  if (entry.kind === "command") {
+    const commandText = entry.command || text;
+    return (
+      <div key={entry.id} className="huggy-workline-command" data-status={status}>
+        {status === "active" ? <ListChecks size={16} aria-hidden="true" /> : status === "failed" ? <XIcon size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
+        <span>{status === "active" ? "En cours" : status === "failed" ? "Echec" : "Execute"}</span>
+        <code>{commandText}</code>
+      </div>
+    );
+  }
+
+  if (entry.kind === "summary") {
+    return <div key={entry.id} className="huggy-workline-final">{text}</div>;
+  }
+
+  return (
+    <div key={entry.id} className="huggy-workline-note" data-status={status}>
+      {entry.kind === "thinking" ? <span>En reflexion</span> : null}
+      <p>{text}</p>
+      {entry.detail ? <small>{entry.detail}</small> : null}
+    </div>
+  );
+}
+
+function renderWorkJournal(block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
+  const visibleEntries = (block.entries || []).filter(entry => {
+    const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""}`);
+    return normalized !== "i keep the work recoverable without claiming a false ready preview";
+  });
+  const activeText = block.activeText?.trim();
+  const finalText = block.finalText?.trim();
+
+  return (
+    <div className="huggy-conversation-stream huggy-workline" data-status={block.status} data-restored={block.restored ? "true" : "false"}>
+      <div className="huggy-workline-feed">
+        {visibleEntries.map(renderWorklineEntry)}
+        {activeText && block.status === "active" ? (
+          <div className="huggy-workline-live">
+            <span className="huggy-workline-live-dot" aria-hidden="true" />
+            <span>{activeText}</span>
+          </div>
+        ) : null}
+        {finalText ? <div className="huggy-workline-final">{finalText}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
   if (block.type === "work_journal") {
-    // New MIX agent activity stream (replaces the legacy DOM-driven buildstream).
-    return <AgentActivityStream state={workJournalToActivityState(block)} />;
+    return renderWorkJournal(block);
   }
 
   if (block.type === "reasoning") {

@@ -213,7 +213,7 @@ function isIterationFeedback(text: string) {
 function decideAutoGeneration(text: string, hasFiles: boolean): 'build' | 'edit' | 'clarify' | null {
   if (isCriticalPlatformAction(text) || isDiscussFirst(text)) return null;
   if (isBareBuildCommand(text)) return 'clarify';
-  if (isExplicitAppBuildRequest(text)) return hasFiles ? 'edit' : 'build';
+  if (isExplicitAppBuildRequest(text)) return 'build';
   // Concrete UI edit verbs always act on the current project when one exists.
   if (hasFiles && isIterationFeedback(text)) return 'edit';
   return null;

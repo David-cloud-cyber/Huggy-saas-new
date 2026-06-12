@@ -25,7 +25,7 @@ export type AgentActivityStreamProps = {
   onRetry?: () => void;
 };
 
-function StatusDot({ status }: { status: 'active' | 'done' | 'failed' | 'pending' }) {
+function StatusDot({ status }: { status: 'active' | 'done' | 'failed' | 'cancelled' | 'pending' }) {
   return <span className={`haas-dot haas-dot--${status}`} aria-hidden="true" />;
 }
 

@@ -13,8 +13,8 @@
   --haas-ok: #10b981;
   --haas-fail: #ef4444;
   --haas-warn: #f59e0b;
-  --haas-surface: rgba(255, 255, 255, 0.02);
-  --haas-border: rgba(255, 255, 255, 0.08);
+  --haas-surface: color-mix(in srgb, var(--text, #f8fafc) 2%, transparent);
+  --haas-border: color-mix(in srgb, var(--text, #f8fafc) 8%, transparent);
   --haas-text: rgba(255, 255, 255, 0.92);
   --haas-muted: rgba(255, 255, 255, 0.5);
 
@@ -158,6 +158,7 @@
 .haas-dot--active { background: var(--haas-accent); box-shadow: 0 0 0 3px var(--haas-accent-soft); }
 .haas-dot--done { background: var(--haas-ok); }
 .haas-dot--failed { background: var(--haas-fail); }
+.haas-dot--cancelled { background: var(--haas-warn); opacity: 0.8; }
 .haas-dot--pending { background: var(--haas-muted); opacity: 0.5; }
 
 /* ── Warnings & checks ───────────────────────────────────────────────────── */

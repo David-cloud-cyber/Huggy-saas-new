@@ -297,6 +297,7 @@ create index if not exists project_messages_project_created_idx on public.projec
 create index if not exists project_versions_project_number_idx on public.project_versions (project_id, version_number desc);
 create index if not exists build_errors_project_created_idx on public.build_errors (project_id, created_at desc);
 create index if not exists project_secrets_project_variable_idx on public.project_secrets (project_id, variable);
+create unique index if not exists project_integrations_project_service_idx on public.project_integrations (project_id, service);
 
 grant select, insert, update, delete on public.project_messages to authenticated;
 grant select, insert, update, delete on public.project_versions to authenticated;

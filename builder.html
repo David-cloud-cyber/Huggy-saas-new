@@ -2884,11 +2884,16 @@
       </div>
 
       <div class="brand-right">
-        <button class="btn-integration">
+        <button class="btn-integration" id="btn-connectors" type="button" aria-haspopup="dialog">
           <svg style="color: var(--text-sub);" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <circle cx="7" cy="7" r="3"></circle>
+            <circle cx="17" cy="7" r="3"></circle>
+            <circle cx="7" cy="17" r="3"></circle>
+            <path d="M10 7h4"></path>
+            <path d="M7 10v4"></path>
+            <path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
           </svg>
-          Add integration
+          Connecteur
         </button>
         <button class="btn-upgrade">Upgrade plan</button>
         <button class="btn-publish" type="button">Publish</button>

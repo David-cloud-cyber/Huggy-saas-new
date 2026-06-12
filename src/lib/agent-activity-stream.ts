@@ -80,6 +80,11 @@ const MILESTONE_ORDER: HuggyStreamMilestone[] = [
   'preview_ready',
 ];
 
+function milestoneOrder(key: string): number {
+  const index = MILESTONE_ORDER.indexOf(key as HuggyStreamMilestone);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 export function createInitialActivityState(): AgentActivityState {
   return {
     phase: 'idle',
@@ -113,9 +118,9 @@ function upsertMilestone(
   }
   // When a milestone becomes active, any earlier still-active milestone is done.
   if (state === 'active') {
-    const activeOrder = MILESTONE_ORDER.indexOf(key);
+    const activeOrder = milestoneOrder(key);
     for (let i = 0; i < next.length; i++) {
-      if (next[i].key !== key && next[i].state === 'active' && MILESTONE_ORDER.indexOf(next[i].key) < activeOrder) {
+      if (next[i].key !== key && next[i].state === 'active' && milestoneOrder(next[i].key) < activeOrder) {
         next[i] = { ...next[i], state: 'done' };
       }
     }
