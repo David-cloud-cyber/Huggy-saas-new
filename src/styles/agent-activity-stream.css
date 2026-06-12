@@ -1,0 +1,211 @@
+/*
+ * Agent Activity Stream (MIX) — single tokenized stylesheet for the in-chat
+ * streaming UI. Replaces the overlapping buildstream / flowline rules from
+ * agent-streaming.css and mission-streaming.css.
+ *
+ * Calm by default, transparent on demand: monochrome surface + one accent,
+ * status conveyed by a single dot, motion limited to the active row.
+ */
+
+.haas {
+  --haas-accent: #6366f1;
+  --haas-accent-soft: rgba(99, 102, 241, 0.12);
+  --haas-ok: #10b981;
+  --haas-fail: #ef4444;
+  --haas-warn: #f59e0b;
+  --haas-surface: rgba(255, 255, 255, 0.02);
+  --haas-border: rgba(255, 255, 255, 0.08);
+  --haas-text: rgba(255, 255, 255, 0.92);
+  --haas-muted: rgba(255, 255, 255, 0.5);
+
+  margin: 8px 0;
+  border: 1px solid var(--haas-border);
+  border-radius: 14px;
+  background: var(--haas-surface);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--haas-text);
+  overflow: hidden;
+  animation: haas-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-color-scheme: light) {
+  .haas {
+    --haas-surface: rgba(15, 23, 42, 0.02);
+    --haas-border: rgba(15, 23, 42, 0.1);
+    --haas-text: rgba(15, 23, 42, 0.92);
+    --haas-muted: rgba(15, 23, 42, 0.5);
+  }
+}
+
+@keyframes haas-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.haas-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.haas-head-text { flex: 1; min-width: 0; }
+
+.haas-spark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--haas-accent);
+  box-shadow: 0 0 0 0 var(--haas-accent-soft);
+  animation: haas-pulse 1.4s ease-in-out infinite;
+}
+
+.haas[data-phase="done"] .haas-spark { background: var(--haas-ok); animation: none; }
+.haas[data-phase="error"] .haas-spark { background: var(--haas-fail); animation: none; }
+
+@keyframes haas-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--haas-accent-soft); }
+  50% { box-shadow: 0 0 0 5px transparent; }
+}
+
+.haas-substatus {
+  padding: 0 12px 8px 29px;
+  color: var(--haas-muted);
+  font-size: 12px;
+}
+
+.haas-collapse,
+.haas-recap-chevron {
+  background: none;
+  border: none;
+  color: var(--haas-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.haas-collapse:hover { color: var(--haas-text); background: var(--haas-border); }
+
+/* ── Body lists ──────────────────────────────────────────────────────────── */
+.haas-body { padding: 2px 12px 12px; }
+
+.haas-steps,
+.haas-files,
+.haas-checks,
+.haas-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.haas-files,
+.haas-checks { margin-top: 6px; }
+
+.haas-step,
+.haas-file,
+.haas-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.haas-file[role="button"] { cursor: pointer; }
+.haas-file[role="button"]:hover { background: var(--haas-border); }
+
+.haas-step-label,
+.haas-check-name { color: var(--haas-text); }
+.haas-file-path { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
+.haas-file-meta,
+.haas-check-detail { margin-left: auto; color: var(--haas-muted); font-size: 11px; }
+
+/* Active row gets a subtle shimmer; everything else is calm. */
+.haas-step[data-state="active"] .haas-step-label,
+.haas-file[data-state="writing"] .haas-file-path {
+  background: linear-gradient(90deg, var(--haas-muted) 0%, var(--haas-text) 50%, var(--haas-muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: haas-shimmer 1.6s linear infinite;
+}
+
+@keyframes haas-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .haas, .haas-spark, .haas-step-label, .haas-file-path { animation: none !important; }
+  .haas-step[data-state="active"] .haas-step-label,
+  .haas-file[data-state="writing"] .haas-file-path { -webkit-text-fill-color: currentColor; }
+}
+
+/* ── Status dot ──────────────────────────────────────────────────────────── */
+.haas-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--haas-muted);
+}
+.haas-dot--active { background: var(--haas-accent); box-shadow: 0 0 0 3px var(--haas-accent-soft); }
+.haas-dot--done { background: var(--haas-ok); }
+.haas-dot--failed { background: var(--haas-fail); }
+.haas-dot--pending { background: var(--haas-muted); opacity: 0.5; }
+
+/* ── Warnings & checks ───────────────────────────────────────────────────── */
+.haas-warning {
+  padding: 4px 6px;
+  color: var(--haas-warn);
+  font-size: 12px;
+}
+.haas-check[data-status="fail"] .haas-check-name { color: var(--haas-fail); }
+
+/* ── Error card ──────────────────────────────────────────────────────────── */
+.haas-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.haas-error-msg { flex: 1; color: var(--haas-fail); font-size: 12px; }
+.haas-error-retry {
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: transparent;
+  color: var(--haas-fail);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.haas-error-retry:hover { background: rgba(239, 68, 68, 0.12); }
+
+/* ── Collapsed recap (calm completion) ───────────────────────────────────── */
+.haas--recap { padding: 0; }
+.haas-recap-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  color: var(--haas-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.haas-recap-btn:hover { background: var(--haas-border); }
+.haas-recap-text { flex: 1; }
