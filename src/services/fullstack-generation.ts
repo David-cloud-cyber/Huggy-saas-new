@@ -75,6 +75,17 @@ function hasSupabaseUsage(files: FullstackGeneratedFile[]) {
   return files.some(file => /supabase|@supabase\/supabase-js|Huggy Cloud|huggyCloud|auth\.|\.from\(/i.test(file.content || ''));
 }
 
+function blueprintRequiresBackend(prompt: string) {
+  const blueprint = inferProductionBlueprint(prompt);
+  const backend = blueprint.backend;
+  return Boolean(
+    backend.requiresDatabase ||
+    backend.requiresAuth ||
+    backend.requiresStorage ||
+    backend.requiresBilling
+  );
+}
+
 export function shouldApplyHuggyFullstackKit(input: {
   prompt: string;
   files: FullstackGeneratedFile[];
@@ -83,6 +94,11 @@ export function shouldApplyHuggyFullstackKit(input: {
   return Boolean(
     hasHuggyCloudRequirement(input.requirement) ||
     hasSupabaseUsage(input.files) ||
+    // Deterministic, blueprint-driven detection: any prompt the production
+    // blueprint engine classifies as data-backed (the same engine that builds
+    // the schema) reliably gets the fullstack kit, instead of relying solely on
+    // a brittle keyword list that silently missed data-backed apps.
+    blueprintRequiresBackend(input.prompt || '') ||
     /\b(fullstack|full stack|auth|login|signup|database|supabase|crud|storage|upload|dashboard admin|crm|marketplace|booking|reservation|orders?|products?|clients?|customers?|seller|buyer|checkout|stripe|subscription|cms|blog|internal tool|ai tool|e-?commerce)\b/i.test(input.prompt || '')
   );
 }
@@ -284,8 +300,7 @@ function buildPaymentActions(blueprint: ProductionBlueprint) {
   ].join('\n');
 }
 
-function buildAppDataLayer(requirement: HuggyCloudRequirement) {
-  const needsAuth = requirement.needs_auth;
+function buildAppDataLayer(_requirement: HuggyCloudRequirement) {
   return [
     "import { getHuggyCloudClient, isHuggyCloudConfigured } from './huggyCloud';",
     '',
@@ -327,7 +342,7 @@ function buildAppDataLayer(requirement: HuggyCloudRequirement) {
     '  if (!isHuggyCloudConfigured) return readLocalRecords();',
     '  const client = getHuggyCloudClient();',
     "  const query = client.from('app_records').select('id,title,status,payload,created_at').order('created_at', { ascending: false });",
-    needsAuth ? "  const { data, error } = await query;" : "  const { data, error } = await query;",
+    "  const { data, error } = await query;",
     '  if (error) throw error;',
     '  return data || [];',
     '}',
