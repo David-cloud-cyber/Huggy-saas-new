@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 import { validateAllowedModel } from './ai-validator.ts';
 import { AI_MODEL_FALLBACKS, type AllowedModelId } from '../config/ai-models.ts';
 import { toOpenRouterChatPayloadExtras, type ProviderRequestConfig } from './provider-adapters.ts';
+import { applyPromptCaching, type CacheableMessage } from './prompt-caching.ts';
 
 export const OPENROUTER_API_KEY_ENV_NAMES = [
   'OPENROUTER_API_KEY',
@@ -342,9 +343,12 @@ export class OpenRouterService {
     // a time. Sending OpenRouter's multi-model `models` body here makes
     // diagnostics opaque and some providers reject the request shape during
     // streaming. Keep the provider payload OpenAI-compatible and simple.
+    // Anthropic prompt caching: mark the large stable blocks so Claude reuses
+    // them at ~10% input price. No-op for other adapters.
+    const cachedMessages = applyPromptCaching(messages as unknown as CacheableMessage[], runtimeConfig?.adapter || 'openrouter');
     return {
       model: modelId,
-      messages,
+      messages: cachedMessages,
       ...toOpenRouterChatPayloadExtras(runtimeConfig),
     };
   }

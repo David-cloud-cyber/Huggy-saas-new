@@ -149,3 +149,84 @@ export async function applyGeneratedMigration(options: ApplyMigrationOptions): P
     return { applied: false, dryRun: false, safety, error: redactManagementToken((error as Error).message || 'NETWORK_ERROR') };
   }
 }
+
+// ── Publish-flow wiring ──────────────────────────────────────────────────────
+// Helpers to pick the right migration and target project ref so the publish
+// flow can actually apply the generated backend (closing the gap where
+// supabase/schema.sql was generated but never run).
+
+export type ProjectFileLike = { path: string; content: string };
+
+const MIGRATION_PRIORITY = [
+  'supabase/migrations/0001_huggy_fullstack.sql',
+  'supabase/schema.sql',
+];
+
+/** Pick the SQL migration to apply from a project's files (versioned first). */
+export function selectMigrationFromFiles(files: ProjectFileLike[]): ProjectFileLike | null {
+  if (!Array.isArray(files)) return null;
+  const norm = (p: string) => String(p || '').replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  for (const wanted of MIGRATION_PRIORITY) {
+    const found = files.find(f => norm(f.path) === wanted);
+    if (found && found.content && found.content.trim()) return found;
+  }
+  // Any other .sql under supabase/ as a fallback.
+  const anySql = files.find(f => /^supabase\/.+\.sql$/.test(norm(f.path)) && f.content && f.content.trim());
+  return anySql || null;
+}
+
+/** Resolve a Supabase project ref from a stored runtime/cloud config. */
+export function resolveProjectRef(config: Record<string, unknown> | null | undefined): string | null {
+  if (!config) return null;
+  const candidates = [
+    (config as any).project_ref,
+    (config as any).projectRef,
+    (config as any).ref,
+    (config as any).supabase_project_ref,
+  ].map(v => String(v || '').trim()).filter(Boolean);
+  // Or derive from a supabase URL like https://abcdefghij0123456789.supabase.co
+  const url = String((config as any).supabaseUrl || (config as any).supabase_url || (config as any).url || '');
+  const fromUrl = url.match(/https?:\/\/([a-z0-9]{20})\.supabase\.co/i)?.[1];
+  if (fromUrl) candidates.push(fromUrl);
+  const ref = candidates.find(isValidProjectRef);
+  return ref || null;
+}
+
+export type PublishProvisionInput = {
+  files: ProjectFileLike[];
+  cloudConfig?: Record<string, unknown> | null;
+  token?: string;
+  allowDestructive?: boolean;
+  dryRun?: boolean;
+  fetchImpl?: typeof fetch;
+};
+
+export type PublishProvisionResult = ApplyMigrationResult & { skipped?: boolean; reason?: string };
+
+/**
+ * Orchestrates migration application during publish. Safe by default: skips
+ * cleanly (never throws) when there is no migration, no project ref, or no
+ * management token configured.
+ */
+export async function provisionOnPublish(input: PublishProvisionInput): Promise<PublishProvisionResult> {
+  const migration = selectMigrationFromFiles(input.files);
+  if (!migration) {
+    return { applied: false, dryRun: input.dryRun !== false, safety: classifyMigrationSafety(''), skipped: true, reason: 'no_migration' };
+  }
+  const projectRef = resolveProjectRef(input.cloudConfig);
+  if (!projectRef) {
+    return { applied: false, dryRun: input.dryRun !== false, safety: classifyMigrationSafety(migration.content), skipped: true, reason: 'no_project_ref' };
+  }
+  const token = resolveManagementToken(input.token);
+  if (!token) {
+    return { applied: false, dryRun: input.dryRun !== false, safety: classifyMigrationSafety(migration.content), skipped: true, reason: 'no_management_token' };
+  }
+  return applyGeneratedMigration({
+    projectRef,
+    sql: migration.content,
+    token,
+    allowDestructive: input.allowDestructive,
+    dryRun: input.dryRun,
+    fetchImpl: input.fetchImpl,
+  });
+}

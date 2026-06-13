@@ -99,4 +99,49 @@ const noToken = await applyGeneratedMigration({ projectRef: VALID_REF, sql: SAFE
 assert.equal(noToken.applied, false);
 assert.equal(noToken.error, 'MISSING_MANAGEMENT_TOKEN');
 
+// ── Publish-flow helpers ────────────────────────────────────────────────────
+const { selectMigrationFromFiles, resolveProjectRef, provisionOnPublish } = await import('./src/services/supabase-provisioning.ts');
+
+// Versioned migration is preferred over schema.sql.
+const files = [
+  { path: 'src/App.tsx', content: 'x' },
+  { path: 'supabase/schema.sql', content: 'create table public.app_records();' },
+  { path: 'supabase/migrations/0001_huggy_fullstack.sql', content: 'create table public.app_versioned();' },
+];
+assert.equal(selectMigrationFromFiles(files)?.path, 'supabase/migrations/0001_huggy_fullstack.sql');
+assert.equal(selectMigrationFromFiles([{ path: 'src/App.tsx', content: 'x' }]), null);
+
+// project ref resolution.
+assert.equal(resolveProjectRef({ project_ref: VALID_REF }), VALID_REF);
+assert.equal(resolveProjectRef({ supabaseUrl: `https://${VALID_REF}.supabase.co` }), VALID_REF);
+assert.equal(resolveProjectRef({}), null);
+assert.equal(resolveProjectRef(null), null);
+
+// provisionOnPublish skips cleanly when prerequisites are missing.
+delete process.env.SUPABASE_MANAGEMENT_TOKEN;
+delete process.env.SUPABASE_ACCESS_TOKEN;
+const noMig = await provisionOnPublish({ files: [{ path: 'src/App.tsx', content: 'x' }] });
+assert.equal(noMig.skipped, true);
+assert.equal(noMig.reason, 'no_migration');
+
+const noRef = await provisionOnPublish({ files });
+assert.equal(noRef.skipped, true);
+assert.equal(noRef.reason, 'no_project_ref');
+
+const noTok = await provisionOnPublish({ files, cloudConfig: { project_ref: VALID_REF } });
+assert.equal(noTok.skipped, true);
+assert.equal(noTok.reason, 'no_management_token');
+
+// Full path with a mock fetch — dry-run default still does not execute.
+const dryProvision = await provisionOnPublish({ files, cloudConfig: { project_ref: VALID_REF }, token: FAKE_TOKEN });
+assert.equal(dryProvision.dryRun, true);
+assert.equal(dryProvision.applied, false);
+
+// Execute via mock fetch.
+let calledUrl = '';
+const okFetch2 = (async (url: any) => { calledUrl = String(url); return { ok: true, status: 201, text: async () => '[]' } as any; }) as unknown as typeof fetch;
+const applied2 = await provisionOnPublish({ files, cloudConfig: { project_ref: VALID_REF }, token: FAKE_TOKEN, dryRun: false, fetchImpl: okFetch2 });
+assert.equal(applied2.applied, true);
+assert.match(calledUrl, new RegExp(`/projects/${VALID_REF}/database/query`));
+
 console.log('test-supabase-provisioning passed');
