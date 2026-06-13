@@ -74,15 +74,15 @@
             --text-muted: #c6cad3;
             --text-sub: #8d95a3;
             --border: rgba(226, 232, 240, 0.12);
-            --border-focus: rgba(79, 140, 255, 0.46);
+            --border-focus: rgba(99, 102, 241, 0.46);
             --error: #F87171;
         }
 
         :root[data-theme="light"] {
-            --bg: #fcfbf8;
-            --bg-surface: #fffdf8;
-            --bg-elevated: #f7f4ed;
-            --bg-input: #fffefa;
+            --bg: #fafafa;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f4f4f5;
+            --bg-input: #ffffff;
             --accent: #1c1c1c;
             --accent-dim: rgba(28, 28, 28, 0.06);
             --accent-hover: rgba(28, 28, 28, 0.10);
@@ -90,7 +90,7 @@
             --text-muted: #5f5f5d;
             --text-sub: #77736b;
             --border: #eceae4;
-            --border-focus: rgba(47, 109, 246, 0.34);
+            --border-focus: rgba(99, 102, 241, 0.34);
             --error: #DC2626;
         }
 
@@ -421,12 +421,12 @@
             background:
                 radial-gradient(circle at 10% 5%, rgba(18, 63, 150, 0.06), transparent 34%),
                 radial-gradient(circle at 90% 8%, rgba(59, 130, 246, 0.08), transparent 30%),
-                linear-gradient(180deg, #fcfbf8 0%, #f7f4ed 100%);
+                linear-gradient(180deg, #fafafa 0%, #f4f4f5 100%);
         }
 
         [data-theme="dark"] body {
             background:
-                radial-gradient(circle at 10% 5%, rgba(79, 140, 255, 0.12), transparent 34%),
+                radial-gradient(circle at 10% 5%, rgba(99, 102, 241, 0.12), transparent 34%),
                 linear-gradient(180deg, #0f1014 0%, #15171c 100%);
         }
 
@@ -534,14 +534,14 @@
         }
 
         .tab-btn.active {
-            background: #fffefa;
+            background: #ffffff;
             box-shadow: 0 8px 20px rgba(12, 36, 90, 0.08), inset 0 1px 0 rgba(255,255,255,.92);
         }
 
         .input {
             min-height: 42px;
             border-radius: 12px;
-            background: #fffefa;
+            background: #ffffff;
             box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
         }
 
@@ -556,7 +556,7 @@
             background:
                 radial-gradient(circle at 24% 12%, rgba(147, 197, 253, 0.26), transparent 34%),
                 linear-gradient(135deg, #123f96 0%, #0a2d70 54%, #171456 100%);
-            color: #fffefa;
+            color: #ffffff;
             box-shadow: 0 14px 30px rgba(12, 36, 90, 0.24), inset 0 1px 0 rgba(255,255,255,.16);
         }
 
@@ -569,7 +569,7 @@
         .btn-social {
             min-height: 42px;
             border-radius: 12px;
-            background: #fffefa;
+            background: #ffffff;
             color: #1c1c1c;
             border-color: rgba(28, 28, 28, 0.16);
             font-weight: 680;
@@ -608,11 +608,11 @@
             place-items: center;
             min-height: 100%;
             padding: clamp(26px, 4.2vw, 46px);
-            color: #fffefa;
+            color: #ffffff;
             background:
                 radial-gradient(circle at 50% 42%, rgba(191, 219, 254, 0.22), transparent 32%),
                 radial-gradient(circle at 100% 0%, rgba(255, 254, 250, 0.12), transparent 28%),
-                linear-gradient(135deg, #173f8f 0%, #102f70 52%, #151e55 100%);
+                linear-gradient(135deg, #4338ca 0%, #3730a3 52%, #312e81 100%);
         }
 
         .auth-showcase::before {
@@ -731,7 +731,7 @@
 
         [data-theme="dark"] body {
             background:
-                radial-gradient(circle at 50% 0%, rgba(79, 140, 255, 0.12), transparent 34%),
+                radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12), transparent 34%),
                 linear-gradient(180deg, #0f1014 0%, #13151a 100%);
         }
 
@@ -1025,7 +1025,7 @@
                 const current = html.getAttribute('data-theme');
                 const next = current === 'dark' ? 'light' : 'dark';
                 if (curtain) {
-                    curtain.style.background = next === 'dark' ? '#0f1014' : '#fcfbf8';
+                    curtain.style.background = next === 'dark' ? '#0f1014' : '#fafafa';
                     curtain.style.transformOrigin = 'top';
                     curtain.classList.add('falling');
                 }

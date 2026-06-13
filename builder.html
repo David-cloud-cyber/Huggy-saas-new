@@ -45,54 +45,56 @@
   
   <style>
     /* Absolute pixel-perfect UI style matches the Huggy AI Workspace layout precisely */
+    /* Huggy theme v2 — Zinc surfaces + Indigo 500 signature.
+       Aligned with src/builder.css and src/design-system.css. */
     :root {
-      --bg: #0f1014;
-      --bg-surface: #15171c;
-      --bg-panel: #13151a;
-      --bg-input: #181b21;
-      --border: rgba(226, 232, 240, 0.12);
-      --border-light: rgba(226, 232, 240, 0.09);
-      --border-mid: rgba(226, 232, 240, 0.18);
-      --border-focus: rgba(79, 140, 255, 0.46);
-      --accent: #f5f7fb;
-      --accent-spark: #4f8cff;
-      --accent-blue: #4f8cff;
-      --accent-blue-deep: #8ab4ff;
-      --accent-blue-soft: rgba(79, 140, 255, 0.16);
-      --accent-blue-hover: rgba(79, 140, 255, 0.22);
-      --accent-blue-active: rgba(79, 140, 255, 0.30);
-      --accent-dim: rgba(245, 247, 251, 0.07);
-      --accent-hover: rgba(245, 247, 251, 0.11);
-      --text: #f5f7fb;
-      --text-muted: #c6cad3;
-      --text-sub: #8d95a3;
-      --text-dark: #6b7280;
+      --bg: #09090b;
+      --bg-surface: #18181b;
+      --bg-panel: #131316;
+      --bg-input: #0f0f12;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-light: rgba(255, 255, 255, 0.04);
+      --border-mid: rgba(255, 255, 255, 0.12);
+      --border-focus: rgba(99, 102, 241, 0.50);
+      --accent: #818cf8;
+      --accent-spark: #6366f1;
+      --accent-blue: #6366f1;
+      --accent-blue-deep: #a5b4fc;
+      --accent-blue-soft: rgba(99, 102, 241, 0.14);
+      --accent-blue-hover: rgba(99, 102, 241, 0.22);
+      --accent-blue-active: rgba(99, 102, 241, 0.30);
+      --accent-dim: rgba(244, 244, 245, 0.06);
+      --accent-hover: rgba(244, 244, 245, 0.10);
+      --text: #fafafa;
+      --text-muted: #a1a1aa;
+      --text-sub: #71717a;
+      --text-dark: #52525b;
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
 
     :root[data-theme="light"] {
-      --bg: #fcfbf8;
-      --bg-surface: #fffdf8;
-      --bg-panel: #f7f4ed;
-      --bg-input: #fffefa;
-      --border: #eceae4;
-      --border-light: rgba(236, 234, 228, 0.78);
-      --border-mid: #dedbd2;
-      --border-focus: rgba(47, 109, 246, 0.36);
-      --accent: #2f6df6;
-      --accent-spark: #2f6df6;
-      --accent-blue: #2f6df6;
-      --accent-blue-deep: #173f8f;
-      --accent-blue-soft: rgba(47, 109, 246, 0.10);
-      --accent-blue-hover: rgba(47, 109, 246, 0.14);
-      --accent-blue-active: rgba(47, 109, 246, 0.18);
-      --accent-dim: rgba(47, 109, 246, 0.10);
-      --accent-hover: rgba(47, 109, 246, 0.14);
-      --text: #1c1c1c;
-      --text-muted: #5f5f5d;
-      --text-sub: #77736b;
-      --text-dark: #77736b;
+      --bg: #fafafa;
+      --bg-surface: #ffffff;
+      --bg-panel: #f4f4f5;
+      --bg-input: #ffffff;
+      --border: rgba(9, 9, 11, 0.08);
+      --border-light: rgba(9, 9, 11, 0.05);
+      --border-mid: rgba(9, 9, 11, 0.14);
+      --border-focus: rgba(99, 102, 241, 0.40);
+      --accent: #4f46e5;
+      --accent-spark: #6366f1;
+      --accent-blue: #6366f1;
+      --accent-blue-deep: #4338ca;
+      --accent-blue-soft: rgba(99, 102, 241, 0.10);
+      --accent-blue-hover: rgba(99, 102, 241, 0.16);
+      --accent-blue-active: rgba(99, 102, 241, 0.22);
+      --accent-dim: rgba(9, 9, 11, 0.05);
+      --accent-hover: rgba(9, 9, 11, 0.08);
+      --text: #09090b;
+      --text-muted: #52525b;
+      --text-sub: #71717a;
+      --text-dark: #52525b;
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -183,7 +185,7 @@
     }
 
     .brand-logo-spark {
-      background: linear-gradient(135deg, var(--accent-blue, #2f6df6), #8ab4ff);
+      background: linear-gradient(135deg, var(--accent-blue, #6366f1), #a5b4fc);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       font-size: 16px;
@@ -265,8 +267,8 @@
 
     .project-menu-action:hover,
     .project-menu-link:hover {
-      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 20%, var(--border));
-      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 20%, var(--border));
+      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -293,13 +295,13 @@
       border-radius: 12px;
       display: grid;
       place-items: center;
-      background: linear-gradient(135deg, var(--accent-blue, #2f6df6), #9fc4ff);
+      background: linear-gradient(135deg, var(--accent-blue, #6366f1), #a5b4fc);
       color: #fff;
       font-weight: 900;
       font-size: 13px;
       text-transform: uppercase;
       flex: 0 0 auto;
-      box-shadow: 0 10px 22px rgba(47,109,246,.18);
+      box-shadow: 0 10px 22px rgba(99, 102, 241,.18);
     }
 
     .project-menu-name {
@@ -347,8 +349,8 @@
 
     .project-menu-badge.pro,
     .builder-plan-badge.pro {
-      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 28%, var(--border));
-      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 28%, var(--border));
+      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -383,7 +385,7 @@
 
     .project-menu-upgrade {
       border: 0;
-      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
       color: var(--accent-blue-deep, #2458dc);
       display: inline-flex;
       align-items: center;
@@ -411,7 +413,7 @@
       height: 100%;
       width: 0%;
       border-radius: inherit;
-      background: linear-gradient(90deg, var(--accent-blue, #2f6df6), #9fc4ff);
+      background: linear-gradient(90deg, var(--accent-blue, #6366f1), #a5b4fc);
       transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
@@ -454,7 +456,7 @@
 
     .project-menu-input:focus {
       border-color: var(--border-focus, var(--accent-blue));
-      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,.10));
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(99, 102, 241,.10));
     }
 
     .project-menu-save {
@@ -540,8 +542,8 @@
       gap: 7px;
       background:
         radial-gradient(circle at 24% 12%, rgba(191, 219, 254, 0.30), transparent 34%),
-        linear-gradient(135deg, #173f8f 0%, #102f70 54%, #151e55 100%);
-      color: #fffefa;
+        linear-gradient(135deg, #4338ca 0%, #3730a3 54%, #312e81 100%);
+      color: #ffffff;
       border: 1px solid rgba(255, 255, 255, 0.16);
       font-size: 12px;
       font-weight: 820;
@@ -808,7 +810,7 @@
     }
 
     .p-plan-card.recommended .p-plan-cta:hover {
-      background: var(--accent-blue-deep, #173f8f);
+      background: var(--accent-blue-deep, #4338ca);
     }
 
     /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
@@ -1042,9 +1044,9 @@
       justify-content: center;
       height: 16px;
       padding: 0 6px;
-      border: 1px solid color-mix(in srgb, var(--accent-blue, #2f6df6) 26%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--accent-blue, #6366f1) 26%, var(--border));
       border-radius: 999px;
-      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
       color: var(--accent-blue-deep, #2458dc);
       font-size: 8.5px;
       font-weight: 850;
@@ -1069,8 +1071,8 @@
 
     .pane-plan-tag.locked,
     .builder-action-plan-tag.locked {
-      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 24%, var(--border));
-      background: var(--accent-blue-soft, rgba(47,109,246,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 24%, var(--border));
+      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -2573,7 +2575,7 @@
     }
 
     .analysis-metric-card.is-primary .analysis-metric-label {
-      color: var(--accent-blue, #2f6df6);
+      color: var(--accent-blue, #6366f1);
     }
 
     .analysis-metric-value {
@@ -2603,7 +2605,7 @@
 
     .analysis-chart-line {
       fill: none;
-      stroke: var(--accent-blue, #2f6df6);
+      stroke: var(--accent-blue, #6366f1);
       stroke-width: 3;
       stroke-linejoin: round;
       stroke-linecap: round;
@@ -2706,7 +2708,7 @@
       font-variant-numeric: tabular-nums;
       background:
         linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
-        conic-gradient(from 160deg, #8ab4ff, var(--accent-blue, #2f6df6), #f7f4ed, #8ab4ff) border-box;
+        conic-gradient(from 160deg, #a5b4fc, var(--accent-blue, #6366f1), #f4f4f5, #a5b4fc) border-box;
       border: 1px solid transparent;
     }
 
@@ -3373,7 +3375,7 @@
 
         <!-- SCALE PLAN -->
         <div class="p-plan-card recommended">
-          <div class="p-plan-name" style="color: var(--accent-blue, #2f6df6);">Scale</div>
+          <div class="p-plan-name" style="color: var(--accent-blue, #6366f1);">Scale</div>
           <div class="p-plan-price" id="p-price-scale">$200<span>/mo</span></div>
           <p class="p-plan-desc">For teams and agencies building multiple full-stack apps at scale.</p>
           <ul class="p-plan-features">
@@ -3831,7 +3833,7 @@
             left: 50%;
             transform: translateX(-50%) translateY(20px);
             background: #18181b;
-            border: 1px solid var(--border-focus, rgba(47,109,246,0.36));
+            border: 1px solid var(--border-focus, rgba(99, 102, 241,0.36));
             border-left: 3px solid var(--accent-spark);
             border-radius: 8px;
             padding: 12px 16px;
