@@ -22,7 +22,7 @@
   border-radius: 999px;
   background: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--accent-blue, #2f6df6) 48%, transparent),
+    color-mix(in srgb, var(--accent-blue, #3b82f6) 48%, transparent),
     color-mix(in srgb, var(--border, #e8e2d6) 62%, transparent)
   );
 }
@@ -33,10 +33,10 @@
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--accent-blue, #2f6df6);
+  background: var(--accent-blue, #3b82f6);
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--accent-blue, #2f6df6) 10%, transparent),
-    0 0 18px color-mix(in srgb, var(--accent-blue, #2f6df6) 22%, transparent);
+    0 0 0 4px color-mix(in srgb, var(--accent-blue, #3b82f6) 10%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent-blue, #3b82f6) 22%, transparent);
   animation: huggy-workline-pulse 1.8s ease-in-out infinite;
 }
 
@@ -159,7 +159,7 @@
 .huggy-workline-command code {
   border: 0;
   background: transparent;
-  color: var(--accent-blue, #2f6df6);
+  color: var(--accent-blue, #3b82f6);
   padding: 0;
   font-family: inherit;
   font-size: inherit;
@@ -214,8 +214,8 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--accent-blue, #2f6df6);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue, #2f6df6) 11%, transparent);
+  background: var(--accent-blue, #3b82f6);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-blue, #3b82f6) 11%, transparent);
   animation: huggy-workline-pulse 1.8s ease-in-out infinite;
 }
 
@@ -311,7 +311,7 @@
 }
 
 .huggy-confirm-actions button:hover {
-  border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 42%, var(--border, #e8e2d6));
+  border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 42%, var(--border, #e8e2d6));
 }
 
 @keyframes huggy-workline-in {
@@ -381,8 +381,8 @@
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--accent-blue, #2f6df6), #9fc4ff);
-  box-shadow: 0 0 0 4px var(--accent-blue-soft, rgba(47, 109, 246, .10));
+  background: linear-gradient(135deg, var(--accent-blue, #3b82f6), #9fc4ff);
+  box-shadow: 0 0 0 4px var(--accent-blue-soft, rgba(59, 130, 246, .10));
   flex: 0 0 auto;
 }
 
@@ -392,7 +392,7 @@
     110deg,
     color-mix(in srgb, var(--text-muted, #6f6a60) 92%, transparent) 0%,
     color-mix(in srgb, var(--text-muted, #6f6a60) 92%, transparent) 35%,
-    var(--accent-blue, #2f6df6) 50%,
+    var(--accent-blue, #3b82f6) 50%,
     color-mix(in srgb, var(--text-muted, #6f6a60) 92%, transparent) 75%,
     color-mix(in srgb, var(--text-muted, #6f6a60) 92%, transparent) 100%
   );
@@ -506,8 +506,8 @@
 }
 
 .huggy-mission-meta .huggy-mission-status {
-  border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 35%, var(--border, #e8e2d6));
-  background: var(--accent-blue-soft, rgba(47, 109, 246, .10));
+  border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 35%, var(--border, #e8e2d6));
+  background: var(--accent-blue-soft, rgba(59, 130, 246, .10));
   color: var(--accent-blue-deep, #2458dc);
 }
 
@@ -594,7 +594,7 @@
 
 .huggy-ai-agent-item-active,
 .huggy-queue-item:has(.huggy-queue-item-indicator:not(.huggy-queue-item-indicator-completed)) {
-  background: color-mix(in srgb, var(--accent-blue, #2f6df6) 9%, var(--bg-input, #fffaf0));
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 9%, var(--bg-input, #fffaf0));
 }
 
 .huggy-file-tree-item-created .huggy-file-tree-status,

@@ -10,7 +10,7 @@ svg { display: block; flex-shrink: 0; }
 /* ── TOKENS ──────────────────────────────────────────
    Huggy theme v2. Single source of truth for the builder.
    Palette: Zinc scale (Tailwind v4) — the standard used by Linear,
-   Vercel, Cursor. Signature accent: Indigo 500 (#6366f1).
+   Vercel, Cursor. Signature accent: Indigo 500 (#3b82f6).
    Dark uses soft near-black layers with raised-by-light elevation
    (Linear pattern), not pure black. Light uses neutral cool whites,
    not warm yellow tones.
@@ -26,12 +26,12 @@ svg { display: block; flex-shrink: 0; }
   --bg-panel:     #131316;  /* between bg and surface — side rails */
 
   /* Signature accent — Indigo 500 with cool blue-violet tone. */
-  --accent:       #818cf8;  /* indigo-400 (light enough on dark) */
-  --accent-blue:  #6366f1;  /* indigo-500 — primary action */
-  --accent-blue-deep: #a5b4fc;  /* indigo-300 — quoted/highlight */
-  --accent-blue-soft:   rgba(99,102,241,0.14);
-  --accent-blue-hover:  rgba(99,102,241,0.22);
-  --accent-blue-active: rgba(99,102,241,0.30);
+  --accent:       #60a5fa;  /* indigo-400 (light enough on dark) */
+  --accent-blue:  #3b82f6;  /* indigo-500 — primary action */
+  --accent-blue-deep: #93c5fd;  /* indigo-300 — quoted/highlight */
+  --accent-blue-soft:   rgba(59, 130, 246,0.14);
+  --accent-blue-hover:  rgba(59, 130, 246,0.22);
+  --accent-blue-active: rgba(59, 130, 246,0.30);
   --accent-dim:   rgba(244,244,245,0.06);
   --accent-hover: rgba(244,244,245,0.10);
   --accent-active:rgba(244,244,245,0.14);
@@ -44,7 +44,7 @@ svg { display: block; flex-shrink: 0; }
   /* Borders — hairline whites for separation; firmer mid for emphasis. */
   --border:       rgba(255,255,255,0.06);
   --border-mid:   rgba(255,255,255,0.12);
-  --border-focus: rgba(99,102,241,0.50);  /* indigo focus ring */
+  --border-focus: rgba(59, 130, 246,0.50);  /* indigo focus ring */
   --blue:         var(--accent-blue);
   --blue-dim:     var(--accent-blue-soft);
 
@@ -73,12 +73,12 @@ svg { display: block; flex-shrink: 0; }
   --bg-panel:     #f4f4f5;  /* zinc-100 — side rails */
 
   /* Signature accent — Indigo 500. Same hue as dark, deeper on light. */
-  --accent:       #4f46e5;  /* indigo-600 — readable on white */
-  --accent-blue:  #6366f1;  /* indigo-500 — primary action */
-  --accent-blue-deep: #4338ca;  /* indigo-700 */
-  --accent-blue-soft:   rgba(99,102,241,0.10);
-  --accent-blue-hover:  rgba(99,102,241,0.16);
-  --accent-blue-active: rgba(99,102,241,0.22);
+  --accent:       #2563eb;  /* indigo-600 — readable on white */
+  --accent-blue:  #3b82f6;  /* indigo-500 — primary action */
+  --accent-blue-deep: #1d4ed8;  /* indigo-700 */
+  --accent-blue-soft:   rgba(59, 130, 246,0.10);
+  --accent-blue-hover:  rgba(59, 130, 246,0.16);
+  --accent-blue-active: rgba(59, 130, 246,0.22);
   --accent-dim:   rgba(9,9,11,0.05);
   --accent-hover: rgba(9,9,11,0.08);
   --accent-active:rgba(9,9,11,0.12);
@@ -91,7 +91,7 @@ svg { display: block; flex-shrink: 0; }
   /* Borders — Zinc 200/300. */
   --border:       rgba(9,9,11,0.08);
   --border-mid:   rgba(9,9,11,0.14);
-  --border-focus: rgba(99,102,241,0.40);
+  --border-focus: rgba(59, 130, 246,0.40);
   --blue:         var(--accent-blue);
   --blue-dim:     var(--accent-blue-soft);
 
@@ -334,8 +334,8 @@ body {
   height: 32px;
   padding: 0 16px; border-radius: 6px;
   background:
-    radial-gradient(circle at 24% 12%, rgba(191, 219, 254, 0.30), transparent 34%),
-    linear-gradient(135deg, #173f8f 0%, #102f70 54%, #151e55 100%);
+    radial-gradient(circle at 24% 12%, rgba(147, 197, 253, 0.30), transparent 34%),
+    linear-gradient(135deg, #1d4ed8 0%, #102f70 54%, #151e55 100%);
   color: #fffefa;
   border: 1px solid rgba(255, 255, 255, 0.16);
   font-family: inherit;

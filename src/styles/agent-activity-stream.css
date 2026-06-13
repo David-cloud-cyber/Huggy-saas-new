@@ -8,8 +8,8 @@
  */
 
 .haas {
-  --haas-accent: #6366f1;
-  --haas-accent-soft: rgba(99, 102, 241, 0.12);
+  --haas-accent: #3b82f6;
+  --haas-accent-soft: rgba(59, 130, 246, 0.12);
   --haas-ok: #10b981;
   --haas-fail: #ef4444;
   --haas-warn: #f59e0b;

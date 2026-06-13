@@ -5,7 +5,7 @@
   --huggy-motion-slow: 360ms;
   --huggy-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --huggy-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
-  --huggy-shadow-soft-blue: 0 0 0 4px var(--huggy-blue-soft, rgba(47, 109, 246, 0.1));
+  --huggy-shadow-soft-blue: 0 0 0 4px var(--huggy-blue-soft, rgba(59, 130, 246, 0.1));
 }
 
 html {
