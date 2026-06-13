@@ -99,45 +99,45 @@ function installStyle() {
   const style = document.createElement('style');
   style.id = 'huggy-connectors-panel-style';
   style.textContent = `
-    .connectors-overlay{position:fixed;inset:0;z-index:11000;display:grid;place-items:center;padding:16px;background:rgba(5,7,10,.72);backdrop-filter:blur(14px) saturate(.75);opacity:0;visibility:hidden;transition:opacity 180ms cubic-bezier(.22,1,.36,1),visibility 0s linear 180ms}
+    .connectors-overlay{position:fixed;inset:0;z-index:11000;display:grid;place-items:center;padding:20px;background:rgba(5,7,10,.66);backdrop-filter:blur(12px) saturate(.78);opacity:0;visibility:hidden;transition:opacity 180ms cubic-bezier(.22,1,.36,1),visibility 0s linear 180ms}
     .connectors-overlay.open{opacity:1;visibility:visible;transition:opacity 180ms cubic-bezier(.22,1,.36,1),visibility 0s}
-    .connectors-panel{width:min(1420px,calc(100vw - 32px));height:min(900px,calc(100dvh - 32px));display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);overflow:hidden;border:1px solid var(--border-mid,var(--border,#333));border-radius:20px;background:var(--bg-surface,#171717);color:var(--text,#f7f7f5);box-shadow:0 40px 130px rgba(0,0,0,.58);transform:translateY(14px) scale(.988);transition:transform 220ms cubic-bezier(.22,1,.36,1)}
+    .connectors-panel{width:min(1180px,calc(100vw - 40px));height:min(760px,calc(100dvh - 40px));display:grid;grid-template-columns:minmax(210px,260px) minmax(0,1fr);overflow:hidden;border:1px solid var(--border-mid,var(--border,#333));border-radius:18px;background:var(--bg-surface,#171717);color:var(--text,#f7f7f5);box-shadow:0 34px 110px rgba(0,0,0,.54);transform:translateY(12px) scale(.988);transition:transform 220ms cubic-bezier(.22,1,.36,1)}
     .connectors-overlay.open .connectors-panel{transform:translateY(0) scale(1)}
-    .connectors-sidebar{min-height:0;display:flex;flex-direction:column;gap:16px;padding:16px;border-right:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 9%,transparent));background:color-mix(in srgb,var(--bg,#111) 94%,transparent)}
-    .connectors-search{height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;border:1px solid var(--border,#333);border-radius:12px;background:var(--bg-input,#171717);color:var(--text-sub,#aaa)}
+    .connectors-sidebar{min-height:0;display:flex;flex-direction:column;gap:12px;padding:14px;border-right:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 9%,transparent));background:color-mix(in srgb,var(--bg,#111) 94%,transparent)}
+    .connectors-search{height:42px;display:flex;align-items:center;gap:9px;padding:0 12px;border:1px solid var(--border,#333);border-radius:11px;background:var(--bg-input,#171717);color:var(--text-sub,#aaa)}
     .connectors-search:focus-within{border-color:var(--border-focus,#4f75ff)}
-    .connectors-search svg{width:20px;height:20px;flex:none}
-    .connectors-search input{width:100%;border:0;outline:0;background:transparent;color:var(--text,#fff);font:inherit;font-size:15px}
+    .connectors-search svg{width:18px;height:18px;flex:none}
+    .connectors-search input{width:100%;border:0;outline:0;background:transparent;color:var(--text,#fff);font:inherit;font-size:14px}
     .connectors-nav{min-height:0;flex:1;display:flex;flex-direction:column;gap:4px;overflow:auto;padding-right:2px}
-    .connectors-nav-label{padding:14px 12px 6px;color:var(--text-sub,#999);font-size:12px;font-weight:720}
-    .connectors-filter{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-radius:11px;padding:0 12px;background:transparent;color:var(--text-muted,#c9c9c6);font:inherit;font-size:14px;font-weight:650;text-align:left;cursor:pointer}
+    .connectors-nav-label{padding:10px 10px 5px;color:var(--text-sub,#999);font-size:11px;font-weight:720}
+    .connectors-filter{width:100%;min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;border-radius:10px;padding:0 10px;background:transparent;color:var(--text-muted,#c9c9c6);font:inherit;font-size:13px;font-weight:650;text-align:left;cursor:pointer}
     .connectors-filter:hover,.connectors-filter.active{background:var(--bg-elevated,#292929);color:var(--text,#fff)}
     .connectors-filter span:last-child{color:var(--text-sub,#969696);font-size:12px;font-variant-numeric:tabular-nums}
-    .connectors-sidebar-card{display:grid;gap:10px;padding:16px;border:1px solid var(--border,#333);border-radius:13px;background:var(--bg-input,#171717)}
-    .connectors-sidebar-card svg{width:22px;height:22px}
+    .connectors-sidebar-card{display:grid;gap:9px;padding:13px;border:1px solid var(--border,#333);border-radius:12px;background:var(--bg-input,#171717)}
+    .connectors-sidebar-card svg{width:19px;height:19px}
     .connectors-sidebar-card strong{font-size:13px}
     .connectors-sidebar-card p{margin:0;color:var(--text-sub,#aaa);font-size:11px;line-height:1.45}
     .connectors-sidebar-card button,.connectors-secondary{height:36px;border:1px solid var(--border,#444);border-radius:10px;background:transparent;color:var(--text,#fff);font:inherit;font-size:12px;font-weight:760;cursor:pointer}
     .connectors-main{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--bg-surface,#1c1c1c)}
-    .connectors-header{min-height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 9%,transparent))}
+    .connectors-header{min-height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 9%,transparent))}
     .connectors-title{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:780}.connectors-title svg{width:20px;height:20px}
     .connectors-close{width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:10px;background:transparent;color:var(--text-sub,#aaa);cursor:pointer}.connectors-close:hover{background:var(--bg-elevated,#2a2a2a);color:var(--text,#fff)}.connectors-close svg{width:21px;height:21px}
     .connectors-body{position:relative;min-height:0;overflow:auto;scrollbar-width:thin}
-    .connectors-intro{position:relative;min-height:360px;display:grid;place-items:center;overflow:hidden;border-bottom:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 7%,transparent))}
-    .connectors-marquee{position:absolute;inset:0;display:grid;align-content:start;gap:14px;padding-top:10px;opacity:.52;mask-image:linear-gradient(to bottom,#000 0%,#000 55%,transparent 92%)}
+    .connectors-intro{position:relative;min-height:280px;display:grid;place-items:center;overflow:hidden;border-bottom:1px solid var(--border-light,color-mix(in srgb,var(--text,#111) 7%,transparent))}
+    .connectors-marquee{position:absolute;inset:0;display:grid;align-content:start;gap:10px;padding-top:8px;opacity:.5;mask-image:linear-gradient(to bottom,#000 0%,#000 55%,transparent 92%)}
     .connectors-track{display:flex;width:max-content;gap:10px;animation:connector-marquee 34s linear infinite;will-change:transform}.connectors-track.reverse{animation-direction:reverse;animation-duration:41s}.connectors-track.slow{animation-duration:48s}
-    .connector-chip{height:42px;display:flex;align-items:center;gap:9px;padding:0 13px;border:1px solid color-mix(in srgb,var(--text,#111) 8%,transparent);border-radius:999px;background:rgba(25,25,25,.56);color:#e8e8e5;font-size:13px;font-weight:720;white-space:nowrap}
+    .connector-chip{height:34px;display:flex;align-items:center;gap:8px;padding:0 11px;border:1px solid color-mix(in srgb,var(--text,#111) 8%,transparent);border-radius:999px;background:rgba(25,25,25,.56);color:#e8e8e5;font-size:12px;font-weight:720;white-space:nowrap}
     .connectors-intro::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(25,25,25,.12),rgba(25,25,25,.68) 52%,var(--bg-surface,#1c1c1c) 92%);pointer-events:none}
-    .connectors-intro-copy{position:relative;z-index:2;width:min(720px,calc(100% - 40px));display:grid;justify-items:center;gap:15px;text-align:center;padding-top:74px}
-    .connectors-intro-copy h2{margin:0;color:var(--text,#fff);font-size:clamp(28px,4vw,44px);line-height:1;letter-spacing:-.045em}
-    .connectors-intro-copy p{max-width:650px;margin:0;color:var(--text-muted,#c6c6c1);font-size:15px;line-height:1.55}
+    .connectors-intro-copy{position:relative;z-index:2;width:min(620px,calc(100% - 36px));display:grid;justify-items:center;gap:12px;text-align:center;padding-top:54px}
+    .connectors-intro-copy h2{margin:0;color:var(--text,#fff);font-size:clamp(24px,3vw,36px);line-height:1.04;letter-spacing:-.04em}
+    .connectors-intro-copy p{max-width:570px;margin:0;color:var(--text-muted,#c6c6c1);font-size:13px;line-height:1.5}
     .connectors-intro-actions{display:flex;gap:9px}.connectors-intro-actions button,.connectors-intro-actions a{height:38px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border,#444);border-radius:10px;padding:0 14px;background:var(--bg-input,#222);color:var(--text,#fff);font-size:12px;font-weight:760;text-decoration:none;cursor:pointer}
-    .connectors-catalog{padding:34px 36px 48px}.connectors-catalog-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:20px}.connectors-catalog-head h3{margin:0 0 5px;font-size:20px}.connectors-catalog-head p{margin:0;color:var(--text-sub,#aaa);font-size:12px}.connectors-count{color:var(--text-sub,#aaa);font-size:12px}
+    .connectors-catalog{padding:26px 30px 38px}.connectors-catalog-head{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:16px}.connectors-catalog-head h3{margin:0 0 4px;font-size:18px}.connectors-catalog-head p{margin:0;color:var(--text-sub,#aaa);font-size:12px}.connectors-count{color:var(--text-sub,#aaa);font-size:12px}
     .connectors-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    .connector-card{min-width:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;border:1px solid var(--border,#393939);border-radius:13px;padding:12px;background:var(--bg-input,#202020);color:var(--text,#fff);text-align:left;cursor:pointer;transition:transform 150ms cubic-bezier(.22,1,.36,1),border-color 150ms,background 150ms}
+    .connector-card{min-width:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;border:1px solid var(--border,#393939);border-radius:12px;padding:10px;background:var(--bg-input,#202020);color:var(--text,#fff);text-align:left;cursor:pointer;transition:transform 150ms cubic-bezier(.22,1,.36,1),border-color 150ms,background 150ms}
     .connector-card:hover{transform:translateY(-1px);border-color:var(--border-focus,#566cff);background:var(--bg-elevated,#272727)}
     .connector-card-copy{min-width:0}.connector-card-copy strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.connector-card-copy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px;color:var(--text-sub,#aaa);font-size:11px}
-    .connector-glyph{width:46px;height:46px;display:grid;place-items:center;flex:none;border-radius:11px;background:var(--connector-color);color:#fff;font-size:12px;font-weight:900;letter-spacing:-.03em;box-shadow:0 0 0 1px color-mix(in srgb,var(--text,#111) 9%,transparent) inset}.connector-glyph.compact{width:29px;height:29px;border-radius:999px;font-size:9px}
+    .connector-glyph{width:40px;height:40px;display:grid;place-items:center;flex:none;border-radius:10px;background:var(--connector-color);color:#fff;font-size:11px;font-weight:900;letter-spacing:-.03em;box-shadow:0 0 0 1px color-mix(in srgb,var(--text,#111) 9%,transparent) inset}.connector-glyph.compact{width:25px;height:25px;border-radius:999px;font-size:8px}
     .connector-status{min-height:25px;display:inline-flex;align-items:center;border-radius:8px;padding:0 8px;background:var(--accent-dim,rgba(47,109,246,.14));color:var(--accent,#7ea5ff);font-size:10px;font-weight:820;white-space:nowrap}.connector-status.enabled{background:rgba(73,151,48,.22);color:#80cf67}.connector-status.setup_required{background:rgba(230,158,44,.18);color:#e8b657}
     .connectors-empty{grid-column:1/-1;padding:50px 20px;color:var(--text-sub,#aaa);text-align:center}
     .connector-detail{position:absolute;inset:0;z-index:5;display:grid;grid-template-rows:auto minmax(0,1fr);background:color-mix(in srgb,var(--bg-surface,#1c1c1c) 97%,transparent);backdrop-filter:blur(18px);transform:translateX(102%);transition:transform 220ms cubic-bezier(.22,1,.36,1)}.connector-detail.open{transform:translateX(0)}

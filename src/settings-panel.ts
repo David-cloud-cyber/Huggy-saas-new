@@ -851,16 +851,16 @@ function installSettingsStyle() {
       right: auto;
       bottom: auto;
       left: 50%;
-      width: min(1420px, calc(100vw - 32px));
+      width: min(1060px, calc(100vw - 40px));
       max-width: none;
-      height: min(900px, calc(100dvh - 32px));
-      max-height: calc(100dvh - 32px);
+      height: min(720px, calc(100dvh - 40px));
+      max-height: calc(100dvh - 40px);
       display: block;
       overflow: hidden;
       border: 1px solid var(--border-mid, var(--border, #eceae4));
-      border-radius: 18px;
+      border-radius: 16px;
       background: var(--bg-surface, #fffdf8);
-      box-shadow: 0 36px 120px rgba(0, 0, 0, .38);
+      box-shadow: 0 30px 96px rgba(0, 0, 0, .34);
       transform: translate(-50%, -47%) scale(.985);
       transition:
         transform 220ms cubic-bezier(.22, 1, .36, 1),
@@ -880,27 +880,27 @@ function installSettingsStyle() {
       min-height: 0;
       height: 100%;
       display: grid;
-      grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+      grid-template-columns: minmax(210px, 250px) minmax(0, 1fr);
     }
 
     .settings-sidebar {
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 18px;
-      padding: 22px 16px 18px;
+      gap: 12px;
+      padding: 16px 12px 14px;
       background: color-mix(in srgb, var(--bg, #fcfbf8) 92%, transparent);
       border-right: 1px solid var(--border-light, rgba(236,234,228,.78));
     }
 
     .settings-search {
-      height: 44px;
+      height: 40px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       border: 1px solid transparent;
       border-radius: 11px;
-      padding: 0 13px;
+      padding: 0 11px;
       background: var(--bg-elevated, #f7f4ed);
       color: var(--text-sub, #77736b);
       transition:
@@ -916,8 +916,8 @@ function installSettingsStyle() {
     .settings-search svg,
     .settings-tab svg,
     .settings-close svg {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       flex: 0 0 auto;
       stroke: currentColor;
     }
@@ -957,16 +957,16 @@ function installSettingsStyle() {
 
     .settings-tab {
       width: 100%;
-      min-height: 42px;
+      min-height: 36px;
       height: auto;
       display: flex;
       align-items: center;
-      gap: 11px;
+      gap: 9px;
       border: 0;
       border-radius: 10px;
-      padding: 0 12px;
+      padding: 0 10px;
       color: var(--text-muted, #5f5f5d);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       text-align: left;
       transition:
@@ -1018,8 +1018,8 @@ function installSettingsStyle() {
     }
 
     .settings-header {
-      min-height: 76px;
-      padding: 20px 34px;
+      min-height: 62px;
+      padding: 16px 26px;
       border-bottom: 0;
     }
 
@@ -1028,7 +1028,7 @@ function installSettingsStyle() {
     }
 
     .settings-title-stack h2 {
-      font-size: 19px;
+      font-size: 17px;
       font-weight: 760;
     }
 
@@ -1043,8 +1043,8 @@ function installSettingsStyle() {
     }
 
     .settings-close {
-      width: 34px;
-      height: 34px;
+      width: 30px;
+      height: 30px;
       border: 0;
       border-radius: 9px;
       color: var(--text-muted, #5f5f5d);
@@ -1060,21 +1060,21 @@ function installSettingsStyle() {
 
     .settings-content {
       min-height: 0;
-      padding: 18px 48px 52px;
-      scroll-padding-top: 18px;
+      padding: 12px 32px 38px;
+      scroll-padding-top: 12px;
     }
 
     .tab-panel {
-      width: min(100%, 980px);
+      width: min(100%, 820px);
       margin: 0 auto;
     }
 
     .tab-panel::before {
       content: attr(data-settings-heading);
       display: block;
-      margin: 4px 0 30px;
+      margin: 2px 0 22px;
       color: var(--text, #1c1c1c);
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 760;
       letter-spacing: -.025em;
     }
@@ -1084,8 +1084,8 @@ function installSettingsStyle() {
       border-bottom: 1px solid var(--border-light, rgba(236,234,228,.78));
       border-radius: 0;
       background: transparent;
-      padding: 0 0 28px;
-      margin: 0 0 28px;
+      padding: 0 0 22px;
+      margin: 0 0 22px;
     }
 
     .settings-card:last-child {
@@ -1116,8 +1116,8 @@ function installSettingsStyle() {
     .settings-hero-card .settings-avatar {
       grid-column: 2;
       grid-row: 1;
-      width: 58px;
-      height: 58px;
+      width: 48px;
+      height: 48px;
       border-radius: 999px;
       box-shadow: none;
     }
@@ -1134,26 +1134,26 @@ function installSettingsStyle() {
     }
 
     .settings-field-grid {
-      gap: 14px 22px;
-      margin-top: 20px;
+      gap: 12px 18px;
+      margin-top: 16px;
     }
 
     .settings-field input,
     .settings-field select,
     .settings-field textarea {
-      min-height: 42px;
+      min-height: 38px;
       border-color: transparent;
       border-radius: 10px;
       background: var(--bg-elevated, #f7f4ed);
     }
 
     .settings-field textarea {
-      min-height: 118px;
+      min-height: 96px;
     }
 
     .settings-row {
-      min-height: 64px;
-      padding: 14px 0;
+      min-height: 54px;
+      padding: 11px 0;
     }
 
     .settings-integration-grid {
@@ -1192,7 +1192,7 @@ function installSettingsStyle() {
     }
 
     [data-theme="dark"] .settings-panel {
-      box-shadow: 0 36px 120px rgba(0,0,0,.62);
+      box-shadow: 0 30px 96px rgba(0,0,0,.58);
     }
 
     @media (max-width: 900px) {
