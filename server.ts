@@ -222,6 +222,8 @@ import {
   type DeepReasoningContract,
 } from './src/services/deep-reasoning.ts';
 import { buildAgentMoatIntelligence } from './src/services/agent-moat-intelligence.ts';
+import { inspectInput, inspectOutput, type SafetyResult } from './src/services/safety-filter.ts';
+import { runAgentBuild, type AgentBuildResult, type AgentWorkspaceFile } from './src/services/agent-build-loop.ts';
 import {
   buildDesignStudioBrief,
   designWorkshopInstructionLines,
@@ -645,6 +647,7 @@ const openRouter = new OpenRouterService({
 const providerGateway = new ProviderGateway(openRouter);
 const AGENT_V3_ENABLED = isAgentV3Enabled(process.env);
 const AGENT_V2_ENABLED = isAgentV2Enabled(process.env) || AGENT_V3_ENABLED;
+const AGENTIC_BUILD_ENABLED = process.env.HUGGY_AGENTIC_BUILD === '1';
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
 const webResearchGateway = new WebResearchGateway(process.env);
 const falMediaGateway = new FalMediaGateway(process.env);
@@ -1472,7 +1475,8 @@ function enforceRateLimit(key: string, limit: number, windowMs: number) {
 }
 
 function isAbusivePrompt(prompt: string) {
-  return /(phishing|steal password|credential harvester|malware|ransomware|keylogger)/i.test(prompt);
+  const safety = inspectInput(prompt);
+  return !safety.allowed;
 }
 
 function slugify(value: string): string {
@@ -10267,14 +10271,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       .filter((item: any) => /^https?:\/\/|^data:image\//i.test(item.url))
       .slice(0, 8)
     : [];
-  const agentPrompt = applyRequestContextToPrompt(prompt, studioContext, preparedImportContext);
   if (!requireProjectCapability(req, res, 'view', project)) return;
   if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
   }
-  if (isAbusivePrompt(prompt)) {
-    return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
+  const inputSafety = inspectInput(prompt);
+  if (!inputSafety.allowed) {
+    return res.status(400).json({ success: false, error: inputSafety.reason || 'This request cannot be generated safely.' });
   }
+  const sanitizedPrompt = inputSafety.sanitized;
+  const agentPrompt = applyRequestContextToPrompt(sanitizedPrompt, studioContext, preparedImportContext);
 
   // Huggy Stream v2 typed emitter (sequenced id: for Last-Event-ID resume).
   // Emitted alongside the legacy event shape so the v2 client understands
@@ -10460,6 +10466,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: diagnostic.diagnostic_code, suggested_action: diagnostic.suggested_action });
       return respondJson(message.includes('not configured') ? 503 : 200, { success: false, error: message, message });
     }
+    const textOutputSafety = inspectOutput(content);
+    content = textOutputSafety.sanitized;
     await saveProjectMessage({
       organization_id: project.organization_id,
       project_id: project.id,
@@ -10527,40 +10535,79 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }
     }
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
-    const generation = await generateFilesWithAi({
-      onEvent: (event) => {
-        if (!isStream || streamAborted) return;
-        // Legacy event for current consumers.
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-        // Mirror onto the typed v2 protocol so the new client renders a
-        // fluid milestone timeline without changing every emitter below.
-        if (streamV2 && event && typeof event === 'object') {
-          const anyEvent = event as { type?: string; step?: string; message?: string; text?: string; content?: string };
-          if (anyEvent.type === 'agent_step') {
-            streamV2.emit('milestone', {
-              milestone: mapLegacyStepToMilestone(anyEvent.step),
-              state: 'active',
-              label: anyEvent.message,
-            });
-          } else if (anyEvent.type === 'token') {
-            const text = String(anyEvent.text ?? anyEvent.content ?? '');
-            if (text) streamV2.emit('assistant_delta', { text });
+    const finalBuildPrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
+
+    let generation: { files: GeneratedFile[]; summary: string; model: string; cost_usd: number };
+
+    if (AGENTIC_BUILD_ENABLED) {
+      const uiPolicy = buildWorldClassUiPolicy({ prompt: finalBuildPrompt });
+      const systemPrompt = buildGenerationSystemPrompt({
+        prompt: finalBuildPrompt,
+        uiPolicySystemPrompt: uiPolicy.systemPrompt,
+        hasExistingFiles: existingFiles.length > 0,
+      });
+      if (isStream && streamV2) {
+        streamV2.emit('milestone', { milestone: 'generating', state: 'active', label: 'Agent building with tool loop...' });
+      }
+      const agenticResult: AgentBuildResult = await runAgentBuild({
+        gateway: providerGateway,
+        modelId: effectiveModelSelection,
+        systemPrompt,
+        userPrompt: finalBuildPrompt,
+        initialFiles: existingFiles.map(f => ({ path: f.path, content: f.content, language: f.language })),
+        maxSteps: 8,
+        timeoutMs: 120_000,
+      });
+      generation = {
+        files: agenticResult.files.map(f => ({ path: f.path, content: f.content, language: f.language })),
+        summary: agenticResult.summary,
+        model: effectiveModelSelection,
+        cost_usd: 0,
+      };
+      if (isStream && streamV2) {
+        streamV2.emit('milestone', { milestone: 'checking', state: 'active', label: `Agent completed in ${agenticResult.steps} tool steps.` });
+      }
+    } else {
+      generation = await generateFilesWithAi({
+        onEvent: (event) => {
+          if (!isStream || streamAborted) return;
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          if (streamV2 && event && typeof event === 'object') {
+            const anyEvent = event as { type?: string; step?: string; message?: string; text?: string; content?: string };
+            if (anyEvent.type === 'agent_step') {
+              streamV2.emit('milestone', {
+                milestone: mapLegacyStepToMilestone(anyEvent.step),
+                state: 'active',
+                label: anyEvent.message,
+              });
+            } else if (anyEvent.type === 'token') {
+              const text = String(anyEvent.text ?? anyEvent.content ?? '');
+              if (text) streamV2.emit('assistant_delta', { text });
+            }
           }
-        }
-      },
-      projectName: project.name,
-      prompt: executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt,
-      project,
-      decision,
-      modelId: effectiveModelSelection,
-      userCredits: walletForRouting,
-      existingFiles,
-      seniorAgentContext,
-      deepReasoningContract,
-      visionInputs,
-      // ✅ Pass recent history for conflict detection
-      recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
+        },
+        projectName: project.name,
+        prompt: finalBuildPrompt,
+        project,
+        decision,
+        modelId: effectiveModelSelection,
+        userCredits: walletForRouting,
+        existingFiles,
+        seniorAgentContext,
+        deepReasoningContract,
+        visionInputs,
+        recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
+      });
+    }
+
+    const outputSafety = inspectOutput(generation.summary);
+    generation.files = generation.files.map(f => {
+      const s = inspectOutput(f.content);
+      return s.sanitized !== f.content ? { ...f, content: s.sanitized } : f;
     });
+    if (outputSafety.sanitized !== generation.summary) {
+      generation.summary = outputSafety.sanitized;
+    }
 
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
