@@ -275,6 +275,17 @@ const COUNTRY_NAMES: Record<string, string> = {
 // Standard middlewares
 app.use(express.json({ limit: '8mb' }));
 
+// WebContainer preview requires cross-origin isolation. Gated by env so the
+// default behavior (and third-party embeds / OAuth popups) is unchanged until
+// the WebContainer preview is rolled out.
+if (process.env.HUGGY_WEBCONTAINER_PREVIEW === '1') {
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+    next();
+  });
+}
+
 // ── LAZY-LOADED RESOURCES / CLIENT GAUARDS ───────────────────────────
 const SUPABASE_SERVER_CLIENT_OPTIONS = {
   auth: {
@@ -11609,6 +11620,28 @@ async function publishProjectSnapshot(req: any, res: any) {
     };
 
     await saveDeploymentRecord(deploy);
+
+    // Apply the generated backend migration on publish (closes the gap where
+    // supabase/schema.sql was generated but never run). Safe by default: skips
+    // cleanly without a migration/project ref/management token, and only
+    // executes for real when HUGGY_APPLY_MIGRATIONS=1.
+    try {
+      const { provisionOnPublish } = await import('./src/services/supabase-provisioning.ts');
+      const cloud = await loadProjectHuggyCloud(projectId).catch(() => null);
+      const provision = await provisionOnPublish({
+        files: context.files,
+        cloudConfig: (cloud?.project?.public_runtime_config as Record<string, unknown>) || null,
+        dryRun: process.env.HUGGY_APPLY_MIGRATIONS !== '1',
+      });
+      if (provision.applied) {
+        console.log('[huggy:publish_migration_applied]', { project_id: projectId });
+      } else if (!provision.skipped && provision.error) {
+        console.warn('[huggy:publish_migration_skipped]', { project_id: projectId, error: provision.error });
+      }
+    } catch (provisionErr: any) {
+      console.warn('[huggy:publish_migration_error]', { project_id: projectId, message: provisionErr?.message || String(provisionErr) });
+    }
+
     const latestContext = { ...context, latestDeployment: deploy };
     const nextStatus = buildPublishStatus(latestContext);
     res.json({
