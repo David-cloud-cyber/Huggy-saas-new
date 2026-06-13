@@ -15,10 +15,14 @@ type TestIntent = {
   routingSource?: string;
   intentUnderstanding?: ReturnType<typeof understandUserIntent>;
   clarification?: { question: string; choices: string[]; recommendation: string };
+  // Project state — independent from requiresFileChanges (which is the decision
+  // *outcome*, not whether the project already has files). Defaults to false
+  // (fresh project) so explicit "create app" prompts route to BUILD.
+  hasFiles?: boolean;
 };
 
 function baseDecision(prompt: string, patch: Partial<TestIntent> = {}): TestIntent {
-  const understanding = understandUserIntent({ prompt, hasFiles: Boolean(patch.requiresFileChanges), requestedMode: 'auto' });
+  const understanding = understandUserIntent({ prompt, hasFiles: Boolean(patch.hasFiles), requestedMode: 'auto' });
   return {
     intent: 'conversation',
     confidence: 0.86,
@@ -35,7 +39,7 @@ function baseDecision(prompt: string, patch: Partial<TestIntent> = {}): TestInte
 
 function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   const decision = baseDecision(prompt, patch);
-  const typedDecision = buildTypedIntentDecision({ prompt, decision, hasFiles: Boolean(patch.requiresFileChanges) });
+  const typedDecision = buildTypedIntentDecision({ prompt, decision, hasFiles: Boolean(patch.hasFiles) });
   const gated = applyTypedIntentGate(decision, typedDecision);
   return { typedDecision, gated };
 }
@@ -54,6 +58,7 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
   // Autonomous edit: short directional feedback on an EXISTING project must
   // become an edit action, not a conversation.
   const autoEdit = typed('non, trop grand, fais plus propre', {
+    hasFiles: true,
     requiresFileChanges: true,
   });
   assert.equal(autoEdit.typedDecision.primary_intent, 'EDIT');
@@ -153,6 +158,7 @@ function typed(prompt: string, patch: Partial<TestIntent> = {}) {
 
 {
   const { typedDecision, gated } = typed('preview blanche, index.html should load /src/main.tsx, corrige le probleme', {
+    hasFiles: true,
     intent: 'debug_fix',
     requiresFileChanges: true,
     requiresPreviewRebuild: true,
