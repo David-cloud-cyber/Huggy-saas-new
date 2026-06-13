@@ -21,6 +21,7 @@ import WebSocket from 'ws';
 
 // Import our custom services
 import { OpenRouterService, buildVisionMessageContent, resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
+import { AnthropicService, resolveAnthropicApiKey } from './src/services/anthropic-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
 import { runLlmToolLoop } from './src/services/llm-tool-loop.ts';
 import { parseOrRepairStructuredObject } from './src/services/structured-output.ts';
@@ -586,6 +587,7 @@ app.get('/api/health', (_req, res) => {
       supabase_url: Boolean(process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL),
       supabase_service_role: supabaseDiagnostics.service_role_project_api_key,
       openrouter: Boolean(getOpenRouterApiKey()),
+      anthropic_direct: Boolean(getAnthropicApiKey()),
       vercel: Boolean(getVercelToken()),
       stripe: Boolean(process.env.STRIPE_SECRET_KEY),
     },
@@ -628,6 +630,14 @@ function getOpenRouterApiKey() {
   return resolveOpenRouterApiKey(process.env);
 }
 
+function getAnthropicApiKey() {
+  return resolveAnthropicApiKey(process.env);
+}
+
+function hasLiveAiProvider() {
+  return Boolean(getOpenRouterApiKey() || getAnthropicApiKey());
+}
+
 function getOpenRouterSiteUrl() {
   return String(
     process.env.OPENROUTER_SITE_URL ||
@@ -642,7 +652,8 @@ const openRouter = new OpenRouterService({
   siteUrl: getOpenRouterSiteUrl(),
   appName: String(process.env.OPENROUTER_APP_NAME || 'Huggy').trim()
 });
-const providerGateway = new ProviderGateway(openRouter);
+const anthropicDirect = new AnthropicService({ apiKey: getAnthropicApiKey() });
+const providerGateway = new ProviderGateway(openRouter, { anthropic: anthropicDirect });
 const AGENT_V3_ENABLED = isAgentV3Enabled(process.env);
 const AGENT_V2_ENABLED = isAgentV2Enabled(process.env) || AGENT_V3_ENABLED;
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
@@ -698,10 +709,12 @@ function diagnoseProviderError(error: any) {
       AUTO_MODEL_NOT_RESOLVED: 'use_auto',
       OPENROUTER_NOT_CONFIGURED: 'configure_openrouter_key',
       OPENROUTER_KEY_INVALID: 'update_openrouter_key',
+      ANTHROPIC_NOT_CONFIGURED: 'configure_anthropic_key',
+      ANTHROPIC_KEY_INVALID: 'update_anthropic_key',
       MODEL_OUTPUT_PARSE_FAILED: 'retry_or_use_auto',
       RELIABILITY_GATE_FAILED: 'fix_and_retry',
       PROVIDER_BAD_REQUEST: 'retry_or_use_auto',
-      PROVIDER_QUOTA_OR_BILLING: 'check_openrouter_billing',
+      PROVIDER_QUOTA_OR_BILLING: 'check_provider_billing',
       PROVIDER_RATE_LIMITED: 'retry_later',
       PROVIDER_TIMEOUT: 'retry_or_use_auto',
       PROVIDER_UNAVAILABLE: 'retry_or_use_auto',
@@ -726,13 +739,29 @@ function diagnoseProviderError(error: any) {
   }
   if (/insufficient.*credit|quota|billing|payment required|OpenRouter HTTP 402/i.test(rawMessage)) {
     return {
-      message: 'The AI provider rejected the request because the provider account has insufficient credits or quota. Check OpenRouter billing, then retry.',
+      message: 'The AI provider rejected the request because its account has insufficient credits or quota. Check provider billing, then retry.',
       diagnostic_code: 'PROVIDER_QUOTA_OR_BILLING',
-      suggested_action: 'check_openrouter_billing',
+      suggested_action: 'check_provider_billing',
       status: 503,
     };
   }
-  if (/not configured|OPENROUTER_API_KEY/i.test(rawMessage)) {
+  if (/Anthropic API key is not configured|ANTHROPIC_API_KEY/i.test(rawMessage)) {
+    return {
+      message: 'Anthropic direct is not configured. Add ANTHROPIC_API_KEY on Railway and redeploy.',
+      diagnostic_code: 'ANTHROPIC_NOT_CONFIGURED',
+      suggested_action: 'configure_anthropic_key',
+      status: 503,
+    };
+  }
+  if (/Anthropic HTTP 401|Anthropic HTTP 403|Anthropic.*invalid api key|Anthropic.*unauthorized/i.test(rawMessage)) {
+    return {
+      message: 'Anthropic key invalid or unauthorized. Update ANTHROPIC_API_KEY on Railway and redeploy.',
+      diagnostic_code: 'ANTHROPIC_KEY_INVALID',
+      suggested_action: 'update_anthropic_key',
+      status: 503,
+    };
+  }
+  if (/OpenRouter.*not configured|OPENROUTER_API_KEY/i.test(rawMessage)) {
     return {
       message: 'OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy. The backend also accepts OPEN_ROUTER_API_KEY, OPENROUTER_KEY, or OPENROUTER_TOKEN.',
       diagnostic_code: 'OPENROUTER_NOT_CONFIGURED',
@@ -3727,7 +3756,7 @@ function guardAiDecisionWithUnderstanding(
 }
 
 async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentDecision): Promise<IntentDecision | null> {
-  if (!getOpenRouterApiKey() || !agentIntentNeedsAiRouter(fallback)) return null;
+  if (!hasLiveAiProvider() || !agentIntentNeedsAiRouter(fallback)) return null;
   const routerRuntime = buildAIModelRuntimeConfig({
     modelId: DEFAULT_PROVIDER_MODEL_ID,
     task: 'intent',
@@ -4264,7 +4293,7 @@ async function createAgentTextResponse(input: {
     const checks = verifyGeneratedProject({ projectName: project.name, files, previewHtml: pipeline.html });
     return { text: createVerificationResponse(project, files, checks), model: 'auto', cost_usd: 0 };
   }
-  if (!getOpenRouterApiKey()) {
+  if (!hasLiveAiProvider()) {
     if (decision.intent === 'plan') {
       return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0 };
     }
@@ -4274,7 +4303,7 @@ async function createAgentTextResponse(input: {
     if (decision.intent === 'conversation') {
       return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0 };
     }
-    throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live AI responses.');
+    throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live AI responses.');
   }
 
   const selectedModel = (await resolveAgentProviderModel({
@@ -4355,7 +4384,7 @@ async function streamAgentTextResponse(input: {
     const checks = verifyGeneratedProject({ projectName: project.name, files, previewHtml: pipeline.html });
     return { text: createVerificationResponse(project, files, checks), model: 'auto', cost_usd: 0, streamed: false };
   }
-  if (!getOpenRouterApiKey()) {
+  if (!hasLiveAiProvider()) {
     if (decision.intent === 'plan') {
       return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
     }
@@ -4365,7 +4394,7 @@ async function streamAgentTextResponse(input: {
     if (decision.intent === 'conversation') {
       return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
     }
-    throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live AI responses.');
+    throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live AI responses.');
   }
 
   const selectedModel = (await resolveAgentProviderModel({
@@ -5642,9 +5671,9 @@ async function generateFilesWithAi(input: {
   recentHistory?: string[];  // last N user messages for conflict detection
   onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
-  const hasLiveKey = Boolean(getOpenRouterApiKey());
+  const hasLiveKey = hasLiveAiProvider();
   if (!hasLiveKey) {
-    throw new Error('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway to enable live generation.');
+    throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live generation.');
   }
 
   const selectedModel = input.project && input.decision
@@ -9118,6 +9147,7 @@ function buildAdminHealth() {
   return [
     { id: 'supabase', label: 'Supabase', status: supabaseDiagnostics.project_refs_match ? 'ok' : 'warning', detail: supabaseDiagnostics.project_refs_match ? 'Frontend/backend refs match' : 'Check Supabase env refs' },
     { id: 'openrouter', label: 'OpenRouter', status: getOpenRouterApiKey() ? 'ok' : 'warning', detail: getOpenRouterApiKey() ? 'API key configured' : 'Missing provider key' },
+    { id: 'anthropic', label: 'Anthropic direct', status: getAnthropicApiKey() ? 'ok' : 'warning', detail: getAnthropicApiKey() ? 'Direct Claude fallback configured' : 'Missing ANTHROPIC_API_KEY' },
     { id: 'vercel', label: 'Vercel', status: getVercelToken() ? 'ok' : 'warning', detail: getVercelToken() ? 'Publish token configured' : 'Publish token missing' },
     { id: 'stripe', label: 'Stripe', status: process.env.STRIPE_SECRET_KEY ? 'ok' : 'warning', detail: process.env.STRIPE_SECRET_KEY ? 'Billing key configured' : 'Billing key missing' },
     { id: 'admin', label: 'Admin guard', status: 'ok', detail: `${getPlatformAdminEmails().size} admin email${getPlatformAdminEmails().size > 1 ? 's' : ''} configured` },

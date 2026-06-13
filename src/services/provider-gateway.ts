@@ -6,6 +6,7 @@ import {
 } from '../config/ai-models.ts';
 import { validateAllowedModel } from './ai-validator.ts';
 import type { ChatCompletionResult, ChatMessage, OpenRouterService, StreamChatEvent } from './openrouter-service.ts';
+import type { AnthropicService } from './anthropic-service.ts';
 import type { ProviderRequestConfig } from './provider-adapters.ts';
 
 type CircuitState = {
@@ -45,10 +46,12 @@ export class ProviderGateway {
   private circuits = new Map<string, CircuitState>();
   private metrics = new Map<string, ModelRuntimeMetric>();
   private openRouter: OpenRouterService;
-  private options: { breakerMs?: number; failureThreshold?: number };
+  private anthropic?: AnthropicService;
+  private options: { breakerMs?: number; failureThreshold?: number; anthropic?: AnthropicService };
 
-  constructor(openRouter: OpenRouterService, options: { breakerMs?: number; failureThreshold?: number } = {}) {
+  constructor(openRouter: OpenRouterService, options: { breakerMs?: number; failureThreshold?: number; anthropic?: AnthropicService } = {}) {
     this.openRouter = openRouter;
+    this.anthropic = options.anthropic;
     this.options = options;
   }
 
@@ -81,7 +84,7 @@ export class ProviderGateway {
         const startedAt = Date.now();
         this.noteRequest(candidate);
         try {
-          const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000, candidateRuntimeConfig);
+          const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000, candidateRuntimeConfig);
           this.noteMetricSuccess(candidate, Date.now() - startedAt);
           this.noteSuccess(candidate);
           return result;
@@ -91,7 +94,7 @@ export class ProviderGateway {
           if (classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
             try {
               this.noteRetry(candidate);
-              const result = await this.openRouter.chat(candidate, messages, 1, options.timeoutMs || 45_000);
+              const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000);
               this.noteMetricSuccess(candidate, Date.now() - startedAt);
               this.noteSuccess(candidate);
               return result;
@@ -101,7 +104,10 @@ export class ProviderGateway {
           }
           this.noteFailure(candidate, classified.retryable);
           this.noteMetricFailure(candidate, classified.diagnosticCode, Date.now() - startedAt);
-          if (!classified.retryable) throw classified;
+          if (!classified.retryable) {
+            if (this.shouldTryDirectAnthropicFallback(classified, candidate)) break;
+            throw classified;
+          }
           if (attempt >= maxAttempts) break;
           this.noteRetry(candidate);
           await sleep(250 * attempt);
@@ -133,7 +139,7 @@ export class ProviderGateway {
       const startedAt = Date.now();
       this.noteRequest(candidate);
       try {
-        for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000, candidateRuntimeConfig)) {
+        for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000, candidateRuntimeConfig)) {
           yieldedAnyEvent = true;
           yield event;
         }
@@ -146,7 +152,7 @@ export class ProviderGateway {
         if (!yieldedAnyEvent && classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
           try {
             this.noteRetry(candidate);
-            for await (const event of this.openRouter.streamChat(candidate, messages, options.timeoutMs || 90_000)) {
+            for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000)) {
               yieldedAnyEvent = true;
               yield event;
             }
@@ -159,7 +165,7 @@ export class ProviderGateway {
         }
         this.noteFailure(candidate, classified.retryable);
         this.noteMetricFailure(candidate, classified.diagnosticCode, Date.now() - startedAt);
-        if (yieldedAnyEvent || !classified.retryable) throw classified;
+        if (yieldedAnyEvent || (!classified.retryable && !this.shouldTryDirectAnthropicFallback(classified, candidate))) throw classified;
       }
     }
 
@@ -205,9 +211,56 @@ export class ProviderGateway {
   }
 
   private candidatesFor(modelId: AllowedModelId): AllowedModelId[] {
-    return [modelId, ...(AI_MODEL_FALLBACKS[modelId] || [])]
+    const directAnthropicFallback = this.hasDirectAnthropic()
+      ? ['anthropic/claude-sonnet-4.6' as AllowedModelId]
+      : [];
+    return [modelId, ...(AI_MODEL_FALLBACKS[modelId] || []), ...directAnthropicFallback]
       .filter((candidate, index, list) => list.indexOf(candidate) === index)
       .filter(isAllowedModelId);
+  }
+
+  private hasDirectAnthropic() {
+    return Boolean(this.anthropic?.isConfigured());
+  }
+
+  private shouldUseDirectAnthropic(modelId: AllowedModelId) {
+    return Boolean(this.anthropic?.isConfigured() && this.anthropic.supportsModel(modelId));
+  }
+
+  private shouldTryDirectAnthropicFallback(error: ProviderGatewayError, modelId: AllowedModelId) {
+    if (!this.hasDirectAnthropic() || this.shouldUseDirectAnthropic(modelId)) return false;
+    return [
+      'OPENROUTER_NOT_CONFIGURED',
+      'OPENROUTER_KEY_INVALID',
+      'PROVIDER_QUOTA_OR_BILLING',
+      'PROVIDER_RATE_LIMITED',
+      'PROVIDER_UNAVAILABLE',
+      'PROVIDER_TIMEOUT',
+    ].includes(error.diagnosticCode);
+  }
+
+  private chatWithProvider(
+    modelId: AllowedModelId,
+    messages: ChatMessage[],
+    timeoutMs: number,
+    runtimeConfig?: ProviderRequestConfig,
+  ) {
+    if (this.shouldUseDirectAnthropic(modelId)) {
+      return this.anthropic!.chat(modelId, messages, 1, timeoutMs, runtimeConfig);
+    }
+    return this.openRouter.chat(modelId, messages, 1, timeoutMs, runtimeConfig);
+  }
+
+  private streamWithProvider(
+    modelId: AllowedModelId,
+    messages: ChatMessage[],
+    timeoutMs: number,
+    runtimeConfig?: ProviderRequestConfig,
+  ) {
+    if (this.shouldUseDirectAnthropic(modelId)) {
+      return this.anthropic!.streamChat(modelId, messages, timeoutMs, runtimeConfig);
+    }
+    return this.openRouter.streamChat(modelId, messages, timeoutMs, runtimeConfig);
   }
 
   private getCircuitError(modelId: AllowedModelId): ProviderGatewayError | null {
@@ -290,9 +343,25 @@ export class ProviderGateway {
     if (/auto must be resolved/i.test(message)) {
       return new ProviderGatewayError(message, { diagnosticCode: 'AUTO_MODEL_NOT_RESOLVED', statusCode: 500, retryable: false, modelId });
     }
-    if (/not configured|OPENROUTER_API_KEY/i.test(message)) {
+    if (/OpenRouter.*not configured|OPENROUTER_API_KEY/i.test(message)) {
       return new ProviderGatewayError('OpenRouter is not configured. Add OPENROUTER_API_KEY on Railway and redeploy. The backend also accepts OPEN_ROUTER_API_KEY, OPENROUTER_KEY, or OPENROUTER_TOKEN.', {
         diagnosticCode: 'OPENROUTER_NOT_CONFIGURED',
+        statusCode: 503,
+        retryable: false,
+        modelId,
+      });
+    }
+    if (/Anthropic API key is not configured/i.test(message)) {
+      return new ProviderGatewayError('Anthropic direct is not configured. Add ANTHROPIC_API_KEY on Railway and redeploy.', {
+        diagnosticCode: 'ANTHROPIC_NOT_CONFIGURED',
+        statusCode: 503,
+        retryable: false,
+        modelId,
+      });
+    }
+    if (/Anthropic HTTP (401|403)|Anthropic.*invalid api key|Anthropic.*unauthorized/i.test(message)) {
+      return new ProviderGatewayError('Anthropic key invalid or unauthorized. Update ANTHROPIC_API_KEY on Railway and redeploy.', {
+        diagnosticCode: 'ANTHROPIC_KEY_INVALID',
         statusCode: 503,
         retryable: false,
         modelId,

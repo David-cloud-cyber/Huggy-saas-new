@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { ProviderGateway, ProviderGatewayError } from './src/services/provider-gateway.ts';
 import { resolveOpenRouterApiKey, type ChatMessage } from './src/services/openrouter-service.ts';
+import { resolveAnthropicApiKey, resolveDirectAnthropicModelId } from './src/services/anthropic-service.ts';
 
 const messages: ChatMessage[] = [{ role: 'user', content: 'hello' }];
 
@@ -30,6 +31,33 @@ class FakeOpenRouter {
   }
 }
 
+class FakeAnthropic {
+  calls: string[] = [];
+
+  isConfigured() {
+    return true;
+  }
+
+  supportsModel(modelId: string) {
+    return modelId.startsWith('anthropic/') || modelId.startsWith('~anthropic/');
+  }
+
+  async chat(modelId: string) {
+    this.calls.push(modelId);
+    return {
+      text: 'direct-anthropic-ok',
+      model: modelId,
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      cost_usd: 0.001,
+    };
+  }
+
+  async *streamChat(modelId: string) {
+    this.calls.push(modelId);
+    yield { type: 'token' as const, text: 'direct-anthropic-ok', model: modelId };
+  }
+}
+
 {
   const fake = new FakeOpenRouter();
   fake.failures.push(new Error('OpenRouter HTTP 404: model not available'));
@@ -47,6 +75,33 @@ class FakeOpenRouter {
   assert.equal(resolveOpenRouterApiKey({ OPEN_ROUTER_API_KEY: '  sk-or-alias\n' }), 'sk-or-alias');
   assert.equal(resolveOpenRouterApiKey({ OPENROUTER_API_KEY: '***redacted***', OPENROUTER_TOKEN: ' sk-or-token ' }), 'sk-or-token');
   assert.equal(resolveOpenRouterApiKey({ OPENROUTER_API_KEY: '***redacted***' }), '');
+}
+
+{
+  assert.equal(resolveAnthropicApiKey({ ANTHROPIC_API_KEY: '  sk-ant-direct\n' }), 'sk-ant-direct');
+  assert.equal(resolveDirectAnthropicModelId('anthropic/claude-sonnet-4.6'), 'claude-sonnet-4-6');
+  assert.equal(resolveDirectAnthropicModelId('anthropic/claude-opus-4.8-fast'), 'claude-opus-4-8');
+  assert.equal(resolveDirectAnthropicModelId('google/gemini-3.5-flash'), null);
+}
+
+{
+  const fakeOpenRouter = new FakeOpenRouter();
+  const fakeAnthropic = new FakeAnthropic();
+  const gateway = new ProviderGateway(fakeOpenRouter as any, { anthropic: fakeAnthropic as any });
+  const result = await gateway.chat('anthropic/claude-sonnet-4.6', messages);
+  assert.equal(result.text, 'direct-anthropic-ok');
+  assert.deepEqual(fakeAnthropic.calls, ['anthropic/claude-sonnet-4.6']);
+  assert.equal(fakeOpenRouter.calls.length, 0, 'Claude models should use the direct Anthropic key when configured.');
+}
+
+{
+  const fakeOpenRouter = new FakeOpenRouter();
+  fakeOpenRouter.failures.push(...Array.from({ length: 10 }, () => new Error('OpenRouter HTTP 402: insufficient credits')));
+  const fakeAnthropic = new FakeAnthropic();
+  const gateway = new ProviderGateway(fakeOpenRouter as any, { anthropic: fakeAnthropic as any });
+  const result = await gateway.chat('google/gemini-3.5-flash', messages, { maxAttempts: 1 });
+  assert.equal(result.text, 'direct-anthropic-ok');
+  assert.ok(fakeAnthropic.calls.includes('anthropic/claude-sonnet-4.6'), 'OpenRouter quota exhaustion should fail over to direct Claude.');
 }
 
 {
