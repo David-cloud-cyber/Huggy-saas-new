@@ -41,6 +41,7 @@ type GeneratedFile = {
 
 type ProjectPayload = {
   success: boolean;
+  recovery_source?: 'normalized' | 'snapshot' | 'mixed';
   project: {
     id: string;
     name: string;
@@ -50,7 +51,7 @@ type ProjectPayload = {
   };
   files: GeneratedFile[];
   messages?: Array<{ role: string; content: string; intent?: string }>;
-  events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any }>;
+  events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any; public_payload?: any; status?: string; agent_run_id?: string; created_at?: string }>;
   workspace_state?: WorkspaceState | null;
   preview?: {
     status: string;
@@ -4554,7 +4555,7 @@ async function loadProject() {
     if (currentProjectId) await flushPendingPromptAttachments();
     renderFiles(payload.files || []);
     applyWorkspaceState(payload.workspace_state || null);
-    if (payload.preview?.html && payload.preview.status === 'ready' && isUsablePreviewHtml(payload.preview.html)) {
+    if (payload.preview?.html && payload.preview.status !== 'idle' && isUsablePreviewHtml(payload.preview.html)) {
       setPreview(payload.preview.html, payload.preview.status);
     } else {
       currentPreviewHtml = '';
@@ -4562,6 +4563,8 @@ async function loadProject() {
     }
     syncProjectReadinessClass();
     restoreMessages(payload);
+    const restoredWorkline = restoreWorklineFromPayloadEvents(payload);
+    if (!restoredWorkline) await restoreLatestWorklineFromRunHistory(payload);
     const activeTab = payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab;
     if (activeTab === 'code' || activeTab === 'database' || activeTab === 'analysis') {
       activateBuilderView(activeTab);
@@ -4603,6 +4606,29 @@ function restoreMessages(payload: ProjectPayload) {
         lastPlan = message.content;
       }
     });
+}
+
+function restoreWorklineFromPayloadEvents(payload: ProjectPayload) {
+  const scroll = chatScroll();
+  if (!scroll || scroll.dataset.worklineRestored === 'true' || !payload.events?.length) return false;
+  const steps = payload.events.map((event, index) => ({
+    sequence_number: Number(event.sequence_number || index + 1),
+    event_type: event.event_type,
+    status: event.status || 'completed',
+    message: event.message || '',
+    public_payload: event.public_payload || event.payload || {},
+    created_at: event.created_at,
+  })) as AgentRunStep[];
+  const journal = buildHuggyWorklineFromSteps(steps, { status: 'completed' } as AgentRunSummary);
+  if (!journal) return false;
+  const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
+  if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
+    journal.finalText = '';
+  }
+  const card = appendMessage('assistant', '');
+  setWorkJournalBlock(card, journal);
+  scroll.dataset.worklineRestored = 'true';
+  return true;
 }
 
 function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyWorklineBlock | null {

@@ -1033,6 +1033,22 @@ type PublishContext = {
   currentVisitors?: number;
 };
 
+type DurableProjectSnapshot = {
+  project_id: string;
+  owner_id: string;
+  organization_id?: string | null;
+  revision?: number;
+  project_snapshot?: GeneratedProject | null;
+  files_snapshot?: GeneratedFile[];
+  messages_snapshot?: any[];
+  events_snapshot?: any[];
+  workspace_snapshot?: Record<string, any> | null;
+  preview_snapshot?: { status?: string; html?: string } | null;
+  last_agent_run_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 type AgentEvent = {
   id?: string;
   organization_id: string;
@@ -6491,6 +6507,15 @@ async function saveProject(project: GeneratedProject, files?: GeneratedFile[]) {
     await saveProjectFilesWithSchemaFallback(client, project, files);
   }
 
+  await persistDurableProjectSnapshot({
+    project,
+    files,
+    preview: {
+      status: project.preview_status || 'idle',
+      html: project.preview_html || (files ? getProjectPreviewHtml(project, files, 'preview') : ''),
+    },
+  });
+
   return project;
 }
 
@@ -6541,6 +6566,182 @@ async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
     ...file,
     content: redactSecrets(file.content || ''),
   })) as GeneratedFile[];
+}
+
+function isMissingProjectSnapshotTableError(error: any) {
+  return /project_state_snapshots|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error?.message || '');
+}
+
+function cleanProjectForSnapshot(project: GeneratedProject) {
+  const snapshot = redactSecretPayload({ ...project }) as Record<string, any>;
+  delete snapshot.__huggy_project_role;
+  return snapshot;
+}
+
+async function persistDurableProjectSnapshot(input: {
+  project: GeneratedProject;
+  files?: GeneratedFile[];
+  messages?: any[];
+  events?: any[];
+  workspace?: Record<string, any> | null;
+  preview?: { status?: string; html?: string } | null;
+  lastAgentRunId?: string | null;
+}) {
+  const row = withoutUndefinedValues({
+    project_id: input.project.id,
+    owner_id: input.project.owner_id,
+    organization_id: input.project.organization_id || null,
+    revision: Date.now(),
+    project_snapshot: cleanProjectForSnapshot(input.project),
+    files_snapshot: input.files === undefined ? undefined : redactSecretPayload(input.files),
+    messages_snapshot: input.messages === undefined ? undefined : redactSecretPayload(input.messages.slice(-250)),
+    events_snapshot: input.events === undefined ? undefined : redactSecretPayload(input.events.slice(-500)),
+    workspace_snapshot: input.workspace === undefined ? undefined : redactSecretPayload(input.workspace || {}),
+    preview_snapshot: input.preview === undefined ? undefined : redactSecretPayload(input.preview || {}),
+    last_agent_run_id: input.lastAgentRunId === undefined ? undefined : input.lastAgentRunId,
+    updated_at: new Date().toISOString(),
+  });
+  const client = requireSupabase('Durable project snapshot persistence');
+  const { error } = await client.from('project_state_snapshots').upsert([row], { onConflict: 'project_id' });
+  if (error && isMissingProjectSnapshotTableError(error)) {
+    console.warn('[huggy:durable_project_snapshot_unavailable]', { project_id: input.project.id, message: error.message });
+    return false;
+  }
+  if (error) throw new Error(`Durable project snapshot persistence failed: ${error.message}`);
+  return true;
+}
+
+async function appendDurableProjectSnapshotItem(input: {
+  projectId: string;
+  ownerId: string;
+  organizationId?: string | null;
+  field: 'messages_snapshot' | 'events_snapshot';
+  item: any;
+  limit: number;
+  lastAgentRunId?: string | null;
+}) {
+  const client = requireSupabase('Durable project snapshot append');
+  const { data, error: readError } = await client
+    .from('project_state_snapshots')
+    .select(`project_id,${input.field}`)
+    .eq('project_id', input.projectId)
+    .maybeSingle();
+  if (readError && isMissingProjectSnapshotTableError(readError)) return false;
+  if (readError) throw new Error(`Durable project snapshot read failed: ${readError.message}`);
+  const previous = Array.isArray(data?.[input.field]) ? data[input.field] : [];
+  const row = withoutUndefinedValues({
+    project_id: input.projectId,
+    owner_id: input.ownerId,
+    organization_id: input.organizationId || null,
+    revision: Date.now(),
+    [input.field]: redactSecretPayload([...previous, input.item].slice(-input.limit)),
+    last_agent_run_id: input.lastAgentRunId === undefined ? undefined : input.lastAgentRunId,
+    updated_at: new Date().toISOString(),
+  });
+  const { error } = await client.from('project_state_snapshots').upsert([row], { onConflict: 'project_id' });
+  if (error && isMissingProjectSnapshotTableError(error)) return false;
+  if (error) throw new Error(`Durable project snapshot append failed: ${error.message}`);
+  return true;
+}
+
+async function persistDurableWorkspaceSnapshot(projectId: string, ownerId: string, workspace: Record<string, any> | null) {
+  const client = requireSupabase('Durable workspace snapshot persistence');
+  const row = {
+    project_id: projectId,
+    owner_id: ownerId,
+    revision: Date.now(),
+    workspace_snapshot: redactSecretPayload(workspace || {}),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('project_state_snapshots').upsert([row], { onConflict: 'project_id' });
+  if (error && isMissingProjectSnapshotTableError(error)) return false;
+  if (error) throw new Error(`Durable workspace snapshot persistence failed: ${error.message}`);
+  return true;
+}
+
+async function loadDurableProjectSnapshot(projectId: string, ownerId: string): Promise<DurableProjectSnapshot | null> {
+  const client = requireSupabase('Durable project snapshot loading');
+  const { data, error } = await client
+    .from('project_state_snapshots')
+    .select('*')
+    .eq('project_id', projectId)
+    .eq('owner_id', ownerId)
+    .maybeSingle();
+  if (error && isMissingProjectSnapshotTableError(error)) return null;
+  if (error) throw new Error(`Durable project snapshot load failed: ${error.message}`);
+  return (data as DurableProjectSnapshot) || null;
+}
+
+async function refreshDurableProjectSnapshot(project: GeneratedProject, files?: GeneratedFile[]) {
+  const [messages, workspace] = await Promise.all([
+    listProjectMessages(project.id).catch(() => []),
+    getProjectWorkspaceState(project.id).catch(() => null),
+  ]);
+  return persistDurableProjectSnapshot({
+    project,
+    files,
+    messages,
+    workspace,
+    preview: {
+      status: project.preview_status || 'idle',
+      html: project.preview_html || (files ? getProjectPreviewHtml(project, files, 'preview') : ''),
+    },
+  });
+}
+
+function recoverProjectPayloadFromSnapshot(input: {
+  project: GeneratedProject;
+  files: GeneratedFile[];
+  messages: any[];
+  events: any[];
+  workspace: Record<string, any> | null;
+  snapshot: DurableProjectSnapshot | null;
+}) {
+  const snapshot = input.snapshot;
+  const snapshotFiles = normalizeGeneratedFiles(snapshot?.files_snapshot || []);
+  const snapshotMessages = Array.isArray(snapshot?.messages_snapshot) ? snapshot!.messages_snapshot! : [];
+  const snapshotEvents = Array.isArray(snapshot?.events_snapshot) ? snapshot!.events_snapshot! : [];
+  const fileMap = new Map<string, GeneratedFile>();
+  snapshotFiles.forEach(file => fileMap.set(file.path, file));
+  input.files.forEach(file => fileMap.set(file.path, file));
+  const files = Array.from(fileMap.values()).sort((a, b) => a.path.localeCompare(b.path));
+  const messageMap = new Map<string, any>();
+  [...snapshotMessages, ...input.messages].forEach((message: any, index) => {
+    const key = String(message?.id || `${message?.role || 'unknown'}:${message?.created_at || index}:${message?.content || ''}`);
+    messageMap.set(key, sanitizeProjectMessageForUser(message));
+  });
+  const messages = Array.from(messageMap.values()).sort((a, b) => String(a?.created_at || '').localeCompare(String(b?.created_at || '')));
+  const eventMap = new Map<string, any>();
+  [...snapshotEvents, ...input.events].forEach((event: any, index) => {
+    const key = String(event?.id || `${event?.agent_run_id || ''}:${event?.sequence_number || index}:${event?.event_type || ''}:${event?.message || ''}`);
+    eventMap.set(key, redactSecretPayload(event));
+  });
+  const events = Array.from(eventMap.values()).sort((a, b) => {
+    const sequenceDiff = Number(a?.sequence_number || 0) - Number(b?.sequence_number || 0);
+    return sequenceDiff || String(a?.created_at || '').localeCompare(String(b?.created_at || ''));
+  });
+  const workspace = input.workspace || snapshot?.workspace_snapshot || null;
+  const snapshotPreview = snapshot?.preview_snapshot || null;
+  const normalizedPreviewHtml = input.project.preview_html
+    ? getProjectPreviewHtml(input.project, files, 'preview')
+    : String(snapshotPreview?.html || '').trim()
+      || getProjectPreviewHtml(input.project, files, 'preview');
+  const usedSnapshot = files.length > input.files.length
+    || messages.length > input.messages.length
+    || events.length > input.events.length
+    || (!input.workspace && Boolean(snapshot?.workspace_snapshot))
+    || (!input.project.preview_html && Boolean(snapshotPreview?.html));
+  return {
+    recovery_source: usedSnapshot ? 'mixed' as const : 'normalized' as const,
+    files,
+    messages,
+    events,
+    workspace,
+    preview: {
+      status: input.project.preview_status || snapshotPreview?.status || 'idle',
+      html: normalizedPreviewHtml,
+    },
+  };
 }
 
 function withoutUndefinedValues(row: Record<string, any>) {
@@ -6641,8 +6842,20 @@ async function saveAgentEvent(event: AgentEvent) {
 
   const client = requireSupabase('Agent event persistence');
   const { error } = await client.from('agent_events').insert([row]);
+  const snapshotPersisted = await appendDurableProjectSnapshotItem({
+    projectId: row.project_id,
+    ownerId: row.user_id,
+    organizationId: row.organization_id,
+    field: 'events_snapshot',
+    item: row,
+    limit: 500,
+  }).catch(snapshotError => {
+    console.warn('[huggy:agent_event_snapshot_failed]', { message: redactSecrets(snapshotError?.message || String(snapshotError), '[redacted]') });
+    return false;
+  });
   if (error) {
     console.warn('[huggy:agent_event_persistence_skipped]', { message: redactSecrets(error.message, '[redacted]') });
+    if (!snapshotPersisted) throw new Error(`Agent event persistence failed: ${error.message}`);
   }
   return row;
 }
@@ -6864,7 +7077,30 @@ async function saveAgentRunStep(input: {
   };
   const client = requireSupabase('Agent run step persistence');
   const { error } = await client.from('agent_run_steps').insert([row]);
-  if (error && isMissingAgentV2TableError(error)) return row;
+  const snapshotPersisted = await appendDurableProjectSnapshotItem({
+    projectId: row.project_id,
+    ownerId: row.user_id,
+    organizationId: row.organization_id,
+    field: 'events_snapshot',
+    item: {
+      sequence_number: row.sequence_number,
+      event_type: row.event_type,
+      status: row.status,
+      message: row.message,
+      public_payload: row.public_payload,
+      agent_run_id: row.agent_run_id,
+      created_at: row.created_at,
+    },
+    limit: 500,
+    lastAgentRunId: row.agent_run_id,
+  }).catch(snapshotError => {
+    console.warn('[huggy:agent_run_step_snapshot_failed]', { message: redactSecrets(snapshotError?.message || String(snapshotError), '[redacted]') });
+    return false;
+  });
+  if (error && isMissingAgentV2TableError(error)) {
+    if (!snapshotPersisted) console.warn('[huggy:agent_run_step_not_durable]', { project_id: row.project_id, message: redactSecrets(error.message, '[redacted]') });
+    return row;
+  }
   if (error) console.warn('[huggy:agent_run_step_persistence_skipped]', { message: redactSecrets(error.message, '[redacted]') });
   return row;
 }
@@ -7423,10 +7659,22 @@ async function saveProjectMessage(data: any) {
     const retry = await client.from('project_messages').insert([compactRow]);
     error = retry.error;
   }
+  const snapshotPersisted = await appendDurableProjectSnapshotItem({
+    projectId: row.project_id,
+    ownerId: row.user_id,
+    organizationId: row.organization_id,
+    field: 'messages_snapshot',
+    item: row,
+    limit: 250,
+  }).catch(snapshotError => {
+    console.warn('[huggy:project_message_snapshot_failed]', { message: redactSecrets(snapshotError?.message || String(snapshotError), '[redacted]') });
+    return false;
+  });
   if (error) {
     if (/project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
       console.warn('[huggy:project_message_persistence_skipped]', { message: error.message });
-      return row;
+      if (snapshotPersisted) return row;
+      throw new Error(`Project message persistence unavailable: ${error.message}`);
     }
     throw new Error(`Supabase project message persistence failed: ${error.message}`);
   }
@@ -7792,8 +8040,19 @@ async function upsertProjectWorkspaceState(userId: string, projectId: string, pa
     data = retry.data;
     error = retry.error;
   }
-  if (error && isMissingWorkspaceTableError(error)) return null;
+  if (error && isMissingWorkspaceTableError(error)) {
+    const snapshotPersisted = await persistDurableWorkspaceSnapshot(projectId, userId, row).catch(() => false);
+    if (!snapshotPersisted) return null;
+    await upsertUserWorkspaceState(userId, { last_project_id: projectId, last_route: `/builder.html?project=${projectId}` });
+    return row;
+  }
   if (error) throw new Error(`Supabase project workspace state update failed: ${error.message}`);
+  await persistDurableWorkspaceSnapshot(projectId, userId, data || row).catch(snapshotError => {
+    console.warn('[huggy:project_workspace_snapshot_failed]', {
+      project_id: projectId,
+      message: redactSecrets(snapshotError?.message || String(snapshotError), '[redacted]'),
+    });
+  });
   await upsertUserWorkspaceState(userId, { last_project_id: projectId, last_route: `/builder.html?project=${projectId}` });
   return data;
 }
@@ -9351,7 +9610,12 @@ app.get('/api/projects/:id/messages', async (req: any, res) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  const messages = await listProjectMessagesPage(project.id, req.query?.limit, req.query?.before);
+  let messages = await listProjectMessagesPage(project.id, req.query?.limit, req.query?.before);
+  if (!messages.length) {
+    const snapshot = await loadDurableProjectSnapshot(project.id, userId);
+    const fallback = Array.isArray(snapshot?.messages_snapshot) ? snapshot!.messages_snapshot! : [];
+    messages = fallback.slice(-Math.min(100, Math.max(1, Number(req.query?.limit || 100)))).map(sanitizeProjectMessageForUser);
+  }
   res.json({ success: true, messages });
 });
 
@@ -9359,7 +9623,12 @@ app.get('/api/projects/:id/events', async (req: any, res) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  const events = await listAgentEventsPage(project.id, req.query?.limit, req.query?.before);
+  let events = await listAgentEventsPage(project.id, req.query?.limit, req.query?.before);
+  if (!events.length) {
+    const snapshot = await loadDurableProjectSnapshot(project.id, userId);
+    const fallback = Array.isArray(snapshot?.events_snapshot) ? snapshot!.events_snapshot! : [];
+    events = fallback.slice(-Math.min(100, Math.max(1, Number(req.query?.limit || 100)))).map(redactSecretPayload);
+  }
   res.json({ success: true, events });
 });
 
@@ -9605,22 +9874,24 @@ app.get('/api/projects/:id', async (req: any, res: any) => {
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
-  const files = await loadProjectFiles(project.id);
-  const messages = await listProjectMessages(project.id);
-  const events = await listAgentEvents(project.id);
-  const workspaceState = await getProjectWorkspaceState(project.id);
+  const [files, messages, events, workspaceState, snapshot] = await Promise.all([
+    loadProjectFiles(project.id),
+    listProjectMessages(project.id),
+    listAgentEvents(project.id),
+    getProjectWorkspaceState(project.id),
+    loadDurableProjectSnapshot(project.id, userId),
+  ]);
+  const recovered = recoverProjectPayloadFromSnapshot({ project, files, messages, events, workspace: workspaceState, snapshot });
   await upsertUserWorkspaceState(userId, { last_project_id: project.id, last_route: `/builder.html?project=${project.id}` });
   res.json({
     success: true,
+    recovery_source: recovered.recovery_source,
     project,
-    files,
-    messages,
-    events,
-    workspace_state: workspaceState,
-    preview: {
-      status: project.preview_status || 'idle',
-      html: getProjectPreviewHtml(project, files, 'preview'),
-    },
+    files: recovered.files,
+    messages: recovered.messages,
+    events: recovered.events,
+    workspace_state: recovered.workspace,
+    preview: recovered.preview,
   });
 });
 
@@ -9648,28 +9919,30 @@ app.get('/api/projects/:id/state', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-  const files = await loadProjectFiles(project.id);
-  const messages = await listProjectMessages(project.id);
-  const events = await listAgentEvents(project.id);
-  const versions = await listProjectVersions(project.id);
-  const secrets = await listProjectSecrets(project.id);
-  const errors = await listBuildErrors(project.id);
-  const workspaceState = await getProjectWorkspaceState(project.id);
+  const [files, messages, events, versions, secrets, errors, workspaceState, snapshot] = await Promise.all([
+    loadProjectFiles(project.id),
+    listProjectMessages(project.id),
+    listAgentEvents(project.id),
+    listProjectVersions(project.id),
+    listProjectSecrets(project.id),
+    listBuildErrors(project.id),
+    getProjectWorkspaceState(project.id),
+    loadDurableProjectSnapshot(project.id, userId),
+  ]);
+  const recovered = recoverProjectPayloadFromSnapshot({ project, files, messages, events, workspace: workspaceState, snapshot });
   await upsertUserWorkspaceState(userId, { last_project_id: project.id, last_route: `/builder.html?project=${project.id}` });
   res.json({
     success: true,
+    recovery_source: recovered.recovery_source,
     project,
-    files,
-    messages,
-    events,
+    files: recovered.files,
+    messages: recovered.messages,
+    events: recovered.events,
     versions,
     secrets,
     errors,
-    workspace_state: workspaceState,
-    preview: {
-      status: project.preview_status || 'idle',
-      html: getProjectPreviewHtml(project, files, 'preview'),
-    },
+    workspace_state: recovered.workspace,
+    preview: recovered.preview,
   });
 });
 
@@ -10833,6 +11106,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
       },
     });
+    await saveProjectMessage({
+      organization_id: updatedProject.organization_id,
+      project_id: updatedProject.id,
+      user_id: userId,
+      role: 'assistant',
+      content: generation.summary || 'The application is ready in Preview.',
+      intent: decision.intent,
+      requested_mode: decision.requestedMode,
+    });
+    await refreshDurableProjectSnapshot(updatedProject, finalFiles);
 
     const finalPayload = {
       success: true,
