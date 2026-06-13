@@ -3116,7 +3116,9 @@ function ensurePublishPanel() {
   if (root) return root;
   root = document.createElement('div');
   root.id = 'huggy-publish-panel';
-  root.style.cssText = 'position:fixed;inset:0;background:rgba(28,28,28,.28);display:grid;place-items:center;z-index:99999;padding:16px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);';
+  // Transparent click-catcher — the panel is a dropdown anchored to the
+  // Publish button, not a centered, screen-dimming modal.
+  root.style.cssText = 'position:fixed;inset:0;z-index:99999;background:transparent;';
   document.body.appendChild(root);
   root.addEventListener('click', event => {
     if (event.target === root) closePublishPanel();
@@ -3124,7 +3126,27 @@ function ensurePublishPanel() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && document.getElementById('huggy-publish-panel')) closePublishPanel();
   });
+  window.addEventListener('resize', positionPublishDropdown);
   return root;
+}
+
+function positionPublishDropdown() {
+  const root = document.getElementById('huggy-publish-panel');
+  const section = root?.querySelector('section') as HTMLElement | null;
+  const button = document.querySelector('.btn-publish') as HTMLElement | null;
+  if (!root || !section) return;
+  section.style.position = 'absolute';
+  if (button) {
+    const rect = button.getBoundingClientRect();
+    const top = Math.round(rect.bottom + 8);
+    const right = Math.max(12, Math.round(window.innerWidth - rect.right));
+    section.style.top = `${top}px`;
+    section.style.right = `${right}px`;
+    section.style.left = 'auto';
+  } else {
+    section.style.top = '60px';
+    section.style.right = '16px';
+  }
 }
 
 function closePublishPanel() {
@@ -3198,72 +3220,40 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
       `
       : '';
   root.innerHTML = `
-    <section role="dialog" aria-modal="true" aria-label="Publish settings" style="width:min(430px,100%);border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:18px;box-shadow:0 24px 64px rgba(25,22,16,.18),0 0 0 1px rgba(255,255,255,.55) inset;overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 13px;border-bottom:1px solid var(--border);">
-        <div style="min-width:0;">
-          <h3 style="margin:0;color:var(--text);font-size:18px;line-height:1.1;letter-spacing:-.03em;font-weight:850;">${escapeHtml(title)}</h3>
-          <p style="margin:5px 0 0;color:var(--text-muted);font-size:12px;line-height:1.4;">${escapeHtml(statusDetail)}</p>
+    <section role="dialog" aria-label="Publish" style="position:absolute;width:min(360px,calc(100vw - 24px));border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:16px;box-shadow:var(--shadow-lg,0 18px 48px rgba(0,0,0,.45));overflow:hidden;font-family:var(--font-body,Inter,ui-sans-serif,system-ui);transform-origin:top right;animation:huggy-pub-in 140ms cubic-bezier(.22,1,.36,1) both;">
+      <style>@keyframes huggy-pub-in{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}</style>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px 11px;">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${hasPublishedDeployment ? 'var(--success,#22c55e)' : 'var(--text-sub,#71717a)'};"></span>
+          <h3 style="margin:0;color:var(--text);font-size:15px;line-height:1.1;letter-spacing:-.02em;font-weight:800;">${escapeHtml(title)}</h3>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:12px;font-weight:850;white-space:nowrap;border:1px solid var(--border);background:var(--bg-input);border-radius:999px;padding:6px 9px;">
-          <span style="color:var(--accent-blue);display:grid;place-items:center;width:17px;height:17px;">${publishIcon('visitors')}</span>
-          <span>${hasPublishedDeployment ? escapeHtml(visitorLabel) : 'Draft'}</span>
-        </div>
+        <button type="button" data-publish-action="close" aria-label="Close" style="display:grid;place-items:center;width:26px;height:26px;border:0;border-radius:8px;background:transparent;color:var(--text-muted);cursor:pointer;padding:0;">${publishIcon('fail')}</button>
       </div>
-      <div style="display:grid;gap:13px;padding:15px 18px;border-bottom:1px solid var(--border);">
-        ${error ? `<div style="border:1px solid rgba(220,38,38,.22);background:rgba(220,38,38,.08);color:#991b1b;border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.4;">${escapeHtml(error)}</div>` : ''}
+      <div style="display:grid;gap:11px;padding:0 16px 14px;">
+        ${error ? `<div style="border:1px solid var(--error-dim,rgba(248,113,113,.25));background:var(--error-dim,rgba(248,113,113,.10));color:var(--error,#f87171);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.4;">${escapeHtml(error)}</div>` : ''}
         ${status ? `
-          <div style="display:grid;gap:9px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <strong style="color:var(--text);font-size:13px;letter-spacing:-.02em;">Website URL</strong>
-              <button type="button" data-publish-action="domain" style="display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--accent-blue-deep);font-size:11px;font-weight:800;cursor:pointer;padding:0;white-space:nowrap;">
-                <span style="display:grid;place-items:center;width:16px;height:16px;">${publishIcon('link')}</span>
-                <span>Add custom domain</span>
-              </button>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--border);background:var(--bg-input);border-radius:13px;padding:10px 11px;box-shadow:0 1px 0 rgba(255,255,255,.55) inset;">
-              <span title="${escapeHtml(publicUrl || publicUrlLabel)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${publicUrl ? 'var(--text)' : 'var(--text-muted)'};font-size:13px;font-weight:780;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
-              <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy live URL" style="display:grid;place-items:center;width:24px;height:24px;border:0;background:transparent;color:${publicUrl ? 'var(--text-muted)' : 'color-mix(in srgb, var(--text-muted) 45%, transparent)'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;color:var(--text-muted);font-size:11px;line-height:1.35;">
-              <span>${hasPublishedDeployment ? `Last published: ${escapeHtml(formatPublishDate(status.latest_published_at))}` : 'URL appears after first publish'}</span>
-              <span>${status.badge_required ? 'Badge active' : 'No badge'}</span>
-            </div>
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;border:1px solid var(--border);background:var(--bg-input);border-radius:11px;padding:9px 11px;">
+            <span style="color:var(--text-muted);display:grid;place-items:center;width:16px;height:16px;flex:0 0 auto;">${publishIcon('globe')}</span>
+            <span title="${escapeHtml(publicUrl || publicUrlLabel)}" style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${publicUrl ? 'var(--text)' : 'var(--text-muted)'};font-size:12.5px;font-weight:600;letter-spacing:-.01em;">${escapeHtml(publicUrlLabel)}</span>
+            <button type="button" data-publish-action="copy" ${publicUrl ? '' : 'disabled'} aria-label="Copy URL" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:7px;background:transparent;color:${publicUrl ? 'var(--text-muted)' : 'color-mix(in srgb, var(--text-muted) 45%, transparent)'};cursor:${publicUrl ? 'pointer' : 'default'};padding:0;">${publishIcon('copy')}</button>
           </div>
         ` : `
-          <div style="display:grid;gap:10px;">
-            <div class="skeleton" style="height:58px;border-radius:14px;background:var(--bg-input);"></div>
-            <div class="skeleton" style="height:68px;border-radius:14px;background:var(--bg-input);"></div>
-          </div>
+          <div class="skeleton" style="height:40px;border-radius:11px;background:var(--bg-input);"></div>
         `}
-        ${status ? `
-          <div style="display:grid;gap:9px;">
-            <strong style="color:var(--text);font-size:13px;letter-spacing:-.02em;">Who can see this website</strong>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div style="display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--accent-blue-soft);color:var(--accent-blue-deep);">${publishIcon('globe')}</div>
-              <div>
-                <div style="color:var(--text);font-size:13px;font-weight:850;letter-spacing:-.02em;">Public</div>
-                <div style="margin-top:2px;color:var(--text-muted);font-size:12px;font-weight:620;">Anyone with the URL after publish</div>
-              </div>
-            </div>
-          </div>
-        ` : ''}
-      </div>
-      ${detailPanel}
-      <div style="display:grid;gap:10px;padding:13px 18px 16px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
-          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.55) inset;opacity:${status ? '1' : '.5'};">
-            Checks <span style="display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;border-radius:999px;background:${failCount ? '#dc2626' : warnCount ? '#d97706' : 'var(--accent-blue)'};color:#fff;font-size:10px;font-weight:900;">${checkCount || passCount}</span>
+        ${detailPanel ? `<div style="margin:0 -16px 0;">${detailPanel}</div>` : `
+        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:40px;border:0;background:var(--accent-blue,#6366f1);color:#fff;border-radius:11px;font-size:13.5px;font-weight:800;letter-spacing:-.01em;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};opacity:${status?.can_publish && !isPublishing ? '1' : '.5'};transition:filter 120ms ease;">${escapeHtml(primaryLabel)}</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <button type="button" data-publish-action="security" ${status ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:650;cursor:${status ? 'pointer' : 'default'};padding:4px 2px;opacity:${status ? '1' : '.5'};">
+            ${failCount ? 'Issues' : warnCount ? 'Review' : 'Checks'} <span style="display:inline-grid;place-items:center;min-width:17px;height:17px;border-radius:999px;background:${failCount ? 'var(--error,#f87171)' : warnCount ? 'var(--warning,#fbbf24)' : 'var(--accent-blue-soft)'};color:${failCount || warnCount ? '#fff' : 'var(--accent-blue-deep)'};font-size:10px;font-weight:800;">${checkCount || passCount}</span>
           </button>
-          <button type="button" data-publish-action="settings" ${status ? '' : 'disabled'} style="height:32px;border:1px solid var(--border);background:var(--bg-input);color:var(--text);border-radius:10px;font-size:11px;font-weight:850;cursor:${status ? 'pointer' : 'default'};box-shadow:0 1px 0 rgba(255,255,255,.55) inset;opacity:${status ? '1' : '.5'};">Settings</button>
+          <button type="button" data-publish-action="domain" ${status ? '' : 'disabled'} style="border:0;background:transparent;color:var(--text-muted);font-size:12px;font-weight:650;cursor:${status ? 'pointer' : 'default'};padding:4px 2px;opacity:${status ? '1' : '.5'};">Custom domain</button>
+          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? 'var(--accent-blue-deep)' : 'var(--text-muted)'};font-size:12px;font-weight:700;cursor:${canOpen ? 'pointer' : 'default'};padding:4px 2px;opacity:${canOpen ? '1' : '.45'};">Open ↗</button>
         </div>
-        <button type="button" data-publish-action="publish" ${status?.can_publish && !isPublishing ? '' : 'disabled'} style="height:38px;border:1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);background:radial-gradient(circle at 24% 12%, rgba(191,219,254,.28), transparent 34%),linear-gradient(135deg,var(--accent-blue) 0%,var(--accent-blue-deep) 100%);color:#fff;border-radius:11px;font-size:13px;font-weight:900;cursor:${status?.can_publish && !isPublishing ? 'pointer' : 'default'};box-shadow:0 10px 22px rgba(47,109,246,.22),inset 0 1px 0 rgba(255,255,255,.24);opacity:${status?.can_publish && !isPublishing ? '1' : '.52'};">${escapeHtml(primaryLabel)}</button>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-muted);font-size:11px;">
-          <button type="button" data-publish-action="close" style="border:0;background:transparent;color:var(--text-muted);font-weight:800;cursor:pointer;padding:0;">Close</button>
-          <button type="button" data-publish-action="open" ${canOpen ? '' : 'disabled'} style="border:0;background:transparent;color:${canOpen ? 'var(--accent-blue-deep)' : 'var(--text-muted)'};font-weight:800;cursor:${canOpen ? 'pointer' : 'default'};padding:0;opacity:${canOpen ? '1' : '.55'};">Open live app</button>
-        </div>
+        `}
       </div>
     </section>
   `;
+  positionPublishDropdown();
 
   root.querySelectorAll<HTMLButtonElement>('[data-publish-action]').forEach(button => {
     button.addEventListener('click', () => {
