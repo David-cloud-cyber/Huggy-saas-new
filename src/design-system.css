@@ -14,7 +14,7 @@
   --huggy-border-strong: rgba(9, 9, 11, 0.14);
 
   /* Signature accent — Indigo 500. */
-  --huggy-blue: #6366f1;
+  --huggy-blue: #2f6df6;
   --huggy-blue-deep: #4338ca;
   --huggy-blue-ink: #312e81;
   --huggy-blue-soft: rgba(99, 102, 241, 0.10);
@@ -39,7 +39,7 @@
   --huggy-shadow-soft: 0 4px 12px rgba(9, 9, 11, 0.06), 0 1px 2px rgba(9, 9, 11, 0.04);
   --huggy-shadow-card: 0 20px 48px rgba(9, 9, 11, 0.10), 0 1px 2px rgba(9, 9, 11, 0.04);
 
-  --huggy-gradient-blue: linear-gradient(135deg, #6366f1 0%, #4f46e5 48%, #4338ca 100%);
+  --huggy-gradient-blue: linear-gradient(135deg, #2f6df6 0%, #2563eb 48%, #1d4ed8 100%);
   --huggy-motion-fast: 120ms;
   --huggy-motion-normal: 180ms;
   --huggy-motion-panel: 260ms;
@@ -59,7 +59,7 @@
   --huggy-border-strong: rgba(255, 255, 255, 0.12);
 
   /* Same Indigo 500 signature. */
-  --huggy-blue: #6366f1;
+  --huggy-blue: #2f6df6;
   --huggy-blue-deep: #a5b4fc;
   --huggy-blue-ink: #c7d2fe;
   --huggy-blue-soft: rgba(99, 102, 241, 0.14);

@@ -183,9 +183,9 @@ function ensureStyles() {
     }
     [data-prompt-action="voice"].is-recording,
     .btn-voice.is-recording {
-      color: var(--accent, #8b5cf6) !important;
-      border-color: color-mix(in srgb, var(--accent, #8b5cf6) 45%, transparent) !important;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #8b5cf6) 16%, transparent);
+      color: var(--accent-blue, #2f6df6) !important;
+      border-color: color-mix(in srgb, var(--accent-blue, #2f6df6) 45%, transparent) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue, #2f6df6) 16%, transparent);
     }
   `;
   document.head.appendChild(style);
