@@ -2954,6 +2954,38 @@ function bindConnectorsButton() {
   });
 }
 
+// WebContainer state: cached URL + teardown for the current preview boot.
+let webContainerUrl = '';
+let webContainerTeardown: (() => void) | null = null;
+let webContainerBootInFlight = false;
+
+async function tryBootWebContainerPreview(frame: HTMLIFrameElement, files: GeneratedFile[]) {
+  if (webContainerBootInFlight) return false;
+  try {
+    const mod = await import('./services/webcontainer-runner.ts');
+    if (!mod.webContainerPreviewEnabled() || !mod.webContainersSupported()) return false;
+    if (!files || files.length === 0) return false;
+    webContainerBootInFlight = true;
+    // Tear down any previous boot before starting a new one.
+    if (webContainerTeardown) { try { webContainerTeardown(); } catch { /* ignore */ } webContainerTeardown = null; }
+    const result = await mod.bootHuggyWebContainer({
+      files: files.map(f => ({ path: f.path, content: f.content })),
+    });
+    if (result.ok) {
+      webContainerUrl = result.url;
+      webContainerTeardown = result.teardown;
+      frame.removeAttribute('srcdoc');
+      frame.src = result.url;
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    webContainerBootInFlight = false;
+  }
+}
+
 function setPreview(html: string, status = 'ready') {
   if (!isUsablePreviewHtml(html)) {
     currentPreviewHtml = '';
@@ -2974,7 +3006,12 @@ function setPreview(html: string, status = 'ready') {
     frame.style.transition = 'opacity 180ms cubic-bezier(.22,1,.36,1), transform 180ms cubic-bezier(.22,1,.36,1)';
     frame.style.opacity = '0.72';
     frame.style.transform = 'scale(.998)';
-    frame.srcdoc = html;
+    // WebContainer real-build preview (flag gated). When the boot succeeds, the
+    // iframe shows the live Vite dev server (preview == production). On any
+    // failure or when the flag is off, we fall back to the Babel preview html.
+    void tryBootWebContainerPreview(frame, currentFiles).then(booted => {
+      if (!booted) frame.srcdoc = html;
+    });
     requestAnimationFrame(() => {
       frame.style.opacity = '1';
       frame.style.transform = 'scale(1)';

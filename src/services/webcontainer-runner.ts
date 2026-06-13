@@ -58,10 +58,21 @@ export function webContainersSupported(): boolean {
     && typeof SharedArrayBuffer !== 'undefined';
 }
 
-/** True when the feature flag is on (server injects window.__HUGGY_FLAGS__). */
+/**
+ * True when the feature flag is on. Three sources are checked, any one wins:
+ *   - window.__HUGGY_FLAGS__.webcontainerPreview (server-side injected flag)
+ *   - <meta name="huggy-webcontainer-preview" content="1"> in the page
+ *   - the URL query string ?webcontainers=1 (handy for opt-in testing)
+ */
 export function webContainerPreviewEnabled(): boolean {
   if (typeof window === 'undefined') return false;
-  return Boolean((window as any).__HUGGY_FLAGS__?.webcontainerPreview);
+  if ((window as any).__HUGGY_FLAGS__?.webcontainerPreview) return true;
+  try {
+    const meta = document.querySelector('meta[name="huggy-webcontainer-preview"]') as HTMLMetaElement | null;
+    if (meta && meta.content === '1') return true;
+    if (window.location && /[?&]webcontainers?=1\b/.test(window.location.search)) return true;
+  } catch { /* SSR or strict CSP */ }
+  return false;
 }
 
 export type BootResult =

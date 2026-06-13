@@ -3,6 +3,7 @@ import { validateAllowedModel } from './ai-validator.ts';
 import { AI_MODEL_FALLBACKS, type AllowedModelId } from '../config/ai-models.ts';
 import { toOpenRouterChatPayloadExtras, type ProviderRequestConfig } from './provider-adapters.ts';
 import { applyPromptCaching, type CacheableMessage } from './prompt-caching.ts';
+import { ToolCallStreamAccumulator, type AssembledToolCall } from './tool-call-stream-accumulator.ts';
 
 export const OPENROUTER_API_KEY_ENV_NAMES = [
   'OPENROUTER_API_KEY',
@@ -87,7 +88,8 @@ export interface ChatCompletionResult {
 
 export type StreamChatEvent =
   | { type: 'token'; text: string; model: string }
-  | { type: 'usage'; usage: ChatCompletionResult['usage']; cost_usd: number; model: string };
+  | { type: 'usage'; usage: ChatCompletionResult['usage']; cost_usd: number; model: string }
+  | { type: 'tool_calls'; tool_calls: AssembledToolCall[]; model: string };
 
 export class OpenRouterService {
   private config: OpenRouterConfig;
@@ -248,6 +250,9 @@ export class OpenRouterService {
       let model = modelId;
       // Partial-JSON accumulator for cross-chunk SSE data fragments
       let partialData = '';
+      // Structured tool-call accumulator: stitches fragmented delta.tool_calls
+      // chunks back into complete calls (parallel-call safe by index).
+      const toolCalls = new ToolCallStreamAccumulator();
 
       for await (const chunk of response.body as any) {
         buffer += Buffer.from(chunk).toString('utf8');
@@ -287,9 +292,14 @@ export class OpenRouterService {
               throw new Error(`OpenRouter API Error: ${data.error.message || JSON.stringify(data.error)}`);
             }
             model = data?.model || model;
-            const text = data?.choices?.[0]?.delta?.content || data?.choices?.[0]?.text || '';
+            const delta = data?.choices?.[0]?.delta;
+            const text = delta?.content || data?.choices?.[0]?.text || '';
             if (text) {
               yield { type: 'token', text, model };
+            }
+            // Accumulate streamed tool_calls deltas — emitted at end of stream.
+            if (Array.isArray(delta?.tool_calls)) {
+              toolCalls.ingestDeltaArray(delta.tool_calls);
             }
 
             if (data?.usage) {
@@ -309,6 +319,13 @@ export class OpenRouterService {
               };
             }
           }
+        }
+      }
+      // Emit any accumulated tool calls once the stream is done.
+      if (toolCalls.hasCalls()) {
+        const finalized = toolCalls.finalize();
+        if (finalized.length > 0) {
+          yield { type: 'tool_calls', tool_calls: finalized, model };
         }
       }
     } finally {

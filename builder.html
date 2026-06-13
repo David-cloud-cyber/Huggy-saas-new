@@ -52,21 +52,21 @@
       --bg-surface: #18181b;
       --bg-panel: #131316;
       --bg-input: #0f0f12;
-      --border: rgba(161, 161, 170, 0.14);
-      --border-light: rgba(161, 161, 170, 0.09);
-      --border-mid: rgba(161, 161, 170, 0.22);
-      --border-focus: rgba(47, 109, 246, 0.50);
-      --accent: #7ea5ff;
-      --accent-spark: #2f6df6;
-      --accent-blue: #2f6df6;
-      --accent-blue-deep: #9fc4ff;
-      --accent-blue-soft: rgba(47, 109, 246, 0.14);
-      --accent-blue-hover: rgba(47, 109, 246, 0.22);
-      --accent-blue-active: rgba(47, 109, 246, 0.30);
+      --border: color-mix(in srgb, var(--text, #fafafa) 6%, transparent);
+      --border-light: color-mix(in srgb, var(--text, #fafafa) 4%, transparent);
+      --border-mid: rgba(255, 255, 255, 0.12);
+      --border-focus: rgba(59, 130, 246, 0.50);
+      --accent: #60a5fa;
+      --accent-spark: #3b82f6;
+      --accent-blue: #3b82f6;
+      --accent-blue-deep: #93c5fd;
+      --accent-blue-soft: rgba(59, 130, 246, 0.14);
+      --accent-blue-hover: rgba(59, 130, 246, 0.22);
+      --accent-blue-active: rgba(59, 130, 246, 0.30);
       --accent-dim: rgba(244, 244, 245, 0.06);
       --accent-hover: rgba(244, 244, 245, 0.10);
       --text: #fafafa;
-      --text-muted: #b4b4bd;
+      --text-muted: #b3b8c3;
       --text-sub: #71717a;
       --text-dark: #52525b;
       --blue: var(--accent-blue);
@@ -81,14 +81,14 @@
       --border: rgba(9, 9, 11, 0.08);
       --border-light: rgba(9, 9, 11, 0.05);
       --border-mid: rgba(9, 9, 11, 0.14);
-      --border-focus: rgba(47, 109, 246, 0.40);
+      --border-focus: rgba(59, 130, 246, 0.40);
       --accent: #2563eb;
-      --accent-spark: #2f6df6;
-      --accent-blue: #2f6df6;
-      --accent-blue-deep: #2458dc;
-      --accent-blue-soft: rgba(47, 109, 246, 0.10);
-      --accent-blue-hover: rgba(47, 109, 246, 0.16);
-      --accent-blue-active: rgba(47, 109, 246, 0.22);
+      --accent-spark: #3b82f6;
+      --accent-blue: #3b82f6;
+      --accent-blue-deep: #1d4ed8;
+      --accent-blue-soft: rgba(59, 130, 246, 0.10);
+      --accent-blue-hover: rgba(59, 130, 246, 0.16);
+      --accent-blue-active: rgba(59, 130, 246, 0.22);
       --accent-dim: rgba(9, 9, 11, 0.05);
       --accent-hover: rgba(9, 9, 11, 0.08);
       --text: #09090b;
@@ -185,7 +185,7 @@
     }
 
     .brand-logo-spark {
-      background: linear-gradient(135deg, var(--accent-blue, #6366f1), #a5b4fc);
+      background: linear-gradient(135deg, var(--accent-blue, #3b82f6), #93c5fd);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       font-size: 16px;
@@ -267,8 +267,8 @@
 
     .project-menu-action:hover,
     .project-menu-link:hover {
-      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 20%, var(--border));
-      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 20%, var(--border));
+      background: var(--accent-blue-soft, rgba(59, 130, 246,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -295,13 +295,13 @@
       border-radius: 12px;
       display: grid;
       place-items: center;
-      background: linear-gradient(135deg, var(--accent-blue, #6366f1), #a5b4fc);
+      background: linear-gradient(135deg, var(--accent-blue, #3b82f6), #93c5fd);
       color: #fff;
       font-weight: 900;
       font-size: 13px;
       text-transform: uppercase;
       flex: 0 0 auto;
-      box-shadow: 0 10px 22px rgba(99, 102, 241,.18);
+      box-shadow: 0 10px 22px rgba(59, 130, 246,.18);
     }
 
     .project-menu-name {
@@ -349,8 +349,8 @@
 
     .project-menu-badge.pro,
     .builder-plan-badge.pro {
-      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 28%, var(--border));
-      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 28%, var(--border));
+      background: var(--accent-blue-soft, rgba(59, 130, 246,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -385,7 +385,7 @@
 
     .project-menu-upgrade {
       border: 0;
-      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      background: var(--accent-blue-soft, rgba(59, 130, 246,.10));
       color: var(--accent-blue-deep, #2458dc);
       display: inline-flex;
       align-items: center;
@@ -413,7 +413,7 @@
       height: 100%;
       width: 0%;
       border-radius: inherit;
-      background: linear-gradient(90deg, var(--accent-blue, #6366f1), #a5b4fc);
+      background: linear-gradient(90deg, var(--accent-blue, #3b82f6), #93c5fd);
       transition: width 220ms cubic-bezier(0.22, 1, 0.36, 1);
     }
 
@@ -456,7 +456,7 @@
 
     .project-menu-input:focus {
       border-color: var(--border-focus, var(--accent-blue));
-      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(59, 130, 246,.10));
     }
 
     .project-menu-save {
@@ -539,7 +539,7 @@
       align-items: center;
       justify-content: center;
       gap: 7px;
-      background: var(--accent-blue, #6366f1);
+      background: var(--accent-blue, #3b82f6);
       color: #ffffff;
       border: 0;
       font-size: 12px;
@@ -557,6 +557,15 @@
 
     .btn-publish:active {
       transform: scale(0.97);
+    }
+
+    .avatar-circle {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #f1a98c; /* Warm salmon pink peach matching screenshot */
+      border: 1px solid var(--border);
+      cursor: pointer;
     }
 
     /* Pricing Modal Styling */
@@ -790,7 +799,7 @@
     }
 
     .p-plan-card.recommended .p-plan-cta:hover {
-      background: var(--accent-blue-deep, #4338ca);
+      background: var(--accent-blue-deep, #1d4ed8);
     }
 
     /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
@@ -1024,9 +1033,9 @@
       justify-content: center;
       height: 16px;
       padding: 0 6px;
-      border: 1px solid color-mix(in srgb, var(--accent-blue, #6366f1) 26%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 26%, var(--border));
       border-radius: 999px;
-      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      background: var(--accent-blue-soft, rgba(59, 130, 246,.10));
       color: var(--accent-blue-deep, #2458dc);
       font-size: 8.5px;
       font-weight: 850;
@@ -1051,8 +1060,8 @@
 
     .pane-plan-tag.locked,
     .builder-action-plan-tag.locked {
-      border-color: color-mix(in srgb, var(--accent-blue, #6366f1) 24%, var(--border));
-      background: var(--accent-blue-soft, rgba(99, 102, 241,.10));
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 24%, var(--border));
+      background: var(--accent-blue-soft, rgba(59, 130, 246,.10));
       color: var(--accent-blue-deep, #2458dc);
     }
 
@@ -2233,6 +2242,11 @@
         font-size: 11px;
       }
 
+      .avatar-circle {
+        width: 26px;
+        height: 26px;
+      }
+
       .workspace-body {
         display: block;
         flex: 0 0 auto;
@@ -2550,7 +2564,7 @@
     }
 
     .analysis-metric-card.is-primary .analysis-metric-label {
-      color: var(--accent-blue, #6366f1);
+      color: var(--accent-blue, #3b82f6);
     }
 
     .analysis-metric-value {
@@ -2580,7 +2594,7 @@
 
     .analysis-chart-line {
       fill: none;
-      stroke: var(--accent-blue, #6366f1);
+      stroke: var(--accent-blue, #3b82f6);
       stroke-width: 3;
       stroke-linejoin: round;
       stroke-linecap: round;
@@ -2683,7 +2697,7 @@
       font-variant-numeric: tabular-nums;
       background:
         linear-gradient(var(--bg-panel), var(--bg-panel)) padding-box,
-        conic-gradient(from 160deg, #a5b4fc, var(--accent-blue, #6366f1), #f4f4f5, #a5b4fc) border-box;
+        conic-gradient(from 160deg, #93c5fd, var(--accent-blue, #3b82f6), #f4f4f5, #93c5fd) border-box;
       border: 1px solid transparent;
     }
 
@@ -3360,7 +3374,7 @@
 
         <!-- SCALE PLAN -->
         <div class="p-plan-card recommended">
-          <div class="p-plan-name" style="color: var(--accent-blue, #6366f1);">Scale</div>
+          <div class="p-plan-name" style="color: var(--accent-blue, #3b82f6);">Scale</div>
           <div class="p-plan-price" id="p-price-scale">$200<span>/mo</span></div>
           <p class="p-plan-desc">For teams and agencies building multiple full-stack apps at scale.</p>
           <ul class="p-plan-features">
@@ -3818,7 +3832,7 @@
             left: 50%;
             transform: translateX(-50%) translateY(20px);
             background: #18181b;
-            border: 1px solid var(--border-focus, rgba(99, 102, 241,0.36));
+            border: 1px solid var(--border-focus, rgba(59, 130, 246,0.36));
             border-left: 3px solid var(--accent-spark);
             border-radius: 8px;
             padding: 12px 16px;
