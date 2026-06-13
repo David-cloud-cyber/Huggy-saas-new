@@ -1,22 +1,27 @@
-/* Huggy Design System Lock
-   Shared visual language for public pages and product surfaces. */
+/* Huggy Design System — public pages and product surfaces.
+   Aligned with src/builder.css tokens (Zinc + Indigo 500 signature).
+   Cool neutral whites, no warm yellow; Linear-style raised-by-light dark. */
 :root {
-  --huggy-bg: #fcfbf8;
-  --huggy-bg-warm: #f7f4ed;
-  --huggy-surface: #fffdf8;
-  --huggy-surface-raised: #fffefa;
-  --huggy-text: #1c1c1c;
-  --huggy-muted: #5f5f5d;
-  --huggy-subtle: #77736b;
-  --huggy-border: #eceae4;
-  --huggy-border-strong: #dedbd2;
-  --huggy-blue: #2f6df6;
-  --huggy-blue-deep: #173f8f;
-  --huggy-blue-ink: #132a69;
-  --huggy-blue-soft: rgba(47, 109, 246, 0.10);
-  --huggy-blue-hover: rgba(47, 109, 246, 0.14);
-  --huggy-blue-active: rgba(47, 109, 246, 0.18);
-  --huggy-focus: rgba(47, 109, 246, 0.28);
+  /* Surfaces — cool neutral whites (Zinc 50/100). */
+  --huggy-bg: #fafafa;
+  --huggy-bg-warm: #f4f4f5;
+  --huggy-surface: #ffffff;
+  --huggy-surface-raised: #ffffff;
+  --huggy-text: #09090b;
+  --huggy-muted: #52525b;
+  --huggy-subtle: #71717a;
+  --huggy-border: rgba(9, 9, 11, 0.08);
+  --huggy-border-strong: rgba(9, 9, 11, 0.14);
+
+  /* Signature accent — Indigo 500. */
+  --huggy-blue: #6366f1;
+  --huggy-blue-deep: #4338ca;
+  --huggy-blue-ink: #312e81;
+  --huggy-blue-soft: rgba(99, 102, 241, 0.10);
+  --huggy-blue-hover: rgba(99, 102, 241, 0.16);
+  --huggy-blue-active: rgba(99, 102, 241, 0.22);
+  --huggy-focus: rgba(99, 102, 241, 0.40);
+
   --accent-blue: var(--huggy-blue);
   --accent-blue-deep: var(--huggy-blue-deep);
   --accent-blue-soft: var(--huggy-blue-soft);
@@ -24,13 +29,17 @@
   --accent-blue-active: var(--huggy-blue-active);
   --blue: var(--huggy-blue);
   --blue-dim: var(--huggy-blue-soft);
+
   --huggy-radius-sm: 8px;
   --huggy-radius-md: 14px;
   --huggy-radius-lg: 22px;
   --huggy-radius-xl: 30px;
-  --huggy-shadow-soft: 0 14px 40px rgba(24, 22, 17, 0.08);
-  --huggy-shadow-card: 0 20px 70px rgba(24, 22, 17, 0.10), 0 1px 0 rgba(255, 255, 255, 0.72) inset;
-  --huggy-gradient-blue: linear-gradient(135deg, #1d4ed8 0%, #173f8f 48%, #151e55 100%);
+
+  /* Soft, low-contrast elevation that feels like paper. */
+  --huggy-shadow-soft: 0 4px 12px rgba(9, 9, 11, 0.06), 0 1px 2px rgba(9, 9, 11, 0.04);
+  --huggy-shadow-card: 0 20px 48px rgba(9, 9, 11, 0.10), 0 1px 2px rgba(9, 9, 11, 0.04);
+
+  --huggy-gradient-blue: linear-gradient(135deg, #6366f1 0%, #4f46e5 48%, #4338ca 100%);
   --huggy-motion-fast: 120ms;
   --huggy-motion-normal: 180ms;
   --huggy-motion-panel: 260ms;
@@ -38,24 +47,29 @@
 }
 
 :root[data-theme="dark"] {
-  --huggy-bg: #0f1014;
-  --huggy-bg-warm: #13151a;
-  --huggy-surface: #15171c;
-  --huggy-surface-raised: #1b1e25;
-  --huggy-text: #f5f7fb;
-  --huggy-muted: #c6cad3;
-  --huggy-subtle: #8d95a3;
-  --huggy-border: rgba(226, 232, 240, 0.12);
-  --huggy-border-strong: rgba(226, 232, 240, 0.18);
-  --huggy-blue: #4f8cff;
-  --huggy-blue-deep: #8ab4ff;
-  --huggy-blue-ink: #cfe0ff;
-  --huggy-blue-soft: rgba(79, 140, 255, 0.16);
-  --huggy-blue-hover: rgba(79, 140, 255, 0.22);
-  --huggy-blue-active: rgba(79, 140, 255, 0.30);
-  --huggy-focus: rgba(79, 140, 255, 0.34);
-  --huggy-shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.30);
-  --huggy-shadow-card: 0 24px 76px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255, 255, 255, 0.07) inset;
+  /* Surfaces — Zinc 950 → 800 (Linear raised-by-light). */
+  --huggy-bg: #09090b;
+  --huggy-bg-warm: #131316;
+  --huggy-surface: #18181b;
+  --huggy-surface-raised: #27272a;
+  --huggy-text: #fafafa;
+  --huggy-muted: #a1a1aa;
+  --huggy-subtle: #71717a;
+  --huggy-border: rgba(255, 255, 255, 0.06);
+  --huggy-border-strong: rgba(255, 255, 255, 0.12);
+
+  /* Same Indigo 500 signature. */
+  --huggy-blue: #6366f1;
+  --huggy-blue-deep: #a5b4fc;
+  --huggy-blue-ink: #c7d2fe;
+  --huggy-blue-soft: rgba(99, 102, 241, 0.14);
+  --huggy-blue-hover: rgba(99, 102, 241, 0.22);
+  --huggy-blue-active: rgba(99, 102, 241, 0.30);
+  --huggy-focus: rgba(99, 102, 241, 0.50);
+
+  /* Elevation — soft shadow + faint top highlight (Linear trick). */
+  --huggy-shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 16px rgba(0, 0, 0, 0.45);
+  --huggy-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 18px 48px rgba(0, 0, 0, 0.55);
 }
 
 :where(button, a, input, textarea, select, summary) {

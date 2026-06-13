@@ -7,91 +7,112 @@ button { cursor: pointer; font-family: inherit; border: none; }
 textarea, input { font-family: inherit; }
 svg { display: block; flex-shrink: 0; }
 
-/* ── TOKENS ─────────────────────────────────────────── */
+/* ── TOKENS ──────────────────────────────────────────
+   Huggy theme v2. Single source of truth for the builder.
+   Palette: Zinc scale (Tailwind v4) — the standard used by Linear,
+   Vercel, Cursor. Signature accent: Indigo 500 (#6366f1).
+   Dark uses soft near-black layers with raised-by-light elevation
+   (Linear pattern), not pure black. Light uses neutral cool whites,
+   not warm yellow tones.
+   Legacy names (--accent-blue, --huggy-*) remain aliased so existing
+   styles keep working — they all resolve to the new palette below.
+─────────────────────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:           #060606;
-  --bg-surface:   #0F0F0F;
-  --bg-elevated:  #161616;
-  --bg-input:     #111111;
-  --bg-panel:     #0A0A0A;
+  /* Surfaces — Zinc 950 → 800. Each step lighter = "raised". */
+  --bg:           #09090b;  /* zinc-950  — page base */
+  --bg-surface:   #18181b;  /* zinc-900  — primary surface */
+  --bg-elevated:  #27272a;  /* zinc-800  — cards / popovers */
+  --bg-input:     #0f0f12;  /* slightly darker than surface — recessed input */
+  --bg-panel:     #131316;  /* between bg and surface — side rails */
 
-  --accent:       #F4F4F5;
-  --accent-blue:  #93C5FD;
-  --accent-blue-deep:#BFDBFE;
-  --accent-blue-soft:rgba(147,197,253,0.12);
-  --accent-blue-hover:rgba(147,197,253,0.16);
-  --accent-blue-active:rgba(147,197,253,0.22);
-  --accent-dim:   rgba(244,244,245,0.07);
-  --accent-hover: rgba(244,244,245,0.11);
-  --accent-active:rgba(244,244,245,0.16);
+  /* Signature accent — Indigo 500 with cool blue-violet tone. */
+  --accent:       #818cf8;  /* indigo-400 (light enough on dark) */
+  --accent-blue:  #6366f1;  /* indigo-500 — primary action */
+  --accent-blue-deep: #a5b4fc;  /* indigo-300 — quoted/highlight */
+  --accent-blue-soft:   rgba(99,102,241,0.14);
+  --accent-blue-hover:  rgba(99,102,241,0.22);
+  --accent-blue-active: rgba(99,102,241,0.30);
+  --accent-dim:   rgba(244,244,245,0.06);
+  --accent-hover: rgba(244,244,245,0.10);
+  --accent-active:rgba(244,244,245,0.14);
 
-  --text:         #F2F2F2;
-  --text-muted:   #B8B8C0;
-  --text-sub:     #80808A;
+  /* Text — Zinc 100 → 500. */
+  --text:         #fafafa;  /* zinc-50 */
+  --text-muted:   #a1a1aa;  /* zinc-400 */
+  --text-sub:     #71717a;  /* zinc-500 */
 
-  --border:       rgba(255,255,255,0.12);
-  --border-mid:   rgba(255,255,255,0.18);
-  --border-focus: rgba(244,244,245,0.34);
+  /* Borders — hairline whites for separation; firmer mid for emphasis. */
+  --border:       rgba(255,255,255,0.06);
+  --border-mid:   rgba(255,255,255,0.12);
+  --border-focus: rgba(99,102,241,0.50);  /* indigo focus ring */
   --blue:         var(--accent-blue);
   --blue-dim:     var(--accent-blue-soft);
 
-  --success:      #4ADE80;
-  --success-dim:  rgba(74,222,128,0.10);
-  --warning:      #FBBF24;
-  --warning-dim:  rgba(251,191,36,0.10);
-  --error:        #F87171;
-  --error-dim:    rgba(248,113,113,0.10);
+  /* Status — Tailwind 400 tier (better contrast on dark). */
+  --success:      #4ade80;
+  --success-dim:  rgba(74,222,128,0.12);
+  --warning:      #fbbf24;
+  --warning-dim:  rgba(251,191,36,0.12);
+  --error:        #f87171;
+  --error-dim:    rgba(248,113,113,0.12);
+
+  /* Elevation — soft shadows with a faint top highlight (the Linear trick). */
+  --shadow-sm: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 1px 0 rgba(255,255,255,0.05) inset, 0 6px 16px rgba(0,0,0,0.45);
+  --shadow-lg: 0 1px 0 rgba(255,255,255,0.06) inset, 0 18px 48px rgba(0,0,0,0.55);
 
   --caret: var(--accent);
 }
 
 [data-theme="light"] {
-  --bg:           #fcfbf8;
-  --bg-surface:   #fffdf8;
-  --bg-elevated:  #f7f4ed;
-  --bg-input:     #fffefa;
-  --bg-panel:     #f7f4ed;
+  /* Surfaces — Cool neutral whites (Zinc 50/100/200), no warm yellow. */
+  --bg:           #fafafa;  /* zinc-50 — page base */
+  --bg-surface:   #ffffff;  /* pure white — primary surface */
+  --bg-elevated:  #ffffff;  /* cards stay white, elevated via shadow */
+  --bg-input:     #ffffff;
+  --bg-panel:     #f4f4f5;  /* zinc-100 — side rails */
 
-  --accent:       #2F6DF6;
-  --accent-blue:  #2F6DF6;
-  --accent-blue-deep:#173F8F;
-  --accent-blue-soft:rgba(47,109,246,0.10);
-  --accent-blue-hover:rgba(47,109,246,0.14);
-  --accent-blue-active:rgba(47,109,246,0.18);
-  --accent-dim:   rgba(47,109,246,0.10);
-  --accent-hover: rgba(47,109,246,0.14);
-  --accent-active:rgba(47,109,246,0.18);
+  /* Signature accent — Indigo 500. Same hue as dark, deeper on light. */
+  --accent:       #4f46e5;  /* indigo-600 — readable on white */
+  --accent-blue:  #6366f1;  /* indigo-500 — primary action */
+  --accent-blue-deep: #4338ca;  /* indigo-700 */
+  --accent-blue-soft:   rgba(99,102,241,0.10);
+  --accent-blue-hover:  rgba(99,102,241,0.16);
+  --accent-blue-active: rgba(99,102,241,0.22);
+  --accent-dim:   rgba(9,9,11,0.05);
+  --accent-hover: rgba(9,9,11,0.08);
+  --accent-active:rgba(9,9,11,0.12);
 
-  --text:         #09090B;
-  --text-muted:   #3F3F46;
-  --text-sub:     #52525B;
+  /* Text — Zinc 950 → 500. */
+  --text:         #09090b;  /* zinc-950 */
+  --text-muted:   #52525b;  /* zinc-600 */
+  --text-sub:     #71717a;  /* zinc-500 */
 
-  --border:       rgba(9,9,11,0.16);
-  --border-mid:   rgba(9,9,11,0.20);
-  --border-focus: rgba(47,109,246,0.38);
+  /* Borders — Zinc 200/300. */
+  --border:       rgba(9,9,11,0.08);
+  --border-mid:   rgba(9,9,11,0.14);
+  --border-focus: rgba(99,102,241,0.40);
   --blue:         var(--accent-blue);
   --blue-dim:     var(--accent-blue-soft);
 
-  --success:      #16A34A;
+  /* Status — Tailwind 600 tier. */
+  --success:      #16a34a;
   --success-dim:  rgba(22,163,74,0.10);
-  --warning:      #D97706;
+  --warning:      #d97706;
   --warning-dim:  rgba(217,119,6,0.10);
-  --error:        #DC2626;
+  --error:        #dc2626;
   --error-dim:    rgba(220,38,38,0.10);
+
+  /* Elevation — soft, low-contrast shadows that feel like paper. */
+  --shadow-sm: 0 1px 2px rgba(9,9,11,0.04);
+  --shadow-md: 0 4px 12px rgba(9,9,11,0.06), 0 1px 2px rgba(9,9,11,0.04);
+  --shadow-lg: 0 20px 48px rgba(9,9,11,0.08), 0 2px 4px rgba(9,9,11,0.04);
 
   --caret: var(--accent);
 }
 
-/* ── GRAIN ─────────────────────────────────────────── */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 9998;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/></filter><rect width='200' height='200' filter='url(%23n)' opacity='1'/></svg>");
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  opacity: 0.022;
-}
+/* Grain texture removed — concurrent dev tools (Linear, Vercel, Bolt)
+   use clean surfaces; the SVG noise was hurting the premium feel. */
 
 /* ── CURTAIN ────────────────────────────────────────── */
 #curtain {
