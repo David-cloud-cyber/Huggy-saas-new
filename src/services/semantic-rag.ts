@@ -13,6 +13,9 @@
  * This solves: "Huggy injects wrong files on 50+ file projects"
  */
 
+import type { EmbeddingProvider } from './embeddings.ts';
+import { InMemoryVectorStore } from './vector-store.ts';
+
 export type RagDocument = {
   id: string;         // file path
   content: string;    // file content
@@ -178,6 +181,40 @@ export class SemanticRag {
   }
 
   /**
+   * Dense-embedding search. Embeds the documents and the query with the given
+   * provider, ranks by cosine similarity in a vector store, and falls back to
+   * TF-IDF when embeddings are unavailable or fail (so callers never break).
+   *
+   * This is the pgvector-ready upgrade path: swap InMemoryVectorStore for a
+   * pgvector adapter and the ranking contract is identical.
+   */
+  static async retrieveSemantic(
+    documents: RagDocument[],
+    query: string,
+    provider: EmbeddingProvider,
+    topK = 15,
+  ): Promise<RagResult[]> {
+    if (documents.length === 0 || !query.trim()) return [];
+    try {
+      const [queryVec] = await provider.embed([query]);
+      if (!queryVec || queryVec.length === 0) return SemanticRag.retrieve(documents, query, topK);
+
+      const docVectors = await provider.embed(documents.map(d => `${d.id}\n${(d.content || '').slice(0, 8000)}`));
+      const store = new InMemoryVectorStore();
+      store.upsert(documents.map((d, i) => ({ id: d.id, vector: docVectors[i] || [], metadata: { excerpt: String(d.content || '').slice(0, 200) } })));
+
+      return store.query(queryVec, topK).map(r => ({
+        id: r.id,
+        score: r.score,
+        excerpt: String((r.metadata?.excerpt as string) || ''),
+      }));
+    } catch {
+      // Any embedding failure → graceful TF-IDF fallback.
+      return SemanticRag.retrieve(documents, query, topK);
+    }
+  }
+
+  /**
    * Returns files most relevant to a query — ready for context injection.
    * Merges semantic results with always-critical files.
    */
@@ -192,43 +229,75 @@ export class SemanticRag {
   ): Array<{ path: string; content: string; language?: string; ragScore: number }> {
     const topK = options.topK ?? 20;
     const tokenBudget = options.tokenBudget ?? 80_000;
-    const alwaysCritical = options.alwaysCritical ?? [
-      /^package\.json$/i,
-      /^index\.html$/i,
-      /^vite\.config\./i,
-      /^src\/main\.(t|j)sx?$/i,
-      /^src\/App\.(t|j)sx?$/i,
-      /^supabase\/schema\.sql$/i,
-    ];
+    const alwaysCritical = options.alwaysCritical ?? DEFAULT_CRITICAL_PATTERNS;
 
     const docs: RagDocument[] = files.map(f => ({ id: f.path, content: f.content || '' }));
     const results = SemanticRag.retrieve(docs, query, topK);
     const scoreById = new Map(results.map(r => [r.id, r.score]));
-
-    // Always include critical files
-    const criticalPaths = new Set(files.filter(f => alwaysCritical.some(p => p.test(f.path))).map(f => f.path));
-
-    // Build final ranked list
-    const ranked = files
-      .map(f => ({ ...f, ragScore: scoreById.get(f.path) ?? 0 }))
-      .sort((a, b) => {
-        // Critical files always first
-        const aCrit = criticalPaths.has(a.path) ? 1 : 0;
-        const bCrit = criticalPaths.has(b.path) ? 1 : 0;
-        if (aCrit !== bCrit) return bCrit - aCrit;
-        return b.ragScore - a.ragScore;
-      });
-
-    // Respect token budget
-    const selected: typeof ranked = [];
-    let usedTokens = 0;
-    for (const file of ranked) {
-      const tokens = Math.ceil((file.content || '').length / 4);
-      if (usedTokens + tokens > tokenBudget) continue;
-      selected.push(file);
-      usedTokens += tokens;
-    }
-
-    return selected;
+    return assembleRankedSelection(files, scoreById, alwaysCritical, tokenBudget);
   }
+
+  /**
+   * Same contract as `selectRelevantFiles` but scores files with dense
+   * embeddings (pgvector-ready). Critical-file pinning and token budgeting are
+   * identical. Falls back to TF-IDF scoring inside `retrieveSemantic` if the
+   * provider errors, so callers get a result either way.
+   */
+  static async selectRelevantFilesSemantic(
+    files: Array<{ path: string; content: string; language?: string }>,
+    query: string,
+    provider: EmbeddingProvider,
+    options: { topK?: number; alwaysCritical?: RegExp[]; tokenBudget?: number } = {},
+  ): Promise<Array<{ path: string; content: string; language?: string; ragScore: number }>> {
+    const topK = options.topK ?? 20;
+    const tokenBudget = options.tokenBudget ?? 80_000;
+    const alwaysCritical = options.alwaysCritical ?? DEFAULT_CRITICAL_PATTERNS;
+
+    const docs: RagDocument[] = files.map(f => ({ id: f.path, content: f.content || '' }));
+    const results = await SemanticRag.retrieveSemantic(docs, query, provider, topK);
+    const scoreById = new Map(results.map(r => [r.id, r.score]));
+    return assembleRankedSelection(files, scoreById, alwaysCritical, tokenBudget);
+  }
+}
+
+const DEFAULT_CRITICAL_PATTERNS: RegExp[] = [
+  /^package\.json$/i,
+  /^index\.html$/i,
+  /^vite\.config\./i,
+  /^src\/main\.(t|j)sx?$/i,
+  /^src\/App\.(t|j)sx?$/i,
+  /^supabase\/schema\.sql$/i,
+];
+
+/**
+ * Shared ranking assembly: pins critical files first, orders the rest by score,
+ * then greedily fills up to the token budget. Used by both the TF-IDF and the
+ * embeddings selection paths so their output contracts stay identical.
+ */
+function assembleRankedSelection(
+  files: Array<{ path: string; content: string; language?: string }>,
+  scoreById: Map<string, number>,
+  alwaysCritical: RegExp[],
+  tokenBudget: number,
+): Array<{ path: string; content: string; language?: string; ragScore: number }> {
+  const criticalPaths = new Set(files.filter(f => alwaysCritical.some(p => p.test(f.path))).map(f => f.path));
+
+  const ranked = files
+    .map(f => ({ ...f, ragScore: scoreById.get(f.path) ?? 0 }))
+    .sort((a, b) => {
+      const aCrit = criticalPaths.has(a.path) ? 1 : 0;
+      const bCrit = criticalPaths.has(b.path) ? 1 : 0;
+      if (aCrit !== bCrit) return bCrit - aCrit;
+      return b.ragScore - a.ragScore;
+    });
+
+  const selected: typeof ranked = [];
+  let usedTokens = 0;
+  for (const file of ranked) {
+    const tokens = Math.ceil((file.content || '').length / 4);
+    if (usedTokens + tokens > tokenBudget) continue;
+    selected.push(file);
+    usedTokens += tokens;
+  }
+  return selected;
 }

@@ -9,6 +9,7 @@ import { buildSmartContextInjection } from './src/services/smart-context-injecto
 import { extractDesignTokens, buildDesignTokenContext, designSystemToMemoryRows, designSystemFromMemoryRow } from './src/services/design-token-store.ts';
 import { detectPromptConflict, conflictToPromptContext } from './src/services/conflict-detector.ts';
 import { SemanticRag } from './src/services/semantic-rag.ts';
+import { resolveEmbeddingProvider } from './src/services/embeddings.ts';
 import { runParallelAgents, mergeAgentOutputs, selectAgentsForContext, type ParallelAgentContext } from './src/services/parallel-agent-runner.ts';
 import { initJobQueue, startJobWorker, enqueueJob, getJobStatus, cancelJob, shouldUseJobQueue, registerJobHandler } from './src/services/async-job-queue.ts';
 import fs from 'fs';
@@ -5680,19 +5681,24 @@ async function generateFilesWithAi(input: {
   const depGraph = buildDependencyGraph(input.existingFiles);
   const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
 
-  // ✅ Semantic RAG — upgrade context injection with TF-IDF relevance scoring
-  // Replaces the positional file selection with semantically relevant files
-  const semanticContext = (() => {
+  // ✅ Semantic RAG — upgrade context injection with relevance scoring.
+  // Uses dense embeddings (pgvector-ready) when HUGGY_EMBEDDINGS_RAG=1, else the
+  // zero-dependency TF-IDF path. Both share critical-file pinning + token budget.
+  const semanticContext = await (async () => {
     try {
       if (input.existingFiles.length >= 8) {
-        const ragFiles = SemanticRag.selectRelevantFiles(
-          input.existingFiles,
-          input.prompt,
-          {
-            topK: getAIModelCapabilityProfile(selectedModel).limits.contextTokens >= 500_000 ? 44 : 22,
-            tokenBudget: Math.max(24_000, Math.min(180_000, Math.floor(getAIModelCapabilityProfile(selectedModel).limits.contextTokens * 0.42))),
-          },
-        );
+        const ragOptions = {
+          topK: getAIModelCapabilityProfile(selectedModel).limits.contextTokens >= 500_000 ? 44 : 22,
+          tokenBudget: Math.max(24_000, Math.min(180_000, Math.floor(getAIModelCapabilityProfile(selectedModel).limits.contextTokens * 0.42))),
+        };
+        const ragFiles = process.env.HUGGY_EMBEDDINGS_RAG === '1'
+          ? await SemanticRag.selectRelevantFilesSemantic(
+            input.existingFiles,
+            input.prompt,
+            resolveEmbeddingProvider(process.env),
+            ragOptions,
+          )
+          : SemanticRag.selectRelevantFiles(input.existingFiles, input.prompt, ragOptions);
         // Return as formatted context (same shape as buildExistingFilesContextForGeneration)
         const chunks = ragFiles.map(f =>
           `--- ${f.path} (${f.language || 'text'}, rag_score=${f.ragScore.toFixed(3)}) ---\n${f.content || ''}`,
