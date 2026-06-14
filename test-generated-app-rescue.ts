@@ -126,4 +126,12 @@ assertInteractiveApp('create a custom workflow app for studio operations', 'gene
   'Reset',
 ]);
 
+{
+  const rawPrompt = 'cree une mini calculatrice pour mon premier message secret';
+  const app = createGeneratedRescueAppTsx({ projectName: 'QuickCalc', prompt: rawPrompt });
+  assertParsesAsTsx(app, rawPrompt);
+  assert.doesNotMatch(app, new RegExp(rawPrompt, 'i'));
+  assert.match(app, /QuickCalc/);
+}
+
 console.log('PASS: generated app rescue creates interactive fallback apps.');

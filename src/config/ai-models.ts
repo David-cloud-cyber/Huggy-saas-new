@@ -16,7 +16,7 @@ export const AIModelTier = {
 
 export type AIModelTier = (typeof AIModelTier)[keyof typeof AIModelTier];
 
-export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'deepseek';
+export type ModelProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'moonshot';
 export type ModelStrength = 'low' | 'medium' | 'high' | 'frontier';
 export type ModelSpeed = 'fast' | 'balanced' | 'deliberate';
 export type ModelReliability = 'standard' | 'high' | 'experimental';
@@ -101,6 +101,62 @@ export const MODEL_REGISTRY = [
     minPlan: UserPlan.PRO,
     creditFloor: 4.5,
     description: 'Balanced DeepSeek coding model for multi-file app work.',
+  },
+  {
+    id: 'moonshotai/kimi-k2.5',
+    label: 'Kimi K2.5',
+    provider: 'moonshot',
+    contextWindow: 262000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 6.5,
+    isNew: true,
+    description: 'Multimodal Kimi model for visual coding, agentic tool use and product generation.',
+    capabilities: { supportsVision: true, supportsTools: true, supportsToolCalling: true },
+  },
+  {
+    id: 'moonshotai/kimi-k2.6',
+    label: 'Kimi K2.6',
+    provider: 'moonshot',
+    contextWindow: 262000,
+    tier: AIModelTier.PRO,
+    minPlan: UserPlan.PRO,
+    creditFloor: 8,
+    isPremium: true,
+    isNew: true,
+    description: 'Long-horizon coding and UI/UX generation with multi-agent orchestration.',
+    capabilities: {
+      supportsVision: true,
+      supportsTools: true,
+      supportsToolCalling: true,
+      supportsLongContext: true,
+      reasoningLevel: 'high',
+      codeLevel: 'frontier',
+      agenticLevel: 'frontier',
+      designLevel: 'high',
+    },
+  },
+  {
+    id: 'moonshotai/kimi-k2.7-code',
+    label: 'Kimi K2.7 Code',
+    provider: 'moonshot',
+    contextWindow: 262000,
+    tier: AIModelTier.PREMIUM,
+    minPlan: UserPlan.SCALE,
+    creditFloor: 13,
+    isPremium: true,
+    isNew: true,
+    description: 'Coding-focused Kimi model for end-to-end programming and long-horizon agentic work.',
+    capabilities: {
+      supportsVision: true,
+      supportsTools: true,
+      supportsToolCalling: true,
+      supportsLongContext: true,
+      reasoningLevel: 'frontier',
+      codeLevel: 'frontier',
+      agenticLevel: 'frontier',
+      designLevel: 'high',
+    },
   },
   {
     id: 'google/gemini-3-pro-preview',
@@ -273,6 +329,7 @@ export const PROVIDER_META: Record<ModelProvider, {
   openai: { label: 'OpenAI', color: '#0F9F7A', textColor: '#fff', icon: 'openai' },
   google: { label: 'Google', color: '#4285F4', textColor: '#fff', icon: 'google' },
   deepseek: { label: 'DeepSeek', color: '#4D6BFE', textColor: '#fff', icon: 'deepseek' },
+  moonshot: { label: 'Kimi', color: '#111827', textColor: '#fff', icon: 'moonshot' },
 };
 
 export function getModelsByProvider() {
@@ -281,6 +338,7 @@ export function getModelsByProvider() {
     openai: [],
     google: [],
     deepseek: [],
+    moonshot: [],
   };
   return MODEL_REGISTRY.reduce<Record<ModelProvider, ModelDefinition[]>>((acc, model) => {
     const provider = model.provider;
@@ -304,7 +362,9 @@ const buildRecord = <T>(mapper: (model: ModelDefinition) => T) => (
 
 function strengthForModel(model: ModelDefinition, kind: 'reasoning' | 'code' | 'agentic' | 'design' | 'security'): ModelStrength {
   const id = model.id.toLowerCase();
-  if (id.includes('fable') || id.includes('opus') || id.includes('gpt-5.5-pro')) return 'frontier';
+  if (id.includes('fable') || id.includes('opus') || id.includes('gpt-5.5-pro') || id.includes('kimi-k2.7')) return 'frontier';
+  if (id.includes('kimi-k2.6')) return kind === 'code' || kind === 'agentic' ? 'frontier' : 'high';
+  if (id.includes('kimi-k2.5')) return 'high';
   if (id.includes('sonnet') || id.includes('gpt-5.5') || id.includes('gemini-3-pro')) return 'high';
   if (id.includes('deepseek-v4-pro')) return kind === 'code' ? 'high' : 'medium';
   if (model.tier === AIModelTier.STANDARD || model.tier === AIModelTier.PRO) return 'medium';
@@ -319,7 +379,7 @@ function speedForModel(model: ModelDefinition): ModelSpeed {
 
 function reliabilityForModel(model: ModelDefinition): ModelReliability {
   if (model.id.includes('preview') || model.id.includes('fable') || model.id.includes('4.8')) return 'experimental';
-  if (model.provider === 'anthropic' || model.provider === 'openai') return 'high';
+  if (model.provider === 'anthropic' || model.provider === 'openai' || model.provider === 'moonshot') return 'high';
   return 'standard';
 }
 
@@ -333,6 +393,9 @@ function bestUsesForModel(model: ModelDefinition): string[] {
   if (id.includes('gemini-3-pro')) return ['long_context', 'vision', 'product_reasoning', 'analysis'];
   if (id.includes('gemini')) return ['fast_classification', 'long_context', 'vision', 'simple_streaming'];
   if (id.includes('deepseek-v4-pro')) return ['code_generation', 'multi_file_edits', 'debug'];
+  if (id.includes('kimi-k2.7')) return ['full_stack_generation', 'long_horizon_coding', 'agentic_workflow', 'vision', 'debug'];
+  if (id.includes('kimi-k2.6')) return ['frontend_generation', 'ui_ux_generation', 'full_stack_generation', 'multi_agent_workflow', 'vision'];
+  if (id.includes('kimi-k2.5')) return ['visual_coding', 'agentic_tool_use', 'product_generation', 'vision'];
   return ['simple_chat', 'small_edits', 'classification'];
 }
 
@@ -346,11 +409,11 @@ export const MODEL_ACTION_CREDIT_FLOORS = buildRecord(model => model.creditFloor
 
 export const AI_MODEL_CAPABILITIES = buildRecord<ModelCapabilities>(model => ({
   supportsStreaming: model.capabilities?.supportsStreaming ?? true,
-  supportsTools: model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google'].includes(model.provider),
+  supportsTools: model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google', 'moonshot'].includes(model.provider),
   supportsVision: model.capabilities?.supportsVision ?? false,
   supportsJsonMode: model.capabilities?.supportsJsonMode ?? model.provider !== 'deepseek',
   supportsStructuredOutput: model.capabilities?.supportsStructuredOutput ?? model.capabilities?.supportsJsonMode ?? model.provider !== 'deepseek',
-  supportsToolCalling: model.capabilities?.supportsToolCalling ?? model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google'].includes(model.provider),
+  supportsToolCalling: model.capabilities?.supportsToolCalling ?? model.capabilities?.supportsTools ?? ['anthropic', 'openai', 'google', 'moonshot'].includes(model.provider),
   supportsLongContext: model.capabilities?.supportsLongContext ?? model.contextWindow >= 200000,
   reasoningLevel: model.capabilities?.reasoningLevel ?? strengthForModel(model, 'reasoning'),
   codeLevel: model.capabilities?.codeLevel ?? strengthForModel(model, 'code'),

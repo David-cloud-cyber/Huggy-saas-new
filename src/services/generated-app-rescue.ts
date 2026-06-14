@@ -84,7 +84,9 @@ function literal(value: string) {
 function appConstants(input: Required<GeneratedRescueInput>, fallbackTitle: string, fallbackSummary: string) {
   return [
     `const appTitle = ${literal(cleanTitle(input.projectName, fallbackTitle))};`,
-    `const appSummary = ${literal(cleanSummary(input.prompt, fallbackSummary))};`,
+    // Never render the user's raw first message inside the generated product.
+    // The prompt is implementation context, not user-facing marketing copy.
+    `const appSummary = ${literal(cleanSummary(fallbackSummary, fallbackSummary))};`,
     '',
   ];
 }

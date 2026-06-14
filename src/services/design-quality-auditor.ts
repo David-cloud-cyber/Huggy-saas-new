@@ -349,9 +349,10 @@ function hasTodoIntent(bundle: SourceBundle, platform: GeneratedAppType) {
 
 function hasCommerceIntent(bundle: SourceBundle, platform: GeneratedAppType) {
   if (hasTimerIntent(bundle)) return false;
-  if (platform === 'ecommerce') return true;
-  if (/\b(ecommerce|e-commerce|shop|store|cart|checkout|catalog|panier|boutique|paiement|catalogue)\b/i.test(bundle.prompt)) return true;
-  return false;
+  // Domain-specific blocking checks must come from the user's actual request.
+  // A classifier or generated copy mentioning "product" must never turn an
+  // unrelated calculator, game, or utility into a commerce app.
+  return /\b(ecommerce|e-commerce|online shop|online store|shopping cart|checkout|catalogue produit|catalogue de produits|panier|boutique en ligne|paiement)\b/i.test(bundle.prompt);
 }
 
 function auditCoreProductScenarios(bundle: SourceBundle, platform: GeneratedAppType): AgentVerificationCheck[] {

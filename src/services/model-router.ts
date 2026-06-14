@@ -103,11 +103,11 @@ export class ModelRouter {
           break;
 
         case 'Balanced':
-          selectedModel = firstAffordable(['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'deepseek/deepseek-v4-pro']);
+          selectedModel = firstAffordable(['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k2.5', 'google/gemini-3.5-flash']);
           break;
 
         case 'Pro':
-          selectedModel = firstAffordable(['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'openai/gpt-5.5']);
+          selectedModel = firstAffordable(['moonshotai/kimi-k2.6', 'anthropic/claude-sonnet-4.6', 'google/gemini-3-pro-preview', 'openai/gpt-5.5']);
           break;
 
         case 'Premium':
@@ -143,12 +143,12 @@ export class ModelRouter {
         return this.firstAvailable(models, ['deepseek/deepseek-v4-flash', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
       }
       if (complexity === 'complex') {
-        return this.firstAvailable(models, ['google/gemini-3-pro-preview', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'openai/gpt-5.5']);
+        return this.firstAvailable(models, ['moonshotai/kimi-k2.6', 'anthropic/claude-sonnet-4.6', 'deepseek/deepseek-v4-pro', 'google/gemini-3-pro-preview', 'openai/gpt-5.5']);
       }
       if (complexity === 'extreme') {
         return this.firstAvailable(models, ['anthropic/claude-fable-5', '~anthropic/claude-fable-latest', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.8', 'openai/gpt-5.5-pro', 'anthropic/claude-sonnet-4.6']);
       }
-      return this.firstAvailable(models, ['google/gemini-3.5-flash', 'google/gemini-3-flash-preview', 'deepseek/deepseek-v4-pro']);
+      return this.firstAvailable(models, ['deepseek/deepseek-v4-flash', 'moonshotai/kimi-k2.5', 'google/gemini-3.5-flash', 'google/gemini-3-flash-preview']);
     }
     const scored = models.map(modelId => ({
       modelId,
@@ -240,6 +240,7 @@ export class ModelRouter {
       'google/gemini-3-pro-preview',
       'openai/gpt-5.5',
       'deepseek/deepseek-v4-pro',
+      'moonshotai/kimi-k2.6',
       'google/gemini-3.5-flash',
       'deepseek/deepseek-v4-flash',
     ];

@@ -139,6 +139,14 @@ for (const modelId of AI_ALLOWED_MODELS) {
 }
 
 {
+  const kimiProfile = getAIModelCapabilityProfile('moonshotai/kimi-k2.7-code');
+  assert.equal(kimiProfile.adapter, 'openrouter', 'Kimi models should use their OpenRouter IDs through the OpenRouter adapter.');
+  assert.equal(kimiProfile.code, 'frontier');
+  assert.equal(kimiProfile.supports.vision, true);
+  assert.equal(kimiProfile.supports.toolCalling, true);
+}
+
+{
   const anthropicProfile = getAIModelCapabilityProfile('anthropic/claude-opus-4.8');
   assert.equal(anthropicProfile.supports.reasoningControl, true, 'Claude Opus should support reasoning control');
 }

@@ -8,6 +8,7 @@ import { initPromptInputActions } from './prompt-input-actions';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { openConnectorsPanel } from './connectors-panel';
 import { startCreateProjectFlow } from './services/create-project-flow';
+import { deriveProjectName } from './services/project-naming';
 
 type ProjectListResponse = {
   success: boolean;
@@ -193,12 +194,7 @@ function installContinueLastProject(state: UserWorkspaceState | null) {
 }
 
 function projectNameFromPrompt(prompt: string) {
-  const words = prompt
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
-  return words.join(' ') || 'New Huggy app';
+  return deriveProjectName(prompt);
 }
 
 async function hydrateWorkspaceState() {

@@ -16,6 +16,7 @@ import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationA
 import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
+import { deriveProjectName } from './services/project-naming';
 import { buildExecutionContract } from './services/execution-contract';
 import {
   DESIGN_WORKSHOP_OPTIONS,
@@ -4441,12 +4442,7 @@ async function ensureProject() {
 }
 
 function projectNameFromPrompt(prompt: string) {
-  const words = prompt
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
-  return words.join(' ') || 'New Huggy app';
+  return deriveProjectName(prompt);
 }
 
 async function ensureProjectForPrompt(prompt: string) {

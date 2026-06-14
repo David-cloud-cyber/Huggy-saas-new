@@ -1,5 +1,6 @@
 import { apiFetch } from '../lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from '../lib/supabase-browser';
+import { deriveProjectName } from './project-naming';
 
 export type CreateProjectFlowMode = 'auto' | 'build' | 'plan';
 export type CreateProjectFlowSource = 'landing' | 'dashboard' | 'builder' | 'import' | 'modal' | 'template';
@@ -36,12 +37,7 @@ function cleanText(value: unknown) {
 }
 
 function projectNameFromPrompt(prompt: string) {
-  const words = prompt
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5);
-  return words.join(' ') || 'New Huggy app';
+  return deriveProjectName(prompt);
 }
 
 export function persistCreateProjectFlow(input: CreateProjectFlowInput) {

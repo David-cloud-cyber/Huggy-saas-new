@@ -42,6 +42,13 @@ export function providerIconSvg(icon: ProviderIconName): string {
           <circle cx="15.92" cy="9.72" r="1.05" fill="var(--provider-icon-bg, #fff)"/>
         </svg>
       `;
+    case 'moonshot':
+      return `
+        <svg class="provider-mark provider-mark-moonshot" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M17.9 15.9A7.6 7.6 0 0 1 8.1 6.1 7.75 7.75 0 1 0 17.9 15.9Z" fill="currentColor"/>
+          <path d="m16.7 4.2.55 1.35 1.35.55-1.35.55-.55 1.35-.55-1.35-1.35-.55 1.35-.55.55-1.35Zm3.1 5.25.33.82.82.33-.82.33-.33.82-.33-.82-.82-.33.82-.33.33-.82Z" fill="currentColor"/>
+        </svg>
+      `;
     default:
       return providerIconSvg('auto');
   }

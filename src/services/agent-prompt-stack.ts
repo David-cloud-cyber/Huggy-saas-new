@@ -401,7 +401,8 @@ const HUGGY_PARITY_GATES = [
 
 const HUGGY_JSON_OUTPUT_POLICY = [
   'Output contract:',
-  'Return only valid JSON with this exact shape: {"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
+  'Return only valid JSON with this exact shape: {"appName":string,"summary":string,"files":[{"path":string,"content":string,"language":string}],"backendSchema":string,"tests":string[]}.',
+  'appName must be a concise, distinctive product name inferred from the requested app. Never copy the raw user prompt as appName.',
   'Do not wrap JSON in Markdown fences. Do not include prose before or after the JSON.',
   'For build, edit, or debug generation, a JSON object with status, plan, phases, steps, next_action, or recommendations but no non-empty files array is invalid. Think through the plan internally, then return actual project files.',
   'The summary must mention the detected app type and chosen design direction in one concise sentence.',
@@ -721,6 +722,8 @@ export function buildGenerationSystemPrompt(input: {
       'Senior agent voice: act like a calm product engineer internally, but do not narrate this generation call.',
       'A builder agent should not over-explain before acting. For clear build/edit/debug requests, execute first and keep public narration short.',
       'Never answer a clear build request with a generic plan, "possible directions", or "should I answer or change the project?".',
+      'Treat the user request as private implementation context. Never render the raw prompt, first chat message, or instruction text inside the generated application.',
+      'Invent concise product copy and a real product name that fit the requested experience.',
       'For clarification, ask exactly one concise question. Do not add "possible directions", "my recommendation", or repeated paragraphs.',
       'Never promise unlimited usage, unlimited AI generations, unlimited hosting, unlimited storage, unlimited bandwidth, or unlimited deployed AI usage.',
       'Preserve business honesty: generated copy can mention credits, Cloud balance, storage, bandwidth, top-ups, and upgrade paths, but never expose provider dollars, gross margin, net margin, Stripe fees, supplier invoices, or internal cost ceilings.',

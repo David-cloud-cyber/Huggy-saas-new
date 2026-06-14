@@ -121,6 +121,7 @@ const PROVIDER_ADAPTERS: Record<ModelProvider, RuntimeProviderAdapter> = {
   openai: 'openai',
   google: 'gemini',
   deepseek: 'deepseek',
+  moonshot: 'openrouter',
 };
 
 function asRuntimeStrength(value: string | undefined): RuntimeStrength {
@@ -140,6 +141,9 @@ function knownLimitsForProvider(provider: ModelProvider, modelId: AllowedModelId
   if (provider === 'deepseek') {
     limits.push('structured output and tool calling are routed conservatively unless the gateway confirms support');
   }
+  if (provider === 'moonshot') {
+    limits.push('served through OpenRouter; use fallback if a specific Kimi endpoint is temporarily unavailable');
+  }
   if (modelId.includes('preview')) {
     limits.push('preview model; use fallback on provider instability');
   }
@@ -157,6 +161,7 @@ function supportsReasoningControl(provider: ModelProvider, modelId: AllowedModel
   if (provider === 'anthropic' && /claude-fable|claude-opus|claude-sonnet-4/i.test(modelId)) return true;
   if (provider === 'google' && /gemini-3-pro|gemini-3-ultra/i.test(modelId)) return true;
   if (provider === 'deepseek' && /deepseek-r1|deepseek-v4/i.test(modelId)) return true;
+  if (provider === 'moonshot' && /kimi-k2\.(?:6|7)|kimi-k2-thinking/i.test(modelId)) return true;
   return false;
 }
 

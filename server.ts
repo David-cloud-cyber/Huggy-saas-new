@@ -56,6 +56,11 @@ import {
 } from './src/services/ai-model-runtime.ts';
 import { buildProviderRequestConfig } from './src/services/provider-adapters.ts';
 import { ModelRouter, type RoutingContext } from './src/services/model-router.ts';
+import {
+  deriveProjectName,
+  isAutomaticallyDerivedProjectName,
+  sanitizeSuggestedProjectName,
+} from './src/services/project-naming.ts';
 import { ForbiddenModelError, validateAllowedModel } from './src/services/ai-validator.ts';
 import {
   AI_ALLOWED_MODELS,
@@ -2650,9 +2655,9 @@ function buildReactVitePreviewHtml(
     '  </style>',
     '</head>',
     '<body>',
-    `  <div id="root">${fallbackHtml}</div>`,
+    '  <div id="root"></div>',
     '  <noscript>',
-    fallbackHtml,
+    '    JavaScript is required to display this application.',
     '  </noscript>',
     '  <script type="text/javascript">',
     `    const __HUGGY_PREVIEW_FALLBACK__ = ${fallbackScriptValue};`,
@@ -5670,7 +5675,7 @@ async function generateFilesWithAi(input: {
   visionInputs?: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }>;
   recentHistory?: string[];  // last N user messages for conflict detection
   onEvent?: (event: any) => void;
-}): Promise<{ files: GeneratedFile[]; summary: string; model: string; cost_usd: number }> {
+}): Promise<{ files: GeneratedFile[]; summary: string; appName: string; model: string; cost_usd: number }> {
   const hasLiveKey = hasLiveAiProvider();
   if (!hasLiveKey) {
     throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live generation.');
@@ -6056,7 +6061,7 @@ async function generateFilesWithAi(input: {
     attempt++;
   }
 
-  let parsed: ReturnType<typeof parseGeneratedOutput>;
+  let parsed: ReturnType<typeof parseGeneratedOutput> | null = null;
   try {
     parsed = parseGeneratedOutput(input.projectName, result.text, input.prompt, {
       hasExistingFiles: input.existingFiles.length > 0,
@@ -6069,6 +6074,39 @@ async function generateFilesWithAi(input: {
       project_id: input.project?.id,
       message: error?.message || 'model output parse failed',
     });
+    let repairedByModel = false;
+    try {
+      const repairResult = await providerGateway.chat(selectedModel, [
+        {
+          role: 'system',
+          content: buildGenerationSystemPrompt({
+            prompt: input.prompt,
+            uiPolicySystemPrompt: uiPolicy.systemPrompt,
+            hasExistingFiles: input.existingFiles.length > 0,
+          }),
+        },
+        {
+          role: 'user',
+          content: `Repair this malformed generation into complete project files for "${input.prompt}". Return the required JSON contract, not a plan or template. Do not display the raw user prompt in the app.\n\n${String(result.text || '').slice(0, 80_000)}`,
+        },
+      ], {
+        maxAttempts: 1,
+        timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
+        runtimeConfig: runtimeOptions?.providerConfig,
+        runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
+      });
+      parsed = parseGeneratedOutput(input.projectName, repairResult.text, input.prompt, {
+        hasExistingFiles: input.existingFiles.length > 0,
+      });
+      totalCostUsd += repairResult.cost_usd;
+      result = repairResult;
+      repairedByModel = true;
+    } catch (repairError: any) {
+      console.warn('[huggy:generation_parse_model_repair_failed]', {
+        project_id: input.project?.id,
+        message: repairError?.message || 'model repair failed',
+      });
+    }
     // Robust recovery before falling back to a hardcoded template.
     // 1) Detect a plan envelope { plan, message } so we don't dump JSON in the
     //    preview — surface the message instead and stop trying to "build".
@@ -6076,7 +6114,7 @@ async function generateFilesWithAi(input: {
     // 3) Only if both fail, use the deterministic rescue scaffold.
     const { classifyModelOutput, extractPlanEnvelope, salvageFiles } = await import('./src/services/generated-output-recovery.ts');
     const kind = classifyModelOutput(result.text || '');
-    if (kind === 'plan_envelope') {
+    if (!repairedByModel && kind === 'plan_envelope') {
       const envelope = extractPlanEnvelope(result.text || '');
       const safeMessage = (envelope?.message || 'Huggy a préparé un plan. Confirme pour lancer la génération.').slice(0, 800);
       input.onEvent?.({ type: 'agent_step', step: 'plan_detected', message: safeMessage });
@@ -6084,7 +6122,7 @@ async function generateFilesWithAi(input: {
       parsed = parseGeneratedOutput(input.projectName, JSON.stringify({ ...planFallback, summary: safeMessage }), input.prompt, {
         hasExistingFiles: input.existingFiles.length > 0,
       });
-    } else {
+    } else if (!repairedByModel) {
       const salvaged = salvageFiles(result.text || '');
       if (salvaged && salvaged.files.length > 0) {
         input.onEvent?.({ type: 'agent_step', step: 'parse_salvage', message: 'Huggy a récupéré les fichiers depuis une sortie partielle du modèle.' });
@@ -6103,6 +6141,9 @@ async function generateFilesWithAi(input: {
         });
       }
     }
+  }
+  if (!parsed) {
+    throw new GeneratedOutputParseError('Huggy could not recover complete project files from the selected model.');
   }
   const files = parsed.files;
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
@@ -6171,6 +6212,7 @@ async function generateFilesWithAi(input: {
   return {
     files,
     summary: String(parsed.summary || 'Application files generated.'),
+    appName: sanitizeSuggestedProjectName(parsed.appName, input.prompt),
     model: result.model,
     cost_usd: totalCostUsd,
   };
@@ -6221,6 +6263,7 @@ function buildGenerationMessages(input: {
 function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOrDescription = '') {
   const actionablePrompt = extractActionablePromptText(promptOrDescription || projectName || '');
   return {
+    appName: deriveProjectName(actionablePrompt || projectName),
     summary: 'Generated a recoverable React/Vite application because the model output did not contain valid project files.',
     files: [
       { path: 'src/App.tsx', content: createGeneratedRescueAppTsx({ projectName: projectName || 'Huggy App', prompt: actionablePrompt }), language: 'tsx' },
@@ -6272,6 +6315,7 @@ function parseGeneratedOutput(
   const summary = String(parsed.summary || 'Modern React application files generated.');
   return {
     files,
+    appName: sanitizeSuggestedProjectName(parsed.appName, promptOrDescription || projectName),
     summary: /html\s+preview|standalone\s+html|complete\s+html/i.test(summary)
       ? 'Generated a modern React/Vite application with project files and preview.'
       : summary,
@@ -9809,8 +9853,13 @@ app.post('/api/projects', async (req: any, res: any) => {
     if (!authUser) return;
     const userId = authUser.id;
     const organizationId = await ensurePersonalOrganization(req, userId);
-    const name = sanitizeProjectName(req.body?.name);
     const prompt = sanitizeWorkspaceText(req.body?.prompt || req.body?.description || '').trim();
+    const requestedName = sanitizeProjectName(req.body?.name);
+    const name = sanitizeProjectName(
+      !requestedName || isAutomaticallyDerivedProjectName(requestedName, prompt)
+        ? deriveProjectName(prompt)
+        : requestedName,
+    );
 
     if (!name) {
       return res.status(400).json({ success: false, error: 'Project name is required.' });
@@ -9834,8 +9883,10 @@ app.post('/api/projects', async (req: any, res: any) => {
       updated_at: now,
     };
 
-    const files = createTemplateFiles(name, prompt || `Create a polished web app named ${name}.`);
-    project.preview_html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
+    // A new project starts with an honest empty preview. The builder owns the
+    // loading state until real generated files have passed the quality gates.
+    const files: GeneratedFile[] = [];
+    project.preview_html = '';
     await saveProject(project, files);
     const huggyCloud = prompt
       ? await upsertProjectBackendRequirements(project, prompt).catch((error: any) => {
@@ -10830,6 +10881,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       }
     }
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
+    const generationProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
+      ? deriveProjectName(prompt)
+      : project.name;
     const generation = await generateFilesWithAi({
       onEvent: (event) => {
         if (!isStream || streamAborted) return;
@@ -10851,7 +10905,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           }
         }
       },
-      projectName: project.name,
+      projectName: generationProjectName,
       prompt: executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt,
       project,
       decision,
@@ -10870,12 +10924,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     generation.files.forEach(file => mergedByPath.set(file.path, file));
     let files = withProjectSeoSupport(
       Array.from(mergedByPath.values()).sort((a, b) => a.path.localeCompare(b.path)),
-      project.name,
+      generationProjectName,
       prompt,
       { ensureIndex: true },
     );
-    files = ensureModernFrontendProject(files, project.name, prompt);
-    const projectForRun: GeneratedProject = { ...project, prompt };
+    files = ensureModernFrontendProject(files, generationProjectName, prompt);
+    const projectForRun: GeneratedProject = { ...project, name: generationProjectName, prompt };
 
     let pipeline = runPreviewPipeline(projectForRun, files);
     let finalFiles = files;
@@ -10973,8 +11027,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const qualitySummary = finalGate.qualitySummary;
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     if (shouldDeliverRecoverableDraft(reliabilitySummary)) {
+      const generatedProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
+        ? sanitizeSuggestedProjectName(generation.appName, prompt)
+        : project.name;
       const recoverableProject: GeneratedProject = {
         ...project,
+        name: generatedProjectName,
+        slug: generatedProjectName !== project.name ? await uniqueSlug(generatedProjectName, userId) : project.slug,
         prompt,
         model_id: generation.model,
         status: project.status || 'draft',
@@ -11082,8 +11141,13 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         return res.json(finalPayload);
       }
     }
+    const generatedProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
+      ? sanitizeSuggestedProjectName(generation.appName, prompt)
+      : project.name;
     const updatedProject: GeneratedProject = {
       ...project,
+      name: generatedProjectName,
+      slug: generatedProjectName !== project.name ? await uniqueSlug(generatedProjectName, userId) : project.slug,
       prompt,
       model_id: generation.model,
       status: project.status || 'draft',

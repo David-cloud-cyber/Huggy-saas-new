@@ -21,8 +21,8 @@ assert.equal(
     userCredits: 10,
     taskComplexity: 'medium',
   }),
-  'google/gemini-3.5-flash',
-  'Auto medium tasks should use the balanced free-tier default.',
+  'deepseek/deepseek-v4-flash',
+  'Auto medium tasks should avoid provider lock-in and use a capable free-tier model.',
 );
 
 assert.equal(
@@ -32,8 +32,8 @@ assert.equal(
     userCredits: 80,
     taskComplexity: 'complex',
   }),
-  'google/gemini-3-pro-preview',
-  'Auto complex tasks should upgrade to a stronger Pro model when plan and credits allow it.',
+  'moonshotai/kimi-k2.6',
+  'Auto complex tasks should upgrade to a strong agentic coding model when plan and credits allow it.',
 );
 
 assert.equal(
@@ -78,8 +78,8 @@ assert.equal(
     taskComplexity: 'medium',
     preferredModels: ['anthropic/claude-opus-4.8', 'anthropic/claude-opus-4.8-fast', 'anthropic/claude-opus-4.7'],
   }),
-  'google/gemini-3.5-flash',
-  'Studio Opus preference should fall back to the normal safe router when Opus is not available.',
+  'deepseek/deepseek-v4-flash',
+  'Studio Opus preference should fall back to the diversified safe router when Opus is not available.',
 );
 
 console.log('model-router tests passed');
