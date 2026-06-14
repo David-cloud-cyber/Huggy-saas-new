@@ -34,9 +34,51 @@ export type HuggyStreamMilestone =
   | 'fixing'
   | 'preview_ready';
 
+/**
+ * Reasoning phases the agent walks through, in order. These power the new
+ * transparent pipeline UI (understand → decide → plan → reason → build →
+ * verify → fix → recap) so the user sees the agent *think*, never guess.
+ */
+export type HuggyReasoningPhase =
+  | 'understand'
+  | 'decide'
+  | 'plan'
+  | 'reason'
+  | 'build'
+  | 'verify'
+  | 'fix'
+  | 'recap';
+
+export const HUGGY_REASONING_PHASE_ORDER: readonly HuggyReasoningPhase[] = [
+  'understand',
+  'decide',
+  'plan',
+  'reason',
+  'build',
+  'verify',
+  'fix',
+  'recap',
+];
+
+/** A single actionable step in the agent's plan, shown as a live checklist. */
+export type HuggyPlanStep = {
+  id: string;
+  title: string;
+  /** What the step does to the workspace. */
+  kind: 'create' | 'edit' | 'delete' | 'task';
+  path?: string;
+};
+
 export type HuggyStreamEventType =
   | 'status'
   | 'milestone'
+  | 'phase'
+  | 'understanding'
+  | 'assumption'
+  | 'clarification'
+  | 'plan'
+  | 'plan_step'
+  | 'reasoning_delta'
   | 'assistant_delta'
   | 'file_start'
   | 'file_delta'
@@ -49,6 +91,13 @@ export type HuggyStreamEventType =
 const EVENT_TYPES: readonly HuggyStreamEventType[] = [
   'status',
   'milestone',
+  'phase',
+  'understanding',
+  'assumption',
+  'clarification',
+  'plan',
+  'plan_step',
+  'reasoning_delta',
   'assistant_delta',
   'file_start',
   'file_delta',
@@ -80,6 +129,69 @@ export interface HuggyMilestoneEvent extends HuggyStreamEventBase {
   state: 'active' | 'done';
   /** Optional user-facing label override. */
   label?: string;
+}
+
+/**
+ * Phase transition. Drives the transparent pipeline timeline. `state: 'active'`
+ * highlights the phase; earlier active phases auto-complete on the client.
+ */
+export interface HuggyPhaseEvent extends HuggyStreamEventBase {
+  type: 'phase';
+  phase: HuggyReasoningPhase;
+  state: 'active' | 'done' | 'failed';
+  /** Optional user-facing label override. */
+  label?: string;
+}
+
+/** What the agent understood from the request — shown before it acts. */
+export interface HuggyUnderstandingEvent extends HuggyStreamEventBase {
+  type: 'understanding';
+  /** One-sentence restatement of the goal, in the user's language. */
+  summary: string;
+  /** Detected project kind, e.g. "calculatrice React". */
+  projectType?: string;
+  /** Concrete requirements the agent extracted. */
+  requirements: string[];
+  /** Calibrated confidence 0–1 from the decision core. */
+  confidence?: number;
+}
+
+/** An explicit assumption surfaced when acting at medium confidence. */
+export interface HuggyAssumptionEvent extends HuggyStreamEventBase {
+  type: 'assumption';
+  text: string;
+}
+
+/**
+ * The agent stops and asks ONE focused question instead of guessing.
+ * Optional `options` render as quick-reply chips.
+ */
+export interface HuggyClarificationEvent extends HuggyStreamEventBase {
+  type: 'clarification';
+  question: string;
+  options?: string[];
+}
+
+/** The full plan, emitted once as a checklist the build phase ticks off. */
+export interface HuggyPlanEvent extends HuggyStreamEventBase {
+  type: 'plan';
+  steps: HuggyPlanStep[];
+}
+
+/** A plan step changing state (the live checklist tick). */
+export interface HuggyPlanStepEvent extends HuggyStreamEventBase {
+  type: 'plan_step';
+  stepId: string;
+  state: 'active' | 'done' | 'failed';
+}
+
+/**
+ * Incremental reasoning text — the agent thinking out loud. Rendered in a
+ * collapsible "Réflexion" panel, separate from the assistant's final answer.
+ */
+export interface HuggyReasoningDeltaEvent extends HuggyStreamEventBase {
+  type: 'reasoning_delta';
+  text: string;
 }
 
 export interface HuggyAssistantDeltaEvent extends HuggyStreamEventBase {
@@ -137,6 +249,13 @@ export interface HuggyDoneEvent extends HuggyStreamEventBase {
 export type HuggyStreamEvent =
   | HuggyStatusEvent
   | HuggyMilestoneEvent
+  | HuggyPhaseEvent
+  | HuggyUnderstandingEvent
+  | HuggyAssumptionEvent
+  | HuggyClarificationEvent
+  | HuggyPlanEvent
+  | HuggyPlanStepEvent
+  | HuggyReasoningDeltaEvent
   | HuggyAssistantDeltaEvent
   | HuggyFileStartEvent
   | HuggyFileDeltaEvent

@@ -89,5 +89,9 @@ export function workJournalToActivityState(block: WorkJournalBlockLike): AgentAc
     lastEventId: 0,
     startedAt: finished ? 0 : undefined,
     endedAt: undefined,
+    phases: [],
+    reasoningText: '',
+    assumptions: [],
+    planSteps: [],
   };
 }

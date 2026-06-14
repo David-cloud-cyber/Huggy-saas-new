@@ -48,6 +48,51 @@ function mapLegacyStepToMilestone(step?: string): HuggyStreamMilestone {
   if (/preview_ready|done|memory_updated|complete/.test(value)) return 'preview_ready';
   return 'generating';
 }
+
+/**
+ * Streams the reasoning-pipeline narration (phases + understanding + assumptions
+ * + clarification) over the v2 protocol. This is what makes Huggy visibly think
+ * before it acts — and ask one focused question instead of guessing when its
+ * confidence is low. Best-effort: never throws into the request path.
+ *
+ * Returns true when the narration asked the user to pause (clarification /
+ * critical action / refusal) so the caller can surface it appropriately.
+ */
+function emitReasoningNarration(
+  stream: HuggyStreamEmitter | null,
+  events: ReasoningPhaseEvent[],
+): void {
+  if (!stream) return;
+  for (const event of events) {
+    try {
+      switch (event.kind) {
+        case 'phase':
+          stream.emit('phase', { phase: event.phase, state: event.state, label: event.label });
+          break;
+        case 'understanding':
+          stream.emit('understanding', {
+            summary: event.summary,
+            projectType: event.projectType,
+            requirements: event.requirements,
+            confidence: event.confidence,
+          });
+          break;
+        case 'assumption':
+          stream.emit('assumption', { text: event.text });
+          break;
+        case 'clarification':
+          stream.emit('clarification', { question: event.question, options: event.options });
+          break;
+        case 'reasoning_delta':
+          stream.emit('reasoning_delta', { text: event.text });
+          break;
+      }
+    } catch {
+      // client closed — stop narrating
+      break;
+    }
+  }
+}
 import {
   buildAIModelRuntimeConfig,
   getAllAIModelCapabilityProfiles,
@@ -162,6 +207,11 @@ import {
   decideHuggyAction,
   describeDecisionForStream,
 } from './src/services/decision-core.ts';
+import {
+  narrateDecision,
+  decisionRequiresPause,
+  type ReasoningPhaseEvent,
+} from './src/services/reasoning-pipeline.ts';
 import { guardDecision } from './src/services/decision-guard.ts';
 import { decisionToLegacyDecision } from './src/services/decision-bridge.ts';
 import {
@@ -653,6 +703,10 @@ const providerGateway = new ProviderGateway(openRouter);
 const AGENT_V3_ENABLED = isAgentV3Enabled(process.env);
 const AGENT_V2_ENABLED = isAgentV2Enabled(process.env) || AGENT_V3_ENABLED;
 const AGENTIC_BUILD_ENABLED = process.env.HUGGY_AGENTIC_BUILD === '1';
+// Transparent reasoning pipeline: stream understand→decide→plan→reason→build
+// phases + understanding/clarification/assumptions instead of hardcoded status
+// strings, so the agent visibly *reasons* (and asks instead of guessing).
+const REASONING_PIPELINE_ENABLED = process.env.HUGGY_REASONING_PIPELINE === '1';
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
 const webResearchGateway = new WebResearchGateway(process.env);
 const falMediaGateway = new FalMediaGateway(process.env);
@@ -10380,6 +10434,31 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     : initialDecision;
   const reliability = buildReliabilityDecision(decision);
+
+  // Transparent reasoning narration: stream what Huggy understood and why it
+  // chose this action BEFORE touching any file. When confidence is low this
+  // surfaces a clarifying question instead of guessing.
+  if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+    try {
+      const reasoningDecision = decideHuggyAction({
+        prompt: agentPrompt,
+        requestedMode,
+        project: {
+          hasFiles: existingFiles.length > 0,
+          fileCount: existingFiles.length,
+          hasLastPlan: Boolean(lastPlan),
+          lastBuildFailed: project.preview_status === 'failed',
+        },
+      });
+      emitReasoningNarration(streamV2, narrateDecision(reasoningDecision));
+      if (decisionRequiresPause(reasoningDecision)) {
+        reqLog.info('reasoning_pause', { action: reasoningDecision.action, path: reasoningDecision.decision_path });
+      }
+    } catch (err: any) {
+      reqLog.warn('reasoning_narration_failed', { message: err?.message || String(err) });
+    }
+  }
+
   const durableRunContract = buildDurableRunContract({
     contract: decision.executionContract || buildExecutionContract({
       prompt: agentPrompt,
@@ -10545,6 +10624,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   try {
     let executionPlan = '';
     if (decision.autoPlanRequired) {
+      if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+        streamV2.emit('phase', { phase: 'plan', state: 'active' });
+      }
       try {
         const planDecision: IntentDecision = {
           ...decision,
@@ -10557,9 +10639,16 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       } catch {
         executionPlan = createPlanResponse(project, prompt, existingFiles);
       }
+      if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+        streamV2.emit('phase', { phase: 'plan', state: 'done' });
+      }
     }
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
     const finalBuildPrompt = executionPlan ? `${executionPlan}\n\nBuild request:\n${basePrompt}` : basePrompt;
+
+    if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+      streamV2.emit('phase', { phase: 'build', state: 'active' });
+    }
 
     let generation: { files: GeneratedFile[]; summary: string; model: string; cost_usd: number };
 
@@ -10625,6 +10714,17 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       });
     }
 
+    // Emit per-file events for the reasoning pipeline UI.
+    if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+      for (let fi = 0; fi < generation.files.length; fi++) {
+        const gf = generation.files[fi];
+        streamV2.emit('file_start', { path: gf.path, language: gf.language, index: fi, total: generation.files.length });
+        streamV2.emit('file_done', { path: gf.path, bytes: new TextEncoder().encode(gf.content).length });
+      }
+      streamV2.emit('phase', { phase: 'build', state: 'done' });
+      streamV2.emit('phase', { phase: 'verify', state: 'active' });
+    }
+
     const outputSafety = inspectOutput(generation.summary);
     generation.files = generation.files.map(f => {
       const s = inspectOutput(f.content);
@@ -10650,6 +10750,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     let finalFiles = files;
     let autoFix = null as any;
     if (pipeline.status === 'failed') {
+      if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+        streamV2.emit('phase', { phase: 'verify', state: 'done' });
+        streamV2.emit('phase', { phase: 'fix', state: 'active' });
+      }
       await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
       for (let attempt = 1; attempt <= 3 && pipeline.status === 'failed'; attempt += 1) {
         const fix = applyAutoFix(projectForRun, finalFiles, pipeline.errors);
@@ -10657,6 +10761,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         if (!fix.fixed) break;
         finalFiles = fix.files;
         pipeline = runPreviewPipeline(projectForRun, finalFiles);
+      }
+      if (REASONING_PIPELINE_ENABLED && isStream && streamV2 && !streamAborted) {
+        streamV2.emit('phase', { phase: 'fix', state: pipeline.status === 'failed' ? 'failed' : 'done' });
       }
     }
     let previewHtml = pipeline.html;
@@ -10845,6 +10952,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         },
       };
       if (isStream) {
+        if (REASONING_PIPELINE_ENABLED && streamV2) {
+          streamV2.emit('phase', { phase: 'verify', state: 'failed' });
+          streamV2.emit('phase', { phase: 'recap', state: 'active' });
+          streamV2.emit('phase', { phase: 'recap', state: 'done' });
+          streamV2.emit('done', { payload: finalPayload });
+        }
         res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
         return res.end();
       } else {
@@ -10932,6 +11045,12 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       },
     };
     if (isStream) {
+      if (REASONING_PIPELINE_ENABLED && streamV2) {
+        streamV2.emit('phase', { phase: 'verify', state: 'done' });
+        streamV2.emit('phase', { phase: 'recap', state: 'active' });
+        streamV2.emit('phase', { phase: 'recap', state: 'done' });
+        streamV2.emit('done', { payload: finalPayload });
+      }
       res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
       return res.end();
     } else {
@@ -10954,6 +11073,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       suggested_action: diagnostic.suggested_action,
     });
     if (isStream) {
+      if (REASONING_PIPELINE_ENABLED && streamV2) {
+        streamV2.emit('error', { message: diagnostic.message, recoverable: diagnostic.suggested_action !== 'none' });
+      }
       res.write(`data: ${JSON.stringify({ type: 'error', error: diagnostic.message, diagnostic_code: diagnostic.diagnostic_code })}\n\n`);
       return res.end();
     } else {

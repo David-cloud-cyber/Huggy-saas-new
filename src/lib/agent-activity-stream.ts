@@ -12,10 +12,35 @@
 import type {
   HuggyStreamEvent,
   HuggyStreamMilestone,
+  HuggyReasoningPhase,
+  HuggyPlanStep,
 } from './stream-protocol.ts';
+import { HUGGY_REASONING_PHASE_ORDER } from './stream-protocol.ts';
 
 export type ActivityPhase = 'idle' | 'streaming' | 'done' | 'error';
 export type FileActivityStatus = 'writing' | 'done';
+
+/** A reasoning-pipeline phase row in the transparent timeline. */
+export type ActivityReasoningPhase = {
+  key: HuggyReasoningPhase;
+  label: string;
+  state: 'active' | 'done' | 'failed';
+  order: number;
+};
+
+/** A plan checklist row, ticked off as the build progresses. */
+export type ActivityPlanStep = HuggyPlanStep & {
+  state: 'pending' | 'active' | 'done' | 'failed';
+  order: number;
+};
+
+/** What the agent understood, surfaced before it touches any file. */
+export type ActivityUnderstanding = {
+  summary: string;
+  projectType?: string;
+  requirements: string[];
+  confidence?: number;
+};
 
 export type ActivityFile = {
   path: string;
@@ -58,7 +83,63 @@ export type AgentActivityState = {
   /** True once finished — the UI condenses to the summary recap. */
   collapsed: boolean;
   lastEventId: number;
+
+  // ── Reasoning pipeline (transparent "thinking" UI) ──────────────────────
+  /** Ordered phase timeline: understand → decide → plan → reason → build → … */
+  phases: ActivityReasoningPhase[];
+  /** Accumulated reasoning text — shown in the collapsible "Réflexion" panel. */
+  reasoningText: string;
+  /** What the agent understood from the request. */
+  understanding?: ActivityUnderstanding;
+  /** Explicit assumptions surfaced at medium confidence. */
+  assumptions: string[];
+  /** Set when the agent pauses to ask instead of guessing. */
+  clarification?: { question: string; options?: string[] };
+  /** The plan checklist, ticked off during the build. */
+  planSteps: ActivityPlanStep[];
 };
+
+const REASONING_PHASE_LABELS: Record<HuggyReasoningPhase, string> = {
+  understand: 'Comprendre',
+  decide: 'Décider',
+  plan: 'Planifier',
+  reason: 'Raisonner',
+  build: 'Construire',
+  verify: 'Vérifier',
+  fix: 'Corriger',
+  recap: 'Récapitulatif',
+};
+
+function upsertPhase(
+  phases: ActivityReasoningPhase[],
+  key: HuggyReasoningPhase,
+  state: 'active' | 'done' | 'failed',
+  label?: string,
+): ActivityReasoningPhase[] {
+  const next = phases.slice();
+  const idx = next.findIndex(item => item.key === key);
+  const resolvedLabel = label || REASONING_PHASE_LABELS[key] || key;
+  if (idx === -1) {
+    next.push({ key, label: resolvedLabel, state, order: HUGGY_REASONING_PHASE_ORDER.indexOf(key) });
+  } else {
+    next[idx] = { ...next[idx], state, label: resolvedLabel };
+  }
+  // When a phase becomes active, mark any earlier still-active phase as done.
+  if (state === 'active') {
+    const activeOrder = HUGGY_REASONING_PHASE_ORDER.indexOf(key);
+    for (let i = 0; i < next.length; i++) {
+      if (
+        next[i].key !== key &&
+        next[i].state === 'active' &&
+        HUGGY_REASONING_PHASE_ORDER.indexOf(next[i].key) < activeOrder
+      ) {
+        next[i] = { ...next[i], state: 'done' };
+      }
+    }
+  }
+  next.sort((a, b) => a.order - b.order);
+  return next;
+}
 
 const MILESTONE_LABELS: Record<HuggyStreamMilestone, string> = {
   understanding: 'Analyse de la demande',
@@ -90,6 +171,10 @@ export function createInitialActivityState(): AgentActivityState {
     warnings: [],
     collapsed: false,
     lastEventId: 0,
+    phases: [],
+    reasoningText: '',
+    assumptions: [],
+    planSteps: [],
   };
 }
 
@@ -115,7 +200,7 @@ function upsertMilestone(
   if (state === 'active') {
     const activeOrder = MILESTONE_ORDER.indexOf(key);
     for (let i = 0; i < next.length; i++) {
-      if (next[i].key !== key && next[i].state === 'active' && MILESTONE_ORDER.indexOf(next[i].key) < activeOrder) {
+      if (next[i].key !== key && next[i].state === 'active' && MILESTONE_ORDER.indexOf(next[i].key as HuggyStreamMilestone) < activeOrder) {
         next[i] = { ...next[i], state: 'done' };
       }
     }
@@ -159,6 +244,42 @@ export function reduceActivity(state: AgentActivityState, event: HuggyStreamEven
     case 'milestone':
       next.milestones = upsertMilestone(next.milestones, event.milestone, event.state, event.label);
       break;
+    case 'phase':
+      next.phases = upsertPhase(next.phases, event.phase, event.state, event.label);
+      break;
+    case 'understanding':
+      next.understanding = {
+        summary: event.summary,
+        projectType: event.projectType,
+        requirements: event.requirements ?? [],
+        confidence: event.confidence,
+      };
+      break;
+    case 'assumption':
+      next.assumptions = [...next.assumptions, event.text];
+      break;
+    case 'clarification':
+      next.clarification = { question: event.question, options: event.options };
+      break;
+    case 'plan':
+      next.planSteps = event.steps.map((step, index) => ({
+        ...step,
+        state: 'pending',
+        order: index,
+      }));
+      break;
+    case 'plan_step': {
+      const idx = next.planSteps.findIndex(s => s.id === event.stepId);
+      if (idx !== -1) {
+        const planSteps = next.planSteps.slice();
+        planSteps[idx] = { ...planSteps[idx], state: event.state };
+        next.planSteps = planSteps;
+      }
+      break;
+    }
+    case 'reasoning_delta':
+      next.reasoningText = next.reasoningText + (next.reasoningText && !next.reasoningText.endsWith('\n') ? '\n' : '') + event.text;
+      break;
     case 'assistant_delta':
       next.assistantText = next.assistantText + event.text;
       break;
@@ -187,10 +308,14 @@ export function reduceActivity(state: AgentActivityState, event: HuggyStreamEven
       next.phase = 'done';
       next.donePayload = event.payload;
       next.endedAt = event.ts;
-      next.collapsed = true; // calm: condense to the recap line
-      // Any milestone still active is now complete.
+      // Calm completion collapses to a recap — unless we paused to ask the user,
+      // in which case the question must stay visible.
+      next.collapsed = !next.clarification;
+      // Any milestone / phase / file / plan step still in flight is now complete.
       next.milestones = next.milestones.map(m => (m.state === 'active' ? { ...m, state: 'done' } : m));
+      next.phases = next.phases.map(p => (p.state === 'active' ? { ...p, state: 'done' } : p));
       next.files = next.files.map(f => (f.status === 'writing' ? { ...f, status: 'done' } : f));
+      next.planSteps = next.planSteps.map(s => (s.state === 'active' ? { ...s, state: 'done' } : s));
       break;
   }
 

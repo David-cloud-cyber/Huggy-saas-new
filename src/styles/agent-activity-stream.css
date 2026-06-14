@@ -142,9 +142,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .haas, .haas-spark, .haas-step-label, .haas-file-path { animation: none !important; }
+  .haas, .haas-spark, .haas-step-label, .haas-file-path,
+  .haas-phase-label, .haas-plan-title { animation: none !important; }
   .haas-step[data-state="active"] .haas-step-label,
-  .haas-file[data-state="writing"] .haas-file-path { -webkit-text-fill-color: currentColor; }
+  .haas-file[data-state="writing"] .haas-file-path,
+  .haas-phase[data-state="active"] .haas-phase-label,
+  .haas-plan-step[data-state="active"] .haas-plan-title { -webkit-text-fill-color: currentColor; }
 }
 
 /* ── Status dot ──────────────────────────────────────────────────────────── */
@@ -159,6 +162,286 @@
 .haas-dot--done { background: var(--haas-ok); }
 .haas-dot--failed { background: var(--haas-fail); }
 .haas-dot--pending { background: var(--haas-muted); opacity: 0.5; }
+
+/* ── Phase timeline (reasoning pipeline) ─────────────────────────────────── */
+.haas-phases {
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--haas-border);
+}
+
+.haas-phase {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--haas-muted);
+}
+.haas-phase[data-state="active"] { color: var(--haas-text); }
+.haas-phase[data-state="done"] { color: var(--haas-text); }
+.haas-phase[data-state="failed"] .haas-phase-label { color: var(--haas-fail); }
+.haas-phase-label { font-weight: 500; }
+.haas-phase[data-state="active"] .haas-phase-label {
+  background: linear-gradient(90deg, var(--haas-muted) 0%, var(--haas-text) 50%, var(--haas-muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: haas-shimmer 1.6s linear infinite;
+}
+
+/* ── Understanding card ──────────────────────────────────────────────────── */
+.haas-understanding {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--haas-surface);
+  border: 1px solid var(--haas-border);
+}
+.haas-understanding-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.haas-understanding-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--haas-muted);
+}
+.haas-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--haas-accent-soft);
+  color: var(--haas-accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+.haas-understanding-confidence {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--haas-muted);
+}
+.haas-understanding-summary {
+  margin: 0;
+  color: var(--haas-text);
+}
+.haas-understanding-reqs {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.haas-understanding-req {
+  position: relative;
+  padding-left: 16px;
+  color: var(--haas-muted);
+  font-size: 12px;
+}
+.haas-understanding-req::before {
+  content: "·";
+  position: absolute;
+  left: 5px;
+  color: var(--haas-accent);
+  font-weight: 700;
+}
+
+/* ── Clarification prompt (no more guessing) ─────────────────────────────── */
+.haas-clarify {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--haas-accent-soft);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+.haas-clarify-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--haas-accent);
+  margin-bottom: 4px;
+}
+.haas-clarify-question {
+  margin: 0;
+  color: var(--haas-text);
+  font-weight: 500;
+}
+.haas-clarify-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.haas-clarify-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--haas-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.haas-clarify-chip:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: var(--haas-accent);
+}
+.haas-clarify-chip:disabled { cursor: default; opacity: 0.6; }
+
+/* ── Reasoning panel ("Réflexion") ───────────────────────────────────────── */
+.haas-reasoning {
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--haas-border);
+  background: rgba(255, 255, 255, 0.015);
+  overflow: hidden;
+}
+.haas-reasoning-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--haas-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.haas-reasoning-summary:hover { color: var(--haas-text); }
+.haas-reasoning-title { font-weight: 600; }
+.haas-reasoning-chevron {
+  transition: transform 140ms ease;
+  font-size: 10px;
+}
+.haas-reasoning[data-open="true"] .haas-reasoning-chevron { transform: rotate(90deg); }
+.haas-reasoning-text {
+  margin: 0;
+  padding: 4px 12px 12px;
+  color: var(--haas-muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Assumptions ─────────────────────────────────────────────────────────── */
+.haas-assumptions {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--haas-border);
+}
+.haas-assumptions-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--haas-muted);
+  margin-bottom: 4px;
+}
+.haas-assumptions-icon { color: var(--haas-warn); font-weight: 700; }
+.haas-assumptions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.haas-assumption {
+  position: relative;
+  padding-left: 16px;
+  color: var(--haas-muted);
+  font-size: 12px;
+}
+.haas-assumption::before {
+  content: "≈";
+  position: absolute;
+  left: 4px;
+  color: var(--haas-warn);
+}
+
+/* ── Plan checklist ──────────────────────────────────────────────────────── */
+.haas-plan {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.haas-plan-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  color: var(--haas-text);
+}
+.haas-plan-step[data-state="pending"] { color: var(--haas-muted); }
+.haas-plan-step[data-state="active"] { background: var(--haas-accent-soft); }
+.haas-plan-step[data-state="failed"] .haas-plan-title { color: var(--haas-fail); }
+.haas-plan-step[data-state="done"] .haas-plan-title {
+  color: var(--haas-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--haas-border);
+}
+.haas-plan-icon {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--haas-muted);
+  font-size: 12px;
+}
+.haas-plan-step[data-kind="create"] .haas-plan-icon { color: var(--haas-ok); }
+.haas-plan-step[data-kind="delete"] .haas-plan-icon { color: var(--haas-fail); }
+.haas-plan-step[data-kind="edit"] .haas-plan-icon { color: var(--haas-accent); }
+.haas-plan-title { min-width: 0; }
+.haas-plan-step[data-state="active"] .haas-plan-title {
+  background: linear-gradient(90deg, var(--haas-muted) 0%, var(--haas-text) 50%, var(--haas-muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: haas-shimmer 1.6s linear infinite;
+}
+.haas-plan-path {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--haas-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.haas-plan-kind {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--haas-muted);
+  opacity: 0.7;
+}
 
 /* ── Warnings & checks ───────────────────────────────────────────────────── */
 .haas-warning {
