@@ -2094,44 +2094,6 @@
             <button class="chip" data-prompt="Create a SaaS manager">SaaS Manager</button>
           </div>
 
-          <div class="workspace-hubs" aria-label="Huggy workshops">
-            <button class="workspace-hub-card" type="button" data-workshop-open="chat">
-              <span class="workspace-hub-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-                </svg>
-              </span>
-              <span class="workspace-hub-title">Sites <span class="workspace-plan-tag" data-plan-min="free">Free</span></span>
-              <span class="workspace-hub-desc">Build, edit and publish web apps.</span>
-            </button>
-            <button class="workspace-hub-card" type="button" data-workshop-open="design">
-              <span class="workspace-hub-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16"></path><path d="M3 9h18"></path>
-                </svg>
-              </span>
-              <span class="workspace-hub-title">Huggy Design <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="pro">Pro</span></span>
-              <span class="workspace-hub-desc">UI direction, prototypes and polish.</span>
-            </button>
-            <button class="workspace-hub-card" type="button" data-workshop-open="decks">
-              <span class="workspace-hub-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="4" y="5" width="16" height="12" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path>
-                </svg>
-              </span>
-              <span class="workspace-hub-title">Pitch decks <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="pro">Pro</span></span>
-              <span class="workspace-hub-desc">Slides, story and one-pagers.</span>
-            </button>
-            <button class="workspace-hub-card" type="button" data-workshop-open="media">
-              <span class="workspace-hub-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M8 5v14"></path><path d="M16 5v14"></path><path d="M3 10h5"></path><path d="M16 14h5"></path>
-                </svg>
-              </span>
-              <span class="workspace-hub-title">Huggy Media <span class="workspace-beta-badge">Beta</span><span class="workspace-plan-tag" data-plan-min="scale">Scale</span></span>
-              <span class="workspace-hub-desc">Campaigns, UGC videos, product visuals and thumbnails.</span>
-            </button>
-          </div>
         </section>
 
         <section>
@@ -2401,8 +2363,8 @@
     searchInput.addEventListener('input', () => {
       const query = searchInput.value.toLowerCase();
       document.querySelectorAll('.project-card').forEach(card => {
-        const name = card.querySelector('.card-name').textContent.toLowerCase();
-        const desc = card.querySelector('.card-desc').textContent.toLowerCase();
+        const name = (card.querySelector('.card-name')?.textContent || '').toLowerCase();
+        const desc = (card.querySelector('.card-desc')?.textContent || card.querySelector('.card-meta')?.textContent || '').toLowerCase();
         if (name.includes(query) || desc.includes(query)) {
           card.style.display = 'flex';
           card.style.opacity = '1';

@@ -1041,6 +1041,8 @@ type GeneratedProject = {
   status: string;
   preview_status?: string;
   preview_html?: string;
+  publish_status?: string;
+  live_url?: string;
   created_at: string;
   updated_at: string;
 };
@@ -6622,6 +6624,99 @@ async function listProjectsForUser(userId: string): Promise<GeneratedProject[]> 
   return (data || []) as GeneratedProject[];
 }
 
+async function enrichProjectsForDashboard(projects: GeneratedProject[]) {
+  if (!projects.length) return [];
+  const client = requireSupabase('Dashboard project enrichment');
+  const deploymentByProject = new Map<string, any>();
+  const ids = projects.map(project => project.id).filter(Boolean);
+  if (ids.length) {
+    let { data, error } = await client
+      .from('deployments')
+      .select('project_id,status,deployment_status,deployment_url,url,live_url,published_url,created_at')
+      .in('project_id', ids)
+      .order('created_at', { ascending: false });
+    if (error && isSchemaShapeError(error)) {
+      const fallback = await client
+        .from('deployments')
+        .select('project_id,status,deployment_status,deployment_url,created_at')
+        .in('project_id', ids)
+        .order('created_at', { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    }
+    if (!error) {
+      (data || []).forEach((deployment: any) => {
+        if (deployment?.project_id && !deploymentByProject.has(deployment.project_id)) {
+          deploymentByProject.set(deployment.project_id, deployment);
+        }
+      });
+    } else if (!isSchemaShapeError(error)) {
+      console.warn('[huggy:dashboard_deployments_load_failed]', { message: error.message });
+    }
+  }
+
+  return projects.map(project => {
+    const deployment = deploymentByProject.get(project.id);
+    const publishStatus = deployment?.status || deployment?.deployment_status || project.publish_status || null;
+    const liveUrl = deployment?.url || deployment?.deployment_url || deployment?.live_url || deployment?.published_url || project.live_url || null;
+    return {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      prompt: project.prompt || '',
+      template: project.template || 'custom',
+      theme: project.theme || 'light',
+      model_id: project.model_id || 'auto',
+      status: project.status || 'draft',
+      preview_status: project.preview_status || 'idle',
+      preview_html: project.preview_status === 'ready' ? project.preview_html || '' : '',
+      publish_status: publishStatus,
+      live_url: liveUrl,
+      created_at: project.created_at,
+      updated_at: project.updated_at,
+    };
+  });
+}
+
+async function deleteProjectCascade(project: GeneratedProject) {
+  const client = requireSupabase('Project delete');
+  const projectScopedTables = [
+    'project_files',
+    'project_state_snapshots',
+    'project_workspace_state',
+    'project_versions',
+    'project_messages',
+    'project_patches',
+    'project_secrets',
+    'project_assets',
+    'project_integrations',
+    'project_backend_requirements',
+    'project_analytics_events',
+    'project_analytics_sessions',
+    'project_memory',
+    'project_members',
+    'agent_events',
+    'agent_runs',
+    'agent_run_steps',
+    'agent_verifications',
+    'agent_runner_results',
+    'agent_research_results',
+    'agent_memories',
+    'build_errors',
+    'deployments',
+  ];
+
+  for (const table of projectScopedTables) {
+    const { error } = await client.from(table).delete().eq('project_id', project.id);
+    if (error && !isSchemaShapeError(error) && !/relation .* does not exist|table .* does not exist/i.test(error.message || '')) {
+      console.warn('[huggy:project_delete_related_failed]', { project_id: project.id, table, message: error.message });
+    }
+  }
+
+  const { error } = await client.from('projects').delete().eq('id', project.id);
+  if (error) throw new Error(`Supabase project delete failed: ${error.message}`);
+}
+
 async function loadProjectFiles(projectId: string): Promise<GeneratedFile[]> {
   const client = requireSupabase('Project file loading');
   let { data, error } = await client.from('project_files').select('path, content, language, updated_at').eq('project_id', projectId).order('path');
@@ -9843,7 +9938,8 @@ app.post('/api/analytics/collect', async (req: any, res: any) => {
 app.get('/api/projects', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const projects = await listProjectsForUser(userId);
-  res.json({ success: true, projects });
+  const enrichedProjects = await enrichProjectsForDashboard(projects);
+  res.json({ success: true, projects: enrichedProjects });
 });
 
 app.post('/api/projects', async (req: any, res: any) => {
@@ -9994,6 +10090,18 @@ app.patch('/api/projects/:id', async (req: any, res: any) => {
   };
   await saveProject(updatedProject);
   res.json({ success: true, project: updatedProject });
+});
+
+app.delete('/api/projects/:id', async (req: any, res: any) => {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId, req);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  await deleteProjectCascade(project);
+  await upsertUserWorkspaceState(userId, {
+    last_project_id: null,
+    last_route: '/dashboard.html',
+  }).catch(() => null);
+  res.json({ success: true, deleted_project_id: project.id });
 });
 
 app.get('/api/projects/:id/state', async (req: any, res: any) => {

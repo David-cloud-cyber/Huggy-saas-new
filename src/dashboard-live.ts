@@ -22,6 +22,9 @@ type ProjectListResponse = {
     model_id?: string;
     status?: string;
     preview_status?: string;
+    preview_html?: string;
+    publish_status?: string;
+    live_url?: string | null;
     created_at?: string;
     updated_at?: string;
   }>;
@@ -257,7 +260,8 @@ function projectDescription(project: DashboardProject) {
 }
 
 function projectState(project: DashboardProject): 'draft' | 'ready' | 'published' | 'building' | 'needs-fix' {
-  const raw = `${project.status || ''} ${project.preview_status || ''}`.toLowerCase();
+  const raw = `${project.status || ''} ${project.preview_status || ''} ${project.publish_status || ''}`.toLowerCase();
+  if (project.live_url || raw.includes('publish') || raw.includes('deploy') || raw.includes('live')) return 'published';
   if (raw.includes('publish') || raw.includes('deploy') || raw.includes('live')) return 'published';
   if (raw.includes('error') || raw.includes('fail') || raw.includes('blocked') || raw.includes('needs')) return 'needs-fix';
   if (raw.includes('build') || raw.includes('generat') || raw.includes('running') || raw.includes('pending')) return 'building';
@@ -318,6 +322,40 @@ function projectTimelineItems(project: DashboardProject, state: ReturnType<typeo
   if (state === 'published') items.push('Live');
   if (state === 'needs-fix') items.push('Needs review');
   return items.slice(0, 3);
+}
+
+function projectLiveUrl(project: DashboardProject) {
+  const raw = String(project.live_url || '').trim();
+  if (!raw) return '';
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+function projectPreviewFrame(project: DashboardProject, state: ReturnType<typeof projectState>) {
+  const html = String(project.preview_html || '').trim();
+  if ((state === 'ready' || state === 'published') && html) {
+    return `
+      <iframe
+        class="project-preview-frame"
+        title="${escapeHtml(project.name)} preview"
+        loading="lazy"
+        sandbox="allow-scripts allow-forms"
+        srcdoc="${escapeHtml(html)}"
+      ></iframe>
+    `;
+  }
+  return `
+    <div class="project-preview-empty" aria-hidden="true">
+      <span class="project-preview-mark">${escapeHtml((project.name || 'H').slice(0, 1).toUpperCase())}</span>
+      <span>${state === 'needs-fix' ? 'Needs fix' : state === 'building' ? 'Building' : 'No preview yet'}</span>
+    </div>
+  `;
+}
+
+async function deleteProject(projectId: string, projectName: string) {
+  const confirmed = window.confirm(`Delete "${projectName}"? This cannot be undone.`);
+  if (!confirmed) return;
+  await apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+  await loadLiveProjects();
 }
 
 function installDashboardUxPolish() {
@@ -403,10 +441,13 @@ function installDashboardUxPolish() {
     .project-card {
       position: relative;
       overflow: hidden;
-      padding: 18px !important;
+      display: flex;
+      flex-direction: column;
+      min-height: auto;
+      padding: 0 !important;
       border-radius: 18px !important;
-      gap: 14px !important;
-      background: color-mix(in srgb, var(--bg-surface) 92%, var(--project-accent) 8%) !important;
+      gap: 0 !important;
+      background: var(--bg-surface) !important;
       transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
     }
 
@@ -416,6 +457,146 @@ function installDashboardUxPolish() {
 
     .project-card[hidden] {
       display: none !important;
+    }
+
+    .workspace-hubs {
+      display: none !important;
+    }
+
+    .project-preview-shell {
+      position: relative;
+      aspect-ratio: 16 / 10;
+      width: 100%;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background:
+        radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--project-accent) 18%, transparent), transparent 58%),
+        color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+    }
+
+    .project-preview-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+      pointer-events: none;
+      transform: scale(0.72);
+      transform-origin: 0 0;
+      width: 138.89%;
+      height: 138.89%;
+      filter: saturate(0.96) contrast(0.98);
+    }
+
+    .project-preview-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      gap: 10px;
+      color: var(--text-sub);
+      font-size: 12px;
+      font-weight: 760;
+      text-align: center;
+    }
+
+    .project-preview-mark {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      margin: 0 auto;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--project-accent) 14%, var(--bg-elevated));
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 18px;
+      font-weight: 860;
+    }
+
+    .project-hover-actions {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      background: color-mix(in srgb, #020617 42%, transparent);
+      backdrop-filter: blur(5px);
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .project-card:hover .project-hover-actions,
+    .project-card:focus-within .project-hover-actions {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .project-hover-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.20);
+      background: rgba(255, 255, 255, 0.92);
+      color: #111827;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 820;
+      box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+      transition: transform 150ms ease, background 150ms ease, color 150ms ease;
+    }
+
+    .project-hover-button:hover {
+      transform: translateY(-1px);
+      background: #fff;
+    }
+
+    .project-hover-button.danger {
+      background: rgba(31, 41, 55, 0.88);
+      color: #fff;
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .project-hover-button.danger:hover {
+      background: #ef4444;
+    }
+
+    .project-card-body {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 13px 13px;
+    }
+
+    .project-card-title {
+      min-width: 0;
+    }
+
+    .project-card-title .card-name {
+      display: block;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 820;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-card-title .card-meta {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-sub);
+      font-size: 11px;
+      line-height: 1.3;
     }
 
     .project-card-topline {
@@ -608,7 +789,22 @@ function installDashboardUxPolish() {
       }
 
       .project-card {
-        padding: 16px !important;
+        border-radius: 16px !important;
+      }
+
+      .project-hover-actions {
+        position: static;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+        background: transparent;
+        backdrop-filter: none;
+        justify-content: flex-start;
+        padding: 0 13px 13px;
+      }
+
+      .project-hover-button {
+        min-height: 32px;
       }
     }
 
@@ -779,36 +975,24 @@ function renderLiveProjects(projects: DashboardProject[]) {
   grid.innerHTML = projects.map((project, index) => {
     const state = projectState(project);
     const accent = projectAccent(index);
-    const health = projectHealthItems(project, state);
-    const timeline = projectTimelineItems(project, state);
+    const liveUrl = projectLiveUrl(project);
+    const updated = relativeTime(project.updated_at || project.created_at);
     return `
       <div class="project-card" data-id="${escapeHtml(project.id)}" data-project-state="${state}" data-project-recent="${isRecentProject(project) ? 'true' : 'false'}" style="--project-accent:${accent}">
-        <div class="project-card-topline">
-          <span class="project-accent-line" aria-hidden="true"></span>
-          <span class="project-kind-pill">${escapeHtml(projectKind(project))}</span>
+        <div class="project-preview-shell">
+          ${projectPreviewFrame(project, state)}
+          <div class="project-hover-actions" aria-label="Project actions">
+            <button class="project-hover-button" type="button" data-project-action="edit">Continue</button>
+            ${liveUrl ? `<button class="project-hover-button" type="button" data-project-action="live" data-live-url="${escapeHtml(liveUrl)}">View live</button>` : ''}
+            <button class="project-hover-button danger btn-card-delete" type="button" data-project-action="delete">Delete</button>
+          </div>
         </div>
-        <div class="card-header">
-          <div class="card-title-row">
-            <div class="project-dot" style="background:${accent}"></div>
+        <div class="project-card-body">
+          <div class="project-card-title">
             <span class="card-name">${escapeHtml(project.name)}</span>
+            <span class="card-meta">${escapeHtml(projectKind(project))} &middot; Updated ${escapeHtml(updated)}</span>
           </div>
           <span class="status-badge project-status ${state}">${escapeHtml(projectStateLabel(state))}</span>
-        </div>
-        <p class="card-desc">${escapeHtml(projectDescription(project))}</p>
-        <div class="project-health-row" aria-label="Project health">
-          ${health.map(item => `
-            <span class="project-health-item ${escapeHtml(item.status)}">
-              <span class="project-health-dot" aria-hidden="true"></span>
-              ${escapeHtml(item.label)}
-            </span>
-          `).join('')}
-        </div>
-        <div class="project-mini-timeline">
-          ${timeline.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
-        </div>
-        <div class="card-footer project-card-actions">
-          <span class="card-meta">${escapeHtml(project.slug ? `/${project.slug}` : project.id.slice(0, 8))}</span>
-          <button class="btn-open-project" type="button" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:12px;color:var(--text);">Open Builder</button>
         </div>
       </div>
     `;
@@ -816,9 +1000,39 @@ function renderLiveProjects(projects: DashboardProject[]) {
 
   grid.querySelectorAll<HTMLElement>('.project-card').forEach(card => {
     card.addEventListener('click', event => {
-      if ((event.target as HTMLElement).closest('.btn-card-delete')) return;
+      if ((event.target as HTMLElement).closest('[data-project-action]')) return;
       const id = card.dataset.id;
       if (id) window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+    });
+  });
+
+  grid.querySelectorAll<HTMLButtonElement>('[data-project-action]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const card = button.closest<HTMLElement>('.project-card');
+      const id = card?.dataset.id;
+      if (!id) return;
+      const action = button.dataset.projectAction;
+      if (action === 'edit') {
+        window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+        return;
+      }
+      if (action === 'live') {
+        const url = button.dataset.liveUrl;
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (action === 'delete') {
+        const project = projects.find(item => item.id === id);
+        button.disabled = true;
+        try {
+          await deleteProject(id, project?.name || 'this project');
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : 'Project could not be deleted.');
+          button.disabled = false;
+        }
+      }
     });
   });
 }
