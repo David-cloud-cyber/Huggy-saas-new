@@ -1,3 +1,4 @@
+import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { openHuggyStream, createSmoothTextRenderer } from './lib/stream-client';

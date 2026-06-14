@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./design-system.css";
 @import "./styles/huggy-ux-polish.css";
+@import "./styles/huggy-light-theme.css";
 
 :root[data-theme="dark"] {
     --bg: #0a0a0a;

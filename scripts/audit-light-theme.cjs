@@ -19,6 +19,7 @@ const bannedExact = [
   '#E4E4E7',
 ];
 
+const allowedLightExact = new Set(['#d4d4d8', '#D4D4D8', '#e4e4e7', '#E4E4E7']);
 const bannedWords = /\b(beige|cream|sand)\b/i;
 const weakWhiteBorder = /rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*(?:0?\.)0[0-9]/i;
 
@@ -52,6 +53,22 @@ function lineInDarkBlock(lines, index) {
   return false;
 }
 
+function lineInLightBlock(lines, index) {
+  let depth = 0;
+  for (let i = index; i >= 0; i -= 1) {
+    const line = lines[i];
+    depth += (line.match(/}/g) || []).length;
+    depth -= (line.match(/{/g) || []).length;
+    if (line.includes('[data-theme="light"]') || line.includes(":root[data-theme='light']")) {
+      return depth <= 0 || i === index;
+    }
+    if (line.includes('[data-theme="dark"]') || line.includes(":root[data-theme='dark']")) {
+      return false;
+    }
+  }
+  return false;
+}
+
 const failures = [];
 
 for (const file of listFiles(root)) {
@@ -69,6 +86,7 @@ for (const file of listFiles(root)) {
     if (!hasRelevantToken) return;
 
     const darkScoped = lineInDarkBlock(lines, index);
+    const lightScoped = lineInLightBlock(lines, index);
     const trimmed = line.trim();
 
     if (/data-theme=["']dark["']/.test(line) && /\.(html|tsx?|jsx?)$/.test(rel) && !trimmed.includes('[data-theme="dark"]')) {
@@ -76,7 +94,8 @@ for (const file of listFiles(root)) {
     }
 
     for (const color of bannedExact) {
-      if (hasBannedExact && line.includes(color) && !darkScoped) {
+      const allowedLightBorder = allowedLightExact.has(color) && lightScoped;
+      if (hasBannedExact && line.includes(color) && !darkScoped && !allowedLightBorder) {
         failures.push(`${rel}:${index + 1} banned weak/warm color ${color}`);
       }
     }

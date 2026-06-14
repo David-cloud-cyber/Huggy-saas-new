@@ -1,5 +1,6 @@
 import './styles/dashboard-polish.css';
 import './styles/dashboard-kimi.css';
+import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';

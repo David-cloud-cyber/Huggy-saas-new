@@ -1,3 +1,4 @@
+import './styles/huggy-light-theme.css';
 import {
   getAuthRedirectUrl,
   getRedirectTarget,
