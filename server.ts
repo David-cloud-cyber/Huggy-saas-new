@@ -2359,14 +2359,25 @@ function getProjectUpdatedAt(project: GeneratedProject, files: GeneratedFile[]):
   return new Date(Math.max(...dates)).toISOString();
 }
 
+function getDeploymentStatusSlug(deployment: any): string {
+  return String(deployment?.status || deployment?.deployment_status || '').trim().toLowerCase();
+}
+
+function isPublishedDeploymentReady(deployment: any): boolean {
+  const status = getDeploymentStatusSlug(deployment);
+  return ['ready', 'published', 'success', 'completed'].includes(status);
+}
+
 function sanitizeDeploymentForUser(deployment: any, publicUrl: string, customDomain: string | null) {
   if (!deployment) return null;
+  const status = getDeploymentStatusSlug(deployment) || 'unknown';
+  const isReady = isPublishedDeploymentReady(deployment);
   return {
     id: deployment.id,
     provider: 'huggy',
-    status: deployment.status || 'ready',
-    deployment_url: publicUrl,
-    public_url: publicUrl,
+    status,
+    deployment_url: isReady ? publicUrl : '',
+    public_url: isReady ? publicUrl : '',
     custom_domain: customDomain,
     badge_required: Boolean(deployment.badge_required),
     commit_hash: deployment.commit_hash || null,
@@ -2377,12 +2388,9 @@ function sanitizeDeploymentForUser(deployment: any, publicUrl: string, customDom
 
 function normalizeDeploymentStatusForPersistence(status: unknown): 'ready' | 'failed' {
   const normalized = String(status || '').trim().toLowerCase();
+  if (/\b(ready|published|success|completed)\b/.test(normalized)) return 'ready';
   if (/\b(error|failed|failure|canceled|cancelled|removed|deleted)\b/.test(normalized)) return 'failed';
-  // Vercel can return transient states such as INITIALIZING, QUEUED, BUILDING,
-  // or DEPLOYING immediately after accepting the deployment. Huggy persists the
-  // publish snapshot as live because the Vercel URL has already been created;
-  // provider-specific transients must not leak into Supabase enum columns.
-  return 'ready';
+  return 'failed';
 }
 
 function getVercelProjectName(project: Pick<GeneratedProject, 'id' | 'slug'>) {
@@ -2413,18 +2421,85 @@ function getPublicVercelDeploymentUrl(project: GeneratedProject, payload: any) {
   return aliases[0] || `https://${getVercelProjectName(project)}.vercel.app`;
 }
 
+function wait(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
+function getVercelDeploymentState(payload: any): string {
+  return String(payload?.readyState || payload?.state || payload?.status || '').trim().toLowerCase();
+}
+
+function isVercelDeploymentReady(payload: any): boolean {
+  return ['ready', 'published', 'success', 'completed'].includes(getVercelDeploymentState(payload));
+}
+
+function isVercelDeploymentFailed(payload: any): boolean {
+  return ['error', 'failed', 'failure', 'canceled', 'cancelled'].includes(getVercelDeploymentState(payload));
+}
+
+async function waitForVercelDeploymentReady(initialPayload: any, token: string, params: URLSearchParams): Promise<any> {
+  let payload = initialPayload || {};
+  if (isVercelDeploymentReady(payload)) return payload;
+  if (isVercelDeploymentFailed(payload)) {
+    throw createPublicError(
+      'Vercel rejected this deployment. Huggy kept the previous live app unchanged.',
+      502,
+      'VERCEL_DEPLOYMENT_FAILED',
+      'rebuild_then_publish',
+    );
+  }
+
+  const deploymentId = String(payload.id || payload.uid || '').trim();
+  if (!deploymentId) {
+    throw createPublicError(
+      'Vercel accepted the publish request but did not return a deployment id. Huggy kept the previous live app unchanged.',
+      502,
+      'VERCEL_DEPLOYMENT_UNVERIFIED',
+      'retry',
+    );
+  }
+
+  const pollPath = `https://api.vercel.com/v13/deployments/${encodeURIComponent(deploymentId)}${params.toString() ? `?${params.toString()}` : ''}`;
+  const delays = [900, 1200, 1600, 2200, 3000, 4200];
+  for (const delay of delays) {
+    await wait(delay);
+    const response = await fetch(pollPath, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    payload = await response.json().catch(() => payload);
+    if (!response.ok) continue;
+    if (isVercelDeploymentReady(payload)) return payload;
+    if (isVercelDeploymentFailed(payload)) {
+      throw createPublicError(
+        'Vercel finished the deployment with an error. Huggy kept the previous live app unchanged.',
+        502,
+        'VERCEL_DEPLOYMENT_FAILED',
+        'rebuild_then_publish',
+      );
+    }
+  }
+
+  throw createPublicError(
+    'Vercel is still preparing this deployment. The previous live app was kept unchanged; retry Publish in a moment.',
+    409,
+    'VERCEL_DEPLOYMENT_NOT_READY',
+    'retry_later',
+  );
+}
+
 function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
   if (!html || html.includes('data-huggy-published-badge="true"')) return html;
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
   const badge = `
-<a data-huggy-published-badge="true" href="${escapeHtml(href)}" aria-label="Built with Huggy" style="position:fixed;right:14px;bottom:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:999px;background:rgba(28,28,28,.92);color:#fcfbf8;text-decoration:none;font:700 12px/1.1 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 12px 40px rgba(28,28,28,.22),0 0 0 1px rgba(252,251,248,.16) inset;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">
+<a data-huggy-published-badge="true" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="Built with Huggy" style="position:fixed;right:14px;bottom:14px;z-index:2147483647;display:inline-flex;align-items:center;gap:8px;padding:8px 10px 8px 8px;border-radius:999px;background:rgba(8,8,9,.94);color:#fcfbf8;text-decoration:none;font:700 12px/1.1 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 14px 44px rgba(0,0,0,.26),0 0 0 1px rgba(252,251,248,.16) inset;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);">
   <svg aria-hidden="true" viewBox="0 0 32 32" width="20" height="20" style="display:block;flex:0 0 auto;border-radius:6px;box-shadow:0 0 0 1px rgba(252,251,248,.18),0 5px 14px rgba(0,0,0,.22);">
     <rect width="32" height="32" rx="8" fill="#09090b"/>
     <path fill="#ffffff" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/>
     <path fill="#ffffff" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/>
     <path fill="#ffffff" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/>
   </svg>
-  <span>Built with Huggy</span>
+  <span>Huggy</span>
+  <span aria-hidden="true" style="font-size:14px;line-height:1;opacity:.92;">&rarr;</span>
 </a>`;
   if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${badge}\n</body>`);
   return `${html}\n${badge}`;
@@ -2483,6 +2558,24 @@ async function getLatestDeployment(projectId: string): Promise<any | null> {
   }
 }
 
+async function getLatestPublishedDeployment(projectId: string): Promise<any | null> {
+  const client = requireSupabase('Latest published deployment lookup');
+  try {
+    const { data, error } = await client
+      .from('deployments')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('status', 'ready')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return (data || [])[0] || null;
+  } catch (error: any) {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:publish_ready_deployment_lookup_skipped]', { message: error?.message });
+    return null;
+  }
+}
+
 async function getPublishCurrentVisitors(projectId: string): Promise<number> {
   const client = requireSupabase('Publish visitor lookup');
   try {
@@ -2505,7 +2598,8 @@ async function getPublishCurrentVisitors(projectId: string): Promise<number> {
 
 function buildPublishStatus(context: PublishContext): PublishStatus {
   const { project, files, latestDeployment, plan, customDomain, currentVisitors = 0 } = context;
-  const latestPublishedAt = latestDeployment?.created_at || null;
+  const publishedDeployment = isPublishedDeploymentReady(latestDeployment) ? latestDeployment : null;
+  const latestPublishedAt = publishedDeployment?.created_at || null;
   const projectUpdatedAt = getProjectUpdatedAt(project, files);
   const hasUnpublishedChanges = Boolean(
     latestPublishedAt &&
@@ -2520,7 +2614,7 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
   const publicUrl = customDomain ? normalizeDomainUrl(customDomain) : getDefaultPublishedUrl(project);
   const state: PublishStatus['state'] = !previewReady || !hasFiles
     ? 'not_ready'
-    : !latestDeployment
+    : !publishedDeployment
       ? 'ready_to_publish'
       : hasUnpublishedChanges
         ? 'changes_unpublished'
@@ -8468,12 +8562,13 @@ async function deployFilesToVercel(
     throw error;
   }
 
-  const url = getPublicVercelDeploymentUrl(project, payload) || (payload.url ? `https://${String(payload.url).replace(/^https?:\/\//, '')}` : '');
+  const readyPayload = await waitForVercelDeploymentReady(payload, token, params);
+  const url = getPublicVercelDeploymentUrl(project, readyPayload) || (readyPayload.url ? `https://${String(readyPayload.url).replace(/^https?:\/\//, '')}` : '');
   return {
-    provider_deployment_id: payload.id || payload.uid || null,
+    provider_deployment_id: readyPayload.id || readyPayload.uid || null,
     deployment_url: url,
-    status: String(payload.readyState || payload.state || 'queued').toLowerCase(),
-    raw: payload,
+    status: getVercelDeploymentState(readyPayload) || 'ready',
+    raw: readyPayload,
   };
 }
 
@@ -12086,7 +12181,7 @@ app.patch('/api/projects/:id/domains/:domainId/primary', async (req: any, res) =
 async function createPublishContext(project: GeneratedProject): Promise<PublishContext> {
   const [files, latestDeployment, plan, customDomain, currentVisitors] = await Promise.all([
     loadProjectFiles(project.id),
-    getLatestDeployment(project.id),
+    getLatestPublishedDeployment(project.id),
     getOrganizationPlan(project.organization_id),
     getPrimaryCustomDomain(project.id),
     getPublishCurrentVisitors(project.id),
@@ -12398,7 +12493,7 @@ app.use('/p/:slug', async (req: any, res: any, next: any) => {
   try {
     const project = await loadPublicProjectBySlug(req.params.slug);
     if (!project) return res.status(404).send('Published app not found.');
-    const deployment = await getLatestDeployment(project.id);
+    const deployment = await getLatestPublishedDeployment(project.id);
     return proxyPublishedDeployment(project, deployment, req, res, `/p/${encodeURIComponent(req.params.slug)}`);
   } catch (error: any) {
     res.status(500).send(escapeHtml(redactSecrets(error?.message || 'Unable to load published app.')));
@@ -12544,7 +12639,7 @@ app.use(async (req, res, next) => {
   try {
     const project = await loadPublicProjectByCustomDomain(host);
     if (!project) return next();
-    const deployment = await getLatestDeployment(project.id);
+    const deployment = await getLatestPublishedDeployment(project.id);
     return proxyPublishedDeployment(project, deployment, req, res);
   } catch (error: any) {
     return res.status(500).send(escapeHtml(redactSecrets(error?.message || 'Unable to load custom domain app.')));

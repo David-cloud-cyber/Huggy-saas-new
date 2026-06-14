@@ -3025,6 +3025,33 @@ function setPreview(html: string, status = 'ready') {
   syncPreviewAddress(`${status}.huggy.local / ${currentProjectId ? currentProjectId.slice(0, 8) : 'app'}`);
 }
 
+function refreshPreviewFrame() {
+  const button = document.getElementById('btn-preview-refresh') as HTMLButtonElement | null;
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  if (!frame) return;
+  button?.classList.add('is-refreshing');
+  window.setTimeout(() => button?.classList.remove('is-refreshing'), 560);
+  if (frame.src && !frame.src.startsWith('about:')) {
+    try {
+      frame.contentWindow?.location.reload();
+    } catch {
+      frame.src = frame.src;
+    }
+    showTransientNotice('Preview refreshed.');
+    return;
+  }
+  if (currentPreviewHtml) {
+    const html = currentPreviewHtml;
+    frame.srcdoc = '';
+    window.setTimeout(() => {
+      frame.srcdoc = html;
+      showTransientNotice('Preview refreshed.');
+    }, 45);
+    return;
+  }
+  showTransientNotice('No preview to refresh yet.');
+}
+
 function renderFiles(files: GeneratedFile[]) {
   currentFiles = files;
   syncProjectReadinessClass();
@@ -3092,6 +3119,7 @@ function ensureToolbar() {
 
   document.getElementById('btn-live-cancel')?.addEventListener('click', cancelBuild);
   document.getElementById('action-download-zip')?.addEventListener('click', exportCode);
+  document.getElementById('btn-preview-refresh')?.addEventListener('click', refreshPreviewFrame);
   document.querySelectorAll<HTMLButtonElement>('.btn-publish').forEach(button => {
     if (button.dataset.publishBound === 'true') return;
     button.dataset.publishBound = 'true';
@@ -3252,7 +3280,7 @@ function renderPublishPanel(payload: PublishApiPayload | null, isPublishing = fa
           <div style="border:1px solid var(--border);background:var(--bg-input);border-radius:13px;padding:12px;color:var(--text-muted);font-size:12px;line-height:1.5;">
             ${status?.custom_domain
               ? `This app is configured for <strong style="color:var(--text);">${escapeHtml(status.custom_domain)}</strong>. Click Update after DNS changes are verified.`
-              : 'Connect a custom domain from project settings, verify DNS, then click Update. Until then, Huggy serves the app under your Huggy URL.'}
+              : 'Connect a custom domain from project settings and verify DNS. After a successful publish, Huggy will serve this app under your Huggy URL.'}
           </div>
           <button type="button" data-publish-action="settings" style="height:34px;border:1px solid var(--border);background:var(--bg-surface);color:var(--text);border-radius:11px;font-size:12px;font-weight:850;cursor:pointer;">Open settings</button>
         </div>
@@ -6282,15 +6310,20 @@ function ensureResizableSidebar() {
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
   if (!body || !sidebar || document.getElementById('huggy-sidebar-resizer')) return;
   const savedWidth = Number(projectWorkspaceState?.sidebar_width || localStorage.getItem('huggy-sidebar-width') || 380);
+  const syncCompactClass = (width: number) => {
+    body.classList.toggle('sidebar-compact', body.classList.contains('sidebar-collapsed') || width < 330);
+  };
   const applyWidth = (width: number) => {
     if (window.matchMedia('(max-width: 760px)').matches) {
       body.style.gridTemplateColumns = '';
       body.style.removeProperty('--huggy-sidebar-width');
+      syncCompactClass(0);
       return;
     }
     const next = Math.min(520, Math.max(280, width));
     applySidebarWidthPreference(next);
     localStorage.setItem('huggy-sidebar-width', String(next));
+    syncCompactClass(next);
   };
   applyWidth(savedWidth);
   const handle = document.createElement('div');
@@ -6314,6 +6347,7 @@ function ensureResizableSidebar() {
       body.style.setProperty('--huggy-sidebar-width', `${next}px`);
       handle.style.left = `${next - 4}px`;
       localStorage.setItem('huggy-sidebar-width', String(Math.round(next)));
+      syncCompactClass(next);
       scheduleWorkspaceSave({ sidebar_width: Math.round(next) });
     };
     const up = () => {
