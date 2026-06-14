@@ -290,6 +290,8 @@ let workspaceSaveTimer: number | null = null;
 let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
+let currentPreviewStatus = 'idle';
+let currentBuilderView: 'preview' | 'code' | 'database' | 'analysis' = 'preview';
 let currentMediaPreviewHtml = '';
 let previewThemeSyncBound = false;
 let currentPlanKey: PlanKey = 'free';
@@ -1262,12 +1264,14 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   if (emptyPreviewMode === mode && emptyPreviewLabel === resolvedLabel && frame.dataset.emptyPreview === 'true') return;
   emptyPreviewMode = mode;
   emptyPreviewLabel = resolvedLabel;
+  currentPreviewStatus = mode;
   frame.dataset.emptyPreview = 'true';
   frame.dataset.emptyPreviewMode = mode;
   frame.dataset.previewShellTheme = getBuilderPreviewTheme();
   frame.srcdoc = centeredPreviewLoaderHtml(mode, resolvedLabel);
   setPreviewDevice(selectedPreviewDevice, false);
   syncPreviewAddress(null);
+  syncPreviewToolbarControls();
 }
 
 function mediaPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Media output') {
@@ -1325,9 +1329,11 @@ function setMediaPreviewHtml(html: string, addressLabel = 'media.huggy.local / l
   frame.removeAttribute('data-design-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
+  currentPreviewStatus = 'idle';
   setPreviewDevice(selectedPreviewDevice, false);
   void addressLabel;
   syncPreviewAddress(null);
+  syncPreviewToolbarControls();
 }
 
 function designPreviewShellHtml(state: 'idle' | 'working' = 'idle', title = 'Design canvas') {
@@ -1395,9 +1401,11 @@ function setDesignPreviewHtml(html: string, addressLabel = 'design.huggy.local /
   frame.removeAttribute('data-media-preview');
   frame.removeAttribute('data-empty-preview');
   frame.srcdoc = html;
+  currentPreviewStatus = 'idle';
   setPreviewDevice(selectedPreviewDevice, false);
   void addressLabel;
   syncPreviewAddress(null);
+  syncPreviewToolbarControls();
 }
 
 function syncWorkshopPreview() {
@@ -1619,6 +1627,27 @@ function syncPreviewAddress(label?: string | null) {
   const hasRealPreviewAddress = Boolean(cleanLabel);
   row?.classList.toggle('address-hidden', !hasRealPreviewAddress);
   if (address) address.textContent = hasRealPreviewAddress ? cleanLabel : '';
+}
+
+function hasReadyAppPreview() {
+  const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
+  return currentBuilderView === 'preview'
+    && currentPreviewStatus === 'ready'
+    && emptyPreviewMode === 'ready'
+    && isUsablePreviewHtml(currentPreviewHtml)
+    && frame?.dataset.emptyPreview !== 'true'
+    && frame?.dataset.designPreview !== 'true'
+    && frame?.dataset.mediaPreview !== 'true';
+}
+
+function syncPreviewToolbarControls() {
+  const controls = document.querySelector('.preview-toolbar-controls') as HTMLElement | null;
+  const refresh = document.getElementById('btn-preview-refresh') as HTMLButtonElement | null;
+  const visible = hasReadyAppPreview();
+  controls?.classList.toggle('preview-controls-visible', visible);
+  controls?.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if (refresh) refresh.disabled = !visible;
+  if (!visible) closePreviewDeviceMenu();
 }
 
 function closePreviewDeviceMenu() {
@@ -2988,14 +3017,18 @@ async function tryBootWebContainerPreview(frame: HTMLIFrameElement, files: Gener
 }
 
 function setPreview(html: string, status = 'ready') {
+  const normalizedStatus = String(status || '').trim().toLowerCase() || 'idle';
   if (!isUsablePreviewHtml(html)) {
     currentPreviewHtml = '';
-    emptyPreviewMode = status === 'building' ? 'working' : 'idle';
-    setEmptyPreviewState(emptyPreviewMode, status === 'building' ? 'Generating' : 'Ready when you are');
+    currentPreviewStatus = normalizedStatus;
+    emptyPreviewMode = normalizedStatus === 'building' ? 'working' : 'idle';
+    setEmptyPreviewState(emptyPreviewMode, normalizedStatus === 'building' ? 'Generating' : 'Ready when you are');
     syncProjectReadinessClass();
+    syncPreviewToolbarControls();
     return;
   }
   currentPreviewHtml = html;
+  currentPreviewStatus = normalizedStatus;
   emptyPreviewMode = 'ready';
   emptyPreviewLabel = '';
   syncProjectReadinessClass();
@@ -3004,6 +3037,7 @@ function setPreview(html: string, status = 'ready') {
     frame.dataset.emptyPreview = 'false';
     frame.dataset.emptyPreviewMode = 'ready';
     frame.removeAttribute('data-media-preview');
+    frame.removeAttribute('data-design-preview');
     frame.style.transition = 'opacity 180ms cubic-bezier(.22,1,.36,1), transform 180ms cubic-bezier(.22,1,.36,1)';
     frame.style.opacity = '0.72';
     frame.style.transform = 'scale(.998)';
@@ -3022,13 +3056,14 @@ function setPreview(html: string, status = 'ready') {
 
   activateBuilderView('preview');
 
-  syncPreviewAddress(`${status}.huggy.local / ${currentProjectId ? currentProjectId.slice(0, 8) : 'app'}`);
+  syncPreviewAddress(`${normalizedStatus}.huggy.local / ${currentProjectId ? currentProjectId.slice(0, 8) : 'app'}`);
+  syncPreviewToolbarControls();
 }
 
 function refreshPreviewFrame() {
   const button = document.getElementById('btn-preview-refresh') as HTMLButtonElement | null;
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
-  if (!frame) return;
+  if (!frame || !hasReadyAppPreview()) return;
   button?.classList.add('is-refreshing');
   window.setTimeout(() => button?.classList.remove('is-refreshing'), 560);
   if (frame.src && !frame.src.startsWith('about:')) {
@@ -4304,6 +4339,7 @@ function setChatMode(mode: ChatMode) {
 }
 
 function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis') {
+  currentBuilderView = view;
   const screens: Record<string, string> = {
     preview: 'screen-layout-preview',
     code: 'screen-layout-code',
@@ -4325,6 +4361,7 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
   } else {
     stopAnalysisPolling();
   }
+  syncPreviewToolbarControls();
   scheduleWorkspaceSave({ active_tab: view });
 }
 

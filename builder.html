@@ -2062,10 +2062,20 @@
     }
 
     .preview-toolbar-controls {
-      display: inline-flex;
+      display: none;
       align-items: center;
       gap: 7px;
       min-width: 0;
+    }
+
+    .preview-toolbar-controls.preview-controls-visible {
+      display: inline-flex;
+      animation: preview-controls-reveal 180ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    @keyframes preview-controls-reveal {
+      from { opacity: 0; transform: translateY(-3px); }
+      to { opacity: 1; transform: none; }
     }
 
     .sub-nav-right .preview-address-row {
@@ -3253,7 +3263,7 @@
           </div>
 
           <div class="sub-nav-right">
-            <div class="preview-toolbar-controls" aria-label="Preview controls">
+            <div class="preview-toolbar-controls" aria-label="Preview controls" aria-hidden="true">
               <div class="preview-address-row address-hidden">
                 <div class="preview-address-glow">
                   <span class="preview-address-live-dot"></span>
