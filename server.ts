@@ -224,6 +224,8 @@ import {
 import { buildAgentMoatIntelligence } from './src/services/agent-moat-intelligence.ts';
 import { inspectInput, inspectOutput, type SafetyResult } from './src/services/safety-filter.ts';
 import { runAgentBuild, type AgentBuildResult, type AgentWorkspaceFile } from './src/services/agent-build-loop.ts';
+import { InMemoryRateLimiter, rateLimitHeaders, RATE_TIER_GENERATE } from './src/services/rate-limiter.ts';
+import { createLogger, createRequestLogger } from './src/services/structured-logger.ts';
 import {
   buildDesignStudioBrief,
   designWorkshopInstructionLines,
@@ -623,6 +625,8 @@ app.use('/api/projects', requireAuth);
 // Runtime data must live in Supabase. The only in-memory state kept here is
 // short-lived rate-limit counters, which are not product data.
 const RATE_LIMITS = new Map<string, number[]>();
+const rateLimiter = new InMemoryRateLimiter();
+const logger = createLogger({ service: 'huggy-server' });
 const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000000';
 
 // Instantiate Core Services
@@ -1466,12 +1470,11 @@ function hasProjectCapability(req: any, capability: 'build' | 'deploy' | 'secret
 }
 
 function enforceRateLimit(key: string, limit: number, windowMs: number) {
-  const now = Date.now();
-  const recent = (RATE_LIMITS.get(key) || []).filter(ts => now - ts < windowMs);
-  if (recent.length >= limit) return false;
-  recent.push(now);
-  RATE_LIMITS.set(key, recent);
-  return true;
+  // Production-grade sliding-window limiter with burst support and automatic GC.
+  // The legacy RATE_LIMITS map is retained for any callers still reading it, but
+  // the gating decision now comes from the dedicated rate-limiter service.
+  const result = rateLimiter.consume(key, { limit, windowMs });
+  return result.allowed;
 }
 
 function isAbusivePrompt(prompt: string) {
@@ -8553,8 +8556,8 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
   const userId = String(authUser.id);
-  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
-  if (!prompt) {
+  const rawPrompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
+  if (!rawPrompt) {
     return res.status(400).json({
       success: false,
       error: 'Prompt is required.',
@@ -8564,6 +8567,18 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
       suggested_action: 'write_message',
     });
   }
+  const chatSafety = inspectInput(rawPrompt);
+  if (!chatSafety.allowed) {
+    return res.status(400).json({
+      success: false,
+      error: chatSafety.reason || 'This message cannot be processed safely.',
+      message: chatSafety.reason || 'This message cannot be processed safely.',
+      diagnostic_code: 'SAFETY_BLOCKED',
+      request_id: requestId,
+      suggested_action: 'rephrase_message',
+    });
+  }
+  const prompt = chatSafety.sanitized;
   if (!enforceRateLimit(`assistant_chat:${userId}`, 30, 60_000)) {
     return res.status(429).json({
       success: false,
@@ -10244,6 +10259,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const authUser = requireAuthenticatedUser(req, res, requestId);
   if (!authUser) return;
   const userId = authUser.id;
+  const reqLog = createRequestLogger({ id: requestId, userId, params: { projectId: req.params.id } });
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
 
@@ -10272,7 +10288,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       .slice(0, 8)
     : [];
   if (!requireProjectCapability(req, res, 'view', project)) return;
-  if (!enforceRateLimit(`generate:${userId}`, 12, 60_000)) {
+  const generateRate = rateLimiter.consume(`generate:${userId}`, RATE_TIER_GENERATE);
+  Object.entries(rateLimitHeaders(generateRate)).forEach(([k, v]) => res.setHeader(k, v));
+  if (!generateRate.allowed) {
     return res.status(429).json({ success: false, error: 'Too many build requests. Please wait a moment.' });
   }
   const inputSafety = inspectInput(prompt);
@@ -10564,6 +10582,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         model: effectiveModelSelection,
         cost_usd: 0,
       };
+      reqLog.info('agentic_build_complete', { steps: agenticResult.steps, files: agenticResult.files.length, model: effectiveModelSelection });
       if (isStream && streamV2) {
         streamV2.emit('milestone', { milestone: 'checking', state: 'active', label: `Agent completed in ${agenticResult.steps} tool steps.` });
       }
@@ -11222,8 +11241,8 @@ app.post('/api/projects/:id/visual-edit', async (req: any, res: any) => {
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   if (!requireProjectCapability(req, res, 'build', project)) return;
   const selector = String(req.body?.selector || '').trim().slice(0, 240);
-  const instruction = String(req.body?.instruction || req.body?.prompt || '').trim().slice(0, 1200);
-  if (!instruction) {
+  const rawInstruction = String(req.body?.instruction || req.body?.prompt || '').trim().slice(0, 1200);
+  if (!rawInstruction) {
     return res.status(400).json({
       success: false,
       message: 'Describe the visual change to apply.',
@@ -11231,6 +11250,16 @@ app.post('/api/projects/:id/visual-edit', async (req: any, res: any) => {
       suggested_action: 'provide_visual_edit_instruction',
     });
   }
+  const editSafety = inspectInput(rawInstruction);
+  if (!editSafety.allowed) {
+    return res.status(400).json({
+      success: false,
+      message: editSafety.reason || 'This instruction cannot be processed safely.',
+      diagnostic_code: 'SAFETY_BLOCKED',
+      suggested_action: 'rephrase_message',
+    });
+  }
+  const instruction = editSafety.sanitized;
   const prompt = [
     'Visual edit request.',
     selector ? `Target selector: ${selector}` : 'Target selector: not provided; infer the smallest safe target from the current preview.',
@@ -12095,6 +12124,7 @@ function pathExists(target: string): boolean {
 
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
+  logger.info('server_started', { port, agentic_build: AGENTIC_BUILD_ENABLED, agent_v3: AGENT_V3_ENABLED });
 
   // ✅ Initialize async job queue worker — picks up long-running jobs from Supabase
   const supabaseClient = getSupabase();
