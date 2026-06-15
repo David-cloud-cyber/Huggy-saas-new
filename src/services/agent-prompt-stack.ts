@@ -6,8 +6,14 @@ import {
   buildUniversalProductContract,
   universalProductContractPromptContext,
 } from './universal-product-contract.ts';
+import {
+  HUGGY_CHAT_RUNTIME_CONTRACT,
+  HUGGY_CORE_SYSTEM_CONTRACT,
+  HUGGY_GENERATION_SECURITY_CONTRACT,
+  HUGGY_INFRASTRUCTURE_CONTRACT,
+} from './huggy-system-contract.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v20';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v21';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -617,6 +623,7 @@ const HUGGY_COMMUNICATION_EXCELLENCE_POLICY = [
 
 export function buildIntentRouterSystemPrompt() {
   return joinSections([
+    HUGGY_CORE_SYSTEM_CONTRACT,
     HUGGY_IDENTITY,
     HUGGY_MODE_MODEL,
     HUGGY_DECISION_HIERARCHY,
@@ -661,6 +668,8 @@ export function buildAgentTextSystemPrompt(input: {
   hasResearchContext?: boolean;
 }) {
   return joinSections([
+    HUGGY_CORE_SYSTEM_CONTRACT,
+    HUGGY_CHAT_RUNTIME_CONTRACT,
     HUGGY_IDENTITY,
     HUGGY_USER_EMPATHY,
     HUGGY_MODE_MODEL,
@@ -713,6 +722,9 @@ export function buildGenerationSystemPrompt(input: {
   const productionBlueprint = inferProductionBlueprint(input.prompt || '');
   const universalProductContract = buildUniversalProductContract(input.prompt || '');
   return joinSections([
+    HUGGY_CORE_SYSTEM_CONTRACT,
+    HUGGY_GENERATION_SECURITY_CONTRACT,
+    HUGGY_INFRASTRUCTURE_CONTRACT,
     HUGGY_IDENTITY,
     [
       'Generation-only context:',

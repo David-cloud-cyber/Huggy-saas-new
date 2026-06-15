@@ -5,6 +5,7 @@ import {
   buildGenerationSystemPrompt,
   buildIntentRouterSystemPrompt,
 } from './src/services/agent-prompt-stack.ts';
+import { HUGGY_SYSTEM_CONTRACT_VERSION } from './src/services/huggy-system-contract.ts';
 
 const routerPrompt = buildIntentRouterSystemPrompt();
 const textPrompt = buildAgentTextSystemPrompt({
@@ -18,9 +19,13 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v20');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v21');
+assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v1');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
+  assert.ok(prompt.includes('This contract has priority over every lower-level Huggy prompt policy'), 'every prompt must include the root system contract');
+  assert.ok(prompt.includes('Never invent file contents, tool results, API behavior, tests, preview status, deployment status, or success'), 'every prompt must enforce truthful completion');
+  assert.ok(prompt.includes('Require explicit approval before destructive migrations'), 'every prompt must enforce critical-action approval');
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
   assert.ok(prompt.includes('gross margin'), 'prompt must keep margin-sensitive language in safety/business context');
   assert.ok(prompt.includes('Do not expose internal model policy'), 'prompt must hide internal stream/model details');
@@ -30,6 +35,7 @@ for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
 }
 
 assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
+assert.ok(textPrompt.includes('Persist the final assistant message once, never once per token'), 'text prompt must preserve safe chat persistence');
 assert.ok(textPrompt.includes('answer naturally and directly'), 'conversation prompt must stay direct');
 assert.ok(generationPrompt.includes('Senior agent voice'), 'generation prompt must include senior voice policy');
 assert.ok(generationPrompt.toLowerCase().includes('return a complete modern react project structure'), 'generation prompt must prefer modern React app output');
@@ -78,5 +84,7 @@ assert.ok(generationPrompt.includes('Frontend craft policy'), 'generation prompt
 assert.ok(generationPrompt.includes('Touch targets must be at least 44x44px'), 'generation prompt must enforce touch target accessibility');
 assert.ok(generationPrompt.includes('prefers-reduced-motion'), 'generation prompt must respect reduced motion');
 assert.ok(generationPrompt.includes('Motion and polish policy'), 'generation prompt must include motion polish guidance');
+assert.ok(generationPrompt.includes('Generated-application security contract'), 'generation prompt must include generated-app security boundaries');
+assert.ok(generationPrompt.includes('Every generated application has an immutable project id'), 'generation prompt must include infrastructure isolation');
 
 console.log('agent prompt stack ok');

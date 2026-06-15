@@ -79,6 +79,7 @@ export type HuggyConversationBlock =
 export type HuggyConversationMessage = {
   id: string;
   content: string;
+  parts?: import("./lib/chat-message-parts").HuggyMessagePart[];
   role: HuggyConversationRole;
   working?: boolean;
   trace?: HuggyAgentTrace | null;
@@ -88,7 +89,7 @@ export type HuggyConversationMessage = {
 };
 
 export type HuggyConversationApi = {
-  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
+  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; parts?: import("./lib/chat-message-parts").HuggyMessagePart[]; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
   updateMessage: (id: string, content: string) => void;
   setWorking: (id: string, label: string) => void;
   clearWorking: (id: string) => void;
@@ -1857,9 +1858,21 @@ function renderPlainMessage(content: string) {
   return <span className="huggy-message-plain">{content}</span>;
 }
 
+function textFromConversationParts(parts: HuggyConversationMessage["parts"], fallback: string) {
+  if (!Array.isArray(parts) || !parts.length) return fallback;
+  const text = parts
+    .filter(part => part.type === "text" || part.type === "reasoning")
+    .map(part => String(part.text || "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  return text || fallback;
+}
+
 function renderStandardMessageContent(message: HuggyConversationMessage) {
-  if (message.role === "assistant") return renderAssistantMarkdown(message.content);
-  return renderPlainMessage(message.content);
+  const content = textFromConversationParts(message.parts, message.content);
+  if (message.role === "assistant") return renderAssistantMarkdown(content);
+  return renderPlainMessage(content);
 }
 
 function workJournalCompareText(value = "") {
@@ -2430,6 +2443,7 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
           id,
           role: message.role,
           content: message.content,
+          parts: message.parts,
           working: Boolean(message.working),
           trace: message.trace || null,
           block: message.block,

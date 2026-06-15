@@ -12,15 +12,16 @@ assert.ok(builderLive.includes('commitAssistantText'), 'builder should render on
 assert.ok(builderLive.includes("'clarification_only'"), 'builder should still clarify vague bare actions');
 assert.ok(builderLive.includes('startBuildStream'), 'builder should start the compact build stream for real project work');
 assert.ok(builderLive.includes('setWorkJournalBlock(status, journal)'), 'builder should attach the build stream journal to the assistant message');
+assert.ok(builderLive.includes('/api/assistant/chat/stream'), 'simple conversation should use the synchronized chat stream endpoint');
+assert.ok(builderLive.includes('chatAbort.signal.addEventListener'), 'simple conversation stop should cancel the chat stream');
 
 assert.ok(!builderLive.includes('apiStream('), 'builder should never call apiStream');
 assert.ok(!builderLive.includes('/generate/stream'), 'builder should never call the streaming generation endpoint');
-assert.ok(!builderLive.includes('/assistant/chat/stream'), 'builder should never call the streaming chat endpoint');
 assert.ok(!builderLive.includes('appendToMessageShimmer(status, liveTokenBuffer)'), 'raw generation tokens must never be rendered in the conversation');
 
 assert.ok(!conversation.includes('components/huggy-streaming/ChatStream'), 'conversation should not import the old ChatStream UI');
 assert.ok(!conversation.includes('<ChatStream'), 'conversation should not render the old ChatStream UI');
-assert.ok(conversation.includes('huggy-message-waiting'), 'conversation should render a compact non-streaming wait state');
+assert.ok(conversation.includes('huggy-message-waiting'), 'conversation should render a compact waiting state before streamed text arrives');
 assert.ok(conversation.includes('huggy-conversation-stream'), 'project work should render as a simple inline conversation stream');
 assert.ok(!conversation.includes('<div className="huggy-workline-rail"'), 'inline project work should not render a visual rail');
 assert.ok(!conversation.includes('Huggy Mission Control'), 'conversation should not render Mission Control');

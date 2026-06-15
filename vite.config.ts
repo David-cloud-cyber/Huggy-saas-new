@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import fs from 'fs';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
 function discoverHtmlInputs(root: string) {
   const ignored = new Set(['dist', 'node_modules', '.git', '.vscode', '.railway']);
@@ -26,13 +26,9 @@ function discoverHtmlInputs(root: string) {
   return inputs;
 }
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     plugins: [tailwindcss()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -2,6 +2,7 @@ import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { openHuggyStream, createSmoothTextRenderer } from './lib/stream-client';
+import { messageTextFromParts, type HuggyMessagePart } from './lib/chat-message-parts';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
@@ -52,7 +53,7 @@ type ProjectPayload = {
     preview_status?: string;
   };
   files: GeneratedFile[];
-  messages?: Array<{ role: string; content: string; intent?: string }>;
+  messages?: Array<{ role: string; content: string; parts?: HuggyMessagePart[]; intent?: string }>;
   events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any; public_payload?: any; status?: string; agent_run_id?: string; created_at?: string }>;
   workspace_state?: WorkspaceState | null;
   preview?: {
@@ -2645,15 +2646,16 @@ function recentConversationForAssistant(currentPrompt = '') {
   const api = ensureConversationApi();
   const normalizedPrompt = redactSecrets(currentPrompt).trim();
   const messages = (api?.messages() || [])
-    .filter(message => (message.role === 'user' || message.role === 'assistant') && !message.working && String(message.content || '').trim())
+    .filter(message => (message.role === 'user' || message.role === 'assistant') && !message.working && messageTextFromParts((message as any).parts, message.content || '').trim())
     .slice(-12);
   const latest = messages[messages.length - 1];
-  if (latest?.role === 'user' && redactSecrets(String(latest.content || '')).trim() === normalizedPrompt) {
+  if (latest?.role === 'user' && redactSecrets(messageTextFromParts((latest as any).parts, latest.content || '')).trim() === normalizedPrompt) {
     messages.pop();
   }
   return messages.map(message => ({
       role: message.role,
-      content: redactSecrets(String(message.content || '')).slice(0, 2400),
+      content: redactSecrets(messageTextFromParts((message as any).parts, message.content || '')).slice(0, 2400),
+      parts: (message as any).parts,
     }));
 }
 
@@ -2717,18 +2719,71 @@ function generationReadyText(speaksFrench: boolean) {
 
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
+  let verified = await getVerifiedSession();
+  if (!verified?.session?.access_token) {
+    verified = await refreshVerifiedSession();
+  }
+  const token = verified?.session?.access_token || '';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  const chatAbort = new AbortController();
+  const clientMessageId = `msg_user_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const assistantMessageId = `msg_asst_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  activeAbort = chatAbort;
+  setBusy(true);
   try {
-    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
-      method: 'POST',
-      body: JSON.stringify({
-        prompt,
-        modelId: selectedModel(),
-        projectId: currentProjectId || undefined,
-        messages: recentConversationForAssistant(prompt),
-      }),
+    let finalText = '';
+    let streamError: Error | null = null;
+    let visibleText = '';
+    const smoothText = createSmoothTextRenderer((visible) => {
+      visibleText = visible;
+      updateMessage(card, redactSecrets(visible));
     });
-    const content = String(payload.text || payload.message || payload.error || '').trim();
-    if (!content) throw new Error('Assistant response was empty.');
+
+    const stream = openHuggyStream({
+      url: `${API_BASE_URL}/api/assistant/chat/stream`,
+      init: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt,
+          modelId: selectedModel(),
+          projectId: currentProjectId || undefined,
+          clientMessageId,
+          assistantMessageId,
+          messages: recentConversationForAssistant(prompt),
+        }),
+      },
+      maxRetries: 0,
+      onEvent: (eventType, data) => {
+        if (!data || typeof data !== 'object') return;
+        if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
+          smoothText.push(String(data.text || ''));
+          return;
+        }
+        if (eventType === 'error' || data.type === 'error') {
+          streamError = new Error(String(data.message || data.error || fallback));
+          return;
+        }
+        if (eventType === 'done' || data.type === 'done') {
+          const payload = data.payload || {};
+          finalText = String(payload.text || payload.message || '').trim();
+        }
+      },
+    });
+
+    chatAbort.signal.addEventListener('abort', () => {
+      smoothText.stop();
+      stream.cancel();
+    }, { once: true });
+
+    await stream.done;
+    await smoothText.finish();
+    if (streamError) throw streamError;
+    const content = finalText || visibleText;
+    if (!content.trim()) throw new Error('Assistant response was empty.');
     updateMessage(card, safeAssistantDisplayText(content, speaksFrench, fallback));
     clearMessageShimmer(card);
   } catch (error) {
@@ -2744,6 +2799,9 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
       return;
     }
     await showAssistantBubble(card, fallback);
+  } finally {
+    if (activeAbort === chatAbort) activeAbort = null;
+    setBusy(false);
   }
 }
 
@@ -4688,21 +4746,25 @@ function restoreMessages(payload: ProjectPayload) {
   if (!scroll || scroll.dataset.restored === 'true') return;
   scroll.dataset.restored = 'true';
   payload.messages
-    .filter(message => message.content && !/^Project (synchronized|ready)\./i.test(message.content))
+    .filter(message => {
+      const text = messageTextFromParts(message.parts, message.content || '');
+      return text && !/^Project (synchronized|ready)\./i.test(text);
+    })
     .slice(-100)
     .forEach(message => {
       const role = message.role === 'user' ? 'user' : 'assistant';
+      const rawContent = messageTextFromParts(message.parts, message.content || '');
       const content = role === 'assistant'
         ? safeAssistantDisplayText(
-          message.content,
-          isLikelyFrenchText(message.content),
-          cleanRecoveryText(isLikelyFrenchText(message.content)),
+          rawContent,
+          isLikelyFrenchText(rawContent),
+          cleanRecoveryText(isLikelyFrenchText(rawContent)),
         )
-        : message.content;
+        : rawContent;
       const card = appendMessage(role, content);
       void card;
       if (message.intent === 'plan') {
-        lastPlan = message.content;
+        lastPlan = rawContent;
       }
     });
 }

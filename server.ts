@@ -32,6 +32,12 @@ import {
   type HuggyStreamEmitter,
   type HuggyStreamMilestone,
 } from './src/lib/stream-protocol.ts';
+import {
+  messagePartsFromContent,
+  messageTextFromParts,
+  normalizeMessageParts,
+  redactMessageParts,
+} from './src/lib/chat-message-parts.ts';
 
 /**
  * Maps a legacy generation step name to a Huggy Stream v2 milestone so the
@@ -7900,16 +7906,52 @@ async function listAgentResearchResults(projectId: string, limitValue = 40) {
   return (data || []).map(redactSecretPayload);
 }
 
+function isProjectMessageSchemaCompatibilityError(error: any) {
+  return /project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache|column .* does not exist|ai_message_id|parts|metadata|intent|requested_mode|organization_id/i.test(error?.message || '');
+}
+
+async function persistProjectMessageRow(client: any, row: any) {
+  if (row.ai_message_id) {
+    const existing = await client
+      .from('project_messages')
+      .select('id')
+      .eq('project_id', row.project_id)
+      .eq('ai_message_id', row.ai_message_id)
+      .maybeSingle();
+
+    if (!existing.error && existing.data?.id) {
+      const { error } = await client
+        .from('project_messages')
+        .update(row)
+        .eq('id', existing.data.id);
+      return { error };
+    }
+
+    if (existing.error && !isProjectMessageSchemaCompatibilityError(existing.error)) {
+      return { error: existing.error };
+    }
+  }
+
+  return await client.from('project_messages').insert([row]);
+}
+
 async function saveProjectMessage(data: any) {
+  const parts = redactMessageParts(
+    normalizeMessageParts(data.parts, data.content || ''),
+    value => redactSecrets(value),
+  );
+  const content = redactSecrets(messageTextFromParts(parts, data.content || ''));
   const row = {
     id: data.id || randomUUID(),
     ...data,
-    content: redactSecrets(data.content || ''),
+    content,
+    parts,
+    metadata: redactSecretPayload(data.metadata || {}),
     created_at: data.created_at || new Date().toISOString(),
   };
   const client = requireSupabase('Project message persistence');
-  let { error } = await client.from('project_messages').insert([row]);
-  if (error && /intent|requested_mode|organization_id|schema cache|column .* does not exist/i.test(error.message || '')) {
+  let { error } = await persistProjectMessageRow(client, row);
+  if (error && isProjectMessageSchemaCompatibilityError(error)) {
     const compactRow = {
       id: row.id,
       project_id: row.project_id,
@@ -7933,7 +7975,7 @@ async function saveProjectMessage(data: any) {
     return false;
   });
   if (error) {
-    if (/project_messages|schema cache|relation .* does not exist|table .* does not exist|could not find .* in the schema cache/i.test(error.message || '')) {
+    if (isProjectMessageSchemaCompatibilityError(error)) {
       console.warn('[huggy:project_message_persistence_skipped]', { message: error.message });
       if (snapshotPersisted) return row;
       throw new Error(`Project message persistence unavailable: ${error.message}`);
@@ -7944,9 +7986,14 @@ async function saveProjectMessage(data: any) {
 }
 
 function sanitizeProjectMessageForUser(row: any) {
+  const parts = redactMessageParts(
+    normalizeMessageParts(row?.parts, row?.content || ''),
+    value => redactSecrets(value),
+  );
   return {
     ...row,
-    content: redactSecrets(row?.content || ''),
+    content: messageTextFromParts(parts, row?.content || ''),
+    parts,
   };
 }
 
@@ -7974,7 +8021,7 @@ async function getRecentDecisionHistory(projectId: string, limitValue = 6): Prom
   return rows
     .map((row: any) => ({
       role: row?.role === 'assistant' ? 'assistant' as const : 'user' as const,
-      content: redactSecrets(String(row?.content || '')).replace(/\s+/g, ' ').trim().slice(0, 1200),
+      content: redactSecrets(messageTextFromParts(row?.parts, row?.content || '')).replace(/\s+/g, ' ').trim().slice(0, 1200),
     }))
     .filter((message: RecentHistoryMessage) => message.content.length > 0);
 }
@@ -9208,6 +9255,214 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
       request_id: requestId,
       suggested_action: diagnostic.suggested_action,
     });
+  }
+});
+
+// POST /assistant/chat/stream
+// Same conversation contract as /assistant/chat, but delivered as Huggy Stream
+// v2 so the UI can render one natural assistant message token-by-token while
+// preserving the final message atomically.
+app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
+  const requestId = `chat_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const userId = String(authUser.id);
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
+  if (!prompt) {
+    return res.status(400).json({
+      success: false,
+      error: 'Prompt is required.',
+      message: 'Prompt is required.',
+      diagnostic_code: 'PROMPT_REQUIRED',
+      request_id: requestId,
+      suggested_action: 'write_message',
+    });
+  }
+  if (!enforceRateLimit(`assistant_chat:${userId}`, 30, 60_000)) {
+    return res.status(429).json({
+      success: false,
+      error: 'Too many messages. Please wait a moment.',
+      message: 'Too many messages. Please wait a moment.',
+      diagnostic_code: 'RATE_LIMITED',
+      request_id: requestId,
+      suggested_action: 'retry_later',
+    });
+  }
+
+  const selectedModel = normalizeModelSelectionId(req.body?.modelId || 'auto');
+  const requestedProjectId = String(req.body?.projectId || '').trim();
+  const now = new Date().toISOString();
+  let project: GeneratedProject = {
+    id: 'assistant',
+    owner_id: userId,
+    organization_id: userId,
+    created_by: userId,
+    name: 'Huggy',
+    slug: 'huggy-assistant',
+    status: 'assistant',
+    preview_status: 'idle',
+    created_at: now,
+    updated_at: now,
+  };
+  let files: GeneratedFile[] = [];
+  let canPersistConversation = false;
+
+  if (isUuid(requestedProjectId)) {
+    const loadedProject = await loadProject(requestedProjectId, userId).catch(() => null);
+    if (loadedProject && hasProjectCapability(req, 'view', loadedProject)) {
+      project = loadedProject;
+      files = await loadProjectFiles(project.id).catch(() => []);
+      canPersistConversation = true;
+    }
+  }
+
+  const history = Array.isArray(req.body?.messages)
+    ? req.body.messages
+      .filter((message: any) => (message?.role === 'user' || message?.role === 'assistant') && messageTextFromParts(message?.parts, message?.content || '').trim())
+      .slice(-10)
+      .map((message: any) => `${message.role === 'assistant' ? 'Huggy' : 'User'}: ${redactSecrets(messageTextFromParts(message?.parts, message?.content || '')).slice(0, 1200)}`)
+      .join('\n')
+    : '';
+  const promptWithHistory = history
+    ? `${prompt}\n\nRecent conversation context, for continuity only:\n${history}`
+    : prompt;
+  const decision: IntentDecision = {
+    intent: 'conversation',
+    confidence: 0.96,
+    requestedMode: 'auto',
+    understandingCategory: 'explanation',
+    requiresFileChanges: false,
+    requiresPreviewRebuild: false,
+    requiresCredits: true,
+    userVisibleReason: 'Conversation only. Huggy will not touch files or preview.',
+    reason: 'lightweight_streamed_conversation_response',
+    nextAction: 'answer',
+    autoPlanRequired: false,
+    selectedModelPolicy: 'balanced',
+    routingSource: 'heuristic',
+  };
+
+  const helpers = getOptionalDbHelpers('assistant_chat_stream');
+  const wallet = await getWalletWithFallback(helpers, userId);
+  const estimate = estimateActionCost(prompt, decision, selectedModel);
+  if (wallet < estimate.finalCredits) {
+    return res.status(402).json({
+      ...publicCreditGateResponse(),
+      request_id: requestId,
+    });
+  }
+
+  Object.entries(HUGGY_SSE_HEADERS).forEach(([key, value]) => res.setHeader(key, value));
+  res.flushHeaders?.();
+
+  let streamAborted = false;
+  req.on('close', () => {
+    streamAborted = true;
+  });
+
+  const stream = createHuggyStreamEmitter((chunk: string) => {
+    if (!streamAborted && !res.writableEnded) res.write(chunk);
+  });
+  const heartbeat = setInterval(() => {
+    if (!streamAborted && !res.writableEnded) stream.heartbeat();
+  }, HUGGY_SSE_HEARTBEAT_INTERVAL_MS);
+
+  const clientMessageId = sanitizeWorkspaceText(req.body?.clientMessageId || '').slice(0, 140) || `msg_${randomUUID()}`;
+  const assistantMessageId = sanitizeWorkspaceText(req.body?.assistantMessageId || '').slice(0, 140) || `msg_${randomUUID()}`;
+
+  try {
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        ai_message_id: clientMessageId,
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'user',
+        content: prompt,
+        parts: messagePartsFromContent(prompt),
+        intent: 'conversation',
+        requested_mode: 'auto',
+        metadata: { request_id: requestId, source: 'assistant_chat_stream' },
+      }).catch(() => null);
+    }
+
+    stream.emit('status', {
+      message: isLikelyFrenchPrompt(prompt) ? 'Huggy répond...' : 'Huggy is writing...',
+    });
+
+    const agentText = await streamAgentTextResponse({
+      project,
+      prompt: promptWithHistory,
+      files,
+      decision,
+      modelId: selectedModel,
+      userCredits: wallet,
+      allowLocalFallback: selectedModel === 'auto',
+      onToken: (chunk) => {
+        if (!streamAborted) stream.emit('assistant_delta', { text: chunk });
+      },
+    });
+
+    if (streamAborted) return;
+    const content = redactSecrets(agentText.text || '').trim() || createConversationResponse(project, prompt);
+    if (!agentText.streamed) {
+      for (const chunk of chunkTextForPublicStream(content, 32)) {
+        if (streamAborted) return;
+        stream.emit('assistant_delta', { text: chunk });
+      }
+    }
+
+    if (canPersistConversation) {
+      await saveProjectMessage({
+        ai_message_id: assistantMessageId,
+        organization_id: project.organization_id,
+        project_id: project.id,
+        user_id: userId,
+        role: 'assistant',
+        content,
+        parts: messagePartsFromContent(content),
+        intent: 'conversation',
+        requested_mode: 'auto',
+        metadata: {
+          request_id: requestId,
+          model: agentText.model,
+          streamed: agentText.streamed,
+          source: 'assistant_chat_stream',
+        },
+      }).catch(() => null);
+    }
+
+    const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
+    await chargeCompletedAgentAction(helpers, userId, chargedCredits, `AI conversation with ${agentText.model}`, `agent_${randomUUID()}`);
+    stream.emit('done', {
+      payload: {
+        success: true,
+        request_id: requestId,
+        text: content,
+        assistant_message_id: assistantMessageId,
+      },
+    });
+  } catch (error: any) {
+    const diagnostic = diagnoseProviderError(error);
+    if (!streamAborted) {
+      stream.emit('error', {
+        message: diagnostic.message,
+        recoverable: diagnostic.status >= 500 || diagnostic.status === 429,
+        diagnostic_code: diagnostic.diagnostic_code,
+      });
+      stream.emit('done', {
+        payload: {
+          success: false,
+          request_id: requestId,
+          message: diagnostic.message,
+          diagnostic_code: diagnostic.diagnostic_code,
+          suggested_action: diagnostic.suggested_action,
+        },
+      });
+    }
+  } finally {
+    clearInterval(heartbeat);
+    if (!res.writableEnded) res.end();
   }
 });
 
