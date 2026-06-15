@@ -20,10 +20,16 @@ const generationPrompt = buildGenerationSystemPrompt({
 });
 
 assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v21');
-assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v1');
+assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v2');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('This contract has priority over every lower-level Huggy prompt policy'), 'every prompt must include the root system contract');
+  assert.ok(prompt.includes('Product engineering operating contract'), 'every prompt must include the product engineering operating contract');
+  assert.ok(prompt.includes('Huggy is not specialized in one app category'), 'every prompt must keep Huggy general-purpose');
+  assert.ok(prompt.includes('Build the actual product, not a generic marketing page'), 'every prompt must prevent generic placeholder output');
+  assert.ok(prompt.includes('Do not trust user_id, owner_id, role, plan, credits, org_id'), 'every prompt must reject client-controlled privileged fields');
+  assert.ok(prompt.includes('structured messages/parts'), 'every prompt must preserve structured chat parts');
+  assert.ok(prompt.includes('A green type check does not prove runtime behavior'), 'every prompt must require layer-appropriate verification');
   assert.ok(prompt.includes('Never invent file contents, tool results, API behavior, tests, preview status, deployment status, or success'), 'every prompt must enforce truthful completion');
   assert.ok(prompt.includes('Require explicit approval before destructive migrations'), 'every prompt must enforce critical-action approval');
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
