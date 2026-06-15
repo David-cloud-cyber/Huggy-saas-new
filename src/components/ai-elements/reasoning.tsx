@@ -1,74 +1,68 @@
-import * as React from "react";
+// Enhanced Reasoning / Thinking Block — collapsible with shimmer.
+//
+// Drop-in upgrade for src/components/ai-elements/reasoning.tsx
+// Import CSS: import '../../styles/agent-activity-stream-v2.css';
 
-type ReasoningContextValue = {
-  open: boolean;
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  isStreaming: boolean;
+import { useState, useEffect } from 'react';
+
+type ReasoningProps = React.HTMLAttributes<HTMLDivElement> & {
+  isStreaming?: boolean;
+  elapsed?: string;
 };
 
-const ReasoningContext = React.createContext<ReasoningContextValue | null>(null);
-
-function useReasoningContext() {
-  const value = React.useContext(ReasoningContext);
-  if (!value) throw new Error("Reasoning components must be rendered inside <Reasoning>.");
-  return value;
+function BrainIcon(props: React.SVGAttributes<SVGSVGElement>) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+    </svg>
+  );
+}
+function ChevronDown(props: React.SVGAttributes<SVGSVGElement>) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
 }
 
-export function Reasoning({
-  isStreaming = false,
-  className = "",
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement> & { isStreaming?: boolean }) {
-  const [open, setOpen] = React.useState(isStreaming);
+export function Reasoning({ isStreaming = false, elapsed, className = '', children, ...props }: ReasoningProps) {
+  const [open, setOpen] = useState(isStreaming);
 
-  React.useEffect(() => {
-    setOpen(isStreaming);
+  useEffect(() => {
+    if (isStreaming) setOpen(true);
   }, [isStreaming]);
 
   return (
-    <ReasoningContext.Provider value={{ open, setOpen, isStreaming }}>
-      <section
-        aria-busy={isStreaming}
-        className={`huggy-reasoning ${isStreaming ? "huggy-reasoning-streaming" : ""} ${className}`}
-        {...props}
-      >
-        {children}
-      </section>
-    </ReasoningContext.Provider>
-  );
-}
-
-export function ReasoningTrigger({
-  className = "",
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { open, setOpen, isStreaming } = useReasoningContext();
-
-  return (
-    <button
-      aria-expanded={open}
-      className={`huggy-reasoning-trigger ${className}`}
-      type="button"
-      onClick={() => setOpen(current => !current)}
-      {...props}
-    >
-      <span className="huggy-reasoning-dot" aria-hidden="true" />
-      <span>{children || (isStreaming ? "Huggy is thinking" : "Agent notes")}</span>
-      <span aria-hidden="true">{open ? "-" : "+"}</span>
-    </button>
-  );
-}
-
-export function ReasoningContent({ className = "", children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  const { open } = useReasoningContext();
-
-  if (!open) return null;
-
-  return (
-    <div className={`huggy-reasoning-content ${className}`} {...props}>
-      {children}
+    <div className={`haas-thinking ${className}`} {...props}>
+      <button type="button" className="haas-thinking-trigger" onClick={() => setOpen(!open)}>
+        <span className={`haas-dot haas-dot--${isStreaming ? 'active' : 'done'}`} aria-hidden="true" />
+        <BrainIcon style={{ color: isStreaming ? 'var(--haas-accent)' : 'var(--haas-muted)' }} />
+        <span className="haas-thinking-label">
+          {isStreaming ? 'Huggy réfléchit…' : 'Raisonnement'}
+        </span>
+        {elapsed && <span className="haas-thinking-elapsed">{elapsed}</span>}
+        <ChevronDown className={`haas-thinking-chevron ${open ? 'haas-thinking-chevron--open' : ''}`} />
+      </button>
+      {open && (
+        <div className="haas-thinking-content">
+          {children}
+          {isStreaming && <span className="haas-typing-cursor">▋</span>}
+        </div>
+      )}
     </div>
   );
 }
+
+// Keep backward-compatible exports
+export function ReasoningTrigger({ className = '', children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button type="button" className={`haas-thinking-trigger ${className}`} {...props}>{children}</button>;
+}
+
+export function ReasoningContent({ className = '', children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={`haas-thinking-content ${className}`} {...props}>{children}</div>;
+}
+
+export default Reasoning;

@@ -6,7 +6,7 @@
 // the old DOM-driven buildstream markup is a one-line render change instead of a
 // cross-file refactor of the 80–280 KB island/builder-live files.
 
-import type { AgentActivityState, ActivityFile, ActivityMilestone } from './agent-activity-stream.ts';
+import type { AgentActivityState, ActivityCheck, ActivityFile, ActivityMilestone } from './agent-activity-stream.ts';
 
 // Mirrors HuggyWorklineEntry / work_journal block in builder-conversation-island.
 export type WorklineEntryLike = {
@@ -51,6 +51,7 @@ export function workJournalToActivityState(block: WorkJournalBlockLike): AgentAc
   const phase = phaseFor(block.status);
   const milestones: ActivityMilestone[] = [];
   const files: ActivityFile[] = [];
+  const checks: ActivityCheck[] = [];
 
   for (const entry of block.entries || []) {
     if (entry.kind === 'divider') continue;
@@ -59,8 +60,20 @@ export function workJournalToActivityState(block: WorkJournalBlockLike): AgentAc
         path: entry.path,
         status: entry.status === 'done' ? 'done' : 'writing',
         chars: 0,
+        action: entry.action,
+        additions: entry.additions,
+        deletions: entry.deletions,
         order: files.length,
       });
+      continue;
+    }
+    if (entry.kind === 'group' && /check|verification|vérification/i.test(`${entry.id} ${entry.text}`)) {
+      for (const item of entry.items || []) {
+        checks.push({
+          name: item,
+          status: entry.status === 'failed' ? 'fail' : entry.status === 'cancelled' ? 'skip' : 'pass',
+        });
+      }
       continue;
     }
     // command / update / group / narration / thinking / summary → step rows.
@@ -82,7 +95,7 @@ export function workJournalToActivityState(block: WorkJournalBlockLike): AgentAc
     assistantText: '',
     milestones,
     files,
-    checks: [],
+    checks,
     warnings: [],
     error: block.status === 'failed' ? { message: block.finalText || block.activeText || 'Correction nécessaire', recoverable: true } : undefined,
     collapsed: phase === 'done',

@@ -23,6 +23,9 @@ export type ActivityFile = {
   status: FileActivityStatus;
   chars: number;
   bytes?: number;
+  action?: 'created' | 'modified' | 'deleted';
+  additions?: number;
+  deletions?: number;
   order: number;
 };
 

@@ -22,7 +22,9 @@ assert.ok(!builderLive.includes('appendToMessageShimmer(status, liveTokenBuffer)
 assert.ok(!conversation.includes('components/huggy-streaming/ChatStream'), 'conversation should not import the old ChatStream UI');
 assert.ok(!conversation.includes('<ChatStream'), 'conversation should not render the old ChatStream UI');
 assert.ok(conversation.includes('huggy-message-waiting'), 'conversation should render a compact waiting state before streamed text arrives');
-assert.ok(conversation.includes('huggy-conversation-stream'), 'project work should render as a simple inline conversation stream');
+assert.ok(conversation.includes('AgentActivityStream'), 'project work should render through the replacement activity stream');
+assert.ok(conversation.includes('workJournalToActivityState'), 'project work should preserve existing events through the activity adapter');
+assert.ok(!conversation.includes('huggy-conversation-stream huggy-workline'), 'the previous workline renderer should be removed');
 assert.ok(!conversation.includes('<div className="huggy-workline-rail"'), 'inline project work should not render a visual rail');
 assert.ok(!conversation.includes('Huggy Mission Control'), 'conversation should not render Mission Control');
 assert.ok(!conversation.includes('Traitement en cours'), 'conversation should not render old processing headers');
@@ -33,4 +35,4 @@ assert.ok(!server.includes('My recommendation'), 'clarification text should not 
 assert.ok(!server.includes('Should Huggy only answer'), 'clarification must not ask a generic answer-or-build question');
 assert.ok(!server.includes('Do you want a simple answer'), 'clarification must ask for the concrete product target instead of mode choice');
 
-console.log('huggy non-streaming ui protocol ok');
+console.log('huggy replacement streaming ui protocol ok');
