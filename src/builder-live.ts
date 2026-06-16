@@ -5338,6 +5338,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.finalText = '';
     setMessageBlock(status, null);
   };
+  // Map of step key → journal entry, so finishAgentStep can flip active→done.
+  const activeStepEntries = new Map<string, HuggyWorklineEntry>();
   const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyWorklineEntry['status'] = 'done') => {
     const clean = cleanPublicJournalText(text, speaksFrench);
     if (!clean) return;
@@ -5444,15 +5446,45 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     scheduleJournal(urgent);
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
-    void key;
     setJournalActive(headline);
-    addJournalLine(label, detail || '', `step:${key}`);
-    // Pro streaming UI: update phase pills and progress bar
-    updateStreamPhase(key, label, 'active');
-    advanceStreamProgress(key);
+    const clean = cleanPublicJournalText(label, speaksFrench);
+    if (clean) {
+      // Mark any previous active step as done before adding the new one.
+      for (const [, entry] of activeStepEntries) {
+        if (entry.status === 'active') entry.status = 'done';
+      }
+      const dedupeKey = `step:${key}`;
+      const existing = activeStepEntries.get(key);
+      if (existing) {
+        existing.text = clean;
+        existing.status = 'active';
+      } else if (!seenJournalKeys.has(dedupeKey)) {
+        seenJournalKeys.add(dedupeKey);
+        const entry: HuggyWorklineEntry = {
+          id: journalEntryId('line'),
+          kind: 'update',
+          text: clean,
+          detail: detail ? cleanPublicJournalText(detail, speaksFrench) || undefined : undefined,
+          status: 'active',
+        };
+        activeStepEntries.set(key, entry);
+        journal.entries.push(entry);
+        if (journal.entries.length > 28) journal.entries.splice(0, journal.entries.length - 28);
+      }
+      scheduleJournal();
+    }
   };
   const finishAgentStep = (key: string, label?: string, detail?: string) => {
-    if (label) addJournalLine(label, detail || '', `step_done:${key}`);
+    const existing = activeStepEntries.get(key);
+    if (existing) {
+      existing.status = 'done';
+      if (label) existing.text = cleanPublicJournalText(label, speaksFrench) || existing.text;
+      if (detail) existing.detail = cleanPublicJournalText(detail, speaksFrench) || undefined;
+      activeStepEntries.delete(key);
+      scheduleJournal();
+    } else if (label) {
+      addJournalLine(label, detail || '', `step_done:${key}`);
+    }
   };
   const setAssistantWorking = (label: string) => {
     if (assistantHasFinalContent) return;
