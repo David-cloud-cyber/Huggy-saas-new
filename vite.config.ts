@@ -43,6 +43,10 @@ export default defineConfig(() => {
     },
     build: {
       rollupOptions: {
+        // @webcontainer/api is loaded dynamically at runtime only when the
+        // webcontainer preview flag is enabled (browser-only, COOP/COEP required).
+        // It must NOT be bundled by Rollup – it is delivered by the CDN at runtime.
+        external: ['@webcontainer/api'],
         input: discoverHtmlInputs(__dirname),
         output: {
           manualChunks(id) {
