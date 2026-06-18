@@ -22,8 +22,14 @@ assert.ok(!builderLive.includes('appendToMessageShimmer(status, liveTokenBuffer)
 assert.ok(!conversation.includes('components/huggy-streaming/ChatStream'), 'conversation should not import the old ChatStream UI');
 assert.ok(!conversation.includes('<ChatStream'), 'conversation should not render the old ChatStream UI');
 assert.ok(conversation.includes('huggy-message-waiting'), 'conversation should render a compact waiting state before streamed text arrives');
-assert.ok(conversation.includes('AgentActivityStream'), 'project work should render through the replacement activity stream');
-assert.ok(conversation.includes('workJournalToActivityState'), 'project work should preserve existing events through the activity adapter');
+assert.ok(conversation.includes('huggy-zip-stream'), 'project work should render as the ZIP-style in-conversation stream');
+assert.ok(conversation.includes('<Reasoning'), 'project work should render reasoning as a compact ZIP block');
+assert.ok(conversation.includes('<ToolCall'), 'project work should render tool calls as separate ZIP cards');
+assert.ok(conversation.includes('<TerminalBlock'), 'project work should render command work as terminal blocks');
+assert.ok(conversation.includes('<CodeBlock'), 'conversation renderer should support ZIP code blocks');
+assert.ok(conversation.includes('<DiffView'), 'conversation renderer should support ZIP diff blocks');
+assert.ok(!conversation.includes('<AgentActivityStream'), 'project work should not render through the old single activity block');
+assert.ok(!conversation.includes('workJournalToActivityState'), 'project work should not collapse existing events into one activity adapter');
 assert.ok(!conversation.includes('huggy-conversation-stream huggy-workline'), 'the previous workline renderer should be removed');
 assert.ok(!conversation.includes('<div className="huggy-workline-rail"'), 'inline project work should not render a visual rail');
 assert.ok(!conversation.includes('Huggy Mission Control'), 'conversation should not render Mission Control');

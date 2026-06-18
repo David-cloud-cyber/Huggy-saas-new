@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ChevronDown, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { ChevronDown, Code2, Copy, Eye, FileText, Maximize2, MessageSquareIcon, Pencil, Search, Terminal as TerminalIcon, ThumbsDown, ThumbsUp, Wrench, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -10,9 +10,11 @@ import {
 } from "./components/ai-elements/conversation";
 import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
-import { AgentActivityStream } from "./components/ai-elements/agent-activity-stream";
+import { CodeBlock } from "./components/ai-elements/code-block";
+import { DiffView } from "./components/ai-elements/diff-view";
 import { Reasoning } from "./components/ai-elements/reasoning";
-import { workJournalToActivityState } from "./lib/agent-activity-stream-adapter";
+import { TerminalBlock } from "./components/ai-elements/terminal";
+import { ToolCall } from "./components/ai-elements/tool-call";
 import "./styles/agent-activity-stream-v2.css";
 import "./styles/huggy-ai-elements.css";
 
@@ -68,6 +70,34 @@ export type HuggyConversationBlock =
       title?: string;
       content: string;
       isStreaming?: boolean;
+      elapsed?: string;
+    }
+  | {
+      type: "tool_call";
+      name: string;
+      detail?: string;
+      status: "active" | "done" | "failed";
+      result?: string;
+      items?: string[];
+    }
+  | {
+      type: "terminal";
+      command: string;
+      output?: string | null;
+      status?: "pass" | "fail" | null;
+      running?: boolean;
+    }
+  | {
+      type: "code";
+      code: string;
+      language?: string;
+      filename?: string;
+      streaming?: boolean;
+    }
+  | {
+      type: "diff";
+      filename: string;
+      hunks: string[];
     }
   | {
       type: "confirmation";
@@ -276,6 +306,36 @@ function ensureConversationStyles() {
       text-decoration: underline;
       text-underline-offset: 3px;
       text-decoration-thickness: 1px;
+    }
+
+    .huggy-zip-stream {
+      display: grid;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .huggy-zip-stream .haas-thinking,
+    .huggy-zip-stream .haas-tool,
+    .huggy-zip-stream .haas-terminal,
+    .huggy-zip-stream .haas-code,
+    .huggy-zip-stream .haas-diff {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .huggy-zip-stream pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .huggy-streamline-text {
+      color: var(--text);
+      font-size: 12.5px;
+      line-height: 1.58;
+      min-width: 0;
     }
 
     .huggy-agent-trace {
@@ -1297,14 +1357,132 @@ function workJournalCompareText(value = "") {
     .trim();
 }
 
+function worklineStatusToToolStatus(status: HuggyWorklineEntry["status"]): "active" | "done" | "failed" {
+  if (status === "failed" || status === "cancelled") return "failed";
+  if (status === "active") return "active";
+  return "done";
+}
+
+function worklineStatusToTerminalStatus(status: HuggyWorklineEntry["status"]): "pass" | "fail" | null {
+  if (status === "failed" || status === "cancelled") return "fail";
+  if (status === "done") return "pass";
+  return null;
+}
+
+function worklineIcon(entry: HuggyWorklineEntry) {
+  const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""} ${entry.path || ""}`);
+  if (entry.kind === "command") return <TerminalIcon size={16} />;
+  if (entry.kind === "file_edit") return <FileText size={16} />;
+  if (normalized.includes("recherche") || normalized.includes("search")) return <Search size={16} />;
+  if (normalized.includes("lecture") || normalized.includes("read") || normalized.includes("preview")) return <Eye size={16} />;
+  if (normalized.includes("code") || normalized.includes("fichier") || normalized.includes("file")) return <Code2 size={16} />;
+  return <Wrench size={16} />;
+}
+
+function isWorklineNarration(entry: HuggyWorklineEntry) {
+  if (entry.kind === "narration" || entry.kind === "summary") return true;
+  if (entry.kind !== "update") return false;
+  const text = entry.text.trim();
+  return /^(je|j'|j ai|huggy)\b/i.test(text) && !entry.items?.length && !entry.detail;
+}
+
+function worklineBodyText(entry: HuggyWorklineEntry) {
+  const lines: string[] = [];
+  if (entry.detail) lines.push(entry.detail);
+  if (entry.items?.length) lines.push(...entry.items);
+  if (entry.path && entry.kind === "file_edit") {
+    const action = entry.action === "created" ? "Created" : entry.action === "deleted" ? "Deleted" : "Modified";
+    const diff = typeof entry.additions === "number" || typeof entry.deletions === "number"
+      ? `+${entry.additions || 0} -${entry.deletions || 0}`
+      : "";
+    lines.push(`${action} ${entry.path}${diff ? ` ${diff}` : ""}`);
+  }
+  return lines.join("\n").trim();
+}
+
+function worklineToolName(entry: HuggyWorklineEntry) {
+  if (entry.kind === "file_edit") {
+    if (entry.action === "created") return "Creation de fichier";
+    if (entry.action === "deleted") return "Suppression de fichier";
+    return "Modification de fichier";
+  }
+  if (entry.kind === "command") return "Execution de commande";
+  return entry.text;
+}
+
+function renderWorkJournalEntry(entry: HuggyWorklineEntry) {
+  if (entry.kind === "divider") return null;
+
+  if (entry.kind === "thinking") {
+    return (
+      <Reasoning key={entry.id} isStreaming={entry.status === "active"}>
+        {entry.detail || entry.text}
+      </Reasoning>
+    );
+  }
+
+  if (entry.kind === "command") {
+    return (
+      <TerminalBlock
+        key={entry.id}
+        command={entry.command || entry.text}
+        output={worklineBodyText(entry)}
+        status={worklineStatusToTerminalStatus(entry.status)}
+        running={entry.status === "active"}
+      />
+    );
+  }
+
+  if (isWorklineNarration(entry)) {
+    return (
+      <div key={entry.id} className="huggy-streamline-text">
+        {renderAssistantMarkdown(entry.text)}
+      </div>
+    );
+  }
+
+  const detail = entry.path || entry.detail;
+  const body = worklineBodyText(entry);
+  return (
+    <ToolCall
+      key={entry.id}
+      name={worklineToolName(entry)}
+      detail={detail}
+      status={worklineStatusToToolStatus(entry.status)}
+      icon={worklineIcon(entry)}
+    >
+      {body ? <pre>{body}</pre> : null}
+    </ToolCall>
+  );
+}
+
 function renderWorkJournal(message: HuggyConversationMessage, block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
   const visibleEntries = (block.entries || []).filter(entry => {
     const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""}`);
     return normalized !== "i keep the work recoverable without claiming a false ready preview";
   });
-  const state = workJournalToActivityState({ ...block, entries: visibleEntries });
-  const retry = message.actions?.find(action => /retry|reessayer|réessayer|corriger/i.test(action.label))?.onClick;
-  return <AgentActivityStream state={state} onRetry={retry} />;
+  const hasThinking = visibleEntries.some(entry => entry.kind === "thinking");
+  const finalText = (block.finalText || "").trim();
+  const finalIsDuplicate = finalText
+    ? visibleEntries.some(entry => workJournalCompareText(entry.text) === workJournalCompareText(finalText))
+    : false;
+  void message;
+
+  return (
+    <div className="huggy-zip-stream" data-status={block.status} data-restored={block.restored ? "true" : "false"}>
+      {!hasThinking ? (
+        <Reasoning isStreaming={block.status === "active"} elapsed={block.elapsed}>
+          {block.activeText || ""}
+        </Reasoning>
+      ) : null}
+      {visibleEntries.map(renderWorkJournalEntry)}
+      {finalText && !finalIsDuplicate ? (
+        <div className="huggy-streamline-text">
+          {renderAssistantMarkdown(finalText)}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function renderMessageBlock(message: HuggyConversationMessage) {
@@ -1317,10 +1495,45 @@ function renderMessageBlock(message: HuggyConversationMessage) {
 
   if (block.type === "reasoning") {
     return (
-      <Reasoning isStreaming={Boolean(block.isStreaming)}>
+      <Reasoning isStreaming={Boolean(block.isStreaming)} elapsed={block.elapsed}>
         {block.content}
       </Reasoning>
     );
+  }
+
+  if (block.type === "tool_call") {
+    const result = [block.result, ...(block.items || [])].filter(Boolean).join("\n");
+    return (
+      <ToolCall name={block.name} detail={block.detail} status={block.status}>
+        {result ? <pre>{result}</pre> : null}
+      </ToolCall>
+    );
+  }
+
+  if (block.type === "terminal") {
+    return (
+      <TerminalBlock
+        command={block.command}
+        output={block.output}
+        status={block.status}
+        running={Boolean(block.running)}
+      />
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <CodeBlock
+        code={block.code}
+        language={block.language}
+        filename={block.filename}
+        streaming={Boolean(block.streaming)}
+      />
+    );
+  }
+
+  if (block.type === "diff") {
+    return <DiffView filename={block.filename} hunks={block.hunks} />;
   }
 
   return (

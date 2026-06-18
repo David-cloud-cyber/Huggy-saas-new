@@ -41,7 +41,7 @@ export function Reasoning({ isStreaming = false, elapsed, className = '', childr
         <span className={`haas-dot haas-dot--${isStreaming ? 'active' : 'done'}`} aria-hidden="true" />
         <BrainIcon style={{ color: isStreaming ? 'var(--haas-accent)' : 'var(--haas-muted)' }} />
         <span className="haas-thinking-label">
-          {isStreaming ? 'Huggy réfléchit…' : 'Raisonnement'}
+          Raisonnement
         </span>
         {elapsed && <span className="haas-thinking-elapsed">{elapsed}</span>}
         <ChevronDown className={`haas-thinking-chevron ${open ? 'haas-thinking-chevron--open' : ''}`} />
