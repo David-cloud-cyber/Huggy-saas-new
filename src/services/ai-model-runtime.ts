@@ -45,6 +45,8 @@ export type RuntimeToolDefinition = {
   name: string;
   description: string;
   parameters?: Record<string, unknown>;
+  needsApproval?: boolean;
+  approvalReason?: string;
 };
 
 export type AIModelCapabilityProfile = {

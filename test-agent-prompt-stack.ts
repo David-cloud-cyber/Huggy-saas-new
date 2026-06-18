@@ -6,6 +6,13 @@ import {
   buildIntentRouterSystemPrompt,
 } from './src/services/agent-prompt-stack.ts';
 import { HUGGY_SYSTEM_CONTRACT_VERSION } from './src/services/huggy-system-contract.ts';
+import {
+  HUGGY_COMMUNICATION_PROTOCOL_VERSION,
+  validatePublicNarrationBeat,
+} from './src/lib/prompts/communication.ts';
+import { HUGGY_AUTO_INFRASTRUCTURE_PROMPT_VERSION } from './src/lib/prompts/infrastructure.ts';
+import { HUGGY_MESSAGE_STREAMING_PROMPT_VERSION } from './src/lib/prompts/message-streaming.ts';
+import { HUGGY_UNIVERSAL_BUILDER_PROMPT_VERSION } from './src/lib/prompts/system-prompt.ts';
 
 const routerPrompt = buildIntentRouterSystemPrompt();
 const textPrompt = buildAgentTextSystemPrompt({
@@ -19,8 +26,12 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v21');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v23');
 assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v2');
+assert.equal(HUGGY_COMMUNICATION_PROTOCOL_VERSION, 'huggy-communication-protocol-v1');
+assert.equal(HUGGY_UNIVERSAL_BUILDER_PROMPT_VERSION, 'huggy-universal-builder-prompt-v1');
+assert.equal(HUGGY_MESSAGE_STREAMING_PROMPT_VERSION, 'huggy-message-streaming-prompt-v1');
+assert.equal(HUGGY_AUTO_INFRASTRUCTURE_PROMPT_VERSION, 'huggy-auto-infrastructure-prompt-v1');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('This contract has priority over every lower-level Huggy prompt policy'), 'every prompt must include the root system contract');
@@ -38,7 +49,22 @@ for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Architect policy'), 'prompt must include Architect policy');
   assert.ok(prompt.includes('Deep reasoning policy'), 'prompt must include deep reasoning policy');
   assert.ok(prompt.includes('Do not expose hidden reasoning'), 'prompt must keep deep reasoning internal');
+  assert.ok(prompt.includes('Interleaved narration and actions'), 'every prompt must include interleaved communication');
+  assert.ok(prompt.includes('Never produce a long monologue followed by a burst of actions'), 'every prompt must prevent wall-of-text streaming');
+  assert.ok(prompt.includes('one concrete sentence, then the real action it announces'), 'every prompt must enforce short narration/action beats');
+  assert.ok(prompt.includes('Reject public narration that starts with filler'), 'every prompt must include narration validation rules');
+  assert.ok(prompt.includes('senior autonomous full-stack product builder'), 'every prompt must include the universal builder identity');
+  assert.ok(prompt.includes('not a category-specific template bot'), 'every prompt must forbid template-only specialization');
+  assert.ok(prompt.includes('Use structured message parts as the canonical chat representation'), 'every prompt must include structured message streaming');
+  assert.ok(prompt.includes('Never create one assistant message per token'), 'every prompt must prevent token-message spam');
+  assert.ok(prompt.includes('When a generated app requires a backend'), 'every prompt must include auto-provisioned infrastructure rules');
+  assert.ok(prompt.includes('A backend is usable only after a real ready state'), 'every prompt must prevent fake backend readiness');
+  assert.ok(prompt.includes('A clear app creation request should trigger generation'), 'every prompt must enforce action-first generation');
 }
+
+assert.equal(validatePublicNarrationBeat('Je reconstruis la preview.').ok, true);
+assert.equal(validatePublicNarrationBeat('Let me think about how to inspect the project first.').ok, false);
+assert.equal(validatePublicNarrationBeat('Possible directions: répondre sans générer ou créer une app précise.').ok, false);
 
 assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
 assert.ok(textPrompt.includes('Persist the final assistant message once, never once per token'), 'text prompt must preserve safe chat persistence');

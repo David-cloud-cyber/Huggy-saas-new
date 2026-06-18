@@ -7,6 +7,8 @@ const conversation = readFileSync('src/builder-conversation-island.tsx', 'utf8')
 const server = readFileSync('server.ts', 'utf8');
 
 assert.ok(server.includes("app.post('/api/projects/:id/generate'"), 'server should keep the non-streaming generation endpoint');
+assert.ok(server.includes("app.post('/api/chat'"), 'server should expose the AI Elements-compatible /api/chat endpoint');
+assert.ok(server.includes("req.url = '/api/assistant/chat/stream'"), '/api/chat should reuse the canonical Huggy chat stream');
 assert.ok(builderLive.includes('/generate?stream=true'), 'builder should use the synchronized generation event stream');
 assert.ok(builderLive.includes('commitAssistantText'), 'builder should render only the final assistant response after generation');
 assert.ok(builderLive.includes("'clarification_only'"), 'builder should still clarify vague bare actions');

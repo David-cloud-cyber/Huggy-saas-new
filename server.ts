@@ -9466,6 +9466,15 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   }
 });
 
+// POST /api/chat
+// Compatibility endpoint for AI Elements-style chat clients. It reuses Huggy's
+// existing streamed conversation route so the app keeps one source of truth for
+// auth, persistence, cancellation, credits, and provider fallback.
+app.post('/api/chat', (req: any, res: any) => {
+  req.url = '/api/assistant/chat/stream';
+  (app as any).handle(req, res);
+});
+
 // POST /billing/checkout/cloud-topup
 app.post('/api/billing/checkout/cloud-topup', async (req, res) => {
   const { productId, email, successUrl, cancelUrl } = req.body;
