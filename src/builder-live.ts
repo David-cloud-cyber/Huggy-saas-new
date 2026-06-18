@@ -2432,12 +2432,32 @@ function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock
   }
 }
 
-type HuggyWorklineBlock = Extract<HuggyConversationBlock, { type: 'work_journal' }>;
-type HuggyWorklineEntry = HuggyWorklineBlock['entries'][number];
+type HuggyStreamEntry = {
+  id: string;
+  kind: 'update' | 'group' | 'divider' | 'summary' | 'narration' | 'thinking' | 'file_edit' | 'command';
+  text: string;
+  detail?: string;
+  status?: 'active' | 'done' | 'failed' | 'cancelled' | 'muted';
+  items?: string[];
+  path?: string;
+  action?: 'created' | 'modified' | 'deleted';
+  additions?: number;
+  deletions?: number;
+  command?: string;
+};
 
-function createHuggyWorklineBlock(): HuggyWorklineBlock {
+type HuggyStreamPartsState = {
+  status: 'active' | 'done' | 'failed' | 'cancelled';
+  startedAt?: string;
+  elapsed?: string;
+  entries: HuggyStreamEntry[];
+  activeText?: string;
+  finalText?: string;
+  restored?: boolean;
+};
+
+function createHuggyStreamPartsState(): HuggyStreamPartsState {
   return {
-    type: 'work_journal',
     status: 'active',
     startedAt: new Date().toISOString(),
     elapsed: '0m 00s',
@@ -2446,16 +2466,106 @@ function createHuggyWorklineBlock(): HuggyWorklineBlock {
   };
 }
 
-function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
+function streamEntryStatus(status: HuggyStreamEntry['status']) {
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  if (status === 'active') return 'active';
+  if (status === 'muted') return 'done';
+  return status || 'done';
+}
+
+function streamEntryBody(entry: HuggyStreamEntry) {
+  const lines: string[] = [];
+  if (entry.detail) lines.push(entry.detail);
+  if (entry.items?.length) lines.push(...entry.items);
+  return lines.join('\n').trim();
+}
+
+function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | null {
+  if (entry.kind === 'divider') return null;
+  if (entry.kind === 'thinking') {
+    return {
+      id: entry.id,
+      type: 'reasoning',
+      text: entry.detail || entry.text,
+      status: streamEntryStatus(entry.status),
+    };
+  }
+  if (entry.kind === 'command') {
+    return {
+      id: entry.id,
+      type: 'terminal',
+      command: entry.command || entry.text,
+      output: streamEntryBody(entry),
+      status: streamEntryStatus(entry.status),
+      running: entry.status === 'active',
+    };
+  }
+  if (entry.kind === 'file_edit') {
+    return {
+      id: entry.id,
+      type: 'file_edit',
+      name: entry.action === 'created'
+        ? 'Creation de fichier'
+        : entry.action === 'deleted'
+          ? 'Suppression de fichier'
+          : 'Modification de fichier',
+      text: entry.text,
+      detail: entry.detail,
+      status: streamEntryStatus(entry.status),
+      path: entry.path,
+      action: entry.action,
+      additions: entry.additions,
+      deletions: entry.deletions,
+    };
+  }
+  if (entry.kind === 'group') {
+    return {
+      id: entry.id,
+      type: 'tool_call',
+      name: entry.text,
+      status: streamEntryStatus(entry.status),
+      items: entry.items || [],
+      result: streamEntryBody(entry),
+    };
+  }
+  return {
+    id: entry.id,
+    type: 'text',
+    text: [entry.text, entry.detail && entry.detail !== entry.text ? entry.detail : ''].filter(Boolean).join('\n'),
+  };
+}
+
+function streamStateToMessageParts(state: HuggyStreamPartsState | null): HuggyMessagePart[] {
+  if (!state) return [];
+  const parts: HuggyMessagePart[] = [];
+  const hasActiveReasoning = state.entries.some(entry => entry.kind === 'thinking' && entry.status === 'active');
+  if (state.status === 'active' && state.activeText && !hasActiveReasoning) {
+    parts.push({
+      id: 'stream_active_reasoning',
+      type: 'reasoning',
+      text: state.activeText,
+      status: 'active',
+      elapsed: state.elapsed,
+    });
+  }
+  for (const entry of state.entries) {
+    const part = streamEntryToMessagePart(entry);
+    if (part) parts.push(part);
+  }
+  if (state.finalText) {
+    const normalizedFinal = semanticJournalKey(state.finalText);
+    const alreadyVisible = parts.some(part => semanticJournalKey(String(part.text || part.result || '')) === normalizedFinal);
+    if (!alreadyVisible) parts.push({ id: 'stream_final_text', type: 'text', text: state.finalText });
+  }
+  return parts;
+}
+
+function setStreamMessageParts(card: HTMLElement | null, state: HuggyStreamPartsState | null) {
   if (!card) return;
-  setMessageBlock(card, journal);
   const id = messageHandleId(card);
   if (!id || !conversationApi) return;
-  if (journal?.status === 'active') {
-    conversationApi.setWorking(id, journal.activeText || 'Thinking...');
-  } else {
-    conversationApi.clearWorking(id);
-  }
+  conversationApi.setParts(id, streamStateToMessageParts(state));
+  conversationApi.clearWorking(id);
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -4720,8 +4830,8 @@ async function loadProject() {
     }
     syncProjectReadinessClass();
     restoreMessages(payload);
-    const restoredWorkline = restoreWorklineFromPayloadEvents(payload);
-    if (!restoredWorkline) await restoreLatestWorklineFromRunHistory(payload);
+    const restoredStreamParts = restoreStreamPartsFromPayloadEvents(payload);
+    if (!restoredStreamParts) await restoreLatestStreamPartsFromRunHistory(payload);
     const activeTab = payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab;
     if (activeTab === 'code' || activeTab === 'database' || activeTab === 'analysis') {
       activateBuilderView(activeTab);
@@ -4769,9 +4879,9 @@ function restoreMessages(payload: ProjectPayload) {
     });
 }
 
-function restoreWorklineFromPayloadEvents(payload: ProjectPayload) {
+function restoreStreamPartsFromPayloadEvents(payload: ProjectPayload) {
   const scroll = chatScroll();
-  if (!scroll || scroll.dataset.worklineRestored === 'true' || !payload.events?.length) return false;
+  if (!scroll || scroll.dataset.streamPartsRestored === 'true' || !payload.events?.length) return false;
   const steps = payload.events.map((event, index) => ({
     sequence_number: Number(event.sequence_number || index + 1),
     event_type: event.event_type,
@@ -4780,24 +4890,24 @@ function restoreWorklineFromPayloadEvents(payload: ProjectPayload) {
     public_payload: event.public_payload || event.payload || {},
     created_at: event.created_at,
   })) as AgentRunStep[];
-  const journal = buildHuggyWorklineFromSteps(steps, { status: 'completed' } as AgentRunSummary);
+  const journal = buildStreamPartsFromSteps(steps, { status: 'completed' } as AgentRunSummary);
   if (!journal) return false;
   const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
   if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
     journal.finalText = '';
   }
   const card = appendMessage('assistant', '');
-  setWorkJournalBlock(card, journal);
-  scroll.dataset.worklineRestored = 'true';
+  setStreamMessageParts(card, journal);
+  scroll.dataset.streamPartsRestored = 'true';
   return true;
 }
 
-function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyWorklineBlock | null {
+function buildStreamPartsFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyStreamPartsState | null {
   const relevant = steps
     .slice()
     .sort((a, b) => Number(a.sequence_number || 0) - Number(b.sequence_number || 0))
     .filter(step => step?.event_type);
-  const hasWorklineEvents = relevant.some(step => [
+  const hasStreamEvents = relevant.some(step => [
     'narration',
     'thinking',
     'file_edit',
@@ -4813,9 +4923,9 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
     'error',
     'cancelled',
   ].includes(step.event_type));
-  if (!hasWorklineEvents) return null;
+  if (!hasStreamEvents) return null;
 
-  const journal = createHuggyWorklineBlock();
+  const journal = createHuggyStreamPartsState();
   journal.status = run?.status === 'failed'
     ? 'failed'
     : run?.status === 'cancelled'
@@ -4825,7 +4935,7 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
         : 'active';
   journal.elapsed = run?.duration_ms ? formatWorkingDuration(Number(run.duration_ms || 0)) : undefined;
   journal.activeText = journal.status === 'active' ? 'Huggy reprend le travail' : '';
-  const fileEntries = new Map<string, HuggyWorklineEntry>();
+  const fileEntries = new Map<string, HuggyStreamEntry>();
   const commandItems: string[] = [];
   const checkItems: string[] = [];
   let finalText = '';
@@ -4916,25 +5026,25 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
   return journal.entries.length || journal.finalText ? journal : null;
 }
 
-async function restoreLatestWorklineFromRunHistory(payload: ProjectPayload) {
+async function restoreLatestStreamPartsFromRunHistory(payload: ProjectPayload) {
   const scroll = chatScroll();
-  if (!scroll || scroll.dataset.worklineRestored === 'true' || !currentProjectId) return;
-  scroll.dataset.worklineRestored = 'true';
+  if (!scroll || scroll.dataset.streamPartsRestored === 'true' || !currentProjectId) return;
+  scroll.dataset.streamPartsRestored = 'true';
   try {
     const runsPayload = await apiFetch<{ success: boolean; runs: AgentRunSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs?limit=1`);
     const run = runsPayload.runs?.[0];
     if (!run?.id) return;
     const details = await apiFetch<{ success: boolean; run: AgentRunSummary; steps: AgentRunStep[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs/${encodeURIComponent(run.id)}`);
-    const journal = buildHuggyWorklineFromSteps(details.steps || [], details.run || run);
+    const journal = buildStreamPartsFromSteps(details.steps || [], details.run || run);
     if (!journal) return;
     const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
     if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
       journal.finalText = '';
     }
     const card = appendMessage('assistant', '');
-    setWorkJournalBlock(card, journal);
+    setStreamMessageParts(card, journal);
   } catch (error) {
-    console.warn('[huggy] Unable to restore workline.', error);
+    console.warn('[huggy] Unable to restore rich stream parts.', error);
   }
 }
 
@@ -5193,7 +5303,7 @@ function normalizedFileEditPayload(payload: Record<string, any>) {
   };
 }
 
-function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): HuggyWorklineEntry | null {
+function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): HuggyStreamEntry | null {
   const edit = normalizedFileEditPayload(payload);
   if (!edit) return null;
   return {
@@ -5287,10 +5397,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let plainResponseMode = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   let responseCard: HTMLElement | null = status;
-  const journal = createHuggyWorklineBlock();
-  const journalGroups = new Map<string, HuggyWorklineEntry>();
-  const fileEditEntries = new Map<string, HuggyWorklineEntry>();
-  const runningCommandEntries = new Map<string, HuggyWorklineEntry>();
+  const journal = createHuggyStreamPartsState();
+  const journalGroups = new Map<string, HuggyStreamEntry>();
+  const fileEditEntries = new Map<string, HuggyStreamEntry>();
+  const runningCommandEntries = new Map<string, HuggyStreamEntry>();
   const seenJournalKeys = new Set<string>();
   let journalFrame = 0;
   let journalFlushTimer: number | null = null;
@@ -5306,7 +5416,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journalFrame = 0;
     lastJournalFlushAt = Date.now();
     journal.elapsed = elapsedForStatus() || journal.elapsed;
-    setWorkJournalBlock(status, journal);
+    setStreamMessageParts(status, journal);
   };
   const scheduleJournal = (immediate = false) => {
     if (journalFrame) return;
@@ -5339,8 +5449,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setMessageBlock(status, null);
   };
   // Map of step key → journal entry, so finishAgentStep can flip active→done.
-  const activeStepEntries = new Map<string, HuggyWorklineEntry>();
-  const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyWorklineEntry['status'] = 'done') => {
+  const activeStepEntries = new Map<string, HuggyStreamEntry>();
+  const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyStreamEntry['status'] = 'done') => {
     const clean = cleanPublicJournalText(text, speaksFrench);
     if (!clean) return;
     const cleanDetail = cleanPublicJournalText(detail, speaksFrench);
@@ -5368,7 +5478,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.entries.push({ id: journalEntryId('divider'), kind: 'divider', text });
     scheduleJournal();
   };
-  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyWorklineEntry['status'] = 'done') => {
+  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyStreamEntry['status'] = 'done') => {
     const cleanItem = localizeJournalStatus(cleanPublicJournalText(item, speaksFrench) || redactSecrets(item).trim(), speaksFrench);
     if (!cleanItem) return;
     const itemKey = semanticJournalKey(cleanItem);
@@ -5460,7 +5570,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         existing.status = 'active';
       } else if (!seenJournalKeys.has(dedupeKey)) {
         seenJournalKeys.add(dedupeKey);
-        const entry: HuggyWorklineEntry = {
+        const entry: HuggyStreamEntry = {
           id: journalEntryId('line'),
           kind: 'update',
           text: clean,
@@ -5527,7 +5637,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   const startBuildStream = () => {
     journal.status = 'active';
     journal.activeText = say('Je prépare le travail.', 'Preparing the work.');
-    setWorkJournalBlock(status, journal);
+    setStreamMessageParts(status, journal);
     journalTimer = window.setInterval(() => {
       journal.elapsed = elapsedForStatus() || journal.elapsed;
       scheduleJournal(true);

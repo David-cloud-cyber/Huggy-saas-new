@@ -1,88 +1,73 @@
-// Adapter: builder work_journal block → AgentActivityState.
-//
-// The builder conversation island streams agent activity as a `work_journal`
-// block (HuggyWorklineEntry[]). This pure adapter maps that existing model onto
-// the AgentActivityState the new MIX <AgentActivityStream> renders, so swapping
-// the old DOM-driven buildstream markup is a one-line render change instead of a
-// cross-file refactor of the 80–280 KB island/builder-live files.
-
+import type { HuggyMessagePart } from './chat-message-parts.ts';
 import type { AgentActivityState, ActivityCheck, ActivityFile, ActivityMilestone } from './agent-activity-stream.ts';
 
-// Mirrors HuggyWorklineEntry / work_journal block in builder-conversation-island.
-export type WorklineEntryLike = {
-  id: string;
-  kind: 'update' | 'group' | 'divider' | 'summary' | 'narration' | 'thinking' | 'file_edit' | 'command';
-  text: string;
-  detail?: string;
-  status?: 'active' | 'done' | 'failed' | 'cancelled' | 'muted';
-  items?: string[];
-  path?: string;
-  action?: 'created' | 'modified' | 'deleted';
-  additions?: number;
-  deletions?: number;
-  command?: string;
-};
-
-export type WorkJournalBlockLike = {
-  type: 'work_journal';
-  status: 'active' | 'done' | 'failed' | 'cancelled';
-  startedAt?: string;
-  elapsed?: string;
-  entries: WorklineEntryLike[];
+export type RichMessagePartsActivityInput = {
+  parts: HuggyMessagePart[];
+  status?: 'active' | 'done' | 'failed' | 'cancelled';
   activeText?: string;
   finalText?: string;
-  restored?: boolean;
 };
 
-function phaseFor(status: WorkJournalBlockLike['status']): AgentActivityState['phase'] {
+function phaseFor(status: RichMessagePartsActivityInput['status']): AgentActivityState['phase'] {
   if (status === 'failed') return 'error';
   if (status === 'done' || status === 'cancelled') return 'done';
   return 'streaming';
 }
 
-function milestoneState(status?: WorklineEntryLike['status']): ActivityMilestone['state'] {
+function milestoneState(status: unknown): ActivityMilestone['state'] {
   if (status === 'done') return 'done';
   if (status === 'failed') return 'failed';
   if (status === 'cancelled') return 'cancelled';
   return 'active';
 }
 
-export function workJournalToActivityState(block: WorkJournalBlockLike): AgentActivityState {
-  const phase = phaseFor(block.status);
+function partStatus(part: HuggyMessagePart) {
+  return String(part.status || '').trim();
+}
+
+export function messagePartsToActivityState(input: RichMessagePartsActivityInput): AgentActivityState {
+  const phase = phaseFor(input.status || 'active');
   const milestones: ActivityMilestone[] = [];
   const files: ActivityFile[] = [];
   const checks: ActivityCheck[] = [];
+  let assistantText = '';
 
-  for (const entry of block.entries || []) {
-    if (entry.kind === 'divider') continue;
-    if (entry.kind === 'file_edit' && entry.path) {
+  for (const part of input.parts || []) {
+    if (part.type === 'text' && typeof part.text === 'string') {
+      assistantText += part.text;
+      continue;
+    }
+
+    if (part.type === 'file_edit' && typeof part.path === 'string') {
       files.push({
-        path: entry.path,
-        status: entry.status === 'done' ? 'done' : 'writing',
+        path: part.path,
+        status: partStatus(part) === 'active' ? 'writing' : 'done',
         chars: 0,
-        action: entry.action,
-        additions: entry.additions,
-        deletions: entry.deletions,
+        action: typeof part.action === 'string' ? part.action as ActivityFile['action'] : undefined,
+        additions: typeof part.additions === 'number' ? part.additions : undefined,
+        deletions: typeof part.deletions === 'number' ? part.deletions : undefined,
         order: files.length,
       });
       continue;
     }
-    if (entry.kind === 'group' && /check|verification|vérification/i.test(`${entry.id} ${entry.text}`)) {
-      for (const item of entry.items || []) {
+
+    if (part.type === 'tool_call' && /check|verification|vérification/i.test(`${part.name || ''} ${part.text || ''}`)) {
+      const items = Array.isArray(part.items) ? part.items : [];
+      for (const item of items) {
         checks.push({
-          name: item,
-          status: entry.status === 'failed' ? 'fail' : entry.status === 'cancelled' ? 'skip' : 'pass',
+          name: String(item || ''),
+          status: partStatus(part) === 'failed' ? 'fail' : partStatus(part) === 'cancelled' ? 'skip' : 'pass',
         });
       }
       continue;
     }
-    // command / update / group / narration / thinking / summary → step rows.
-    const label = entry.kind === 'command' && entry.command ? entry.command : entry.text;
+
+    const label = String(part.command || part.name || part.text || part.detail || part.type || '').trim();
     if (!label) continue;
     milestones.push({
-      key: entry.id || `step-${milestones.length}`,
+      key: String(part.id || `part-${milestones.length}`),
       label,
-      state: milestoneState(entry.status),
+      state: milestoneState(part.status),
       order: milestones.length,
     });
   }
@@ -91,13 +76,13 @@ export function workJournalToActivityState(block: WorkJournalBlockLike): AgentAc
 
   return {
     phase,
-    statusLine: block.status === 'done' ? block.finalText : block.activeText,
-    assistantText: '',
+    statusLine: input.status === 'done' ? input.finalText : input.activeText,
+    assistantText,
     milestones,
     files,
     checks,
     warnings: [],
-    error: block.status === 'failed' ? { message: block.finalText || block.activeText || 'Correction nécessaire', recoverable: true } : undefined,
+    error: input.status === 'failed' ? { message: input.finalText || input.activeText || 'Correction nécessaire', recoverable: true } : undefined,
     collapsed: phase === 'done',
     lastEventId: 0,
     startedAt: finished ? 0 : undefined,

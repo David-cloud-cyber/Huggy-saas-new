@@ -15,6 +15,7 @@ import { DiffView } from "./components/ai-elements/diff-view";
 import { Reasoning } from "./components/ai-elements/reasoning";
 import { TerminalBlock } from "./components/ai-elements/terminal";
 import { ToolCall } from "./components/ai-elements/tool-call";
+import type { HuggyMessagePart } from "./lib/chat-message-parts";
 import "./styles/agent-activity-stream-v2.css";
 import "./styles/huggy-ai-elements.css";
 
@@ -40,31 +41,7 @@ export type HuggyAgentTrace = {
   steps?: HuggyAgentTraceStep[];
 };
 
-export type HuggyWorklineEntry = {
-  id: string;
-  kind: "update" | "group" | "divider" | "summary" | "narration" | "thinking" | "file_edit" | "command";
-  text: string;
-  detail?: string;
-  status?: "active" | "done" | "failed" | "cancelled" | "muted";
-  items?: string[];
-  path?: string;
-  action?: "created" | "modified" | "deleted";
-  additions?: number;
-  deletions?: number;
-  command?: string;
-};
-
 export type HuggyConversationBlock =
-  | {
-      type: "work_journal";
-      status: "active" | "done" | "failed" | "cancelled";
-      startedAt?: string;
-      elapsed?: string;
-      entries: HuggyWorklineEntry[];
-      activeText?: string;
-      finalText?: string;
-      restored?: boolean;
-    }
   | {
       type: "reasoning";
       title?: string;
@@ -111,7 +88,7 @@ export type HuggyConversationBlock =
 export type HuggyConversationMessage = {
   id: string;
   content: string;
-  parts?: import("./lib/chat-message-parts").HuggyMessagePart[];
+  parts?: HuggyMessagePart[];
   role: HuggyConversationRole;
   working?: boolean;
   trace?: HuggyAgentTrace | null;
@@ -121,8 +98,9 @@ export type HuggyConversationMessage = {
 };
 
 export type HuggyConversationApi = {
-  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; parts?: import("./lib/chat-message-parts").HuggyMessagePart[]; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
+  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; parts?: HuggyMessagePart[]; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
   updateMessage: (id: string, content: string) => void;
+  setParts: (id: string, parts: HuggyMessagePart[], content?: string) => void;
   setWorking: (id: string, label: string) => void;
   clearWorking: (id: string) => void;
   setTrace: (id: string, trace: HuggyAgentTrace | null) => void;
@@ -1342,12 +1320,15 @@ function textFromConversationParts(parts: HuggyConversationMessage["parts"], fal
 }
 
 function renderStandardMessageContent(message: HuggyConversationMessage) {
+  if (message.role === "assistant" && hasRichMessageParts(message.parts)) {
+    return renderRichMessageParts(message);
+  }
   const content = textFromConversationParts(message.parts, message.content);
   if (message.role === "assistant") return renderAssistantMarkdown(content);
   return renderPlainMessage(content);
 }
 
-function workJournalCompareText(value = "") {
+function streamPartCompareText(value = "") {
   return value
     .toLowerCase()
     .normalize("NFKD")
@@ -1357,130 +1338,132 @@ function workJournalCompareText(value = "") {
     .trim();
 }
 
-function worklineStatusToToolStatus(status: HuggyWorklineEntry["status"]): "active" | "done" | "failed" {
+function partStatusToToolStatus(status: unknown): "active" | "done" | "failed" {
   if (status === "failed" || status === "cancelled") return "failed";
   if (status === "active") return "active";
   return "done";
 }
 
-function worklineStatusToTerminalStatus(status: HuggyWorklineEntry["status"]): "pass" | "fail" | null {
+function partStatusToTerminalStatus(status: unknown): "pass" | "fail" | null {
   if (status === "failed" || status === "cancelled") return "fail";
   if (status === "done") return "pass";
   return null;
 }
 
-function worklineIcon(entry: HuggyWorklineEntry) {
-  const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""} ${entry.path || ""}`);
-  if (entry.kind === "command") return <TerminalIcon size={16} />;
-  if (entry.kind === "file_edit") return <FileText size={16} />;
+function streamPartIcon(part: HuggyMessagePart) {
+  const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""} ${part.path || ""}`);
+  if (part.type === "terminal" || part.type === "command") return <TerminalIcon size={16} />;
+  if (part.type === "file_edit") return <FileText size={16} />;
   if (normalized.includes("recherche") || normalized.includes("search")) return <Search size={16} />;
   if (normalized.includes("lecture") || normalized.includes("read") || normalized.includes("preview")) return <Eye size={16} />;
   if (normalized.includes("code") || normalized.includes("fichier") || normalized.includes("file")) return <Code2 size={16} />;
   return <Wrench size={16} />;
 }
 
-function isWorklineNarration(entry: HuggyWorklineEntry) {
-  if (entry.kind === "narration" || entry.kind === "summary") return true;
-  if (entry.kind !== "update") return false;
-  const text = entry.text.trim();
-  return /^(je|j'|j ai|huggy)\b/i.test(text) && !entry.items?.length && !entry.detail;
-}
-
-function worklineBodyText(entry: HuggyWorklineEntry) {
+function partBodyText(part: HuggyMessagePart) {
   const lines: string[] = [];
-  if (entry.detail) lines.push(entry.detail);
-  if (entry.items?.length) lines.push(...entry.items);
-  if (entry.path && entry.kind === "file_edit") {
-    const action = entry.action === "created" ? "Created" : entry.action === "deleted" ? "Deleted" : "Modified";
-    const diff = typeof entry.additions === "number" || typeof entry.deletions === "number"
-      ? `+${entry.additions || 0} -${entry.deletions || 0}`
+  if (typeof part.result === "string") lines.push(part.result);
+  if (typeof part.output === "string") lines.push(part.output);
+  if (typeof part.detail === "string") lines.push(part.detail);
+  if (Array.isArray(part.items)) lines.push(...part.items.map(item => String(item || "")).filter(Boolean));
+  if (typeof part.path === "string" && part.type === "file_edit") {
+    const action = part.action === "created" ? "Created" : part.action === "deleted" ? "Deleted" : "Modified";
+    const diff = typeof part.additions === "number" || typeof part.deletions === "number"
+      ? `+${part.additions || 0} -${part.deletions || 0}`
       : "";
-    lines.push(`${action} ${entry.path}${diff ? ` ${diff}` : ""}`);
+    lines.push(`${action} ${part.path}${diff ? ` ${diff}` : ""}`);
   }
   return lines.join("\n").trim();
 }
 
-function worklineToolName(entry: HuggyWorklineEntry) {
-  if (entry.kind === "file_edit") {
-    if (entry.action === "created") return "Creation de fichier";
-    if (entry.action === "deleted") return "Suppression de fichier";
+function streamPartToolName(part: HuggyMessagePart) {
+  if (typeof part.name === "string" && part.name.trim()) return part.name.trim();
+  if (part.type === "file_edit") {
+    if (part.action === "created") return "Creation de fichier";
+    if (part.action === "deleted") return "Suppression de fichier";
     return "Modification de fichier";
   }
-  if (entry.kind === "command") return "Execution de commande";
-  return entry.text;
+  if (part.type === "terminal" || part.type === "command") return "Execution de commande";
+  return String(part.text || part.type || "Action");
 }
 
-function renderWorkJournalEntry(entry: HuggyWorklineEntry) {
-  if (entry.kind === "divider") return null;
+function renderRichMessagePart(part: HuggyMessagePart, index: number) {
+  const key = String(part.id || `${part.type}_${index}`);
+  if (part.type === "text") {
+    const text = String(part.text || "").trim();
+    return text ? (
+      <div key={key} className="huggy-streamline-text">
+        {renderAssistantMarkdown(text)}
+      </div>
+    ) : null;
+  }
 
-  if (entry.kind === "thinking") {
+  if (part.type === "reasoning" || part.type === "thinking") {
+    const text = String(part.text || part.detail || "").trim();
     return (
-      <Reasoning key={entry.id} isStreaming={entry.status === "active"}>
-        {entry.detail || entry.text}
+      <Reasoning key={key} isStreaming={part.status === "active"} elapsed={typeof part.elapsed === "string" ? part.elapsed : undefined}>
+        {text}
       </Reasoning>
     );
   }
 
-  if (entry.kind === "command") {
+  if (part.type === "terminal" || part.type === "command") {
     return (
       <TerminalBlock
-        key={entry.id}
-        command={entry.command || entry.text}
-        output={worklineBodyText(entry)}
-        status={worklineStatusToTerminalStatus(entry.status)}
-        running={entry.status === "active"}
+        key={key}
+        command={String(part.command || part.text || "")}
+        output={partBodyText(part)}
+        status={partStatusToTerminalStatus(part.status)}
+        running={part.status === "active" || Boolean(part.running)}
       />
     );
   }
 
-  if (isWorklineNarration(entry)) {
+  if (part.type === "code") {
     return (
-      <div key={entry.id} className="huggy-streamline-text">
-        {renderAssistantMarkdown(entry.text)}
-      </div>
+      <CodeBlock
+        key={key}
+        code={String(part.code || part.text || "")}
+        language={typeof part.language === "string" ? part.language : undefined}
+        filename={typeof part.filename === "string" ? part.filename : undefined}
+        streaming={Boolean(part.streaming)}
+      />
     );
   }
 
-  const detail = entry.path || entry.detail;
-  const body = worklineBodyText(entry);
+  if (part.type === "diff") {
+    const hunks = Array.isArray(part.hunks) ? part.hunks.map(item => String(item || "")) : [];
+    return <DiffView key={key} filename={String(part.filename || part.path || "diff")} hunks={hunks} />;
+  }
+
+  const detail = typeof part.path === "string" ? part.path : typeof part.detail === "string" ? part.detail : undefined;
+  const body = partBodyText(part);
   return (
     <ToolCall
-      key={entry.id}
-      name={worklineToolName(entry)}
+      key={key}
+      name={streamPartToolName(part)}
       detail={detail}
-      status={worklineStatusToToolStatus(entry.status)}
-      icon={worklineIcon(entry)}
+      status={partStatusToToolStatus(part.status)}
+      icon={streamPartIcon(part)}
     >
       {body ? <pre>{body}</pre> : null}
     </ToolCall>
   );
 }
 
-function renderWorkJournal(message: HuggyConversationMessage, block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
-  const visibleEntries = (block.entries || []).filter(entry => {
-    const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""}`);
+function hasRichMessageParts(parts: HuggyConversationMessage["parts"]) {
+  return Array.isArray(parts) && parts.some(part => part.type !== "text");
+}
+
+function renderRichMessageParts(message: HuggyConversationMessage) {
+  const parts = (message.parts || []).filter(part => {
+    const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""}`);
     return normalized !== "i keep the work recoverable without claiming a false ready preview";
   });
-  const hasThinking = visibleEntries.some(entry => entry.kind === "thinking");
-  const finalText = (block.finalText || "").trim();
-  const finalIsDuplicate = finalText
-    ? visibleEntries.some(entry => workJournalCompareText(entry.text) === workJournalCompareText(finalText))
-    : false;
-  void message;
-
+  if (!parts.length) return null;
   return (
-    <div className="huggy-zip-stream" data-status={block.status} data-restored={block.restored ? "true" : "false"}>
-      {!hasThinking ? (
-        <Reasoning isStreaming={block.status === "active"} elapsed={block.elapsed}>
-          {block.activeText || ""}
-        </Reasoning>
-      ) : null}
-      {visibleEntries.map(renderWorkJournalEntry)}
-      {finalText && !finalIsDuplicate ? (
-        <div className="huggy-streamline-text">
-          {renderAssistantMarkdown(finalText)}
-        </div>
-      ) : null}
+    <div className="huggy-zip-stream" data-status={message.working ? "active" : "done"}>
+      {parts.map(renderRichMessagePart)}
     </div>
   );
 }
@@ -1488,10 +1471,6 @@ function renderWorkJournal(message: HuggyConversationMessage, block: Extract<Hug
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
-
-  if (block.type === "work_journal") {
-    return renderWorkJournal(message, block);
-  }
 
   if (block.type === "reasoning") {
     return (
@@ -1663,14 +1642,14 @@ function dispatchConversationEdit(message: HuggyConversationMessage) {
   window.dispatchEvent(new CustomEvent("huggy-edit-message", {
     detail: {
       messageId: message.id,
-      content: message.content,
+      content: textFromConversationParts(message.parts, message.content),
       role: message.role,
     },
   }));
 }
 
 async function copyMessageText(message: HuggyConversationMessage) {
-  const text = message.content || "";
+  const text = textFromConversationParts(message.parts, message.content) || "";
   try {
     await navigator.clipboard?.writeText(text);
   } catch {
@@ -2004,6 +1983,17 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
     },
     updateMessage(id, content) {
       messages = messages.map(message => message.id === id ? { ...message, content } : message);
+      render();
+    },
+    setParts(id, parts, content = "") {
+      messages = messages.map(message => message.id === id
+        ? {
+            ...message,
+            content: content || textFromConversationParts(parts, message.content),
+            parts,
+            working: false,
+          }
+        : message);
       render();
     },
     setWorking(id, label) {

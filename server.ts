@@ -9840,7 +9840,7 @@ app.get('/api/admin/feature-flags', async (req: any, res) => {
       { key: 'huggy_media', label: 'Huggy Media', enabled: true, rollout: 'beta', risk: 'medium' },
       { key: 'huggy_design', label: 'Huggy Design', enabled: true, rollout: 'beta', risk: 'medium' },
       { key: 'huggy_decks', label: 'Huggy Decks', enabled: true, rollout: 'beta', risk: 'medium' },
-      { key: 'workline_journal', label: 'Workline journal', enabled: true, rollout: 'all', risk: 'low' },
+      { key: 'rich_message_parts_stream', label: 'Rich message parts stream', enabled: true, rollout: 'all', risk: 'low' },
       { key: 'publish_vercel', label: 'Vercel publish', enabled: Boolean(getVercelToken()), rollout: getVercelToken() ? 'all' : 'blocked', risk: 'high' },
       { key: 'browser_testing', label: 'Browser testing runtime', enabled: true, rollout: 'all', risk: 'medium' },
       { key: 'auto_model_router', label: 'Auto model router', enabled: true, rollout: 'all', risk: 'medium' },

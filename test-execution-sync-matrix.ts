@@ -24,7 +24,7 @@ import { buildInternalExecutionPlan } from './src/services/agent-execution-os.ts
     hasFiles: false,
   });
   const matrix = buildExecutionSyncMatrix(contract);
-  assert.equal(matrix.user_visible_surface, 'huggy_workline');
+  assert.equal(matrix.user_visible_surface, 'rich_parts_stream');
   assert.equal(matrix.mutation_policy, 'allowed');
   assert.equal(matrix.save_policy, 'atomic_versioned');
   assert.equal(matrix.recovery_policy, 'autofix_then_draft');
@@ -65,7 +65,7 @@ import { buildInternalExecutionPlan } from './src/services/agent-execution-os.ts
   });
   const matrix = buildExecutionSyncMatrix(contract);
   assert.equal(contract.mode, 'debug');
-  assert.equal(matrix.user_visible_surface, 'huggy_workline');
+  assert.equal(matrix.user_visible_surface, 'rich_parts_stream');
   assert.equal(matrix.recovery_policy, 'autofix_then_draft');
   assert.equal(executionContractToAIWorkflowTask(contract), 'debug');
 }
@@ -88,7 +88,7 @@ import { buildInternalExecutionPlan } from './src/services/agent-execution-os.ts
   });
   const plan = buildInternalExecutionPlan({ contract, prompt: 'x', hasExistingFiles: false });
   assert.equal(plan.sync_matrix.version, 'execution-sync-matrix/v1');
-  assert.equal(plan.user_visible_surface, 'huggy_workline');
+  assert.equal(plan.user_visible_surface, 'rich_parts_stream');
   assert.ok(plan.required_layers.includes('security'));
   assert.ok(plan.required_layers.includes('browser_testing'));
   assert.equal(plan.save_policy, 'atomic_versioned');

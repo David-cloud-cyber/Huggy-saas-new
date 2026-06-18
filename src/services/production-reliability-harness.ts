@@ -199,7 +199,7 @@ export function buildProductionReliabilityPlan(input: {
   let deliveryPolicy: ProductionReliabilityPlan['deliveryPolicy'] = 'plain_answer';
   if (syncMatrix.user_visible_surface === 'light_plan') deliveryPolicy = 'plan_only';
   if (syncMatrix.user_visible_surface === 'confirmation') deliveryPolicy = 'confirm_first';
-  if (syncMatrix.user_visible_surface === 'huggy_workline') {
+  if (syncMatrix.user_visible_surface === 'rich_parts_stream') {
     deliveryPolicy = contract.mode === 'debug' ? 'recoverable_draft' : 'verified_project';
     requirements.push(...PROJECT_REQUIREMENTS);
   }
