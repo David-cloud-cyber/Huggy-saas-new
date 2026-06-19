@@ -1338,6 +1338,63 @@ function streamPartCompareText(value = "") {
     .trim();
 }
 
+function sanitizeStreamNarrationText(value = "") {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) {
+    return "Je commence par cadrer le résultat attendu avant de toucher au projet.";
+  }
+  if (/\b(je pr[ée]pare le travail|huggy pr[ée]pare le travail|preparing the work)\b/i.test(raw)) {
+    return "Je commence par cadrer le résultat attendu avant de toucher au projet.";
+  }
+  if (/\b(analyse des d[ée]pendances|dependencies)\b/i.test(raw) && /\bAST\b/i.test(raw)) {
+    return "Je repère les parties du projet qui peuvent influencer ce changement.";
+  }
+  if (/\bagents?\s+sp[ée]cialis[ée]s?\s+en\s+parall[èe]le\b/i.test(raw) || /\bspecialized agents in parallel\b/i.test(raw)) {
+    return "Les points de vigilance sont clairs, je passe à la génération.";
+  }
+  if (/^\s*\d+\s*\/\s*\d+\s+agents?\b/i.test(raw)) {
+    return "Les points de vigilance sont clairs, je passe à la génération.";
+  }
+  if (/\b(extraction de la m[ée]moire|architectural memory)\b/i.test(raw) && /\bRAG\b/i.test(raw)) {
+    return "Je récupère le contexte utile pour rester cohérent avec le projet.";
+  }
+  if (/\b(chargement des (tokens|jetons) design|loading design tokens)\b/i.test(raw)) {
+    return "J’aligne les couleurs, l’espacement et la typographie avec l’existant.";
+  }
+  if (/^(brief|bref)\s+affin[ée]\.?$/i.test(raw) || /^brief refined\.?$/i.test(raw)) {
+    return "Je précise le brief pour construire quelque chose de concret.";
+  }
+  if (/^premi[èe]re version g[ée]n[ée]r[ée]e\.?$/i.test(raw)) {
+    return "Je produis une première version complète de l’application.";
+  }
+  if (/^version corrig[ée]e g[ée]n[ée]r[ée]e\.?$/i.test(raw)) {
+    return "J’intègre la correction et je régénère la partie concernée.";
+  }
+  if (/^qualit[ée] v[ée]rifi[ée]e\.?$/i.test(raw)) {
+    return "Je vérifie maintenant que la version peut vraiment s’afficher.";
+  }
+  if (/^code valid[ée]\.?$/i.test(raw)) {
+    return "La structure passe les contrôles principaux, je prépare la preview.";
+  }
+  if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|pipeline)\b/i.test(raw)) return "";
+  if (/^\s*(done|working|processing|loading|analyzing)\.?\s*$/i.test(raw)) return "";
+  return raw;
+}
+
+function sanitizeRichStreamPart(part: HuggyMessagePart): HuggyMessagePart | null {
+  const next: HuggyMessagePart = { ...part };
+  if (typeof next.text === "string") next.text = sanitizeStreamNarrationText(next.text);
+  if (typeof next.detail === "string") next.detail = sanitizeStreamNarrationText(next.detail);
+  if (typeof next.result === "string") next.result = sanitizeStreamNarrationText(next.result);
+  if (typeof next.output === "string") next.output = sanitizeStreamNarrationText(next.output);
+  if (Array.isArray(next.items)) next.items = next.items.map(item => sanitizeStreamNarrationText(String(item || ""))).filter(Boolean);
+  const visibleItems = Array.isArray(next.items) ? next.items : [];
+  const visible = [next.text, next.detail, next.result, next.output, ...visibleItems].map(item => String(item || "").trim()).filter(Boolean);
+  if (!visible.length && next.type !== "file_edit" && next.type !== "terminal" && next.type !== "command") return null;
+  return next;
+}
+
 function partStatusToToolStatus(status: unknown): "active" | "done" | "failed" {
   if (status === "failed" || status === "cancelled") return "failed";
   if (status === "active") return "active";
@@ -1456,10 +1513,17 @@ function hasRichMessageParts(parts: HuggyConversationMessage["parts"]) {
 }
 
 function renderRichMessageParts(message: HuggyConversationMessage) {
-  const parts = (message.parts || []).filter(part => {
-    const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""}`);
-    return normalized !== "i keep the work recoverable without claiming a false ready preview";
-  });
+  const seen = new Set<string>();
+  const parts = (message.parts || [])
+    .map(sanitizeRichStreamPart)
+    .filter((part): part is HuggyMessagePart => {
+      if (!part) return false;
+      const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""} ${part.result || ""}`);
+      if (!normalized || normalized === "i keep the work recoverable without claiming a false ready preview") return false;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
   if (!parts.length) return null;
   return (
     <div className="huggy-zip-stream" data-status={message.working ? "active" : "done"}>

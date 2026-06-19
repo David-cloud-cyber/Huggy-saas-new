@@ -28,7 +28,7 @@ const generationPrompt = buildGenerationSystemPrompt({
 
 assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v23');
 assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v2');
-assert.equal(HUGGY_COMMUNICATION_PROTOCOL_VERSION, 'huggy-communication-protocol-v1');
+assert.equal(HUGGY_COMMUNICATION_PROTOCOL_VERSION, 'huggy-communication-protocol-v2');
 assert.equal(HUGGY_UNIVERSAL_BUILDER_PROMPT_VERSION, 'huggy-universal-builder-prompt-v1');
 assert.equal(HUGGY_MESSAGE_STREAMING_PROMPT_VERSION, 'huggy-message-streaming-prompt-v1');
 assert.equal(HUGGY_AUTO_INFRASTRUCTURE_PROMPT_VERSION, 'huggy-auto-infrastructure-prompt-v1');
@@ -52,6 +52,9 @@ for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('Interleaved narration and actions'), 'every prompt must include interleaved communication');
   assert.ok(prompt.includes('Never produce a long monologue followed by a burst of actions'), 'every prompt must prevent wall-of-text streaming');
   assert.ok(prompt.includes('one concrete sentence, then the real action it announces'), 'every prompt must enforce short narration/action beats');
+  assert.ok(prompt.includes('Never stream duplicate or near-duplicate lines'), 'every prompt must prevent repeated stream lines');
+  assert.ok(prompt.includes('Do not expose internal jargon: AST, RAG'), 'every prompt must hide internal stream jargon');
+  assert.ok(prompt.includes('Do not write counters or percentages in prose'), 'every prompt must prevent progress counters in narration');
   assert.ok(prompt.includes('Reject public narration that starts with filler'), 'every prompt must include narration validation rules');
   assert.ok(prompt.includes('senior autonomous full-stack product builder'), 'every prompt must include the universal builder identity');
   assert.ok(prompt.includes('not a category-specific template bot'), 'every prompt must forbid template-only specialization');
@@ -62,9 +65,12 @@ for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('A clear app creation request should trigger generation'), 'every prompt must enforce action-first generation');
 }
 
-assert.equal(validatePublicNarrationBeat('Je reconstruis la preview.').ok, true);
+assert.equal(validatePublicNarrationBeat('Je reconstruis la preview avant de livrer.').ok, true);
 assert.equal(validatePublicNarrationBeat('Let me think about how to inspect the project first.').ok, false);
 assert.equal(validatePublicNarrationBeat('Possible directions: répondre sans générer ou créer une app précise.').ok, false);
+assert.equal(validatePublicNarrationBeat('Demande reçue.').ok, false);
+assert.equal(validatePublicNarrationBeat('Analyse des dépendances AST.').ok, false);
+assert.equal(validatePublicNarrationBeat('2/2 agents spécialisés complétés.').ok, false);
 
 assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
 assert.ok(textPrompt.includes('Persist the final assistant message once, never once per token'), 'text prompt must preserve safe chat persistence');

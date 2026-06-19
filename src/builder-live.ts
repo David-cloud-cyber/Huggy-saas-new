@@ -2462,7 +2462,7 @@ function createHuggyStreamPartsState(): HuggyStreamPartsState {
     startedAt: new Date().toISOString(),
     elapsed: '0m 00s',
     entries: [],
-    activeText: 'Huggy prépare le travail',
+    activeText: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
   };
 }
 
@@ -2483,10 +2483,12 @@ function streamEntryBody(entry: HuggyStreamEntry) {
 function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | null {
   if (entry.kind === 'divider') return null;
   if (entry.kind === 'thinking') {
+    const text = professionalStreamNarration(entry.detail || entry.text, true);
+    if (!text) return null;
     return {
       id: entry.id,
       type: 'reasoning',
-      text: entry.detail || entry.text,
+      text,
       status: streamEntryStatus(entry.status),
     };
   }
@@ -2519,43 +2521,58 @@ function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | n
     };
   }
   if (entry.kind === 'group') {
+    const name = professionalStreamNarration(entry.text, true) || entry.text;
+    const items = (entry.items || [])
+      .map(item => professionalStreamNarration(item, true))
+      .filter(Boolean);
     return {
       id: entry.id,
       type: 'tool_call',
-      name: entry.text,
+      name,
       status: streamEntryStatus(entry.status),
-      items: entry.items || [],
-      result: streamEntryBody(entry),
+      items,
+      result: items.join('\n'),
     };
   }
+  const text = professionalStreamNarration(entry.text, true);
+  const detail = professionalStreamNarration(entry.detail || '', true);
+  if (!text && !detail) return null;
   return {
     id: entry.id,
     type: 'text',
-    text: [entry.text, entry.detail && entry.detail !== entry.text ? entry.detail : ''].filter(Boolean).join('\n'),
+    text: [text, detail && journalTextKey(detail) !== journalTextKey(text) ? detail : ''].filter(Boolean).join('\n'),
   };
 }
 
 function streamStateToMessageParts(state: HuggyStreamPartsState | null): HuggyMessagePart[] {
   if (!state) return [];
   const parts: HuggyMessagePart[] = [];
+  const seen = new Set<string>();
   const hasActiveReasoning = state.entries.some(entry => entry.kind === 'thinking' && entry.status === 'active');
-  if (state.status === 'active' && state.activeText && !hasActiveReasoning) {
+  const activeText = professionalStreamNarration(state.activeText || '', true);
+  if (state.status === 'active' && activeText && !hasActiveReasoning) {
+    seen.add(semanticJournalKey(activeText));
     parts.push({
       id: 'stream_active_reasoning',
       type: 'reasoning',
-      text: state.activeText,
+      text: activeText,
       status: 'active',
       elapsed: state.elapsed,
     });
   }
   for (const entry of state.entries) {
     const part = streamEntryToMessagePart(entry);
-    if (part) parts.push(part);
+    if (!part) continue;
+    const key = semanticJournalKey(String(part.text || part.result || part.name || part.command || part.path || ''));
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    parts.push(part);
   }
   if (state.finalText) {
-    const normalizedFinal = semanticJournalKey(state.finalText);
+    const finalText = professionalStreamNarration(state.finalText, true);
+    const normalizedFinal = semanticJournalKey(finalText);
     const alreadyVisible = parts.some(part => semanticJournalKey(String(part.text || part.result || '')) === normalizedFinal);
-    if (!alreadyVisible) parts.push({ id: 'stream_final_text', type: 'text', text: state.finalText });
+    if (finalText && !alreadyVisible) parts.push({ id: 'stream_final_text', type: 'text', text: finalText });
   }
   return parts;
 }
@@ -5092,6 +5109,30 @@ function journalTextKey(value: string) {
 function semanticJournalKey(value: string) {
   const key = journalTextKey(value);
   if (!key) return '';
+  if (/\b(agents specialises en parallele|specialized agents in parallel)\b/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/^\d+\s+\d+\s+agents?\s+(specialises|specialized|completed|completes)/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/\b(analyse des dependances ast|analyzing dependencies ast)\b/.test(key)) {
+    return 'project_influence_scan';
+  }
+  if (/\b(extraction de la memoire architecturale rag|architectural memory rag)\b/.test(key)) {
+    return 'project_context_loaded';
+  }
+  if (/\b(chargement des tokens design|chargement des jetons design|loading design tokens)\b/.test(key)) {
+    return 'visual_style_aligned';
+  }
+  if (/\b(brief affine|bref affine|brief refined)\b/.test(key)) {
+    return 'brief_made_concrete';
+  }
+  if (/\b(demande recue|request received)\b/.test(key)) {
+    return 'goal_framed';
+  }
+  if (/\b(je prepare le travail|huggy prepare le travail|preparing the work)\b/.test(key)) {
+    return 'goal_framed';
+  }
   if (/\b(draft recuperable|recoverable draft|work recoverable|false ready preview|preview reste en attente)\b/.test(key)) {
     return 'recoverable_draft_preview_waiting';
   }
@@ -5105,6 +5146,52 @@ function semanticJournalKey(value: string) {
     return 'preview_ready';
   }
   return key;
+}
+
+function professionalStreamNarration(value: unknown, speaksFrench: boolean, fallback = ''): string {
+  const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const fr: Record<string, string> = {
+    goal_framed: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
+    project_influence_scan: 'Je repère les parties du projet qui peuvent influencer ce changement.',
+    specialist_context_checked: 'Les points de vigilance sont clairs, je passe à la génération.',
+    project_context_loaded: 'Je récupère le contexte utile pour rester cohérent avec le projet.',
+    visual_style_aligned: 'J’aligne les couleurs, l’espacement et la typographie avec l’existant.',
+    brief_made_concrete: 'Je précise le brief pour construire quelque chose de concret.',
+    first_version_generated: 'Je produis une première version complète de l’application.',
+    corrected_version_generated: 'J’intègre la correction et je régénère la partie concernée.',
+    quality_checked: 'Je vérifie maintenant que la version peut vraiment s’afficher.',
+    structure_validated: 'La structure passe les contrôles principaux, je prépare la preview.',
+  };
+  const en: Record<string, string> = {
+    goal_framed: 'I am framing the expected result before touching the project.',
+    project_influence_scan: 'I am finding the project areas that can affect this change.',
+    specialist_context_checked: 'The important risks are clear, so I am moving into generation.',
+    project_context_loaded: 'I am pulling the useful context to stay consistent with the project.',
+    visual_style_aligned: 'I am aligning color, spacing, and typography with the existing app.',
+    brief_made_concrete: 'I am tightening the brief into something concrete to build.',
+    first_version_generated: 'I am producing a complete first version of the app.',
+    corrected_version_generated: 'I am applying the fix and regenerating the affected part.',
+    quality_checked: 'I am checking that this version can actually render.',
+    structure_validated: 'The main structure checks passed, so I am preparing the preview.',
+  };
+  const dictionary = speaksFrench ? fr : en;
+  if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) return dictionary.goal_framed;
+  if (/\b(je pr[ée]pare le travail|huggy pr[ée]pare le travail|preparing the work)\b/i.test(raw)) return dictionary.goal_framed;
+  if (/\b(analyse des d[ée]pendances|dependencies)\b/i.test(raw) && /\bAST\b/i.test(raw)) return dictionary.project_influence_scan;
+  if (/\bagents?\s+sp[ée]cialis[ée]s?\s+en\s+parall[èe]le\b/i.test(raw) || /\bspecialized agents in parallel\b/i.test(raw)) return dictionary.specialist_context_checked;
+  if (/^\s*\d+\s*\/\s*\d+\s+agents?\b/i.test(raw)) return dictionary.specialist_context_checked;
+  if (/\b(extraction de la m[ée]moire|architectural memory)\b/i.test(raw) && /\bRAG\b/i.test(raw)) return dictionary.project_context_loaded;
+  if (/\b(chargement des (tokens|jetons) design|loading design tokens)\b/i.test(raw)) return dictionary.visual_style_aligned;
+  if (/^(brief|bref)\s+affin[ée]\.?$/i.test(raw) || /^brief refined\.?$/i.test(raw)) return dictionary.brief_made_concrete;
+  if (/^premi[èe]re version g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^first version generated\.?$/i.test(raw)) return dictionary.first_version_generated;
+  if (/^version corrig[ée]e g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^corrected version generated\.?$/i.test(raw)) return dictionary.corrected_version_generated;
+  if (/^qualit[ée] v[ée]rifi[ée]e\.?$/i.test(raw) || /^quality checked\.?$/i.test(raw)) return dictionary.quality_checked;
+  if (/^code valid[ée]\.?$/i.test(raw) || /^code validated\.?$/i.test(raw)) return dictionary.structure_validated;
+  if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|model names?|pipeline)\b/i.test(raw)) return '';
+  if (/^\s*(done|working|processing|loading|analyzing|termin[ée]|travail termin[ée])\.?\s*$/i.test(raw)) return '';
+  if (/^\s*\d+\s*\/\s*\d+\b/.test(raw)) return '';
+  return raw;
 }
 
 function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = ''): string {
@@ -5139,6 +5226,9 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
     return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
   }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
+  const professional = professionalStreamNarration(compact, speaksFrench);
+  if (!professional) return '';
+  if (professional !== compact) return professional;
   if (looksLikeInternalRecoveryText(compact)) return cleanRecoveryText(speaksFrench);
   if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
     return cleanRecoveryText(speaksFrench);
@@ -5451,9 +5541,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   // Map of step key → journal entry, so finishAgentStep can flip active→done.
   const activeStepEntries = new Map<string, HuggyStreamEntry>();
   const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyStreamEntry['status'] = 'done') => {
-    const clean = cleanPublicJournalText(text, speaksFrench);
+    const clean = professionalStreamNarration(cleanPublicJournalText(text, speaksFrench), speaksFrench);
     if (!clean) return;
-    const cleanDetail = cleanPublicJournalText(detail, speaksFrench);
+    const cleanDetail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench);
     const contentKey = semanticJournalKey(clean);
     const dedupeKey = key ? `${key}:${contentKey}` : contentKey;
     if (seenJournalKeys.has(dedupeKey)) return;
@@ -5547,7 +5637,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes exécutées' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
   const setJournalActive = (label: string, urgent = false) => {
-    const clean = cleanPublicJournalText(label, speaksFrench);
+    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
     if (!clean || journal.activeText === clean) return;
     const now = Date.now();
     if (!urgent && now - lastActiveTextAt < 900) return;
@@ -5557,7 +5647,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     setJournalActive(headline);
-    const clean = cleanPublicJournalText(label, speaksFrench);
+    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
     if (clean) {
       // Mark any previous active step as done before adding the new one.
       for (const [, entry] of activeStepEntries) {
@@ -5574,7 +5664,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           id: journalEntryId('line'),
           kind: 'update',
           text: clean,
-          detail: detail ? cleanPublicJournalText(detail, speaksFrench) || undefined : undefined,
+          detail: detail ? professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined : undefined,
           status: 'active',
         };
         activeStepEntries.set(key, entry);
@@ -5588,8 +5678,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const existing = activeStepEntries.get(key);
     if (existing) {
       existing.status = 'done';
-      if (label) existing.text = cleanPublicJournalText(label, speaksFrench) || existing.text;
-      if (detail) existing.detail = cleanPublicJournalText(detail, speaksFrench) || undefined;
+      if (label) existing.text = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench) || existing.text;
+      if (detail) existing.detail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined;
       activeStepEntries.delete(key);
       scheduleJournal();
     } else if (label) {
@@ -5636,7 +5726,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const startBuildStream = () => {
     journal.status = 'active';
-    journal.activeText = say('Je prépare le travail.', 'Preparing the work.');
+    journal.activeText = say('Je commence par cadrer le résultat attendu avant de toucher au projet.', 'I am framing the expected result before touching the project.');
     setStreamMessageParts(status, journal);
     journalTimer = window.setInterval(() => {
       journal.elapsed = elapsedForStatus() || journal.elapsed;
