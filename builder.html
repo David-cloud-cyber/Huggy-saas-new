@@ -2091,12 +2091,37 @@
       pointer-events: auto;
     }
 
+    .brand-right .preview-address-row {
+      position: static;
+      inset: auto;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0;
+      gap: 7px;
+      z-index: auto;
+      pointer-events: auto;
+    }
+
     .sub-nav-right .preview-address-row.address-hidden {
+      display: none;
+    }
+
+    .brand-right .preview-address-row.address-hidden {
       display: none;
     }
 
     .sub-nav-right .preview-address-glow {
       height: 28px;
+      max-width: 238px;
+      opacity: 1;
+      pointer-events: auto;
+      box-shadow: none;
+    }
+
+    .brand-right .preview-address-glow {
+      height: 30px;
       max-width: 238px;
       opacity: 1;
       pointer-events: auto;
@@ -2112,8 +2137,23 @@
       pointer-events: none;
     }
 
+    .brand-right .preview-address-row.address-hidden .preview-address-glow,
+    .brand-right .preview-address-row.address-hidden:hover .preview-address-glow,
+    .brand-right .preview-address-row.address-hidden .preview-address-glow:focus-within {
+      max-width: 0;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
     .sub-nav-right .preview-address-row:hover .preview-address-glow,
     .sub-nav-right .preview-address-glow:focus-within {
+      max-width: 300px;
+      opacity: 1;
+    }
+
+    .brand-right .preview-address-row:hover .preview-address-glow,
+    .brand-right .preview-address-glow:focus-within {
       max-width: 300px;
       opacity: 1;
     }
