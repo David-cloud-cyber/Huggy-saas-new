@@ -748,6 +748,13 @@ export class StripeService {
         .from('cloud_wallets')
         .upsert([{ organization_id: organizationId, balance_usd: updated, updated_at: new Date().toISOString() }]);
 
+      // A positive balance after a top-up must lift any metering suspension.
+      if (updated > 0) {
+        await this.supabase.rpc('reactivate_cloud_wallet', { org_id: organizationId }).catch((error: any) => {
+          console.warn(`[huggy:cloud_wallet_reactivate_skipped] ${error?.message || error}`);
+        });
+      }
+
       await this.supabase
         .from('cloud_usage_ledger')
         .insert([{

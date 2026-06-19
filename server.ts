@@ -135,6 +135,8 @@ import {
   isPaidPlanKey,
   normalizePlanKey,
 } from './src/services/billing-service.ts';
+import { evaluateExposure, exposureBlockReason } from './src/services/monthly-exposure-guard.ts';
+import { CloudMeteringService } from './src/services/cloud-metering.ts';
 import { AuditLogService, BillingAlertService, UsageMeteringService, MemberLimitService } from './src/services/platform-support.ts';
 import { buildWorldClassUiPolicy } from './src/services/design-generation-policy.ts';
 import {
@@ -707,6 +709,12 @@ const AGENTIC_BUILD_ENABLED = process.env.HUGGY_AGENTIC_BUILD === '1';
 // phases + understanding/clarification/assumptions instead of hardcoded status
 // strings, so the agent visibly *reasons* (and asks instead of guessing).
 const REASONING_PIPELINE_ENABLED = process.env.HUGGY_REASONING_PIPELINE === '1';
+// Step 6 — monthly AI/Cloud exposure cap. Off by default: enable once the
+// metering data and plan caps are configured, so it never blocks before then.
+const EXPOSURE_CAP_ENABLED = process.env.HUGGY_EXPOSURE_CAP === '1';
+// Cloud metering loop. Off by default: requires real UNIT_COST + supporting
+// tables (cloud_request_log, projects.cloud_schema) before it should run.
+const CLOUD_METERING_ENABLED = process.env.HUGGY_CLOUD_METERING === '1';
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
 const webResearchGateway = new WebResearchGateway(process.env);
 const falMediaGateway = new FalMediaGateway(process.env);
@@ -4614,6 +4622,38 @@ function estimateActionCost(prompt: string, intent: IntentDecision, modelId?: un
     minimum_action_credits: Math.max(2, selectedModelFloor),
     complexity_surcharge: prompt.length > 400 ? 2 : 0,
   });
+}
+
+// Month-to-date real USD cost exposure for an org, summed from metered Cloud
+// consumption in the ledger. Best-effort: returns 0 on any error so the exposure
+// cap can never falsely block an action.
+async function getMonthlyExposureUsd(organizationId: string): Promise<number> {
+  try {
+    const supabase = getSupabase();
+    if (!supabase) return 0;
+    const since = new Date();
+    since.setUTCDate(1);
+    since.setUTCHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('cloud_usage_ledger')
+      .select('amount_usd,usage_type')
+      .eq('organization_id', organizationId)
+      .gte('created_at', since.toISOString());
+    if (!Array.isArray(data)) return 0;
+    const consumption = new Set([
+      'database_server', 'database_storage', 'compute', 'file_storage', 'live_updates', 'network', 'ai_app_usage',
+    ]);
+    let usd = 0;
+    for (const row of data as Array<{ amount_usd: number; usage_type: string }>) {
+      const amount = Number(row.amount_usd);
+      if (consumption.has(String(row.usage_type)) && Number.isFinite(amount) && amount < 0) {
+        usd += Math.abs(amount);
+      }
+    }
+    return usd;
+  } catch {
+    return 0;
+  }
 }
 
 async function chargeCompletedAgentAction(
@@ -10618,6 +10658,31 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     });
   }
 
+  // Step 6 — monthly exposure cap (margin protection). Flagged off by default;
+  // best-effort so any lookup error allows the action rather than blocking it.
+  if (EXPOSURE_CAP_ENABLED) {
+    try {
+      const planKey = await getOrganizationPlan(userId).catch(() => 'free');
+      const capUsd = PLAN_ECONOMICS_GUARDRAILS[planKey as keyof typeof PLAN_ECONOMICS_GUARDRAILS]?.maxMonthlyAiCloudExposureUsd ?? null;
+      if (capUsd !== null) {
+        const monthToDateUsd = await getMonthlyExposureUsd(userId);
+        const pendingUsd = Number((cost as { realCostUsd?: number }).realCostUsd) || 0;
+        const exposure = evaluateExposure({ capUsd, monthToDateUsd, pendingUsd });
+        if (!exposure.allowed) {
+          await updateAgentRunStatus(agentRunId, 'failed', { diagnostic_code: 'USAGE_LIMIT_REACHED', suggested_action: 'upgrade_plan' });
+          return respondJson(200, {
+            success: false,
+            error: exposureBlockReason(exposure),
+            diagnostic_code: 'USAGE_LIMIT_REACHED',
+            suggested_action: 'upgrade_plan',
+          });
+        }
+      }
+    } catch (error: any) {
+      console.warn('[huggy:exposure_cap_check_failed]', { message: error?.message || String(error) });
+    }
+  }
+
   const refId = `gen_${randomUUID()}`;
   await helpers.createReservation(userId, cost.finalCredits, refId);
 
@@ -12260,6 +12325,17 @@ app.listen(port, () => {
     initJobQueue(supabaseClient);
     startJobWorker();
     console.log('[huggy:job_queue] Worker initialized');
+
+    // Cloud metering loop (off unless HUGGY_CLOUD_METERING=1 and real unit costs set).
+    if (CLOUD_METERING_ENABLED) {
+      try {
+        const meteringMode = (process.env.HUGGY_CLOUD_BACKEND_MODE === 'dedicated' ? 'dedicated' : 'shared') as 'shared' | 'dedicated';
+        new CloudMeteringService(supabaseClient).start(meteringMode);
+        console.log(`[huggy:cloud_meter] Metering loop started (${meteringMode})`);
+      } catch (error: any) {
+        console.warn('[huggy:cloud_meter] Failed to start:', error?.message || error);
+      }
+    }
   } else {
     console.warn('[huggy:job_queue] Skipped — Supabase not configured');
   }
