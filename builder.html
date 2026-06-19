@@ -159,12 +159,12 @@
 
     /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
     .brand-topbar {
-      height: 48px;
+      height: 44px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 14px;
       background: var(--bg);
       user-select: none;
     }
@@ -519,18 +519,45 @@
     }
 
     .btn-upgrade {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      background: var(--accent-blue-soft, rgba(59, 130, 246, 0.10));
+      border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 32%, var(--border));
+      color: var(--accent-blue-deep, #2458dc);
       font-size: 12px;
-      font-weight: 500;
-      padding: 6px 12px;
-      border-radius: 6px;
+      font-weight: 600;
+      padding: 6px 11px;
+      border-radius: 8px;
+      cursor: pointer;
       transition: all 150ms;
     }
 
+    .btn-upgrade svg {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+    }
+
     .btn-upgrade:hover {
-      background: var(--accent-dim, rgba(9, 9, 11, 0.08));
+      background: color-mix(in srgb, var(--accent-blue, #3b82f6) 16%, transparent);
+    }
+
+    /* Share / "Partager" — secondary neutral action that copies the public URL. */
+    .btn-share {
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-share.is-copied {
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 40%, var(--border));
+      color: var(--accent-blue-deep, #2458dc);
+    }
+
+    .btn-share:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     /* Modern, flat Indigo — no gradients, noise or heavy shadow. */
@@ -545,8 +572,9 @@
       font-size: 12px;
       font-weight: 700;
       letter-spacing: -0.01em;
-      padding: 7px 16px;
-      border-radius: 9px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      white-space: nowrap;
       cursor: pointer;
       transition: filter 120ms ease, transform 120ms ease;
     }
@@ -2866,7 +2894,7 @@
           <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
           <span class="brand-sep">/</span>
           <button class="project-selector" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
-            <span id="project-name">Untitled app</span>
+            <span id="project-name">Projet sans titre</span>
             <svg style="color: var(--text-sub); margin-left:2px;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="6 9 12 15 18 9"/>
             </svg>
@@ -2875,15 +2903,21 @@
       </div>
 
       <div class="brand-right">
-        <button class="btn-integration">
-          <svg style="color: var(--text-sub);" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <div class="avatar-circle" title="Compte"></div>
+        <button class="btn-integration btn-share" id="btn-share-project" type="button" title="Copier le lien public">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>
           </svg>
-          Add integration
+          <span class="btn-share-label">Partager</span>
         </button>
-        <button class="btn-upgrade">Upgrade plan</button>
-        <button class="btn-publish" type="button">Publish</button>
-        <div class="avatar-circle"></div>
+        <button class="btn-upgrade" id="btn-upgrade" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13l0-8Z"/>
+          </svg>
+          <span>Mise à niveau</span>
+        </button>
+        <button class="btn-publish" type="button">Publier</button>
       </div>
     </header>
 
@@ -2896,7 +2930,7 @@
       <div class="project-menu-workspace">
         <div class="project-menu-avatar" id="project-menu-avatar">H</div>
         <div>
-          <div class="project-menu-name" id="project-menu-title">Untitled app</div>
+          <div class="project-menu-name" id="project-menu-title">Projet sans titre</div>
           <div class="project-menu-muted">Workspace project</div>
         </div>
         <div class="project-menu-badge" id="project-menu-plan-badge">FREE</div>
@@ -2916,7 +2950,7 @@
         <label class="project-menu-field">
           <span class="project-menu-label">Project name</span>
           <span class="project-menu-input-row">
-            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Untitled app" autocomplete="off">
+            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Projet sans titre" autocomplete="off">
             <button class="project-menu-save" id="project-name-save" type="button">Save</button>
           </span>
         </label>
