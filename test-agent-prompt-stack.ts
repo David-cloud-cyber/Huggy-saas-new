@@ -18,65 +18,82 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v18');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v26');
 
+// ── LAYER 0 — constitution guardrails present in every assembled prompt ───────
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
+  assert.ok(prompt.includes('LAYER 0 — CONSTITUTION'), 'every prompt must carry the constitution layer');
   assert.ok(prompt.includes('Never promise unlimited usage'), 'prompt must block unlimited usage claims');
-  assert.ok(prompt.includes('gross margin'), 'prompt must keep margin-sensitive language in safety/business context');
-  assert.ok(prompt.includes('Do not expose internal model policy'), 'prompt must hide internal stream/model details');
-  assert.ok(prompt.includes('Architect policy'), 'prompt must include Architect policy');
-  assert.ok(prompt.includes('Deep reasoning policy'), 'prompt must include deep reasoning policy');
-  assert.ok(prompt.includes('Do not expose hidden reasoning'), 'prompt must keep deep reasoning internal');
+  assert.ok(prompt.includes('gross margin'), 'prompt must keep margin-sensitive language in the constitution');
+  assert.ok(prompt.includes('No fake success'), 'prompt must enforce no-fake-success');
+  assert.ok(prompt.includes('service_role'), 'prompt must protect service_role keys');
+  assert.ok(prompt.includes('Do not expose internal model policy'), 'prompt must hide internal model/routing details');
 }
 
-assert.ok(textPrompt.includes('Sound like a calm senior engineer and product designer'), 'text prompt must include senior voice policy');
+// ── LAYER 1 — single routing taxonomy ────────────────────────────────────────
+for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
+  assert.ok(prompt.includes('LAYER 1 — ROUTING'), 'prompt must include the single routing layer');
+  assert.ok(prompt.includes('Words like create, add, generate, improve, fix, modify, arrange, or correct are not enough'), 'routing must resist keyword-only coding decisions');
+  assert.ok(prompt.includes('"Build or Plan?"'), 'routing must forbid generic Build-or-Plan questions');
+}
+
+// Router-only: lean composition (no execution/communication layers, has footer).
+assert.ok(routerPrompt.includes('JSON OUTPUT FOOTER'), 'router prompt must include the JSON footer');
+assert.ok(routerPrompt.includes('clarification_required'), 'router footer must list the intent taxonomy');
+assert.ok(!routerPrompt.includes('LAYER 2 — EXECUTION'), 'router prompt must stay lean (no execution layer)');
+
+// ── Chat prompt — LAYER 0–5, no generation/backend policy ────────────────────
+assert.ok(textPrompt.includes('LAYER 2 — EXECUTION'), 'chat prompt must include execution layer');
+assert.ok(textPrompt.includes('LAYER 3 — COMMUNICATION'), 'chat prompt must include communication layer');
+assert.ok(textPrompt.includes('LAYER 4 — REASONING'), 'chat prompt must include reasoning layer');
+assert.ok(textPrompt.includes('SELF-REVIEW (one gate'), 'chat prompt must include the single self-review gate');
 assert.ok(textPrompt.includes('answer naturally and directly'), 'conversation prompt must stay direct');
-assert.ok(generationPrompt.includes('Senior agent voice'), 'generation prompt must include senior voice policy');
-assert.ok(generationPrompt.toLowerCase().includes('return a complete modern react project structure'), 'generation prompt must prefer modern React app output');
-assert.ok(generationPrompt.includes('Never assume a global supabase variable'), 'generation prompt must forbid global Supabase auth clients');
-assert.ok(generationPrompt.includes('never call supabase.auth unless supabase is imported or created'), 'generation prompt must require an explicit auth client');
-assert.ok(generationPrompt.includes('show a safe demo/auth-unavailable state instead of crashing'), 'generation prompt must keep auth previews safe when config is missing');
-assert.ok(generationPrompt.includes('Generation stack v2 is mandatory'), 'generation prompt must include the strict generation stack v2 policy');
+assert.ok(!textPrompt.includes('Built-in AI Connector policy'), 'chat prompt must not carry generation/backend policy');
+assert.ok(!textPrompt.includes('Output contract:'), 'chat prompt must not carry the generation output contract');
+
+// ── Generation prompt — LAYER 0–5 + modules ──────────────────────────────────
+assert.ok(generationPrompt.includes('SELF-REVIEW (one gate'), 'generation prompt must include the single self-review gate');
+assert.ok(generationPrompt.includes('Generation-only context'), 'generation prompt must declare generation-only context');
+
+// File contract (one canonical spec).
+assert.ok(generationPrompt.includes('MODULE: GENERATION CONTRACT'), 'generation prompt must include the file contract module');
+assert.ok(generationPrompt.includes('Generation stack v2 is mandatory'), 'generation prompt must include the strict stack policy');
 assert.ok(generationPrompt.includes('React 18'), 'generation prompt must require React 18');
 assert.ok(generationPrompt.includes('lucide-react'), 'generation prompt must require lucide-react icons');
 assert.ok(generationPrompt.includes('tailwind.config.ts'), 'generation prompt must require Tailwind config');
 assert.ok(generationPrompt.includes('postcss.config.cjs'), 'generation prompt must require PostCSS config');
-assert.ok(generationPrompt.includes('src/lib/supabaseClient.ts'), 'generation prompt must require a browser-safe Supabase client for backend apps');
-assert.ok(routerPrompt.includes('Words like create, add, generate, improve, fix, modify, arrange, or correct are not enough'), 'router must resist keyword-only coding decisions');
-assert.ok(routerPrompt.includes('Figma, GitHub, Image, and Website URL'), 'router prompt must understand import sources');
-assert.ok(generationPrompt.includes('convert static frames into a real responsive app'), 'generation prompt must upgrade Figma frames into product UI');
-assert.ok(generationPrompt.includes('preserve the imported codebase'), 'generation prompt must preserve imported GitHub apps');
-assert.ok(generationPrompt.includes('recreate it as an editable responsive app'), 'generation prompt must handle screenshot imports');
-assert.ok(generationPrompt.includes('Never copy competitor logos'), 'generation prompt must keep URL imports safe and original');
-assert.ok(routerPrompt.includes('Senior Agent OS policy'), 'router prompt must include Senior Agent OS policy');
-assert.ok(textPrompt.includes('Senior Agent OS policy'), 'text prompt must include Senior Agent OS policy');
-assert.ok(generationPrompt.includes('Senior Agent OS policy'), 'generation prompt must include Senior Agent OS policy');
-assert.ok(generationPrompt.includes('The 16 blueprint sections are an internal completeness checklist'), 'generation prompt must use architect completeness checklist');
-assert.ok(generationPrompt.includes('No fake success'), 'generation prompt must enforce no-fake-success delivery');
-assert.ok(generationPrompt.includes('decompose tasks'), 'generation prompt must require task decomposition before execution');
-assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
-assert.ok(generationPrompt.includes('Universal product contract (binding)'), 'generation prompt must be driven by the universal product contract');
-assert.ok(generationPrompt.includes('Optional production architecture reference'), 'generation prompt may keep blueprints as optional engineering references');
-assert.ok(generationPrompt.includes('must never constrain the product shape'), 'blueprints must never constrain the requested product');
-assert.ok(generationPrompt.includes('Never invent user-facing data'), 'generation prompt must forbid invented user-facing records');
-assert.ok(generationPrompt.includes('Every private table needs RLS'), 'generation prompt must enforce private table RLS');
-assert.ok(generationPrompt.includes('A builder agent should not over-explain before acting'), 'generation prompt must keep builder behavior action-first');
-assert.ok(generationPrompt.includes('Never answer a clear build request with a generic plan'), 'generation prompt must reject generic plan detours for build requests');
-assert.ok(generationPrompt.includes('ask exactly one concise question'), 'generation prompt must keep clarification short');
-assert.ok(routerPrompt.includes('Do not ask "Build or Plan?"'), 'router prompt must forbid generic mode questions');
-assert.ok(generationPrompt.includes('Zero-bug generation contract'), 'generation prompt must include zero-bug generation contract');
 assert.ok(generationPrompt.includes('src/main.tsx must import React'), 'generation prompt must require a real Vite entrypoint');
 assert.ok(generationPrompt.includes('process.exit(isValid ? 0 : 1)'), 'generation prompt must require a non-throwing smoke test');
 assert.ok(generationPrompt.includes('Never generate throw new Error() inside src/App.tsx'), 'generation prompt must forbid runtime throw markers');
 assert.ok(generationPrompt.includes('Never output __HUGGY_FORCE_ERROR__'), 'generation prompt must forbid forced runtime failure markers');
 assert.ok(generationPrompt.includes('Huggy is a general web-app builder'), 'generation prompt must stay general-purpose');
-assert.ok(generationPrompt.includes('Recovery pass is mandatory'), 'generation prompt must require repair/retest before final delivery');
-assert.ok(generationPrompt.includes('Generated app design system policy'), 'generation prompt must include generated app design system policy');
-assert.ok(generationPrompt.includes('design tokens'), 'generation prompt must require design tokens');
-assert.ok(generationPrompt.includes('Avoid generic AI patterns'), 'generation prompt must reject generic AI aesthetics');
-assert.ok(generationPrompt.includes('Frontend craft policy'), 'generation prompt must include frontend craft policy');
-assert.ok(generationPrompt.includes('Touch targets must be at least 44x44px'), 'generation prompt must enforce touch target accessibility');
-assert.ok(generationPrompt.includes('prefers-reduced-motion'), 'generation prompt must respect reduced motion');
-assert.ok(generationPrompt.includes('Motion and polish policy'), 'generation prompt must include motion polish guidance');
+assert.ok(generationPrompt.toLowerCase().includes('return a complete modern react project structure'), 'generation prompt must prefer modern React output');
+
+// Backend & Cloud module (guardrails + AI connector contract).
+assert.ok(generationPrompt.includes('Never assume a global supabase variable'), 'generation prompt must forbid global Supabase clients');
+assert.ok(generationPrompt.includes('never call supabase.auth unless supabase is imported or created'), 'generation prompt must require an explicit auth client');
+assert.ok(generationPrompt.includes('show a safe demo/auth-unavailable state instead of crashing'), 'generation prompt must keep auth previews safe');
+assert.ok(generationPrompt.includes('src/lib/supabaseClient.ts'), 'generation prompt must reference a browser-safe Supabase client');
+assert.ok(generationPrompt.includes('Built-in AI Connector policy'), 'generation prompt must include the AI connector policy');
+assert.ok(generationPrompt.includes('text/event-stream'), 'generation prompt must require SSE streaming');
+assert.ok(generationPrompt.includes('must never contain provider API keys'), 'generation prompt must forbid frontend provider keys');
+assert.ok(generationPrompt.includes('HLS/DASH'), 'generation prompt must include media streaming guidance');
+assert.ok(generationPrompt.includes('Production-readiness policy'), 'generation prompt must include production-readiness policy');
+assert.ok(generationPrompt.includes('Every private table needs RLS'), 'generation prompt must enforce private table RLS');
+
+// Import module.
+assert.ok(generationPrompt.includes('MODULE: IMPORT'), 'generation prompt must include the import module');
+assert.ok(generationPrompt.includes('convert static frames into a real responsive app'), 'generation prompt must upgrade Figma frames');
+assert.ok(generationPrompt.includes('preserve the imported codebase'), 'generation prompt must preserve imported GitHub apps');
+assert.ok(generationPrompt.includes('recreate it as an editable responsive app'), 'generation prompt must handle screenshot imports');
+assert.ok(generationPrompt.includes('Never copy competitor logos'), 'generation prompt must keep URL imports original');
+
+// Product contract + blueprint context (kept).
+assert.ok(generationPrompt.includes('Universal product contract (binding)'), 'generation prompt must be driven by the universal product contract');
+assert.ok(generationPrompt.includes('Optional production architecture reference'), 'generation prompt may keep blueprints as optional references');
+assert.ok(generationPrompt.includes('must never constrain the product shape'), 'blueprints must never constrain the requested product');
+
+// Output contract.
+assert.ok(generationPrompt.includes('Output contract:'), 'generation prompt must include the JSON output contract');
 
 console.log('agent prompt stack ok');

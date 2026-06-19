@@ -23,6 +23,9 @@ const EXPECTED_ALLOWED_MODELS = [
   '~anthropic/claude-fable-latest',
   'anthropic/claude-opus-4.8',
   'anthropic/claude-opus-4.8-fast',
+  'moonshotai/kimi-k2.5',
+  'moonshotai/kimi-k2.6',
+  'moonshotai/kimi-k2.7-code',
 ] as const;
 
 async function runTests() {
@@ -128,6 +131,12 @@ async function runTests() {
   const fintechIntel = getPlatformIntelligence('fintech_billing');
   assert.equal(fintechIntel.trustLevel, 'critical');
   assert.ok(fintechIntel.requiredComponents.includes('transactions'));
+
+  // v26: classification is a hint, and the generic path is the richest fallback.
+  assert.ok(landingPolicy.systemPrompt.includes('CLASSIFICATION IS A HINT, NOT A CAGE'), 'design prompt must frame the platform type as a hint');
+  const genericPolicy = buildWorldClassUiPolicy({ prompt: 'build me something useful for my niche workflow' });
+  assert.equal(genericPolicy.appType, 'generic_web_app');
+  assert.ok(genericPolicy.systemPrompt.includes('GENERIC PRODUCT PATH'), 'generic apps must use the rich generic product path');
 
   console.log('Success: Adaptive world-class UI generation policy passed validation.');
   console.log('Tests completed.');
