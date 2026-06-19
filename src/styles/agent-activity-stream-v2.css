@@ -1,0 +1,175 @@
+/*
+ * Huggy Stream UI v2 — additive stylesheet for the new AI-elements:
+ *   diff-view, tool-call, and the enhanced code-block / terminal.
+ *
+ * Self-contained: it defines its own design tokens on each component root so it
+ * works whether or not the base agent-activity-stream.css is loaded, and it does
+ * NOT redefine the base `.haas` block (no conflict). Calm by default, one accent,
+ * status by a single dot/colour, motion limited to active rows.
+ */
+
+.haas-code,
+.haas-diff,
+.haas-tool,
+.haas-terminal {
+  --haas-accent: #3b82f6;
+  --haas-accent-soft: rgba(59, 130, 246, 0.12);
+  --haas-ok: #10b981;
+  --haas-fail: #ef4444;
+  --haas-warn: #f59e0b;
+  --haas-surface: rgba(255, 255, 255, 0.02);
+  --haas-surface-2: rgba(255, 255, 255, 0.04);
+  --haas-border: rgba(255, 255, 255, 0.08);
+  --haas-text: rgba(255, 255, 255, 0.92);
+  --haas-muted: rgba(255, 255, 255, 0.5);
+  --haas-dim: rgba(255, 255, 255, 0.35);
+  --haas-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --haas-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  margin: 8px 0;
+  border: 1px solid var(--haas-border);
+  border-radius: 12px;
+  background: var(--haas-surface);
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--haas-text);
+}
+
+@media (prefers-color-scheme: light) {
+  .haas-code,
+  .haas-diff,
+  .haas-tool,
+  .haas-terminal {
+    --haas-surface: rgba(15, 23, 42, 0.02);
+    --haas-surface-2: rgba(15, 23, 42, 0.04);
+    --haas-border: rgba(15, 23, 42, 0.1);
+    --haas-text: rgba(15, 23, 42, 0.92);
+    --haas-muted: rgba(15, 23, 42, 0.5);
+    --haas-dim: rgba(15, 23, 42, 0.35);
+  }
+}
+
+/* ── Shared animations ─────────────────────────────────────────────────── */
+@keyframes haas-spin { to { transform: rotate(360deg); } }
+@keyframes haas-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes haas-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes haas-dots { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+@keyframes haas-progress { 0% { left: -40%; } 100% { left: 100%; } }
+
+.haas-spin { animation: haas-spin 1s linear infinite; }
+
+.haas-typing-cursor {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--haas-accent);
+  animation: haas-blink 1s steps(1) infinite;
+}
+
+.haas-typing-dots { display: inline-flex; gap: 3px; align-items: center; }
+.haas-typing-dots span {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--haas-accent);
+  animation: haas-dots 1.2s ease-in-out infinite;
+}
+.haas-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.haas-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+/* ── Code block ────────────────────────────────────────────────────────── */
+.haas-code--streaming { border-color: var(--haas-accent); box-shadow: 0 0 0 1px var(--haas-accent-soft); }
+.haas-code-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: var(--haas-surface-2);
+  border-bottom: 1px solid var(--haas-border);
+  color: var(--haas-muted);
+}
+.haas-code-filename { font-family: var(--haas-mono); font-size: 12px; color: var(--haas-text); }
+.haas-code-copy {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 1px solid var(--haas-border); border-radius: 7px;
+  padding: 3px 8px; font-size: 11px; color: var(--haas-muted);
+  cursor: pointer; transition: background 120ms var(--haas-ease), color 120ms var(--haas-ease);
+}
+.haas-code-copy:hover { background: var(--haas-border); color: var(--haas-text); }
+.haas-code-copy--copied { color: var(--haas-ok); border-color: var(--haas-ok); }
+.haas-code-body {
+  margin: 0; padding: 12px;
+  font-family: var(--haas-mono); font-size: 12px; line-height: 1.55;
+  overflow-x: auto; white-space: pre;
+}
+
+/* ── Diff view ─────────────────────────────────────────────────────────── */
+.haas-diff-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: var(--haas-surface-2);
+  border-bottom: 1px solid var(--haas-border);
+  color: var(--haas-muted);
+}
+.haas-diff-filename { font-family: var(--haas-mono); font-size: 12px; color: var(--haas-text); }
+.haas-diff-actions { margin-left: auto; display: inline-flex; gap: 6px; }
+.haas-diff-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--haas-border); border-radius: 7px;
+  padding: 3px 9px; font-size: 11px; cursor: pointer;
+  background: none; color: var(--haas-text);
+  transition: background 120ms var(--haas-ease), border-color 120ms var(--haas-ease);
+}
+.haas-diff-btn--accept:hover { background: rgba(16, 185, 129, 0.12); border-color: var(--haas-ok); color: var(--haas-ok); }
+.haas-diff-btn--reject:hover { background: rgba(239, 68, 68, 0.12); border-color: var(--haas-fail); color: var(--haas-fail); }
+.haas-diff-status { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.haas-diff-status--accepted { color: var(--haas-ok); }
+.haas-diff-status--rejected { color: var(--haas-fail); }
+.haas-diff-body { margin: 0; padding: 8px 0; font-family: var(--haas-mono); font-size: 12px; line-height: 1.5; overflow-x: auto; }
+.haas-diff-line { padding: 0 12px; white-space: pre; }
+.haas-diff-line--add { background: rgba(16, 185, 129, 0.1); color: var(--haas-ok); }
+.haas-diff-line--del { background: rgba(239, 68, 68, 0.1); color: var(--haas-fail); }
+.haas-diff-line--ctx { color: var(--haas-muted); }
+
+/* ── Tool call card ────────────────────────────────────────────────────── */
+.haas-tool { position: relative; }
+.haas-tool-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 9px 11px; background: none; border: none; cursor: pointer;
+  color: var(--haas-text); font: inherit; font-size: 13px; text-align: left;
+}
+.haas-tool-head:hover { background: var(--haas-surface-2); }
+.haas-tool-icon { display: inline-flex; color: var(--haas-muted); }
+.haas-tool-icon--active { color: var(--haas-accent); }
+.haas-tool-icon--done { color: var(--haas-ok); }
+.haas-tool-icon--failed { color: var(--haas-fail); }
+.haas-tool-name { font-weight: 600; }
+.haas-tool-detail { font-family: var(--haas-mono); font-size: 12px; color: var(--haas-muted); }
+.haas-tool-chevron { color: var(--haas-dim); transition: transform 200ms var(--haas-ease); }
+.haas-tool-body {
+  padding: 8px 12px 12px; border-top: 1px solid var(--haas-border);
+  font-family: var(--haas-mono); font-size: 12px; color: var(--haas-muted);
+  white-space: pre-wrap; word-break: break-word;
+  animation: haas-fade-in 160ms var(--haas-ease) both;
+}
+.haas-tool-progress { position: relative; height: 2px; overflow: hidden; background: var(--haas-border); }
+.haas-tool-progress-bar {
+  position: absolute; top: 0; height: 100%; width: 40%;
+  background: var(--haas-accent); animation: haas-progress 1.2s var(--haas-ease) infinite;
+}
+
+/* ── Terminal block ────────────────────────────────────────────────────── */
+.haas-terminal-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; background: var(--haas-surface-2);
+  border-bottom: 1px solid var(--haas-border); color: var(--haas-muted); font-size: 12px;
+}
+.haas-terminal-body { padding: 10px 12px; font-family: var(--haas-mono); font-size: 12px; line-height: 1.55; }
+.haas-terminal-cmd { color: var(--haas-text); }
+.haas-terminal-prompt { color: var(--haas-accent); margin-right: 8px; user-select: none; }
+.haas-terminal-output { margin-top: 6px; color: var(--haas-muted); white-space: pre-wrap; word-break: break-word; }
+
+/* ── Reduced motion ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .haas-spin,
+  .haas-typing-cursor,
+  .haas-typing-dots span,
+  .haas-tool-progress-bar { animation: none !important; }
+  .haas-tool-progress-bar { left: 0; width: 100%; opacity: 0.4; }
+}
