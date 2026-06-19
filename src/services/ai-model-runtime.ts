@@ -121,6 +121,7 @@ const PROVIDER_ADAPTERS: Record<ModelProvider, RuntimeProviderAdapter> = {
   openai: 'openai',
   google: 'gemini',
   deepseek: 'deepseek',
+  moonshotai: 'openrouter',
 };
 
 function asRuntimeStrength(value: string | undefined): RuntimeStrength {
