@@ -672,6 +672,377 @@
       cursor: pointer;
     }
 
+    .brand-topbar.lovable-builder-topbar {
+      height: 62px;
+      grid-template-columns: minmax(420px, 1fr) minmax(360px, auto) minmax(310px, 1fr);
+      gap: 16px;
+      padding: 0 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 92%, #000 8%), color-mix(in srgb, var(--bg) 90%, #000 10%));
+      border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-blue) 12%, transparent) inset;
+    }
+
+    :root[data-theme="light"] .brand-topbar.lovable-builder-topbar {
+      background: #ffffff;
+      border-bottom-color: rgba(9, 9, 11, .08);
+      box-shadow: 0 1px 0 rgba(9, 9, 11, .04) inset;
+    }
+
+    .lovable-topbar-left,
+    .lovable-topbar-actions {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .lovable-topbar-left {
+      justify-content: flex-start;
+      gap: 12px;
+    }
+
+    .lovable-left-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .lovable-topbar-center {
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .lovable-topbar-actions {
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .project-mini-trigger {
+      max-width: 220px;
+      height: 38px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 8px 0 0;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 150ms cubic-bezier(.22,1,.36,1), color 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .project-mini-trigger:hover,
+    .project-mini-trigger[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--text) 5%, transparent);
+    }
+
+    .project-mini-trigger .brand-logo {
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      border-radius: 9px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.18) inset;
+    }
+
+    .project-mini-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13.5px;
+      font-weight: 720;
+      letter-spacing: -.025em;
+    }
+
+    .lovable-nav-icon-btn,
+    .brand-topbar .collapse-sidebar-arrow {
+      width: 36px;
+      height: 36px;
+      min-width: 36px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      cursor: pointer;
+      transition: color 150ms cubic-bezier(.22,1,.36,1), background 150ms cubic-bezier(.22,1,.36,1), transform 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .lovable-nav-icon-btn:hover,
+    .brand-topbar .collapse-sidebar-arrow:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 7%, transparent);
+      transform: translateY(-1px);
+    }
+
+    .lovable-nav-icon-btn svg,
+    .brand-topbar .collapse-sidebar-arrow svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .brand-topbar .sub-nav-tabs {
+      height: 42px;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 82%, #000 8%);
+      border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+      overflow: visible;
+    }
+
+    :root[data-theme="light"] .brand-topbar .sub-nav-tabs {
+      background: #ffffff;
+      border-color: rgba(9, 9, 11, .10);
+      box-shadow: 0 1px 0 rgba(9, 9, 11, .04) inset, 0 10px 28px rgba(9, 9, 11, .06);
+    }
+
+    .brand-topbar .sub-nav-tab {
+      height: 32px;
+      min-width: 32px;
+      gap: 7px;
+      padding: 0 11px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 760;
+      letter-spacing: -.025em;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .brand-topbar .sub-nav-tab svg {
+      width: 17px;
+      height: 17px;
+      opacity: .94;
+    }
+
+    .brand-topbar .sub-nav-tab:hover:not(.active) {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 6%, transparent);
+    }
+
+    .brand-topbar .sub-nav-tab.active,
+    .brand-topbar .builder-more-trigger.active,
+    .brand-topbar .builder-more-wrapper.open .builder-more-trigger {
+      color: #b8d0ff;
+      background: linear-gradient(180deg, rgba(48, 91, 190, .72), rgba(35, 69, 165, .88));
+      border-color: rgba(111, 150, 255, .58);
+      box-shadow:
+        0 0 0 1px rgba(86, 124, 255, .22),
+        0 0 22px rgba(59, 130, 246, .28),
+        0 1px 0 rgba(255,255,255,.16) inset;
+    }
+
+    .brand-topbar .builder-more-trigger {
+      width: 34px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-topbar .topbar-code-tab:not(.active) span {
+      display: none;
+    }
+
+    .lovable-tab-separator {
+      width: 1px;
+      height: 20px;
+      margin: 0 4px;
+      background: color-mix(in srgb, var(--text) 12%, transparent);
+      flex: 0 0 auto;
+    }
+
+    .brand-topbar .builder-more-menu {
+      top: calc(100% + 12px);
+      left: auto;
+      right: 0;
+      width: min(300px, calc(100vw - 24px));
+      transform: translateY(-4px) scale(.98);
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+      border-color: color-mix(in srgb, var(--text) 10%, transparent);
+    }
+
+    :root[data-theme="light"] .brand-topbar .builder-more-menu {
+      background: rgba(255,255,255,.96);
+      border-color: rgba(9,9,11,.10);
+    }
+
+    .brand-topbar .builder-more-wrapper.open .builder-more-menu {
+      transform: translateY(0) scale(1);
+    }
+
+    .brand-topbar .builder-more-item {
+      min-height: 44px;
+      border-radius: 15px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+    }
+
+    .brand-topbar .preview-toolbar-controls {
+      height: 42px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand-topbar .preview-toolbar-controls .preview-address-row {
+      display: none !important;
+    }
+
+    .brand-topbar .preview-device-toggle {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .brand-topbar .preview-device-trigger,
+    .brand-topbar .preview-refresh-btn,
+    .brand-topbar .preview-external-btn {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      box-shadow: none;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      transition: color 150ms cubic-bezier(.22,1,.36,1), background 150ms cubic-bezier(.22,1,.36,1), transform 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .brand-topbar .preview-device-trigger:hover,
+    .brand-topbar .preview-device-trigger[aria-expanded="true"],
+    .brand-topbar .preview-refresh-btn:hover,
+    .brand-topbar .preview-external-btn:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 7%, transparent);
+      transform: translateY(-1px);
+    }
+
+    .brand-topbar .preview-device-trigger-label {
+      display: none !important;
+    }
+
+    .brand-topbar .preview-device-trigger svg,
+    .brand-topbar .preview-refresh-btn svg,
+    .brand-topbar .preview-external-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke-width: 2.2;
+    }
+
+    .preview-page-selector {
+      height: 40px;
+      min-width: min(360px, 28vw);
+      max-width: 420px;
+      padding: 0 16px;
+      border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 82%, #000 8%);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      font-size: 14px;
+      font-weight: 780;
+      letter-spacing: -.02em;
+      white-space: nowrap;
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+      cursor: default;
+    }
+
+    :root[data-theme="light"] .preview-page-selector {
+      background: #ffffff;
+      border-color: rgba(9, 9, 11, .10);
+      box-shadow: 0 10px 26px rgba(9, 9, 11, .05);
+    }
+
+    .preview-page-selector svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-sub);
+    }
+
+    .btn-share,
+    .btn-upgrade,
+    .btn-publish {
+      height: 40px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 780;
+      letter-spacing: -.025em;
+      border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+      cursor: pointer;
+      transition: transform 140ms cubic-bezier(.22,1,.36,1), filter 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), box-shadow 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .btn-share {
+      background: color-mix(in srgb, var(--bg-surface) 86%, #000 8%);
+      color: var(--text);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+    }
+
+    .btn-share:hover {
+      background: color-mix(in srgb, var(--text) 8%, var(--bg-surface));
+      transform: translateY(-1px);
+    }
+
+    .brand-topbar .btn-upgrade {
+      border-color: color-mix(in srgb, var(--accent-blue) 58%, transparent);
+      background: linear-gradient(180deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
+      color: #fff;
+      box-shadow: 0 12px 28px color-mix(in srgb, var(--accent-blue) 26%, transparent), 0 1px 0 rgba(255,255,255,.24) inset;
+    }
+
+    .brand-topbar .btn-upgrade svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .brand-topbar .btn-publish {
+      border-color: rgba(96, 165, 250, .60);
+      background: linear-gradient(180deg, #3b82f6, #2563eb);
+      color: #fff;
+      box-shadow: 0 12px 28px rgba(37,99,235,.26), 0 1px 0 rgba(255,255,255,.22) inset;
+    }
+
+    .btn-share:active,
+    .brand-topbar .btn-upgrade:active,
+    .brand-topbar .btn-publish:active {
+      transform: scale(.98);
+    }
+
+    .brand-topbar .avatar-circle {
+      width: 38px;
+      height: 38px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,.15);
+      background: linear-gradient(135deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+
     /* Pricing Modal Styling */
     .pricing-modal-overlay {
       position: fixed;
@@ -3196,6 +3567,120 @@
       .analysis-chart-card { padding: 14px; }
       .analysis-seo-checks { grid-template-columns: 1fr; }
     }
+
+    /* Final toolbar compatibility: the builder now uses one Lovable-like topbar. */
+    @media (max-width: 1180px) {
+      .brand-topbar.lovable-builder-topbar {
+        grid-template-columns: minmax(300px, 1fr) minmax(260px, auto) auto;
+        gap: 10px;
+      }
+
+      .project-mini-name {
+        max-width: 120px;
+      }
+
+      .preview-page-selector {
+        min-width: 220px;
+      }
+
+      .btn-share {
+        display: none;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .brand-topbar.lovable-builder-topbar {
+        height: 58px !important;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 0 10px !important;
+      }
+
+      .project-mini-name,
+      .lovable-topbar-center,
+      .brand-topbar .avatar-circle {
+        display: none !important;
+      }
+
+      .lovable-topbar-left {
+        gap: 8px !important;
+      }
+
+      .brand-topbar .sub-nav-tabs {
+        max-width: calc(100vw - 184px) !important;
+        overflow-x: auto !important;
+      }
+
+      .brand-topbar .sub-nav-tab {
+        height: 30px !important;
+        padding: 0 9px !important;
+        font-size: 12px !important;
+      }
+
+      .brand-topbar .btn-upgrade {
+        display: none !important;
+      }
+
+      .brand-topbar .btn-publish {
+        height: 36px !important;
+        padding: 0 13px !important;
+        font-size: 13px !important;
+      }
+
+      .workspace-body[data-mobile-view="preview"] .editor-pane,
+      .workspace-body[data-mobile-view="code"] .editor-pane {
+        padding-top: 0 !important;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .brand-topbar.lovable-builder-topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .project-mini-trigger {
+        display: none !important;
+      }
+
+      .lovable-nav-icon-btn,
+      .brand-topbar .collapse-sidebar-arrow {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+      }
+
+      .brand-topbar .sub-nav-tabs {
+        max-width: calc(100vw - 126px) !important;
+        height: 38px !important;
+      }
+
+      .brand-topbar .sub-nav-tab span,
+      .lovable-tab-separator {
+        display: none !important;
+      }
+
+      .brand-topbar .sub-nav-tab {
+        width: 30px !important;
+        min-width: 30px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+      }
+
+      .brand-topbar .btn-publish {
+        width: 38px !important;
+        padding: 0 !important;
+        color: transparent !important;
+        position: relative;
+      }
+
+      .brand-topbar .btn-publish::after {
+        content: "";
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: #fff;
+        position: absolute;
+      }
+    }
   </style>
 </head>
 <body>
@@ -3203,43 +3688,31 @@
   <div class="app-workspace">
 
     <!-- ── BRANDED NAVBAR ──────────────────────────────────────── -->
-    <header class="brand-topbar">
-      <div class="brand-left">
-        <span class="brand-title" style="display: flex; align-items: center; gap: 8px;">
-          <!-- SVG logo of Huggy -->
-          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" class="brand-logo">
+    <header class="brand-topbar lovable-builder-topbar" aria-label="Huggy builder toolbar">
+      <div class="brand-left lovable-topbar-left" id="builder-topbar-left">
+        <button class="lovable-icon-btn project-mini-trigger" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Project menu">
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none" class="brand-logo" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
             <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#1c1c1c"/>
             <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#1c1c1c"/>
             <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#1c1c1c"/>
           </svg>
-          <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
-          <span class="brand-sep">/</span>
-          <button class="project-selector" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
-            <span id="project-name">Untitled app</span>
-            <svg style="color: var(--text-sub); margin-left:2px;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-        </span>
+          <span id="project-name" class="project-mini-name">Untitled app</span>
+        </button>
+        <div class="lovable-left-tools" id="builder-topbar-center" aria-label="Builder views"></div>
       </div>
 
-      <div class="brand-center" id="builder-topbar-center" aria-label="Builder views"></div>
+      <div class="brand-center lovable-topbar-center" id="builder-topbar-preview-tools" aria-label="Preview tools"></div>
 
-      <div class="brand-right">
-        <div class="brand-preview-tools" id="builder-topbar-preview-tools" aria-label="Preview tools"></div>
-        <button class="btn-integration" id="btn-connectors" type="button" aria-haspopup="dialog">
-          <svg style="color: var(--text-sub);" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="7" cy="7" r="3"></circle>
-            <circle cx="17" cy="7" r="3"></circle>
-            <circle cx="7" cy="17" r="3"></circle>
-            <path d="M10 7h4"></path>
-            <path d="M7 10v4"></path>
-            <path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
+      <div class="brand-right lovable-topbar-actions">
+        <span class="avatar-circle" id="builder-user-avatar" aria-hidden="true">H</span>
+        <button class="btn-share" id="btn-share-project" type="button" aria-label="Share project">Share</button>
+        <button class="btn-upgrade" id="btn-upgrade" type="button" aria-label="Upgrade plan">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z"></path>
           </svg>
-          Connecteur
+          Upgrade
         </button>
-        <button class="btn-upgrade">Upgrade plan</button>
         <button class="btn-publish" type="button">Publish</button>
       </div>
     </header>
@@ -3444,66 +3917,70 @@
       <!-- Control tab row for the right preview/code workspace -->
       <header class="sub-navbar">
           <div class="sub-nav-left">
-            <button class="collapse-sidebar-arrow" type="button" title="Collapse left sidebar" aria-label="Collapse left sidebar" aria-expanded="true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="11 17 6 12 11 7"/>
-                <polyline points="18 17 13 12 18 7"/>
+            <button class="lovable-nav-icon-btn" id="builder-history-shortcut" type="button" data-open-history title="History" aria-label="History and rollback">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+                <path d="M3 4v5h5"></path>
+                <path d="M12 7v5l3 2"></path>
+              </svg>
+            </button>
+            <button class="collapse-sidebar-arrow lovable-nav-icon-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                <path d="M9 5v14"></path>
               </svg>
             </button>
             
-            <div class="sub-nav-tabs">
-              <button class="sub-nav-tab active" id="tab-btn-preview">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
+            <div class="sub-nav-tabs" aria-label="Builder views">
+              <button class="sub-nav-tab active" id="tab-btn-preview" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="2" y1="12" x2="22" y2="12"></line>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
-                Preview
+                <span>Preview</span>
               </button>
-              <button class="sub-nav-tab" id="tab-btn-code">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-                  <polyline points="16 18 22 12 16 6"></polyline>
-                  <polyline points="8 6 2 12 8 18"></polyline>
+              <button class="sub-nav-tab topbar-code-tab" id="tab-btn-code" type="button" aria-label="Code">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"></path>
+                  <path d="M14 2v5h5"></path>
+                  <path d="m10 13-2 2 2 2"></path>
+                  <path d="m14 17 2-2-2-2"></path>
                 </svg>
-                Code
+                <span>Code</span>
               </button>
-              <button class="sub-nav-tab" id="tab-btn-database">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-                  <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
-                  <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
-                  <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
-                </svg>
-                Database
-              </button>
+              <span class="lovable-tab-separator" aria-hidden="true"></span>
               <div class="builder-more-wrapper" id="builder-more-wrapper">
-                <button class="sub-nav-tab builder-more-trigger" id="tab-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="builder-more-menu">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.9;">
-                    <path d="M12 3l7 4v7c0 4-3 6.5-7 7-4-.5-7-3-7-7V7l7-4Z"></path>
-                    <path d="M9 10h6"></path>
-                    <path d="M9 14h4"></path>
+                <button class="sub-nav-tab builder-more-trigger" id="tab-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="builder-more-menu" aria-label="More">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="5" r="1"></circle>
+                    <circle cx="12" cy="12" r="1"></circle>
+                    <circle cx="12" cy="19" r="1"></circle>
                   </svg>
-                  More
                 </button>
                 <div class="builder-more-menu" id="builder-more-menu" role="menu" aria-label="More builder tools">
-                  <button class="builder-more-item" id="tab-btn-analysis" type="button" role="menuitem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <line x1="18" y1="20" x2="18" y2="10"></line>
-                      <line x1="12" y1="20" x2="12" y2="4"></line>
-                      <line x1="6" y1="20" x2="6" y2="14"></line>
-                    </svg>
-                    Analytics
-                  </button>
-                  <button class="builder-more-item" type="button" role="menuitem" data-open-history>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path>
-                    </svg>
-                    History & rollback
-                  </button>
                   <button class="builder-more-item" type="button" role="menuitem" data-open-connectors>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <circle cx="7" cy="7" r="3"></circle><circle cx="17" cy="7" r="3"></circle><circle cx="7" cy="17" r="3"></circle><path d="M10 7h4"></path><path d="M7 10v4"></path>
+                      <circle cx="7" cy="7" r="3"></circle><circle cx="17" cy="7" r="3"></circle><circle cx="7" cy="17" r="3"></circle><path d="M10 7h4"></path><path d="M7 10v4"></path><path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
                     </svg>
-                    Cloud
+                    Connectors
+                  </button>
+                  <button class="builder-more-item" id="tab-btn-database" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                      <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
+                      <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
+                    </svg>
+                    Database / Cloud
+                  </button>
+                  <button class="builder-more-item" id="tab-btn-analysis" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 20h18"></path>
+                      <path d="M6 16V9"></path>
+                      <path d="M12 16V4"></path>
+                      <path d="M18 16v-6"></path>
+                    </svg>
+                    Analytics
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3522,6 +3999,24 @@
                       <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
                     </svg>
                     SEO & AI search <span class="builder-more-soon">Soon</span>
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-open-history>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path>
+                    </svg>
+                    History / Rollback
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-trigger-visual-edit>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                    Visual edit
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-trigger-download>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path>
+                    </svg>
+                    Download code
                   </button>
                 </div>
               </div>
@@ -3576,6 +4071,19 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                   <path d="M21 3v6h-6"></path>
+                </svg>
+              </button>
+              <button class="preview-page-selector" id="preview-page-selector" type="button" aria-label="Preview page selector">
+                <span id="preview-page-label">Homepage</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </button>
+              <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Open preview in a new tab" title="Open preview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M15 3h6v6"></path>
+                  <path d="M10 14 21 3"></path>
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                 </svg>
               </button>
             </div>
@@ -3826,20 +4334,57 @@
       const topbarCenter = document.getElementById("builder-topbar-center");
       const topbarPreviewTools = document.getElementById("builder-topbar-preview-tools");
       const subNavTabs = document.querySelector(".sub-nav-tabs");
+      const historyShortcut = document.getElementById("builder-history-shortcut");
       const collapseSidebarButton = document.querySelector(".collapse-sidebar-arrow");
       const previewToolbarControls = document.querySelector(".preview-toolbar-controls");
       const visualEditButton = document.getElementById("btn-visual-edit");
       const downloadButton = document.getElementById("action-download-zip");
 
       if (topbarCenter && subNavTabs) {
+        if (historyShortcut) topbarCenter.appendChild(historyShortcut);
         if (collapseSidebarButton) topbarCenter.appendChild(collapseSidebarButton);
         topbarCenter.appendChild(subNavTabs);
       }
       if (topbarPreviewTools) {
         if (previewToolbarControls) topbarPreviewTools.appendChild(previewToolbarControls);
-        if (visualEditButton) topbarPreviewTools.appendChild(visualEditButton);
-        if (downloadButton) topbarPreviewTools.appendChild(downloadButton);
       }
+
+      document.getElementById("btn-share-project")?.addEventListener("click", async () => {
+        const shareUrl = window.location.href;
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: "Huggy project", url: shareUrl });
+            return;
+          }
+          await navigator.clipboard.writeText(shareUrl);
+          document.dispatchEvent(new CustomEvent("huggy:toast", { detail: { message: "Project link copied" } }));
+        } catch {
+          try { await navigator.clipboard.writeText(shareUrl); } catch { /* ignore */ }
+        }
+      });
+
+      document.getElementById("btn-preview-external")?.addEventListener("click", () => {
+        const frame = document.getElementById("preview-iframe-element");
+        const iframe = frame instanceof HTMLIFrameElement ? frame : null;
+        if (iframe?.src && iframe.src !== "about:blank") {
+          window.open(iframe.src, "_blank", "noopener,noreferrer");
+          return;
+        }
+        const doc = iframe?.srcdoc || "";
+        if (!doc.trim()) return;
+        const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+        if (!previewWindow) return;
+        previewWindow.document.open();
+        previewWindow.document.write(doc);
+        previewWindow.document.close();
+      });
+
+      document.querySelectorAll("[data-open-history]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          document.getElementById("project-menu-history")?.click();
+        });
+      });
 
       const moreWrapper = document.getElementById("builder-more-wrapper");
       const moreTrigger = document.getElementById("tab-btn-more");
@@ -3866,6 +4411,14 @@
         if (item.hasAttribute("data-open-history")) {
           event.preventDefault();
           document.getElementById("project-menu-history")?.click();
+        }
+        if (item.hasAttribute("data-trigger-visual-edit")) {
+          event.preventDefault();
+          visualEditButton?.click();
+        }
+        if (item.hasAttribute("data-trigger-download")) {
+          event.preventDefault();
+          downloadButton?.click();
         }
       });
       document.addEventListener("click", (event) => {

@@ -4543,7 +4543,7 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
   const moreTrigger = document.getElementById('tab-btn-more');
   const moreWrapper = document.getElementById('builder-more-wrapper');
   if (moreTrigger) {
-    moreTrigger.classList.toggle('active', view === 'analysis');
+    moreTrigger.classList.toggle('active', view === 'analysis' || view === 'database');
     moreTrigger.setAttribute('aria-expanded', 'false');
   }
   moreWrapper?.classList.remove('open');
