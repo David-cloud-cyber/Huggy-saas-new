@@ -1338,8 +1338,23 @@ function streamPartCompareText(value = "") {
     .trim();
 }
 
-function sanitizeStreamNarrationText(value = "") {
-  const raw = String(value || "").replace(/\s+/g, " ").trim();
+function sanitizeStreamNarrationText(value = ""): string {
+  const source = String(value || "").trim();
+  const sourceLines = source.split(/\r?\n+/).map(line => line.trim()).filter(Boolean);
+  if (sourceLines.length > 1) {
+    const seen = new Set<string>();
+    return sourceLines
+      .map(line => sanitizeStreamNarrationText(line))
+      .filter(Boolean)
+      .filter(line => {
+        const key = streamPartCompareText(line);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join("\n");
+  }
+  const raw = source.replace(/\s+/g, " ").trim();
   if (!raw) return "";
   if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) {
     return "Je commence par cadrer le résultat attendu avant de toucher au projet.";
@@ -1380,6 +1395,24 @@ function sanitizeStreamNarrationText(value = "") {
   if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|pipeline)\b/i.test(raw)) return "";
   if (/^\s*(done|working|processing|loading|analyzing)\.?\s*$/i.test(raw)) return "";
   return raw;
+}
+
+function richStreamPartDedupeKey(part: HuggyMessagePart) {
+  if (part.type === "file_edit") {
+    return streamPartCompareText(`file ${part.path || ""} ${part.action || ""} ${part.additions || 0} ${part.deletions || 0}`);
+  }
+  if (part.type === "terminal" || part.type === "command") {
+    return streamPartCompareText(`terminal ${part.command || part.text || ""} ${part.status || ""}`);
+  }
+  const items = Array.isArray(part.items) ? part.items : [];
+  return streamPartCompareText([
+    part.text,
+    part.detail,
+    part.result,
+    part.output,
+    part.name,
+    ...items,
+  ].map(item => String(item || "").trim()).filter(Boolean).join(" "));
 }
 
 function sanitizeRichStreamPart(part: HuggyMessagePart): HuggyMessagePart | null {
@@ -1518,7 +1551,7 @@ function renderRichMessageParts(message: HuggyConversationMessage) {
     .map(sanitizeRichStreamPart)
     .filter((part): part is HuggyMessagePart => {
       if (!part) return false;
-      const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""} ${part.result || ""}`);
+      const normalized = richStreamPartDedupeKey(part);
       if (!normalized || normalized === "i keep the work recoverable without claiming a false ready preview") return false;
       if (seen.has(normalized)) return false;
       seen.add(normalized);

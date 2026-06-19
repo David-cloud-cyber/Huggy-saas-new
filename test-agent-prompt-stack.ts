@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   HUGGY_AGENT_PROMPT_VERSION,
+  MODE_SELECTION_PROMPT,
   buildAgentTextSystemPrompt,
   buildGenerationSystemPrompt,
   buildIntentRouterSystemPrompt,
@@ -26,7 +27,7 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v23');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v25');
 assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v2');
 assert.equal(HUGGY_COMMUNICATION_PROTOCOL_VERSION, 'huggy-communication-protocol-v2');
 assert.equal(HUGGY_UNIVERSAL_BUILDER_PROMPT_VERSION, 'huggy-universal-builder-prompt-v1');
@@ -63,7 +64,22 @@ for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {
   assert.ok(prompt.includes('When a generated app requires a backend'), 'every prompt must include auto-provisioned infrastructure rules');
   assert.ok(prompt.includes('A backend is usable only after a real ready state'), 'every prompt must prevent fake backend readiness');
   assert.ok(prompt.includes('A clear app creation request should trigger generation'), 'every prompt must enforce action-first generation');
+  assert.ok(prompt.includes('AUTONOMOUS MODE SELECTION - DECIDE BEFORE ACTING'), 'every prompt must include autonomous mode selection');
+  assert.ok(prompt.includes('CLARITY'), 'every prompt must evaluate clarity before action');
+  assert.ok(prompt.includes('REVERSIBILITY'), 'every prompt must evaluate reversibility before action');
+  assert.ok(prompt.includes('ACTIONABILITY TREE'), 'every prompt must include the autonomous actionability tree');
+  assert.ok(prompt.includes('Scope touches > 5 files'), 'every prompt must plan before large scope changes');
+  assert.ok(prompt.includes('Ask 1-3 questions MAX'), 'every prompt must cap blocker questions');
+  assert.ok(prompt.includes('OVERRIDE HIERARCHY'), 'every prompt must include override priority');
+  assert.ok(prompt.includes('ALL GREEN means BUILD'), 'every prompt must include the autonomous go/no-go rule');
+  assert.ok(prompt.includes('The mode is never declared, it is revealed through behavior'), 'every prompt must keep modes internal');
 }
+
+assert.ok(MODE_SELECTION_PROMPT.includes('DISCUSS leads to PLAN'), 'mode prompt must include transitions');
+assert.ok(MODE_SELECTION_PROMPT.includes('Never print DISCUSS, PLAN, BUILD, ASK'), 'mode prompt must forbid exposing internal modes');
+assert.ok(MODE_SELECTION_PROMPT.includes('If the user says "go", "do it", "vas-y", "ok", "applique", or "continue"'), 'mode prompt must auto-build after confirmation');
+assert.ok(MODE_SELECTION_PROMPT.includes('Never silently make destructive choices'), 'mode prompt must stop before destructive choices');
+assert.ok(MODE_SELECTION_PROMPT.includes('Plan/Build UI toggle, only as a tiebreaker'), 'mode prompt must not depend on UI toggles');
 
 assert.equal(validatePublicNarrationBeat('Je reconstruis la preview avant de livrer.').ok, true);
 assert.equal(validatePublicNarrationBeat('Let me think about how to inspect the project first.').ok, false);

@@ -4538,8 +4538,15 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
     node.style.display = name === view ? (view === 'code' ? 'grid' : 'flex') : 'none';
     node.setAttribute('aria-hidden', name === view ? 'false' : 'true');
   });
-  document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('.sub-nav-tab, .builder-more-item').forEach(tab => tab.classList.remove('active'));
   document.getElementById(`tab-btn-${view}`)?.classList.add('active');
+  const moreTrigger = document.getElementById('tab-btn-more');
+  const moreWrapper = document.getElementById('builder-more-wrapper');
+  if (moreTrigger) {
+    moreTrigger.classList.toggle('active', view === 'analysis');
+    moreTrigger.setAttribute('aria-expanded', 'false');
+  }
+  moreWrapper?.classList.remove('open');
   if (view === 'database') void loadDatabase();
   if (view === 'analysis') {
     void loadAnalysis();
@@ -5132,6 +5139,27 @@ function semanticJournalKey(value: string) {
   }
   if (/\b(je prepare le travail|huggy prepare le travail|preparing the work)\b/.test(key)) {
     return 'goal_framed';
+  }
+  if (/\b(je commence par cadrer le resultat attendu avant de toucher au projet)\b/.test(key)) {
+    return 'goal_framed';
+  }
+  if (/\b(je repere les parties du projet qui peuvent influencer ce changement)\b/.test(key)) {
+    return 'project_influence_scan';
+  }
+  if (/\b(je verifie les angles importants en une seule passe pour eviter les oublis)\b/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/\b(les points de vigilance sont clairs je passe a la generation)\b/.test(key)) {
+    return 'specialist_context_checked_done';
+  }
+  if (/\b(je recupere le contexte utile pour rester coherent avec le projet)\b/.test(key)) {
+    return 'project_context_loaded';
+  }
+  if (/\b(j aligne les couleurs l espacement et la typographie avec l existant)\b/.test(key)) {
+    return 'visual_style_aligned';
+  }
+  if (/\b(je precise le brief pour construire quelque chose de concret)\b/.test(key)) {
+    return 'brief_made_concrete';
   }
   if (/\b(draft recuperable|recoverable draft|work recoverable|false ready preview|preview reste en attente)\b/.test(key)) {
     return 'recoverable_draft_preview_waiting';
