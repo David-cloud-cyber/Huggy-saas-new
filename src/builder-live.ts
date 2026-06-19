@@ -281,7 +281,7 @@ let mediaSettings: MediaSettings = {
 };
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
-let currentProjectName = 'Untitled app';
+let currentProjectName = 'Projet sans titre';
 let initialBuilderHandoff: { prompt: string; mode: ChatMode; importContext?: Record<string, unknown>; source?: string; shouldAutoRun?: boolean } | null = null;
 let initialGenerationStarted = false;
 let analysisPollTimer: number | null = null;
@@ -1574,7 +1574,7 @@ function bindSharedModelSelectionEvents() {
 
 function displayProjectName(value?: string) {
   const clean = String(value || '').trim();
-  return clean || 'Untitled app';
+  return clean || 'Projet sans titre';
 }
 
 function projectInitial(value?: string) {
@@ -3350,6 +3350,15 @@ function ensureToolbar() {
       void openPublishPanel();
     });
   });
+
+  const shareBtn = document.getElementById('btn-share-project') as HTMLButtonElement | null;
+  if (shareBtn && shareBtn.dataset.shareBound !== 'true') {
+    shareBtn.dataset.shareBound = 'true';
+    shareBtn.addEventListener('click', event => {
+      event.preventDefault();
+      void shareProjectLink(shareBtn);
+    });
+  }
 }
 
 function publishPrimaryLabel(status: PublishStatusPayload | null) {
@@ -3585,6 +3594,46 @@ async function openPublishPanel() {
     renderPublishPanel(payload);
   } catch (error) {
     renderPublishPanel(null, false, error instanceof Error ? error.message : 'Unable to load publish status.');
+  }
+}
+
+async function shareProjectLink(button: HTMLButtonElement) {
+  const label = button.querySelector('.btn-share-label') as HTMLElement | null;
+  const fallbackText = button.textContent?.trim() || 'Partager';
+  const original = label?.textContent || fallbackText;
+  const setLabel = (text: string) => {
+    if (label) label.textContent = text;
+    else button.textContent = text;
+  };
+  const flash = (text: string, copied: boolean) => {
+    setLabel(text);
+    button.classList.toggle('is-copied', copied);
+    window.setTimeout(() => {
+      setLabel(original);
+      button.classList.remove('is-copied');
+      button.disabled = false;
+    }, 1800);
+  };
+
+  if (!currentProjectId) {
+    flash("Publiez d'abord", false);
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
+    const status = payload?.publish || null;
+    const hasLiveDeployment = Boolean(payload?.deployment && status && (status.state === 'published' || status.state === 'changes_unpublished'));
+    const publicUrl = hasLiveDeployment ? status?.public_url || '' : '';
+    if (!publicUrl) {
+      flash("Publiez d'abord", false);
+      return;
+    }
+    await navigator.clipboard?.writeText(publicUrl);
+    flash('Lien copié', true);
+  } catch {
+    flash("Publiez d'abord", false);
   }
 }
 
@@ -4637,7 +4686,7 @@ function emptyBuilderProjectPayload(workspaceState: UserWorkspaceState | null = 
     success: true,
     project: {
       id: '',
-      name: currentProjectName || 'Untitled app',
+      name: currentProjectName || 'Projet sans titre',
       preview_status: 'idle',
     },
     files: [],
@@ -4706,7 +4755,7 @@ function projectNameFromPrompt(prompt: string) {
 async function ensureProjectForPrompt(prompt: string) {
   if (currentProjectId) return;
   const initialPrompt = prompt || getInitialDashboardPrompt() || 'Create a polished fullstack web application.';
-  const selectedName = currentProjectName && currentProjectName !== 'Untitled app'
+  const selectedName = currentProjectName && currentProjectName !== 'Projet sans titre'
     ? currentProjectName
     : projectNameFromPrompt(initialPrompt);
   const created = await apiFetch<ProjectPayload>('/api/projects', {
@@ -6421,7 +6470,7 @@ function showCreditsModal() {
       <button data-action="cancel">Cancel</button>
     </div>
   `, (action) => {
-    if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
+    if (action === 'upgrade') ((document.getElementById('btn-upgrade') as HTMLElement | null) || document.querySelector<HTMLElement>('.btn-upgrade'))?.click();
     if (action === 'auto') {
       applySelectedModel('auto', { persist: true, saveWorkspace: true });
       const label = document.getElementById('current-model-label');
@@ -6635,7 +6684,7 @@ function hydrateDashboardPrompt() {
   const prompt = getInitialDashboardPrompt();
   setChatMode(mode);
   if (!input || !prompt || input.value.trim()) return;
-  if (!currentProjectId && currentProjectName === 'Untitled app') {
+  if (!currentProjectId && currentProjectName === 'Projet sans titre') {
     setProjectNameDisplay(projectNameFromPrompt(prompt));
   }
   input.value = repairTextEncoding(prompt);

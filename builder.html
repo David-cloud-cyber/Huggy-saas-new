@@ -1005,6 +1005,17 @@
       transform: translateY(-1px);
     }
 
+    .btn-share.is-copied {
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 42%, var(--border));
+      color: var(--accent-blue-deep, #2458dc);
+    }
+
+    .btn-share:disabled {
+      opacity: .58;
+      cursor: not-allowed;
+      transform: none;
+    }
+
     .brand-topbar .btn-upgrade {
       border-color: color-mix(in srgb, var(--accent-blue) 58%, transparent);
       background: linear-gradient(180deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
@@ -3706,7 +3717,7 @@
             <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#1c1c1c"/>
             <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#1c1c1c"/>
           </svg>
-          <span id="project-name" class="project-mini-name">Untitled app</span>
+          <span id="project-name" class="project-mini-name">Projet sans titre</span>
         </button>
         <div class="lovable-left-tools" id="builder-topbar-center" aria-label="Builder views"></div>
       </div>
@@ -3715,14 +3726,16 @@
 
       <div class="brand-right lovable-topbar-actions">
         <span class="avatar-circle" id="builder-user-avatar" aria-hidden="true">H</span>
-        <button class="btn-share" id="btn-share-project" type="button" aria-label="Share project">Share</button>
-        <button class="btn-upgrade" id="btn-upgrade" type="button" aria-label="Upgrade plan">
+        <button class="btn-share" id="btn-share-project" type="button" aria-label="Partager le projet">
+          <span class="btn-share-label">Partager</span>
+        </button>
+        <button class="btn-upgrade" id="btn-upgrade" type="button" aria-label="Mettre le plan à niveau">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z"></path>
           </svg>
-          Upgrade
+          <span>Mise à niveau</span>
         </button>
-        <button class="btn-publish" type="button">Publish</button>
+        <button class="btn-publish" type="button">Publier</button>
       </div>
     </header>
 
@@ -3735,7 +3748,7 @@
       <div class="project-menu-workspace">
         <div class="project-menu-avatar" id="project-menu-avatar">H</div>
         <div>
-          <div class="project-menu-name" id="project-menu-title">Untitled app</div>
+          <div class="project-menu-name" id="project-menu-title">Projet sans titre</div>
           <div class="project-menu-muted">Workspace project</div>
         </div>
         <div class="project-menu-badge" id="project-menu-plan-badge">FREE</div>
@@ -3744,7 +3757,7 @@
         <div class="project-menu-card-row">
           <div class="project-menu-card-title">Credits</div>
           <button class="project-menu-upgrade" type="button" id="project-menu-upgrade">
-            <span>Upgrade</span>
+            <span>Mise à niveau</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
@@ -3755,7 +3768,7 @@
         <label class="project-menu-field">
           <span class="project-menu-label">Project name</span>
           <span class="project-menu-input-row">
-            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Untitled app" autocomplete="off">
+            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Projet sans titre" autocomplete="off">
             <button class="project-menu-save" id="project-name-save" type="button">Save</button>
           </span>
         </label>
@@ -4357,20 +4370,6 @@
       if (topbarPreviewTools) {
         if (previewToolbarControls) topbarPreviewTools.appendChild(previewToolbarControls);
       }
-
-      document.getElementById("btn-share-project")?.addEventListener("click", async () => {
-        const shareUrl = window.location.href;
-        try {
-          if (navigator.share) {
-            await navigator.share({ title: "Huggy project", url: shareUrl });
-            return;
-          }
-          await navigator.clipboard.writeText(shareUrl);
-          document.dispatchEvent(new CustomEvent("huggy:toast", { detail: { message: "Project link copied" } }));
-        } catch {
-          try { await navigator.clipboard.writeText(shareUrl); } catch { /* ignore */ }
-        }
-      });
 
       document.getElementById("btn-preview-external")?.addEventListener("click", () => {
         const frame = document.getElementById("preview-iframe-element");
