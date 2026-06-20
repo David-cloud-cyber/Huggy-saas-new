@@ -222,3 +222,35 @@ export async function runBuildFixLoop(input: {
   return { ok: false, files, iterations: maxIterations, diagnostics: lastDiagnostics, blocker: blockerFromDiagnostics(lastDiagnostics, maxIterations) };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Interaction → auto-fix bridge.
+//
+// The browser interaction audit (browser-interaction-runner.ts) is already run in
+// the post-generation verification pass. This turns its HIGH-severity findings
+// (dead controls, runtime errors, blank preview) into the same kind of actionable
+// repatch instruction the build loop uses — so "beautiful but broken" gets fed
+// back for a fix instead of shipped. Structurally compatible with BrowserTestResult.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type InteractionFinding = { key: string; severity: string; message: string; selector?: string };
+export type InteractionAuditLike = { status: 'passed' | 'warning' | 'failed' | 'skipped'; findings: InteractionFinding[] };
+
+export function interactionAuditToFix(result: InteractionAuditLike): { needsFix: boolean; prompt: string; deadControls: string[] } {
+  // Duration/info findings are not failures; only act on real high-severity ones.
+  const blocking = (result.findings || []).filter(f => f.severity === 'high' && !/_duration$/.test(f.key));
+  if (result.status !== 'failed' || blocking.length === 0) {
+    return { needsFix: false, prompt: '', deadControls: [] };
+  }
+  const deadControls = blocking.map(f => f.selector || f.message).filter(Boolean);
+  const lines = blocking.slice(0, 8).map(f => `  - [${f.key}] ${f.message}${f.selector ? ` (selector ${f.selector})` : ''}`);
+  const prompt = [
+    'The preview builds, but a real browser interaction audit found broken behavior. Fix ONLY these so primary controls work and the preview is error-free. Do not redesign or change unrelated code.',
+    '',
+    'Interaction failures:',
+    ...lines,
+    '',
+    'Wire the missing handlers/state so each primary control visibly changes state, and eliminate the runtime errors. Return the corrected files.',
+  ].join('\n');
+  return { needsFix: true, prompt, deadControls };
+}
+

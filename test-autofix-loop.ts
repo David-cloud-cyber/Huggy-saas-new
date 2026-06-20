@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { runBuildFixLoop, type AutoFixFile } from './src/services/build-error-autofix.ts';
+import { runBuildFixLoop, interactionAuditToFix, type AutoFixFile } from './src/services/build-error-autofix.ts';
 
 const files: AutoFixFile[] = [{ path: 'src/App.tsx', content: 'export default function App(){return null}' }];
 const TSC_ERROR = "src/App.tsx(1,1): error TS2304: Cannot find name 'foo'.";
@@ -61,6 +61,28 @@ const TSC_ERROR = "src/App.tsx(1,1): error TS2304: Cannot find name 'foo'.";
     maxIterations: 99,
   });
   assert.equal(res.iterations, 4, 'maxIterations must clamp to 4');
+}
+
+// 5. Interaction bridge: a failed audit with a dead control becomes a repatch instruction.
+{
+  const fix = interactionAuditToFix({
+    status: 'failed',
+    findings: [
+      { key: 'browser_control_interaction_failed', severity: 'high', message: 'Control could not be interacted with', selector: '[data-huggy-probe="2"]' },
+      { key: 'browser_runner_duration', severity: 'info', message: 'done in 9ms' },
+    ],
+  });
+  assert.equal(fix.needsFix, true);
+  assert.deepEqual(fix.deadControls, ['[data-huggy-probe="2"]']);
+  assert.match(fix.prompt, /browser_control_interaction_failed/);
+  assert.doesNotMatch(fix.prompt, /_duration/, 'info/duration findings must not be treated as failures');
+}
+
+// 6. Passed/warning/skipped audits never trigger a repatch.
+{
+  assert.equal(interactionAuditToFix({ status: 'passed', findings: [] }).needsFix, false);
+  assert.equal(interactionAuditToFix({ status: 'warning', findings: [{ key: 'x', severity: 'medium', message: 'm' }] }).needsFix, false);
+  assert.equal(interactionAuditToFix({ status: 'skipped', findings: [] }).needsFix, false);
 }
 
 console.log('test-autofix-loop passed');
