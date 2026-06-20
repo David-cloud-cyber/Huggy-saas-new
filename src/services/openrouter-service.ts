@@ -408,6 +408,10 @@ export class OpenRouterService {
       [/gemini-3-pro/,                        [0.000007,  0.000021]],  // $7/$21 per M
       // Mid tier
       [/deepseek-v4-pro/,                     [0.000000270, 0.000001100]], // $0.27/$1.10 per M
+      // Moonshot Kimi — estimated; verify against the live OpenRouter pricing page.
+      [/kimi-k2\.7/,                          [0.000000600, 0.000002500]], // ~$0.60/$2.50 per M
+      [/kimi-k2\.6/,                          [0.000000550, 0.000002200]], // ~$0.55/$2.20 per M
+      [/kimi-k2\.5|kimi/,                     [0.000000500, 0.000002000]], // ~$0.50/$2.00 per M
       [/gemini-3-flash-preview|gemini-3-flash/, [0.000000250, 0.000001000]], // $0.25/$1 per M
       // Fast / economy tier
       [/deepseek-v4-flash/,                   [0.000000060, 0.000000280]], // $0.06/$0.28 per M
