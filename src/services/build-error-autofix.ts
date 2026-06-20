@@ -134,3 +134,91 @@ export function buildAutoFixPrompt(output: string): { needsFix: boolean; prompt:
   ].join('\n');
   return { needsFix: true, prompt, files, diagnostics };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bounded auto-fix LOOP.
+//
+// Turns the single fix pass into: run the real build -> read the real error ->
+// repatch the minimum -> run again, up to 4 times, stopping early the moment the
+// build passes. The runner and the regenerator (the LLM patch step) are INJECTED
+// so this stays pure and unit-testable with mocks — no runner, no network here.
+//
+// Never fakes success: ok is true only when a real build actually passed. On
+// persistent failure it returns the last files as a recoverable draft plus ONE
+// concise, secret-free blocker (compiler diagnostics only — never provider
+// payloads or secrets).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AutoFixFile = { path: string; content: string; language?: string };
+export type AutoFixBuildResult = { ok: boolean; output: string };
+export type AutoFixRunBuild = (files: AutoFixFile[]) => Promise<AutoFixBuildResult> | AutoFixBuildResult;
+export type AutoFixRegenerate = (
+  files: AutoFixFile[],
+  fixPrompt: string,
+  diagnostics: BuildDiagnostic[],
+) => Promise<AutoFixFile[]> | AutoFixFile[];
+
+export type AutoFixLoopResult = {
+  ok: boolean;
+  /** Last files produced — a recoverable draft even when ok is false. */
+  files: AutoFixFile[];
+  iterations: number;
+  /** Concise, secret-free reason, set only when ok is false. */
+  blocker?: string;
+  diagnostics: BuildDiagnostic[];
+};
+
+/** One concise, secret-free blocker line from the top compiler diagnostics. */
+function blockerFromDiagnostics(diagnostics: BuildDiagnostic[], attempts: number): string {
+  const top = diagnostics.filter(d => d.severity === 'error').slice(0, 3).map(d => {
+    const pos = d.file ? `${d.file}${d.line ? `:${d.line}` : ''}` : '(project)';
+    const code = d.code ? ` ${d.code}` : '';
+    return `${pos}${code}: ${d.message}`.slice(0, 180);
+  });
+  const detail = top.length ? ` First errors — ${top.join(' | ')}` : '';
+  return `Build still failing after ${attempts} auto-fix ${attempts === 1 ? 'attempt' : 'attempts'}.${detail}`;
+}
+
+export async function runBuildFixLoop(input: {
+  files: AutoFixFile[];
+  runBuild: AutoFixRunBuild;
+  regenerate: AutoFixRegenerate;
+  maxIterations?: number;
+}): Promise<AutoFixLoopResult> {
+  const maxIterations = Math.max(1, Math.min(4, input.maxIterations ?? 4));
+  let files = input.files;
+  let lastDiagnostics: BuildDiagnostic[] = [];
+
+  for (let attempt = 1; attempt <= maxIterations; attempt++) {
+    const build = await input.runBuild(files);
+    if (build.ok) {
+      return { ok: true, files, iterations: attempt, diagnostics: [] };
+    }
+
+    const diagnostics = parseBuildErrors(build.output);
+    lastDiagnostics = diagnostics;
+
+    // No actionable compiler diagnostic to repatch — stop with a recoverable draft.
+    if (!hasBlockingErrors(diagnostics)) {
+      return {
+        ok: false,
+        files,
+        iterations: attempt,
+        diagnostics,
+        blocker: `Build failed but produced no actionable diagnostic after ${attempt} ${attempt === 1 ? 'attempt' : 'attempts'}.`,
+      };
+    }
+
+    // Out of attempts — keep the last draft, surface one concise blocker.
+    if (attempt === maxIterations) {
+      return { ok: false, files, iterations: attempt, diagnostics, blocker: blockerFromDiagnostics(diagnostics, attempt) };
+    }
+
+    // Repatch the minimum, then loop to re-run the real build.
+    const fix = buildAutoFixPrompt(build.output);
+    files = await input.regenerate(files, fix.prompt, diagnostics);
+  }
+
+  return { ok: false, files, iterations: maxIterations, diagnostics: lastDiagnostics, blocker: blockerFromDiagnostics(lastDiagnostics, maxIterations) };
+}
+
