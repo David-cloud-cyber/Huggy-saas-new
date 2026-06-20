@@ -730,6 +730,62 @@ const selfAudit = [
 ];
 
 
+// Few-shot reference bank. Models imitate a concrete good example far better than
+// they follow abstract adjectives. One example is injected per generation — only
+// the family that matches the resolved app type — so the prompt stays small.
+const FEW_SHOT_DASHBOARD = [
+  'Reference example for an operational dashboard (imitate the crafted version, never the generic one):',
+  'Generic (reject): a centered hero titled "Dashboard", three identical KPI cards, a purple gradient header, and a CTA button that does nothing.',
+  'Crafted (target): a left nav, a top row of compact metric tiles with tabular numerals (outstanding total, items due this week, average days), then a dense sortable + filterable table with status pills (color AND label), row actions, an empty state with a primary "create" action, and a working primary mutation that updates both the row and the metrics. Sober palette, one accent reserved for the primary action.',
+].join('\n');
+
+const FEW_SHOT_ECOMMERCE = [
+  'Reference example for commerce (imitate the crafted version):',
+  'Generic (reject): identical product cards in a 3-column grid, no price/stock hierarchy, an "Add" button with no cart feedback.',
+  'Crafted (target): a filterable catalog with clear price + variant + stock hierarchy, an add-to-cart that opens a cart drawer and updates totals live, quantity steppers, an empty-cart state, and a checkout summary with honest demo labeling when no backend is wired.',
+].join('\n');
+
+const FEW_SHOT_TOOL = [
+  'Reference example for an AI/utility tool (imitate the crafted version):',
+  'Generic (reject): a marketing panel inside the tool, a single big "Generate" button, no streaming or honest status.',
+  'Crafted (target): a compact prompt/input area, a result/output surface that streams progressively with cancel + retry + error states, persistent history, a settings/model state, and a clear setup-required state when keys are unconfigured — never a faked completed response.',
+].join('\n');
+
+const FEW_SHOT_LANDING = [
+  'Reference example for a landing page (imitate the crafted version):',
+  'Generic (reject): a giant headline + two-line subtitle + two buttons over a gradient blob, then three identical feature cards.',
+  'Crafted (target): a first viewport that shows the actual product and its specific value, real proof (numbers, logos, or a product shot), differentiated sections with specific copy, one primary CTA repeated, and an honest pricing or sign-up handoff. No vague filler.',
+].join('\n');
+
+const FEW_SHOT_GENERIC = [
+  'Reference example for an out-of-category product (imitate the crafted version):',
+  'Generic (reject): a hero-and-three-cards placeholder that could belong to any app.',
+  'Crafted (target): identify the core domain object and the one primary action, give it a real primary surface (list, board, canvas, feed, or form — whichever fits), persistent navigation, full create/read/update/delete with empty/loading/error/success states and visible feedback. As finished as a typed app.',
+].join('\n');
+
+export function getFewShotExample(appType: GeneratedAppType): string {
+  switch (appType) {
+    case 'analytics_dashboard':
+    case 'saas_dashboard':
+    case 'admin_panel':
+    case 'crm_erp':
+    case 'fintech_billing':
+      return FEW_SHOT_DASHBOARD;
+    case 'ecommerce':
+    case 'marketplace':
+      return FEW_SHOT_ECOMMERCE;
+    case 'ai_tool':
+    case 'data_tool':
+    case 'creative_tool':
+      return FEW_SHOT_TOOL;
+    case 'landing_page':
+    case 'portfolio':
+      return FEW_SHOT_LANDING;
+    default:
+      return FEW_SHOT_GENERIC;
+  }
+}
+
 function normalizePrompt(prompt: string) {
   return prompt
     .toLowerCase()
@@ -974,6 +1030,8 @@ export function buildWorldClassUiPolicy(input: {
     bulletList('Global anti-AI-design rules:', antiAiDesignRules),
     bulletList('Functional quality gate:', functionalQualityGate),
     bulletList('Self-audit before output:', selfAudit),
+    '',
+    getFewShotExample(appType),
   ].join('\n');
 
   return {

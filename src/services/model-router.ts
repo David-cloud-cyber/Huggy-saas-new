@@ -32,6 +32,16 @@ export interface RoutingContext {
   };
 }
 
+/** Hard-task signals that justify escalating to a frontier model. */
+export interface EscalationSignals {
+  /** A large or multi-file build was detected. */
+  heavyBuild?: boolean;
+  /** Consecutive auto-debug iterations that failed to produce a passing build. */
+  autofixFailures?: number;
+  /** The app type is known to be complex (e.g. crm_erp, fintech_billing, ai_tool). */
+  complexAppType?: boolean;
+}
+
 export class ModelRouter {
   async selectModel(context: RoutingContext, requestedCustomModelId?: string): Promise<AllowedModelId> {
     // 1. Direct validation of custom model choice if in Custom mode
@@ -221,6 +231,38 @@ export class ModelRouter {
     };
 
     return tierValue(userPlan) >= tierValue(requiredPlan);
+  }
+
+  /**
+   * Selective frontier escalation. The default routing for small/normal actions
+   * is untouched: this only bumps the effective task complexity (and nudges
+   * code/reasoning needs) when a hard signal is present — a heavy build, repeated
+   * auto-debug failures, or a known-complex app type. Plan access and credit/cost
+   * floors are still enforced by selectModel, so escalation can never pick a model
+   * the plan or balance cannot afford (it falls back); the monthly AI/Cloud
+   * exposure cap stays enforced upstream in the generation gate.
+   */
+  shouldEscalateToFrontier(signals: EscalationSignals): boolean {
+    return Boolean(signals.heavyBuild)
+      || (signals.autofixFailures ?? 0) >= 2
+      || Boolean(signals.complexAppType);
+  }
+
+  async selectModelEscalated(
+    context: RoutingContext,
+    signals: EscalationSignals,
+    requestedCustomModelId?: string,
+  ): Promise<AllowedModelId> {
+    // Respect explicit custom choices and skip escalation when no hard signal.
+    if (context.mode === 'Custom' || !this.shouldEscalateToFrontier(signals)) {
+      return this.selectModel(context, requestedCustomModelId);
+    }
+    const escalated: RoutingContext = {
+      ...context,
+      taskComplexity: 'extreme',
+      requiredCapabilities: { ...context.requiredCapabilities, code: true, reasoning: true },
+    };
+    return this.selectModel(escalated, requestedCustomModelId);
   }
 
   /**

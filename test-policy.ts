@@ -138,6 +138,11 @@ async function runTests() {
   assert.equal(genericPolicy.appType, 'generic_web_app');
   assert.ok(genericPolicy.systemPrompt.includes('GENERIC PRODUCT PATH'), 'generic apps must use the rich generic product path');
 
+  // v26 step 5: exactly the matching few-shot example is injected (not all of them).
+  assert.ok(genericPolicy.systemPrompt.includes('Reference example for an out-of-category product'), 'generic apps must get the generic few-shot example');
+  assert.ok(!genericPolicy.systemPrompt.includes('Reference example for commerce'), 'few-shot injection must be scoped to the resolved type, not all families');
+  assert.ok(dashboardPolicy.systemPrompt.includes('Reference example for an operational dashboard'), 'dashboards must get the dashboard few-shot example');
+
   console.log('Success: Adaptive world-class UI generation policy passed validation.');
   console.log('Tests completed.');
 }
