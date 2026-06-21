@@ -76,6 +76,10 @@
       --topbar-fg-muted: rgba(255, 255, 255, 0.70);
       --topbar-hover: rgba(255, 255, 255, 0.08);
       --topbar-focus-ring: rgba(255, 255, 255, 0.30);
+      /* Unified builder surface + inset preview "screen" (Lovable-style merge). */
+      --app-bg: #0a0a0a;
+      --preview-ring: rgba(255, 255, 255, 0.08);
+      --preview-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -108,6 +112,9 @@
       --topbar-fg-muted: rgba(9, 9, 11, 0.55);
       --topbar-hover: rgba(9, 9, 11, 0.06);
       --topbar-focus-ring: rgba(9, 9, 11, 0.30);
+      --app-bg: #ffffff;
+      --preview-ring: rgba(9, 9, 11, 0.08);
+      --preview-shadow: 0 10px 28px rgba(9, 9, 11, 0.12);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -692,7 +699,7 @@
       padding: 0 12px;
       background: var(--topbar-bg);
       color: var(--topbar-fg);
-      border-bottom: 1px solid var(--topbar-border);
+      border-bottom: 1px solid transparent;
       box-shadow: none;
       font-size: 13px;
       font-weight: 500;
@@ -1341,6 +1348,7 @@
     /* ── WORKSPACE SPLIT PANELS ───────────────────────────────── */
     .workspace-body {
       display: grid;
+      background: var(--app-bg);
       grid-template-columns: var(--huggy-sidebar-width, 380px) minmax(0, 1fr);
       flex: 1;
       overflow: hidden;
@@ -1368,7 +1376,7 @@
       grid-column: 1;
       grid-row: 1;
       border-right: 1px solid var(--border-light);
-      background: var(--bg-panel);
+      background: transparent;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -2094,7 +2102,7 @@
     .editor-pane {
       grid-column: 2;
       grid-row: 1;
-      background: var(--bg);
+      background: transparent;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -2872,8 +2880,8 @@
       justify-content: center;
       align-items: stretch;
       overflow: auto;
-      background: var(--preview-stage-bg, var(--bg));
-      padding: 6px;
+      background: transparent;
+      padding: 12px 12px 12px 0;
     }
 
     .preview-device-frame {
@@ -2884,7 +2892,7 @@
       overflow: hidden;
       background: var(--bg-surface);
       border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+      box-shadow: 0 0 0 1px var(--preview-ring), var(--preview-shadow);
       transition:
         width 220ms cubic-bezier(0.22, 1, 0.36, 1),
         max-width 220ms cubic-bezier(0.22, 1, 0.36, 1),
