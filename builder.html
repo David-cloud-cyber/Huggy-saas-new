@@ -1366,6 +1366,79 @@
       pointer-events: none;
     }
 
+    /* ── Chat-to-Build : machine à 3 états (data-layout sur .workspace-body) ──
+       chat-rest  = écran d'accueil, composer centré, fil masqué
+       chat       = conversation plein écran, fil en haut, composer docké en bas
+       workspace  = IDE actuel (sidebar + editor côte à côte)
+       Desktop uniquement (min-width 761px) pour ne pas entrer en conflit avec les
+       règles mobiles data-mobile-view ; gardé :not(.sidebar-collapsed) pour la
+       cohabitation avec l'état replié. La transition grid-template-columns
+       (au-dessus) anime le morph ; prefers-reduced-motion plus bas le neutralise. */
+    @media (min-width: 761px) {
+      /* chat-rest + chat : sidebar plein écran centrée, editor masqué + fade */
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed),
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) {
+        grid-template-columns: minmax(0, 1fr) 0px;
+        justify-items: center;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sidebar-pane,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .sidebar-pane {
+        width: 100%;
+        max-width: 760px;
+        border-right: 0;
+        background: var(--bg);
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .editor-pane,
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sub-navbar,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .editor-pane,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .sub-navbar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+
+      /* ÉTAT 1 — repos : composer + empty-state centrés verticalement, fil masqué,
+         onglets de panneau cachés (écran d'accueil épuré). */
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sidebar-pane {
+        justify-content: center;
+        gap: 14px;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .pane-header-row {
+        display: none;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) #sidebar-scroll-area {
+        flex: 0 0 auto;
+        overflow: visible;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) #chat-empty-state {
+        display: flex;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .chat-input-row {
+        width: 100%;
+      }
+
+      /* ÉTAT 3 — révélation : la grille revient aux pistes workspace (animée) et
+         l'éditeur réapparaît en fondu. */
+      .workspace-body[data-layout="revealing"] .editor-pane,
+      .workspace-body[data-layout="revealing"] .sub-navbar {
+        opacity: 1;
+        transition: opacity 300ms ease 120ms;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .workspace-body,
+      .workspace-body .sidebar-pane,
+      .workspace-body[data-layout="chat-rest"] .editor-pane,
+      .workspace-body[data-layout="chat-rest"] .sub-navbar,
+      .workspace-body[data-layout="chat"] .editor-pane,
+      .workspace-body[data-layout="chat"] .sub-navbar,
+      .workspace-body[data-layout="revealing"] .editor-pane,
+      .workspace-body[data-layout="revealing"] .sub-navbar {
+        transition: none !important;
+      }
+    }
+
     /* Toast animation support */
     @keyframes toastSlideIn {
       from { transform: translateY(20px); opacity: 0; }

@@ -252,6 +252,10 @@ let currentProjectId = '';
 let currentFiles: GeneratedFile[] = [];
 let currentPreviewHtml = '';
 let isGenerating = false;
+// Last known client-side wallet balance (credits). null = unknown -> defer to the
+// server credit gate. 0 = known-empty -> block the workspace reveal and show the
+// existing upgrade prompt instead.
+let lastWalletBalance: number | null = null;
 let lastPlan = '';
 let lastBuildSessionId = '';
 let lastAgentRunId = '';
@@ -3037,6 +3041,7 @@ async function loadProjectMenuCredits() {
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     const balance = Number(wallet.balance ?? 0);
+    lastWalletBalance = Number.isFinite(balance) ? balance : null;
     const monthly = Number(wallet.buckets?.monthly_credits ?? 0);
     const percent = monthly > 0 ? Math.max(0, Math.min(100, Math.round((balance / monthly) * 100))) : 100;
     syncBuilderPlanBadges(wallet.plan || 'free');
@@ -5504,10 +5509,73 @@ function localizeJournalStatus(value: string, speaksFrench: boolean) {
     .replace(/\bcheck\b/gi, 'vérification');
 }
 
+// ── Chat-to-Build: 3-state layout machine ────────────────────────────────────
+// data-layout on .workspace-body: "chat-rest" (centered landing composer) ->
+// "chat" (full-screen conversation, composer docked) -> "workspace" (IDE).
+// CSS does the animation; these helpers only flip the attribute and await the morph.
+type BuilderLayout = 'chat-rest' | 'chat' | 'revealing' | 'workspace';
+
+function getWorkspaceBodyEl(): HTMLElement | null {
+  return document.querySelector('.workspace-body') as HTMLElement | null;
+}
+
+function currentBuilderLayout(): string {
+  return getWorkspaceBodyEl()?.dataset.layout || '';
+}
+
+function setBuilderLayout(state: BuilderLayout) {
+  const body = getWorkspaceBodyEl();
+  if (body) body.dataset.layout = state;
+}
+
+function focusComposer() {
+  (document.getElementById('chat-textarea-box') as HTMLElement | null)?.focus?.();
+}
+
+async function revealWorkspaceLayout(): Promise<void> {
+  const body = getWorkspaceBodyEl();
+  if (!body || body.dataset.layout === 'workspace') return;
+  const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
+  const reduceMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  body.dataset.layout = 'revealing';
+  if (!reduceMotion) {
+    await new Promise<void>(resolve => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        sidebar?.removeEventListener('transitionend', onEnd);
+        resolve();
+      };
+      const onEnd = (event: TransitionEvent) => { if (event.target === sidebar) finish(); };
+      sidebar?.addEventListener('transitionend', onEnd);
+      window.setTimeout(finish, 450);
+    });
+  }
+  body.dataset.layout = 'workspace';
+  focusComposer();
+}
+
+// Initial layout when the builder loads: a project with files opens straight into
+// the workspace; an empty project opens the centered "chat-rest" landing.
+function applyInitialBuilderLayout() {
+  const body = getWorkspaceBodyEl();
+  if (!body || body.dataset.layout === 'revealing') return;
+  if (currentFiles.length > 0) {
+    body.dataset.layout = 'workspace';
+  } else {
+    body.dataset.layout = 'chat-rest';
+    focusComposer();
+  }
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
   const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
   if (isGenerating || !safePrompt) return;
+  // First send from the resting landing: drop the composer to the bottom and open
+  // the conversation BEFORE rendering the message (state 1 -> state 2).
+  if (currentBuilderLayout() === 'chat-rest') setBuilderLayout('chat');
   const speaksFrench = isLikelyFrenchText(safePrompt);
   const promptUiContext = extra.confirmedCriticalAction ? 'project_mission' : classifyPromptUiContext(safePrompt, requestedMode);
   const handoff = getInitialBuilderHandoff();
@@ -5551,6 +5619,20 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   if (handoff.importContext && effectiveExtra.importContext === handoff.importContext) {
     delete handoff.importContext;
   }
+
+  // Intent gate (state 2 -> state 3): reaching here means promptUiContext is the
+  // build/edit run path (conversation/plan/clarify/critical returned earlier). If
+  // we are not already in the workspace, reveal the builder before running — unless
+  // credits are known-empty client-side, in which case show the upgrade prompt and
+  // do not reveal/run.
+  if (currentBuilderLayout() && currentBuilderLayout() !== 'workspace') {
+    if (lastWalletBalance === 0) {
+      showCreditsModal();
+      return;
+    }
+    await revealWorkspaceLayout();
+  }
+
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
@@ -6849,7 +6931,10 @@ function init() {
   normalizeAiChatInputs();
   bindChat();
   hydrateDashboardPrompt();
-  void loadProject().then(() => maybeStartInitialGeneration());
+  void loadProject().then(() => {
+    applyInitialBuilderLayout();
+    maybeStartInitialGeneration();
+  });
 }
 
 window.addEventListener('huggy:auth-ready', init);
