@@ -69,6 +69,13 @@
       --text-muted: #b3b8c3;
       --text-sub: #71717a;
       --text-dark: #52525b;
+      /* Editor top bar — semantic tokens (Lovable-grade bar, Huggy blue accent). */
+      --topbar-bg: #0a0a0a;
+      --topbar-border: rgba(255, 255, 255, 0.08);
+      --topbar-fg: rgba(255, 255, 255, 0.92);
+      --topbar-fg-muted: rgba(255, 255, 255, 0.70);
+      --topbar-hover: rgba(255, 255, 255, 0.08);
+      --topbar-focus-ring: rgba(255, 255, 255, 0.30);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -95,6 +102,12 @@
       --text-muted: #52525b;
       --text-sub: #71717a;
       --text-dark: #52525b;
+      --topbar-bg: #ffffff;
+      --topbar-border: rgba(9, 9, 11, 0.08);
+      --topbar-fg: rgba(9, 9, 11, 0.92);
+      --topbar-fg-muted: rgba(9, 9, 11, 0.55);
+      --topbar-hover: rgba(9, 9, 11, 0.06);
+      --topbar-focus-ring: rgba(9, 9, 11, 0.30);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -673,20 +686,23 @@
     }
 
     .brand-topbar.lovable-builder-topbar {
-      height: 50px;
+      height: 52px;
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       gap: 10px;
       padding: 0 12px;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 92%, #000 8%), color-mix(in srgb, var(--bg) 90%, #000 10%));
-      border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
-      box-shadow: 0 1px 0 color-mix(in srgb, var(--accent-blue) 12%, transparent) inset;
+      background: var(--topbar-bg);
+      color: var(--topbar-fg);
+      border-bottom: 1px solid var(--topbar-border);
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 500;
     }
 
-    :root[data-theme="light"] .brand-topbar.lovable-builder-topbar {
-      background: #ffffff;
-      border-bottom-color: rgba(9, 9, 11, .08);
-      box-shadow: 0 1px 0 rgba(9, 9, 11, .04) inset;
+    /* Focus ring on every interactive top bar control (a11y). */
+    .brand-topbar.lovable-builder-topbar button:focus-visible,
+    .brand-topbar.lovable-builder-topbar [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--topbar-bg), 0 0 0 4px var(--topbar-focus-ring);
     }
 
     .lovable-topbar-left,
@@ -757,13 +773,13 @@
 
     .lovable-nav-icon-btn,
     .brand-topbar .collapse-sidebar-arrow {
-      width: 30px;
-      height: 30px;
-      min-width: 30px;
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
       border: 0;
-      border-radius: 999px;
+      border-radius: 8px;
       background: transparent;
-      color: var(--text-muted);
+      color: var(--topbar-fg-muted);
       display: inline-grid;
       place-items: center;
       padding: 0;
@@ -773,15 +789,15 @@
 
     .lovable-nav-icon-btn:hover,
     .brand-topbar .collapse-sidebar-arrow:hover {
-      color: var(--text);
-      background: color-mix(in srgb, var(--text) 7%, transparent);
-      transform: translateY(-1px);
+      color: var(--topbar-fg);
+      background: var(--topbar-hover);
     }
 
     .lovable-nav-icon-btn svg,
     .brand-topbar .collapse-sidebar-arrow svg {
       width: 16px;
       height: 16px;
+      stroke-width: 1.75;
     }
 
     .brand-topbar .sub-nav-tabs {
@@ -803,10 +819,10 @@
     }
 
     .brand-topbar .sub-nav-tab {
-      height: 28px;
-      min-width: 28px;
+      height: 26px;
+      min-width: 26px;
       gap: 6px;
-      padding: 0 10px;
+      padding: 0 14px;
       border: 1px solid transparent;
       border-radius: 999px;
       color: var(--text-muted);
@@ -980,14 +996,14 @@
     .btn-upgrade,
     .btn-publish {
       height: 32px;
-      border-radius: 999px;
+      border-radius: 8px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      padding: 0 13px;
+      padding: 0 12px;
       font-size: 13px;
-      font-weight: 780;
+      font-weight: 600;
       letter-spacing: -.025em;
       border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
       cursor: pointer;
@@ -995,14 +1011,13 @@
     }
 
     .btn-share {
-      background: color-mix(in srgb, var(--bg-surface) 86%, #000 8%);
-      color: var(--text);
-      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+      background: transparent;
+      color: var(--topbar-fg);
+      border-color: transparent;
     }
 
     .btn-share:hover {
-      background: color-mix(in srgb, var(--text) 8%, var(--bg-surface));
-      transform: translateY(-1px);
+      background: var(--topbar-hover);
     }
 
     .btn-share.is-copied {
@@ -1017,10 +1032,14 @@
     }
 
     .brand-topbar .btn-upgrade {
-      border-color: color-mix(in srgb, var(--accent-blue) 58%, transparent);
-      background: linear-gradient(180deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
-      color: #fff;
-      box-shadow: 0 12px 28px color-mix(in srgb, var(--accent-blue) 26%, transparent), 0 1px 0 rgba(255,255,255,.24) inset;
+      border-color: color-mix(in srgb, var(--accent-blue) 38%, transparent);
+      background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+      color: color-mix(in srgb, var(--accent-blue) 35%, #ffffff);
+      box-shadow: none;
+    }
+
+    .brand-topbar .btn-upgrade:hover {
+      background: color-mix(in srgb, var(--accent-blue) 24%, transparent);
     }
 
     .brand-topbar .btn-upgrade svg {
@@ -1029,10 +1048,15 @@
     }
 
     .brand-topbar .btn-publish {
-      border-color: rgba(96, 165, 250, .60);
-      background: linear-gradient(180deg, #3b82f6, #2563eb);
+      padding: 0 16px;
+      border-color: transparent;
+      background: var(--accent-blue, #3b82f6);
       color: #fff;
-      box-shadow: 0 12px 28px rgba(37,99,235,.26), 0 1px 0 rgba(255,255,255,.22) inset;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+
+    .brand-topbar .btn-publish:hover {
+      filter: brightness(1.08);
     }
 
     .btn-share:active,
@@ -1042,16 +1066,25 @@
     }
 
     .brand-topbar .avatar-circle {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
+      margin-left: 6px;
       display: inline-grid;
       place-items: center;
-      border: 1px solid rgba(255,255,255,.15);
+      border: 1px solid var(--topbar-border);
       background: linear-gradient(135deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
       color: #fff;
       font-size: 12px;
       font-weight: 800;
       letter-spacing: -.03em;
+    }
+
+    /* Responsive: below 640px hide the quick-action icons (History/GitHub/Plus)
+       and the Invite/Share label, per spec, to keep the bar uncluttered. */
+    @media (max-width: 640px) {
+      .brand-topbar.lovable-builder-topbar .lovable-nav-icon-btn { display: none; }
+      .brand-topbar.lovable-builder-topbar .btn-share-label { display: none; }
+      .brand-topbar.lovable-builder-topbar .btn-share { padding: 0; width: 32px; }
     }
 
     /* Pricing Modal Styling */
