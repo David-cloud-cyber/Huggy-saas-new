@@ -5561,12 +5561,10 @@ async function revealWorkspaceLayout(): Promise<void> {
 function applyInitialBuilderLayout() {
   const body = getWorkspaceBodyEl();
   if (!body || body.dataset.layout === 'revealing') return;
-  if (currentFiles.length > 0) {
-    body.dataset.layout = 'workspace';
-  } else {
-    body.dataset.layout = 'chat-rest';
-    focusComposer();
-  }
+  // The builder always opens in the normal side-by-side workspace (sidebar +
+  // preview). The centered chat-rest/chat landing belongs to the dashboard entry,
+  // not the builder — forcing it here pushed every builder element to the center.
+  body.dataset.layout = 'workspace';
 }
 
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
