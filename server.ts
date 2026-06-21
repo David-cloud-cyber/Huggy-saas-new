@@ -3744,9 +3744,14 @@ const agentOrchestrator = new AgentOrchestrator();
 const intentRouter = agentOrchestrator;
 
 function agentIntentNeedsAiRouter(decision: IntentDecision) {
+  // LLM-first routing: the model decides the intent for everything except the
+  // cheapest, most obvious cases. The regex heuristics stay only as a fast-path
+  // to skip a model call on an explicit Plan toggle or an unmistakable greeting/
+  // chit-chat (very high confidence). Everything actionable or ambiguous —
+  // including would-be clarifications — is confirmed by the LLM so Huggy reasons
+  // about what to do instead of routing on keywords.
   if (decision.requestedMode === 'plan') return false;
-  if (decision.intent === 'conversation' && decision.confidence >= 0.93) return false;
-  if (decision.intent === 'clarification_required' && decision.confidence >= 0.95) return false;
+  if (decision.intent === 'conversation' && decision.confidence >= 0.97) return false;
   return true;
 }
 
