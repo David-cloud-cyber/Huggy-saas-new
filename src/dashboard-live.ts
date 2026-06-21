@@ -1359,6 +1359,30 @@ function bindDashboardPromptCreation() {
     event.stopImmediatePropagation();
     submit.classList.add('is-loading');
     const original = submit.innerHTML;
+
+    // Claude-style "descent": drop the composer, fade the hero, and show the
+    // prompt + a thinking indicator while the builder opens with the same prompt.
+    const section = textarea.closest('.create-section') as HTMLElement | null;
+    const wrapper = textarea.closest('.input-wrapper') as HTMLElement | null;
+    if (section && wrapper && !section.querySelector('.launch-thread')) {
+      const thread = document.createElement('div');
+      thread.className = 'launch-thread';
+      const userBubble = document.createElement('div');
+      userBubble.className = 'launch-bubble-user';
+      userBubble.textContent = prompt;
+      const aiRow = document.createElement('div');
+      aiRow.className = 'launch-bubble-ai';
+      const aiLabel = document.createElement('span');
+      aiLabel.textContent = 'Huggy ouvre votre espace';
+      const dots = document.createElement('span');
+      dots.className = 'launch-dots';
+      dots.innerHTML = '<i></i><i></i><i></i>';
+      aiRow.append(aiLabel, dots);
+      thread.append(userBubble, aiRow);
+      section.insertBefore(thread, wrapper);
+      section.classList.add('is-launching');
+    }
+
     void startCreateProjectFlow({
       prompt,
       mode: selectedDashboardMode(),
