@@ -717,6 +717,23 @@
       gap: 8px;
     }
 
+    /* Desktop: the builder-views cluster (history / panel / Preview pill / file /
+       ⋮) starts exactly at the chat|preview divider — the brand (logo + project)
+       fills the sidebar-width column, the views begin at the divider and run
+       toward the right actions. Mirrors the body's --huggy-sidebar-width track. */
+    @media (min-width: 761px) {
+      .brand-topbar .lovable-topbar-left {
+        display: grid;
+        grid-template-columns: var(--huggy-sidebar-width, 380px) auto;
+        align-items: center;
+        gap: 0;
+      }
+      .brand-topbar #builder-topbar-center {
+        padding-left: 12px;
+        justify-content: flex-start;
+      }
+    }
+
     .lovable-left-tools {
       display: inline-flex;
       align-items: center;
