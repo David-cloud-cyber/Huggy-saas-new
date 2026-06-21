@@ -9,6 +9,7 @@ import { initPromptInputActions } from './prompt-input-actions';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { openConnectorsPanel } from './connectors-panel';
 import { startCreateProjectFlow } from './services/create-project-flow';
+import { understandUserIntent } from './services/intent-understanding';
 import { deriveProjectName } from './services/project-naming';
 
 type ProjectListResponse = {
@@ -1360,6 +1361,13 @@ function bindDashboardPromptCreation() {
     submit.classList.add('is-loading');
     const original = submit.innerHTML;
 
+    // Intent gate (Claude-style states 2 vs 3): a real build/edit request opens
+    // the builder workspace (creates the project); a plain discussion goes into
+    // the full-screen chat WITHOUT creating a project (no builder/editor) and
+    // streams its answer there. Explicit "build" mode always builds.
+    const dashboardMode = selectedDashboardMode();
+    const wantsBuild = dashboardMode === 'build' || understandUserIntent({ prompt, hasFiles: false }).allowsFileAction;
+
     // Claude-style "descent": drop the composer, fade the hero, and show the
     // prompt + a thinking indicator while the builder opens with the same prompt.
     const section = textarea.closest('.create-section') as HTMLElement | null;
@@ -1385,14 +1393,14 @@ function bindDashboardPromptCreation() {
 
     void startCreateProjectFlow({
       prompt,
-      mode: selectedDashboardMode(),
+      mode: dashboardMode,
       source: 'dashboard',
       projectName: projectNameFromPrompt(prompt),
       model: 'auto',
       template: 'custom',
       theme: 'light',
     }, {
-      createProject: true,
+      createProject: wantsBuild,
       onStatus: status => {
         submit.textContent = status;
       },
