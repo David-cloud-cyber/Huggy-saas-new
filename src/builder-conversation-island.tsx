@@ -1282,7 +1282,14 @@ function textFromConversationParts(parts: HuggyConversationMessage["parts"], fal
 }
 
 function renderStandardMessageContent(message: HuggyConversationMessage) {
-  const content = textFromConversationParts(message.parts, message.content);
+  let content = textFromConversationParts(message.parts, message.content);
+  if (!content && message.block) {
+    if (message.block.type === "work_journal") {
+      content = message.block.finalText || "";
+    } else if (message.block.type === "reasoning") {
+      content = message.block.content || "";
+    }
+  }
   if (message.role === "assistant") return renderAssistantMarkdown(content);
   return renderPlainMessage(content);
 }
@@ -1312,15 +1319,11 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   if (!block) return null;
 
   if (block.type === "work_journal") {
-    return renderWorkJournal(message, block);
+    return null;
   }
 
   if (block.type === "reasoning") {
-    return (
-      <Reasoning isStreaming={Boolean(block.isStreaming)}>
-        {block.content}
-      </Reasoning>
-    );
+    return null;
   }
 
   return (
@@ -1343,16 +1346,14 @@ function renderMessageBlock(message: HuggyConversationMessage) {
 }
 
 function renderWorkingStatus(message: HuggyConversationMessage) {
-  const lines = message.content.split("\n").map(line => line.trim()).filter(Boolean);
-  const [headline = "Huggy ecrit", ...details] = lines;
-  const activeDetail = details.find(step => step.startsWith("now:"));
-  const latestDetail = activeDetail || details[details.length - 1] || "";
-  const cleanDetail = latestDetail.replace(/^(done|now):\s*/, "").trim();
-  const showDetail = cleanDetail && !headline.toLowerCase().includes(cleanDetail.toLowerCase());
+  const contentLower = message.content.toLowerCase();
+  const isFrench = /[\u00C0-\u017F]/i.test(message.content) || 
+                   /ecrit|precise|prepare|generation|en cours|je |corriger/i.test(contentLower);
+  const label = isFrench ? "Génération en cours" : "Generating";
 
   return (
     <span className="huggy-message-waiting" aria-live="polite">
-      {showDetail ? `${headline} · ${cleanDetail}` : headline}
+      {label}
     </span>
   );
 }

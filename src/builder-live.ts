@@ -2351,36 +2351,7 @@ const shimmerBuffers = new WeakMap<HTMLElement, string>();
 
 function appendToMessageShimmer(card: HTMLElement | null, text: string) {
   if (!card || !text) return;
-  let streamEl = card.querySelector<HTMLElement>('.huggy-live-token-stream');
-  if (!streamEl) {
-    streamEl = document.createElement('div');
-    streamEl.className = 'huggy-live-token-stream';
-    streamEl.setAttribute('aria-live', 'polite');
-    streamEl.setAttribute('aria-label', 'Generating code');
-    // Insert before the working indicator if present
-    const workingIndicator = card.querySelector('.msg-working-indicator') || card.querySelector('.msg-body-paragraph');
-    if (workingIndicator) {
-      card.insertBefore(streamEl, workingIndicator.nextSibling);
-    } else {
-      card.appendChild(streamEl);
-    }
-  }
-  const target = streamEl;
-  let renderer = shimmerRenderers.get(card);
-  if (!renderer) {
-    shimmerBuffers.set(card, '');
-    renderer = createSmoothTextRenderer((visible) => {
-      shimmerBuffers.set(card, visible);
-      // Keep only a compact, stable-height preview of the live feed.
-      target.textContent = visible.slice(-300);
-      const scroll = document.getElementById('sidebar-scroll-area');
-      if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
-        scroll.scrollTop = scroll.scrollHeight;
-      }
-    });
-    shimmerRenderers.set(card, renderer);
-  }
-  renderer.push(text);
+  return; // Disabled token-by-token streaming UI
 }
 
 function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
@@ -2736,7 +2707,7 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
     let visibleText = '';
     const smoothText = createSmoothTextRenderer((visible) => {
       visibleText = visible;
-      updateMessage(card, redactSecrets(visible));
+      // Do not update message content token-by-token during streaming
     });
 
     const stream = openHuggyStream({
