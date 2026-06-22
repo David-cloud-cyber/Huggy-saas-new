@@ -1320,12 +1320,7 @@ function textFromConversationParts(parts: HuggyConversationMessage["parts"], fal
 }
 
 function renderStandardMessageContent(message: HuggyConversationMessage) {
-  let content = textFromConversationParts(message.parts, message.content);
-  if (!content && message.block) {
-    if (message.block.type === "work_journal") {
-      content = message.block.finalText || "";
-    }
-  }
+  const content = textFromConversationParts(message.parts, message.content);
   if (message.role === "assistant") return renderAssistantMarkdown(content);
   return renderPlainMessage(content);
 }
@@ -1490,6 +1485,12 @@ function renderRichMessagePart(part: HuggyMessagePart, index: number) {
     ) : null;
   }
 
+  // We suppress all other stream UI parts at runtime
+  const suppressStreamUI = true;
+  if (suppressStreamUI) {
+    return null;
+  }
+
   if (part.type === "reasoning" || part.type === "thinking") {
     const text = String(part.text || part.detail || "").trim();
     return (
@@ -1571,8 +1572,7 @@ function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
-  if (block.type === "work_journal" ||
-      block.type === "reasoning" ||
+  if (block.type === "reasoning" ||
       block.type === "tool_call" ||
       block.type === "terminal" ||
       block.type === "code" ||
