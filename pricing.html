@@ -132,76 +132,6 @@
             margin: 16px 0 0;
         }
 
-        .pricing-insight-section {
-            max-width: 1120px;
-            margin: -52px auto 96px;
-            padding: 0 24px;
-            display: grid;
-            grid-template-columns: minmax(280px, .85fr) minmax(320px, 1.15fr);
-            gap: 24px;
-            align-items: stretch;
-        }
-
-        .pricing-insight-card,
-        .pricing-trust-card {
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
-            box-shadow: var(--huggy-shadow-soft);
-        }
-
-        .pricing-insight-card {
-            padding: 30px;
-        }
-
-        .pricing-insight-card span,
-        .pricing-trust-card span {
-            color: var(--accent-blue);
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: .14em;
-            text-transform: uppercase;
-        }
-
-        .pricing-insight-card h2 {
-            margin: 18px 0 14px;
-            font-size: clamp(30px, 3.5vw, 48px);
-            line-height: 1;
-            letter-spacing: -.04em;
-        }
-
-        .pricing-insight-card p {
-            color: var(--text-muted);
-            line-height: 1.65;
-            font-size: 15px;
-        }
-
-        .pricing-trust-card {
-            padding: 18px;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .pricing-trust-card div {
-            min-height: 132px;
-            padding: 20px;
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            background: var(--bg);
-        }
-
-        .pricing-trust-card h3 {
-            margin: 12px 0 8px;
-            font-size: 18px;
-        }
-
-        .pricing-trust-card p {
-            color: var(--text-muted);
-            font-size: 13px;
-            line-height: 1.55;
-        }
-
         /* FAQ SECTION */
         .faq-section {
             max-width: 880px;
@@ -266,16 +196,6 @@
                 grid-template-columns: 1fr;
                 max-width: 500px;
             }
-
-            .pricing-insight-section {
-                grid-template-columns: 1fr;
-                margin-top: -32px;
-            }
-
-            .pricing-trust-card {
-                grid-template-columns: 1fr;
-            }
-
         }
     </style>
 </head>
@@ -323,7 +243,7 @@
 
     <header class="pricing-hero">
         <h1>Start free.<br>Ship real apps.</h1>
-        <p>Choose the plan for your stage: validate an idea for free, publish real apps with Pro, then scale with more credits, cloud balance, storage and domains when traffic grows.</p>
+        <p>Start free, upgrade when you ship. No surprises, cancel anytime.</p>
 
         <div class="billing-toggle">
             <button class="toggle-btn active" onclick="setBilling('monthly')">Monthly</button>
@@ -335,15 +255,13 @@
         <div class="pricing-card">
             <span class="card-name">Free</span>
             <div class="card-price">$0 <span>/mo</span></div>
-            <p class="card-desc">For testing an idea, learning the builder and creating your first working draft.</p>
+            <p class="card-desc">Test an idea, learn the builder, ship a first draft.</p>
             <ul class="feature-list">
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>50 starter credits</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 active project</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Live preview while you build</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$1 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>0.1 GB database, 0.25 GB files, 1 GB bandwidth</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Starter database and auth</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Huggy subdomain + badge</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Huggy subdomain</li>
             </ul>
             <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=free')">Start free</button>
         </div>
@@ -352,17 +270,14 @@
             <span class="featured-label">Best start</span>
             <span class="card-name">Pro</span>
             <div class="card-price" id="price-pro">$25 <span>/mo</span></div>
-            <p class="card-desc">Best for founders and freelancers who want to generate, verify, publish and keep improving real apps.</p>
+            <p class="card-desc">For founders and freelancers shipping real apps.</p>
             <ul class="feature-list">
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1,000 credits / month</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 active projects</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>3 published apps</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 active projects, 3 published</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$10 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 GB database, 5 GB files, 50 GB bandwidth</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Codex-like agent journal and preview</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Custom domain and badge removal</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Custom domain &amp; badge removal</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Deploy, export, versions, rollback</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Credit and Cloud top-ups</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Credit &amp; Cloud top-ups</li>
             </ul>
             <p class="billing-note" id="note-pro">Monthly billing. Annual saves $60/year.</p>
             <button class="card-cta btn-solid" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
@@ -371,51 +286,17 @@
         <div class="pricing-card">
             <span class="card-name">Scale</span>
             <div class="card-price" id="price-scale">$200 <span>/mo</span></div>
-            <p class="card-desc">For teams shipping multiple projects, client work and production apps without slowing down.</p>
+            <p class="card-desc">For teams shipping multiple projects and production apps.</p>
             <ul class="feature-list">
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10,000 credits / month</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Unlimited draft projects</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>25 published apps</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Unlimited drafts, 25 published</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$75 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>20 GB database, 100 GB files, 250 GB bandwidth</li>
                 <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Multiple custom domains</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Team workspace and roles</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Advanced analytics and run history</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Priority generation and premium models</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Auto top-up and priority support</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Team workspace &amp; roles</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Priority support &amp; premium models</li>
             </ul>
             <p class="billing-note" id="note-scale">Monthly billing. Annual saves $480/year.</p>
             <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=scale')">Upgrade to Scale</button>
-        </div>
-    </section>
-
-    <section class="pricing-insight-section reveal">
-        <div class="pricing-insight-card">
-            <span>Choose by outcome</span>
-            <h2>Pay for the stage you are actually in.</h2>
-            <p>Free is for validating the idea. Pro is for publishing real apps. Scale is for teams that need more credits, more cloud capacity and a smoother path from prompt to production.</p>
-        </div>
-        <div class="pricing-trust-card">
-            <div>
-                <span>Build credits</span>
-                <h3>Create and iterate</h3>
-                <p>Credits power Huggy's work in the builder: planning, generation, fixes, refactors and product iterations.</p>
-            </div>
-            <div>
-                <span>Cloud balance</span>
-                <h3>Run published apps</h3>
-                <p>Cloud balance covers hosting, database, storage, bandwidth and deployed AI usage for live apps.</p>
-            </div>
-            <div>
-                <span>Safe launch</span>
-                <h3>Preview before live</h3>
-                <p>Your preview can change freely. The published app changes only when you decide to publish.</p>
-            </div>
-            <div>
-                <span>Growth path</span>
-                <h3>Upgrade without friction</h3>
-                <p>Start small, then move to Pro or Scale as projects, clients, traffic and team workflows become serious.</p>
-            </div>
         </div>
     </section>
 
@@ -446,93 +327,11 @@
             </div>
             <div class="faq-item">
                 <div class="faq-q">
-                    <span>What kind of apps can I build?</span>
-                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">Huggy is built for web products: SaaS dashboards, portals, booking tools, e-commerce, internal tools, AI utilities, portfolios and landing pages. New apps use modern React, TypeScript and Vite patterns by default.</div>
-            </div>
-            <div class="faq-item">
-                <div class="faq-q">
-                    <span>Is my data secure?</span>
-                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">Huggy keeps platform auth separate from generated app auth, protects secrets from the frontend, and treats your code and project data as your property. Sensitive keys should stay server-side only.</div>
-            </div>
-            <div class="faq-item">
-                <div class="faq-q">
                     <span>Will I lose my projects if I downgrade or cancel?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 </div>
                 <div class="faq-a">No. Projects stay attached to your account. Plan limits may affect publishing, top-ups or premium features, but Huggy should not remove your saved work unless you delete it.</div>
             </div>
-            <div class="faq-item">
-                <div class="faq-q">
-                    <span>Do published apps change when I keep editing?</span>
-                    <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">No. The preview can evolve while the live app stays stable. The published version changes only after you click Publish again.</div>
-            </div>
-        </div>
-    </section>
-
-    <section class="marketing-prompt-section reveal">
-        <div class="marketing-prompt-copy">
-            <span class="marketing-kicker">Try the workflow</span>
-            <h2>Ready to test Huggy with a real app?</h2>
-            <p>Describe the product, workflow or landing page you want. Huggy opens the builder, generates a working preview and keeps the project saved to your account.</p>
-        </div>
-        <div class="input-wrapper marketing-prompt-card">
-                <textarea rows="3" placeholder="Example: Build a paid SaaS dashboard with login, billing, usage metrics and a custom domain."></textarea>
-                <div class="input-actions">
-                    <div class="actions-left">
-                        <button class="icon-btn btn-upload" data-tooltip="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
-                        <input type="file" style="display: none;" class="file-input" multiple>
-                        <button class="icon-btn btn-voice" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                <line x1="12" y1="19" x2="12" y2="23"></line>
-                                <line x1="8" y1="23" x2="16" y2="23"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="actions-right">
-                        <div class="prompt-mode" data-prompt-mode="auto">
-                            <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
-                                <span class="prompt-mode-label">Auto</span>
-                                <span class="prompt-mode-chevron" aria-hidden="true">v</span>
-                            </button>
-                            <div class="prompt-mode-menu" role="menu">
-                                <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active">
-                                    <span>Auto</span>
-                                    <small>Let Huggy decide</small>
-                                </button>
-                                <button type="button" data-prompt-mode-option="build" role="menuitem">
-                                    <span>Build</span>
-                                    <small>Generate or edit the app</small>
-                                </button>
-                                <button type="button" data-prompt-mode-option="plan" role="menuitem">
-                                    <span>Plan</span>
-                                    <small>Think without changing files</small>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="submit-wrapper">
-                            <button class="submit-btn" title="Open builder" type="button">
-                                <span>Open builder</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="19" x2="12" y2="5"></line>
-                                    <polyline points="5 12 12 5 19 12"></polyline>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
         </div>
     </section>
 
