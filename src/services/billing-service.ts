@@ -175,7 +175,7 @@ export const SAAS_PLANS: Record<PlanKey, PlanConfig> = {
     monthlyCreditCap: 10000,
     maxProjects: 9999,
     customDomains: 10,
-    topupPricePer50: 0.625,
+    topupPricePer50: 1,
     rollover: 'monthly',
     public: true,
     cloud: {
@@ -292,8 +292,8 @@ export const PLAN_ECONOMICS_GUARDRAILS: Record<PlanKey, PlanEconomicsGuardrail> 
 
 export const TOPUP_PRODUCTS: TopupProduct[] = [
   { id: 'topup_credits_500', plan: 'pro', credits: 500, price: 10.00, expiresMonths: 12 },
-  { id: 'topup_credits_1500', plan: 'pro', credits: 1500, price: 25.00, expiresMonths: 12 },
-  { id: 'topup_credits_4000', plan: 'scale', credits: 4000, price: 50.00, expiresMonths: 12 },
+  { id: 'topup_credits_1500', plan: 'pro', credits: 1500, price: 30.00, expiresMonths: 12 },
+  { id: 'topup_credits_4000', plan: 'scale', credits: 4000, price: 80.00, expiresMonths: 12 },
 ];
 
 export const CLOUD_TOPUP_PRODUCTS: CloudTopupProduct[] = [
@@ -747,6 +747,13 @@ export class StripeService {
       await this.supabase
         .from('cloud_wallets')
         .upsert([{ organization_id: organizationId, balance_usd: updated, updated_at: new Date().toISOString() }]);
+
+      // A positive balance after a top-up must lift any metering suspension.
+      if (updated > 0) {
+        await this.supabase.rpc('reactivate_cloud_wallet', { org_id: organizationId }).catch((error: any) => {
+          console.warn(`[huggy:cloud_wallet_reactivate_skipped] ${error?.message || error}`);
+        });
+      }
 
       await this.supabase
         .from('cloud_usage_ledger')

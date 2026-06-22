@@ -11,8 +11,13 @@ export interface ActionCostComponents {
 }
 
 export class CostEstimatorService {
-  // Average selling credit price in US dollars: ranges from volume tiers to standard Pro top-ups.
-  private sell_value_per_credit = 0.20;
+  // Real selling price of one credit in USD. This MUST track what a credit
+  // actually costs the customer across plans/top-ups, or the margin maths below
+  // is fictional. Realized price ranges from $0.0125 (Scale volume top-up) to
+  // $0.025 (Pro monthly); 0.02 is the floor we guarantee on every SKU, so the
+  // dynamic formula (cost * multiplier / sell_value) never under-charges.
+  // NOTE: was 0.20 — a 10x overestimate that made every reported margin false.
+  private sell_value_per_credit = 0.02;
   // 3.4x cost coverage targets at least ~70% gross margin before payment fees.
   private minimum_margin_multiplier = 3.4;
 

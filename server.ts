@@ -3744,10 +3744,12 @@ const agentOrchestrator = new AgentOrchestrator();
 const intentRouter = agentOrchestrator;
 
 function agentIntentNeedsAiRouter(decision: IntentDecision) {
-  if (decision.requestedMode === 'plan') return false;
-  if (decision.intent === 'conversation' && decision.confidence >= 0.93) return false;
-  if (decision.intent === 'clarification_required' && decision.confidence >= 0.95) return false;
-  return true;
+  // No keyword routing. Whenever a live AI provider is available (the caller
+  // gates on hasLiveAiProvider), the LLM decides the intent for EVERY message —
+  // there is no confidence/regex shortcut. The only non-LLM path left is the
+  // user's explicit Plan toggle, which is a deliberate UI choice, not a keyword.
+  // When no provider is configured the caller falls back to the local heuristic.
+  return decision.requestedMode !== 'plan';
 }
 
 function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision | null {
@@ -5821,7 +5823,7 @@ async function generateFilesWithAi(input: {
 
   let totalCostUsd = 0;
   // --- AGENTIC AI V3 LOOP ---
-  input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Analyse des dépendances (AST)...' });
+  input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Je repère les parties du projet qui peuvent influencer ce changement.' });
   const depGraph = buildDependencyGraph(input.existingFiles);
   const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
 
@@ -5851,7 +5853,7 @@ async function generateFilesWithAi(input: {
   // ✅ Parallel specialist agents — run concurrently before main generation
   let parallelAgentContext = '';
   if (input.existingFiles.length >= 0 && ['build', 'edit'].includes(input.decision?.intent || '')) {
-    input.onEvent?.({ type: 'agent_step', step: 'parallel_agents', message: 'Agents spécialisés en parallèle...' });
+    input.onEvent?.({ type: 'agent_step', step: 'parallel_agents', message: 'Je vérifie les angles importants en une seule passe pour éviter les oublis.' });
     try {
       const agentCtx: ParallelAgentContext = {
         projectName: input.projectName,
@@ -5934,7 +5936,7 @@ async function generateFilesWithAi(input: {
         input.onEvent?.({
           type: 'agent_step',
           step: 'parallel_agents_done',
-          message: `${successCount}/${agentRoles.length} agents spécialisés complétés.`,
+          message: 'Les points de vigilance sont clairs, je passe à la génération.',
         });
       }
     } catch (parallelErr: any) {
@@ -5944,7 +5946,7 @@ async function generateFilesWithAi(input: {
   }
 
   // Extract memory (ADRs) from last actions and build RAG context
-  input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Extraction de la mémoire architecturale (RAG)...' });
+  input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Je récupère le contexte utile pour rester cohérent avec le projet.' });
   const persistenceClient = getSupabase();
 
   // Load persisted project memory from Supabase (ADRs, preferences, blockers)
@@ -5980,7 +5982,7 @@ async function generateFilesWithAi(input: {
   }
 
   // ✅ Load persisted design tokens for visual consistency across sessions
-  input.onEvent?.({ type: 'agent_step', step: 'design_tokens', message: 'Chargement des tokens design...' });
+  input.onEvent?.({ type: 'agent_step', step: 'design_tokens', message: 'J’aligne les couleurs, l’espacement et la typographie avec l’existant.' });
   let designTokenContext = '';
   try {
     if (input.project?.id && persistenceClient) {
@@ -6015,7 +6017,7 @@ async function generateFilesWithAi(input: {
   })();
 
   // Meta-prompting: enrich the user's prompt
-  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Brief affiné.' });
+  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Je précise le brief pour construire quelque chose de concret.' });
   const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
 
   // Compose final prompt with all context layers
@@ -6044,7 +6046,13 @@ async function generateFilesWithAi(input: {
   let currentPrompt = composedPrompt;
   
   while (attempt < 2) {
-    input.onEvent?.({ type: 'agent_step', step: 'generation', message: attempt === 0 ? 'Première version générée.' : 'Version corrigée générée.' });
+    input.onEvent?.({
+      type: 'agent_step',
+      step: 'generation',
+      message: attempt === 0
+        ? 'Je produis une première version complète de l’application.'
+        : 'J’intègre la correction et je régénère la partie concernée.',
+    });
 
     // Stream tokens live so the client sees progress in real time
     let fullText = '';
@@ -6137,17 +6145,17 @@ async function generateFilesWithAi(input: {
 
     result = { text: fullText, model: streamedModel, cost_usd: streamedCost };
     totalCostUsd += streamedCost;
-    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Qualité vérifiée.' });
+    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Je vérifie maintenant que la version peut vraiment s’afficher.' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
 
     if (judgeEval.passed || attempt >= 1) {
-      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'Code validé.' });
+      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'La structure passe les contrôles principaux, je prépare la preview.' });
       break;
     }
 
     console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
-    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: 'La première version était trop légère. Huggy la renforce automatiquement.' });
+    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: 'La première version risquait d’afficher un écran vide, je la renforce avant de continuer.' });
 
     // Use a different model for the judge retry to avoid self-agreement bias
     const judgeModelId = modelRouter.selectJudgeModel(
@@ -9466,6 +9474,15 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   }
 });
 
+// POST /api/chat
+// Compatibility endpoint for AI Elements-style chat clients. It reuses Huggy's
+// existing streamed conversation route so the app keeps one source of truth for
+// auth, persistence, cancellation, credits, and provider fallback.
+app.post('/api/chat', (req: any, res: any) => {
+  req.url = '/api/assistant/chat/stream';
+  (app as any).handle(req, res);
+});
+
 // POST /billing/checkout/cloud-topup
 app.post('/api/billing/checkout/cloud-topup', async (req, res) => {
   const { productId, email, successUrl, cancelUrl } = req.body;
@@ -9840,7 +9857,7 @@ app.get('/api/admin/feature-flags', async (req: any, res) => {
       { key: 'huggy_media', label: 'Huggy Media', enabled: true, rollout: 'beta', risk: 'medium' },
       { key: 'huggy_design', label: 'Huggy Design', enabled: true, rollout: 'beta', risk: 'medium' },
       { key: 'huggy_decks', label: 'Huggy Decks', enabled: true, rollout: 'beta', risk: 'medium' },
-      { key: 'workline_journal', label: 'Workline journal', enabled: true, rollout: 'all', risk: 'low' },
+      { key: 'rich_message_parts_stream', label: 'Rich message parts stream', enabled: true, rollout: 'all', risk: 'low' },
       { key: 'publish_vercel', label: 'Vercel publish', enabled: Boolean(getVercelToken()), rollout: getVercelToken() ? 'all' : 'blocked', risk: 'high' },
       { key: 'browser_testing', label: 'Browser testing runtime', enabled: true, rollout: 'all', risk: 'medium' },
       { key: 'auto_model_router', label: 'Auto model router', enabled: true, rollout: 'all', risk: 'medium' },
@@ -11110,7 +11127,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     // and emit a first milestone so the UI reacts in <1s.
     res.flushHeaders?.();
     streamV2.emit('milestone', { milestone: 'understanding', state: 'active' });
-    res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Request received.' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Je commence par cadrer le résultat attendu avant de toucher au projet.' })}\n\n`);
   }
 
   // Stream-aware terminal response. In SSE mode every final/early return MUST be

@@ -1733,6 +1733,77 @@
       box-shadow: none;
     }
 
+    /* ── Chat-to-Build: dashboard "descent" morph on submit ──────────────
+       The centered hero composer drops toward the bottom while the title /
+       subtitle / chips fade out and a short conversation (the prompt + a
+       thinking indicator) appears above it — the Claude.ai feel — right before
+       the builder opens with the same prompt. */
+    .create-section.is-launching {
+      justify-content: flex-end;
+      min-height: 60vh;
+    }
+    .create-section.is-launching .create-title,
+    .create-section.is-launching .create-subtitle,
+    .create-section.is-launching .chips-row {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      pointer-events: none;
+      transition: opacity 200ms ease, max-height 300ms ease, margin 300ms ease;
+    }
+    .create-section.is-launching .input-wrapper {
+      transition: transform 360ms cubic-bezier(.22, 1, .36, 1);
+    }
+    .launch-thread {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 14px;
+      text-align: left;
+      animation: launchFade 280ms ease both;
+    }
+    .launch-bubble-user {
+      align-self: flex-end;
+      max-width: 80%;
+      background: var(--accent-blue, #3b82f6);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 14px 14px 4px 14px;
+      font-size: 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .launch-bubble-ai {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .launch-dots { display: inline-flex; gap: 4px; }
+    .launch-dots i {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor; opacity: .4;
+      animation: launchDot 1s infinite;
+    }
+    .launch-dots i:nth-child(2) { animation-delay: .15s; }
+    .launch-dots i:nth-child(3) { animation-delay: .3s; }
+    @keyframes launchDot { 0%,60%,100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+    @keyframes launchFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .create-section.is-launching .create-title,
+      .create-section.is-launching .create-subtitle,
+      .create-section.is-launching .chips-row,
+      .create-section.is-launching .input-wrapper,
+      .launch-thread,
+      .launch-dots i { transition: none !important; animation: none !important; }
+    }
+
     .create-title {
       font-family: "Instrument Sans", system-ui, sans-serif;
       font-style: normal;

@@ -22,7 +22,7 @@ assert.match(server, /field: 'events_snapshot'/);
 assert.match(server, /recovery_source: recovered\.recovery_source/);
 
 assert.match(builder, /payload\.preview\.status !== 'idle'/);
-assert.match(builder, /restoreWorklineFromPayloadEvents\(payload\)/);
-assert.match(builder, /restoreLatestWorklineFromRunHistory\(payload\)/);
+assert.match(builder, /restoreStreamPartsFromPayloadEvents\(payload\)/);
+assert.match(builder, /restoreLatestStreamPartsFromRunHistory\(payload\)/);
 
 console.log('Durable project persistence tests passed.');

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ChevronDown, Copy, Maximize2, MessageSquareIcon, Pencil, ThumbsDown, ThumbsUp, XIcon } from "lucide-react";
+import { ChevronDown, Code2, Copy, Eye, FileText, Maximize2, MessageSquareIcon, Pencil, Search, Terminal as TerminalIcon, ThumbsDown, ThumbsUp, Wrench, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -10,9 +10,12 @@ import {
 } from "./components/ai-elements/conversation";
 import type { ConfirmationState } from "./components/ai-elements/confirmation";
 import { Message, MessageContent } from "./components/ai-elements/message";
-import { AgentActivityStream } from "./components/ai-elements/agent-activity-stream";
+import { CodeBlock } from "./components/ai-elements/code-block";
+import { DiffView } from "./components/ai-elements/diff-view";
 import { Reasoning } from "./components/ai-elements/reasoning";
-import { workJournalToActivityState } from "./lib/agent-activity-stream-adapter";
+import { TerminalBlock } from "./components/ai-elements/terminal";
+import { ToolCall } from "./components/ai-elements/tool-call";
+import type { HuggyMessagePart } from "./lib/chat-message-parts";
 import "./styles/agent-activity-stream-v2.css";
 import "./styles/huggy-ai-elements.css";
 
@@ -38,36 +41,40 @@ export type HuggyAgentTrace = {
   steps?: HuggyAgentTraceStep[];
 };
 
-export type HuggyWorklineEntry = {
-  id: string;
-  kind: "update" | "group" | "divider" | "summary" | "narration" | "thinking" | "file_edit" | "command";
-  text: string;
-  detail?: string;
-  status?: "active" | "done" | "failed" | "cancelled" | "muted";
-  items?: string[];
-  path?: string;
-  action?: "created" | "modified" | "deleted";
-  additions?: number;
-  deletions?: number;
-  command?: string;
-};
-
 export type HuggyConversationBlock =
-  | {
-      type: "work_journal";
-      status: "active" | "done" | "failed" | "cancelled";
-      startedAt?: string;
-      elapsed?: string;
-      entries: HuggyWorklineEntry[];
-      activeText?: string;
-      finalText?: string;
-      restored?: boolean;
-    }
   | {
       type: "reasoning";
       title?: string;
       content: string;
       isStreaming?: boolean;
+      elapsed?: string;
+    }
+  | {
+      type: "tool_call";
+      name: string;
+      detail?: string;
+      status: "active" | "done" | "failed";
+      result?: string;
+      items?: string[];
+    }
+  | {
+      type: "terminal";
+      command: string;
+      output?: string | null;
+      status?: "pass" | "fail" | null;
+      running?: boolean;
+    }
+  | {
+      type: "code";
+      code: string;
+      language?: string;
+      filename?: string;
+      streaming?: boolean;
+    }
+  | {
+      type: "diff";
+      filename: string;
+      hunks: string[];
     }
   | {
       type: "confirmation";
@@ -81,7 +88,7 @@ export type HuggyConversationBlock =
 export type HuggyConversationMessage = {
   id: string;
   content: string;
-  parts?: import("./lib/chat-message-parts").HuggyMessagePart[];
+  parts?: HuggyMessagePart[];
   role: HuggyConversationRole;
   working?: boolean;
   trace?: HuggyAgentTrace | null;
@@ -91,8 +98,9 @@ export type HuggyConversationMessage = {
 };
 
 export type HuggyConversationApi = {
-  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; parts?: import("./lib/chat-message-parts").HuggyMessagePart[]; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
+  addMessage: (message: { id?: string; role: HuggyConversationRole; content: string; parts?: HuggyMessagePart[]; working?: boolean; trace?: HuggyAgentTrace | null; block?: HuggyConversationBlock }) => string;
   updateMessage: (id: string, content: string) => void;
+  setParts: (id: string, parts: HuggyMessagePart[], content?: string) => void;
   setWorking: (id: string, label: string) => void;
   clearWorking: (id: string) => void;
   setTrace: (id: string, trace: HuggyAgentTrace | null) => void;
@@ -276,6 +284,36 @@ function ensureConversationStyles() {
       text-decoration: underline;
       text-underline-offset: 3px;
       text-decoration-thickness: 1px;
+    }
+
+    .huggy-zip-stream {
+      display: grid;
+      gap: 8px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .huggy-zip-stream .haas-thinking,
+    .huggy-zip-stream .haas-tool,
+    .huggy-zip-stream .haas-terminal,
+    .huggy-zip-stream .haas-code,
+    .huggy-zip-stream .haas-diff {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+    }
+
+    .huggy-zip-stream pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .huggy-streamline-text {
+      color: var(--text);
+      font-size: 12.5px;
+      line-height: 1.58;
+      min-width: 0;
     }
 
     .huggy-agent-trace {
@@ -1273,7 +1311,7 @@ function renderPlainMessage(content: string) {
 function textFromConversationParts(parts: HuggyConversationMessage["parts"], fallback: string) {
   if (!Array.isArray(parts) || !parts.length) return fallback;
   const text = parts
-    .filter(part => part.type === "text" || part.type === "reasoning")
+    .filter(part => part.type === "text")
     .map(part => String(part.text || "").trim())
     .filter(Boolean)
     .join("\n")
@@ -1286,15 +1324,13 @@ function renderStandardMessageContent(message: HuggyConversationMessage) {
   if (!content && message.block) {
     if (message.block.type === "work_journal") {
       content = message.block.finalText || "";
-    } else if (message.block.type === "reasoning") {
-      content = message.block.content || "";
     }
   }
   if (message.role === "assistant") return renderAssistantMarkdown(content);
   return renderPlainMessage(content);
 }
 
-function workJournalCompareText(value = "") {
+function streamPartCompareText(value = "") {
   return value
     .toLowerCase()
     .normalize("NFKD")
@@ -1304,25 +1340,243 @@ function workJournalCompareText(value = "") {
     .trim();
 }
 
-function renderWorkJournal(message: HuggyConversationMessage, block: Extract<HuggyConversationBlock, { type: "work_journal" }>) {
-  const visibleEntries = (block.entries || []).filter(entry => {
-    const normalized = workJournalCompareText(`${entry.kind} ${entry.text} ${entry.detail || ""}`);
-    return normalized !== "i keep the work recoverable without claiming a false ready preview";
-  });
-  const state = workJournalToActivityState({ ...block, entries: visibleEntries });
-  const retry = message.actions?.find(action => /retry|reessayer|réessayer|corriger/i.test(action.label))?.onClick;
-  return <AgentActivityStream state={state} onRetry={retry} />;
+function sanitizeStreamNarrationText(value = ""): string {
+  const source = String(value || "").trim();
+  const sourceLines = source.split(/\r?\n+/).map(line => line.trim()).filter(Boolean);
+  if (sourceLines.length > 1) {
+    const seen = new Set<string>();
+    return sourceLines
+      .map(line => sanitizeStreamNarrationText(line))
+      .filter(Boolean)
+      .filter(line => {
+        const key = streamPartCompareText(line);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .join("\n");
+  }
+  const raw = source.replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+  if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) {
+    return "Je commence par cadrer le résultat attendu avant de toucher au projet.";
+  }
+  if (/\b(je pr[ée]pare le travail|huggy pr[ée]pare le travail|preparing the work)\b/i.test(raw)) {
+    return "Je commence par cadrer le résultat attendu avant de toucher au projet.";
+  }
+  if (/\b(analyse des d[ée]pendances|dependencies)\b/i.test(raw) && /\bAST\b/i.test(raw)) {
+    return "Je repère les parties du projet qui peuvent influencer ce changement.";
+  }
+  if (/\bagents?\s+sp[ée]cialis[ée]s?\s+en\s+parall[èe]le\b/i.test(raw) || /\bspecialized agents in parallel\b/i.test(raw)) {
+    return "Les points de vigilance sont clairs, je passe à la génération.";
+  }
+  if (/^\s*\d+\s*\/\s*\d+\s+agents?\b/i.test(raw)) {
+    return "Les points de vigilance sont clairs, je passe à la génération.";
+  }
+  if (/\b(extraction de la m[ée]moire|architectural memory)\b/i.test(raw) && /\bRAG\b/i.test(raw)) {
+    return "Je récupère le contexte utile pour rester cohérent avec le projet.";
+  }
+  if (/\b(chargement des (tokens|jetons) design|loading design tokens)\b/i.test(raw)) {
+    return "J’aligne les couleurs, l’espacement et la typographie avec l’existant.";
+  }
+  if (/^(brief|bref)\s+affin[ée]\.?$/i.test(raw) || /^brief refined\.?$/i.test(raw)) {
+    return "Je précise le brief pour construire quelque chose de concret.";
+  }
+  if (/^premi[èe]re version g[ée]n[ée]r[ée]e\.?$/i.test(raw)) {
+    return "Je produis une première version complète de l’application.";
+  }
+  if (/^version corrig[ée]e g[ée]n[ée]r[ée]e\.?$/i.test(raw)) {
+    return "J’intègre la correction et je régénère la partie concernée.";
+  }
+  if (/^qualit[ée] v[ée]rifi[ée]e\.?$/i.test(raw)) {
+    return "Je vérifie maintenant que la version peut vraiment s’afficher.";
+  }
+  if (/^code valid[ée]\.?$/i.test(raw)) {
+    return "La structure passe les contrôles principaux, je prépare la preview.";
+  }
+  if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|pipeline)\b/i.test(raw)) return "";
+  if (/^\s*(done|working|processing|loading|analyzing)\.?\s*$/i.test(raw)) return "";
+  return raw;
+}
+
+function richStreamPartDedupeKey(part: HuggyMessagePart) {
+  if (part.type === "file_edit") {
+    return streamPartCompareText(`file ${part.path || ""} ${part.action || ""} ${part.additions || 0} ${part.deletions || 0}`);
+  }
+  if (part.type === "terminal" || part.type === "command") {
+    return streamPartCompareText(`terminal ${part.command || part.text || ""} ${part.status || ""}`);
+  }
+  const items = Array.isArray(part.items) ? part.items : [];
+  return streamPartCompareText([
+    part.text,
+    part.detail,
+    part.result,
+    part.output,
+    part.name,
+    ...items,
+  ].map(item => String(item || "").trim()).filter(Boolean).join(" "));
+}
+
+function sanitizeRichStreamPart(part: HuggyMessagePart): HuggyMessagePart | null {
+  const next: HuggyMessagePart = { ...part };
+  if (typeof next.text === "string") next.text = sanitizeStreamNarrationText(next.text);
+  if (typeof next.detail === "string") next.detail = sanitizeStreamNarrationText(next.detail);
+  if (typeof next.result === "string") next.result = sanitizeStreamNarrationText(next.result);
+  if (typeof next.output === "string") next.output = sanitizeStreamNarrationText(next.output);
+  if (Array.isArray(next.items)) next.items = next.items.map(item => sanitizeStreamNarrationText(String(item || ""))).filter(Boolean);
+  const visibleItems = Array.isArray(next.items) ? next.items : [];
+  const visible = [next.text, next.detail, next.result, next.output, ...visibleItems].map(item => String(item || "").trim()).filter(Boolean);
+  if (!visible.length && next.type !== "file_edit" && next.type !== "terminal" && next.type !== "command") return null;
+  return next;
+}
+
+function partStatusToToolStatus(status: unknown): "active" | "done" | "failed" {
+  if (status === "failed" || status === "cancelled") return "failed";
+  if (status === "active") return "active";
+  return "done";
+}
+
+function partStatusToTerminalStatus(status: unknown): "pass" | "fail" | null {
+  if (status === "failed" || status === "cancelled") return "fail";
+  if (status === "done") return "pass";
+  return null;
+}
+
+function streamPartIcon(part: HuggyMessagePart) {
+  const normalized = streamPartCompareText(`${part.type} ${part.text || ""} ${part.detail || ""} ${part.path || ""}`);
+  if (part.type === "terminal" || part.type === "command") return <TerminalIcon size={16} />;
+  if (part.type === "file_edit") return <FileText size={16} />;
+  if (normalized.includes("recherche") || normalized.includes("search")) return <Search size={16} />;
+  if (normalized.includes("lecture") || normalized.includes("read") || normalized.includes("preview")) return <Eye size={16} />;
+  if (normalized.includes("code") || normalized.includes("fichier") || normalized.includes("file")) return <Code2 size={16} />;
+  return <Wrench size={16} />;
+}
+
+function partBodyText(part: HuggyMessagePart) {
+  const lines: string[] = [];
+  if (typeof part.result === "string") lines.push(part.result);
+  if (typeof part.output === "string") lines.push(part.output);
+  if (typeof part.detail === "string") lines.push(part.detail);
+  if (Array.isArray(part.items)) lines.push(...part.items.map(item => String(item || "")).filter(Boolean));
+  if (typeof part.path === "string" && part.type === "file_edit") {
+    const action = part.action === "created" ? "Created" : part.action === "deleted" ? "Deleted" : "Modified";
+    const diff = typeof part.additions === "number" || typeof part.deletions === "number"
+      ? `+${part.additions || 0} -${part.deletions || 0}`
+      : "";
+    lines.push(`${action} ${part.path}${diff ? ` ${diff}` : ""}`);
+  }
+  return lines.join("\n").trim();
+}
+
+function streamPartToolName(part: HuggyMessagePart) {
+  if (typeof part.name === "string" && part.name.trim()) return part.name.trim();
+  if (part.type === "file_edit") {
+    if (part.action === "created") return "Creation de fichier";
+    if (part.action === "deleted") return "Suppression de fichier";
+    return "Modification de fichier";
+  }
+  if (part.type === "terminal" || part.type === "command") return "Execution de commande";
+  return String(part.text || part.type || "Action");
+}
+
+function renderRichMessagePart(part: HuggyMessagePart, index: number) {
+  const key = String(part.id || `${part.type}_${index}`);
+  if (part.type === "text") {
+    const text = String(part.text || "").trim();
+    return text ? (
+      <div key={key} className="huggy-streamline-text">
+        {renderAssistantMarkdown(text)}
+      </div>
+    ) : null;
+  }
+
+  if (part.type === "reasoning" || part.type === "thinking") {
+    const text = String(part.text || part.detail || "").trim();
+    return (
+      <Reasoning key={key} isStreaming={part.status === "active"} elapsed={typeof part.elapsed === "string" ? part.elapsed : undefined}>
+        {text}
+      </Reasoning>
+    );
+  }
+
+  if (part.type === "terminal" || part.type === "command") {
+    return (
+      <TerminalBlock
+        key={key}
+        command={String(part.command || part.text || "")}
+        output={partBodyText(part)}
+        status={partStatusToTerminalStatus(part.status)}
+        running={part.status === "active" || Boolean(part.running)}
+      />
+    );
+  }
+
+  if (part.type === "code") {
+    return (
+      <CodeBlock
+        key={key}
+        code={String(part.code || part.text || "")}
+        language={typeof part.language === "string" ? part.language : undefined}
+        filename={typeof part.filename === "string" ? part.filename : undefined}
+        streaming={Boolean(part.streaming)}
+      />
+    );
+  }
+
+  if (part.type === "diff") {
+    const hunks = Array.isArray(part.hunks) ? part.hunks.map(item => String(item || "")) : [];
+    return <DiffView key={key} filename={String(part.filename || part.path || "diff")} hunks={hunks} />;
+  }
+
+  const detail = typeof part.path === "string" ? part.path : typeof part.detail === "string" ? part.detail : undefined;
+  const body = partBodyText(part);
+  return (
+    <ToolCall
+      key={key}
+      name={streamPartToolName(part)}
+      detail={detail}
+      status={partStatusToToolStatus(part.status)}
+      icon={streamPartIcon(part)}
+    >
+      {body ? <pre>{body}</pre> : null}
+    </ToolCall>
+  );
+}
+
+function hasRichMessageParts(parts: HuggyConversationMessage["parts"]) {
+  return Array.isArray(parts) && parts.some(part => part.type !== "text");
+}
+
+function renderRichMessageParts(message: HuggyConversationMessage) {
+  const seen = new Set<string>();
+  const parts = (message.parts || [])
+    .map(sanitizeRichStreamPart)
+    .filter((part): part is HuggyMessagePart => {
+      if (!part) return false;
+      const normalized = richStreamPartDedupeKey(part);
+      if (!normalized || normalized === "i keep the work recoverable without claiming a false ready preview") return false;
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+  if (!parts.length) return null;
+  return (
+    <div className="huggy-zip-stream" data-status={message.working ? "active" : "done"}>
+      {parts.map(renderRichMessagePart)}
+    </div>
+  );
 }
 
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
 
-  if (block.type === "work_journal") {
-    return null;
-  }
-
-  if (block.type === "reasoning") {
+  if (block.type === "work_journal" ||
+      block.type === "reasoning" ||
+      block.type === "tool_call" ||
+      block.type === "terminal" ||
+      block.type === "code" ||
+      block.type === "diff") {
     return null;
   }
 
@@ -1451,14 +1705,14 @@ function dispatchConversationEdit(message: HuggyConversationMessage) {
   window.dispatchEvent(new CustomEvent("huggy-edit-message", {
     detail: {
       messageId: message.id,
-      content: message.content,
+      content: textFromConversationParts(message.parts, message.content),
       role: message.role,
     },
   }));
 }
 
 async function copyMessageText(message: HuggyConversationMessage) {
-  const text = message.content || "";
+  const text = textFromConversationParts(message.parts, message.content) || "";
   try {
     await navigator.clipboard?.writeText(text);
   } catch {
@@ -1792,6 +2046,17 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
     },
     updateMessage(id, content) {
       messages = messages.map(message => message.id === id ? { ...message, content } : message);
+      render();
+    },
+    setParts(id, parts, content = "") {
+      messages = messages.map(message => message.id === id
+        ? {
+            ...message,
+            content: content || textFromConversationParts(parts, message.content),
+            parts,
+            working: false,
+          }
+        : message);
       render();
     },
     setWorking(id, label) {

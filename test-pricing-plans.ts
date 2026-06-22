@@ -72,9 +72,12 @@ assert.equal(isPaidPlanKey('enterprise'), true);
 
 assert.equal(TOPUP_PRODUCTS.some(item => String(item.plan) === 'business' || item.id.includes('business')), false);
 assert.equal(TOPUP_PRODUCTS.every(item => item.plan === 'pro' || item.plan === 'scale'), true);
+// Repriced so no SKU sells a credit below the $0.02 floor (see credit-system.ts).
 assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_credits_500')?.price, 10);
-assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_credits_1500')?.price, 25);
-assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_credits_4000')?.price, 50);
+assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_credits_1500')?.price, 30);
+assert.equal(TOPUP_PRODUCTS.find(item => item.id === 'topup_credits_4000')?.price, 80);
+// No top-up may price a credit under the guaranteed $0.02 floor.
+assert.ok(TOPUP_PRODUCTS.every(item => item.price / item.credits >= 0.02 - 1e-9));
 assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.id === 'cloud_topup_50'), false);
 assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.amountUsd < 10), false);
 assert.equal(CLOUD_TOPUP_PRODUCTS.some(item => item.id === 'cloud_topup_10'), true);

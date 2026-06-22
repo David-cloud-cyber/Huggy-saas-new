@@ -252,6 +252,10 @@ let currentProjectId = '';
 let currentFiles: GeneratedFile[] = [];
 let currentPreviewHtml = '';
 let isGenerating = false;
+// Last known client-side wallet balance (credits). null = unknown -> defer to the
+// server credit gate. 0 = known-empty -> block the workspace reveal and show the
+// existing upgrade prompt instead.
+let lastWalletBalance: number | null = null;
 let lastPlan = '';
 let lastBuildSessionId = '';
 let lastAgentRunId = '';
@@ -281,7 +285,7 @@ let mediaSettings: MediaSettings = {
 };
 let selectedModelId = 'auto';
 let selectedPreviewDevice: PreviewDevice = 'desktop';
-let currentProjectName = 'Untitled app';
+let currentProjectName = 'Projet sans titre';
 let initialBuilderHandoff: { prompt: string; mode: ChatMode; importContext?: Record<string, unknown>; source?: string; shouldAutoRun?: boolean } | null = null;
 let initialGenerationStarted = false;
 let analysisPollTimer: number | null = null;
@@ -1574,7 +1578,7 @@ function bindSharedModelSelectionEvents() {
 
 function displayProjectName(value?: string) {
   const clean = String(value || '').trim();
-  return clean || 'Untitled app';
+  return clean || 'Projet sans titre';
 }
 
 function projectInitial(value?: string) {
@@ -2403,30 +2407,157 @@ function setMessageBlock(card: HTMLElement | null, block: HuggyConversationBlock
   }
 }
 
-type HuggyWorklineBlock = Extract<HuggyConversationBlock, { type: 'work_journal' }>;
-type HuggyWorklineEntry = HuggyWorklineBlock['entries'][number];
+type HuggyStreamEntry = {
+  id: string;
+  kind: 'update' | 'group' | 'divider' | 'summary' | 'narration' | 'thinking' | 'file_edit' | 'command';
+  text: string;
+  detail?: string;
+  status?: 'active' | 'done' | 'failed' | 'cancelled' | 'muted';
+  items?: string[];
+  path?: string;
+  action?: 'created' | 'modified' | 'deleted';
+  additions?: number;
+  deletions?: number;
+  command?: string;
+};
 
-function createHuggyWorklineBlock(): HuggyWorklineBlock {
+type HuggyStreamPartsState = {
+  status: 'active' | 'done' | 'failed' | 'cancelled';
+  startedAt?: string;
+  elapsed?: string;
+  entries: HuggyStreamEntry[];
+  activeText?: string;
+  finalText?: string;
+  restored?: boolean;
+};
+
+function createHuggyStreamPartsState(): HuggyStreamPartsState {
   return {
-    type: 'work_journal',
     status: 'active',
     startedAt: new Date().toISOString(),
     elapsed: '0m 00s',
     entries: [],
-    activeText: 'Huggy prépare le travail',
+    activeText: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
   };
 }
 
-function setWorkJournalBlock(card: HTMLElement | null, journal: HuggyWorklineBlock | null) {
+function streamEntryStatus(status: HuggyStreamEntry['status']) {
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  if (status === 'active') return 'active';
+  if (status === 'muted') return 'done';
+  return status || 'done';
+}
+
+function streamEntryBody(entry: HuggyStreamEntry) {
+  const lines: string[] = [];
+  if (entry.detail) lines.push(entry.detail);
+  if (entry.items?.length) lines.push(...entry.items);
+  return lines.join('\n').trim();
+}
+
+function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | null {
+  if (entry.kind === 'divider') return null;
+  if (entry.kind === 'thinking') {
+    const text = professionalStreamNarration(entry.detail || entry.text, true);
+    if (!text) return null;
+    return {
+      id: entry.id,
+      type: 'reasoning',
+      text,
+      status: streamEntryStatus(entry.status),
+    };
+  }
+  if (entry.kind === 'command') {
+    return {
+      id: entry.id,
+      type: 'terminal',
+      command: entry.command || entry.text,
+      output: streamEntryBody(entry),
+      status: streamEntryStatus(entry.status),
+      running: entry.status === 'active',
+    };
+  }
+  if (entry.kind === 'file_edit') {
+    return {
+      id: entry.id,
+      type: 'file_edit',
+      name: entry.action === 'created'
+        ? 'Creation de fichier'
+        : entry.action === 'deleted'
+          ? 'Suppression de fichier'
+          : 'Modification de fichier',
+      text: entry.text,
+      detail: entry.detail,
+      status: streamEntryStatus(entry.status),
+      path: entry.path,
+      action: entry.action,
+      additions: entry.additions,
+      deletions: entry.deletions,
+    };
+  }
+  if (entry.kind === 'group') {
+    const name = professionalStreamNarration(entry.text, true) || entry.text;
+    const items = (entry.items || [])
+      .map(item => professionalStreamNarration(item, true))
+      .filter(Boolean);
+    return {
+      id: entry.id,
+      type: 'tool_call',
+      name,
+      status: streamEntryStatus(entry.status),
+      items,
+      result: items.join('\n'),
+    };
+  }
+  const text = professionalStreamNarration(entry.text, true);
+  const detail = professionalStreamNarration(entry.detail || '', true);
+  if (!text && !detail) return null;
+  return {
+    id: entry.id,
+    type: 'text',
+    text: [text, detail && journalTextKey(detail) !== journalTextKey(text) ? detail : ''].filter(Boolean).join('\n'),
+  };
+}
+
+function streamStateToMessageParts(state: HuggyStreamPartsState | null): HuggyMessagePart[] {
+  if (!state) return [];
+  const parts: HuggyMessagePart[] = [];
+  const seen = new Set<string>();
+  const hasActiveReasoning = state.entries.some(entry => entry.kind === 'thinking' && entry.status === 'active');
+  const activeText = professionalStreamNarration(state.activeText || '', true);
+  if (state.status === 'active' && activeText && !hasActiveReasoning) {
+    seen.add(semanticJournalKey(activeText));
+    parts.push({
+      id: 'stream_active_reasoning',
+      type: 'reasoning',
+      text: activeText,
+      status: 'active',
+      elapsed: state.elapsed,
+    });
+  }
+  for (const entry of state.entries) {
+    const part = streamEntryToMessagePart(entry);
+    if (!part) continue;
+    const key = semanticJournalKey(String(part.text || part.result || part.name || part.command || part.path || ''));
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    parts.push(part);
+  }
+  if (state.finalText) {
+    const finalText = professionalStreamNarration(state.finalText, true);
+    const normalizedFinal = semanticJournalKey(finalText);
+    const alreadyVisible = parts.some(part => semanticJournalKey(String(part.text || part.result || '')) === normalizedFinal);
+    if (finalText && !alreadyVisible) parts.push({ id: 'stream_final_text', type: 'text', text: finalText });
+  }
+  return parts;
+}
+
+function setStreamMessageParts(card: HTMLElement | null, state: HuggyStreamPartsState | null) {
   if (!card) return;
-  setMessageBlock(card, journal);
   const id = messageHandleId(card);
   if (!id || !conversationApi) return;
-  if (journal?.status === 'active') {
-    conversationApi.setWorking(id, journal.activeText || 'Thinking...');
-  } else {
-    conversationApi.clearWorking(id);
-  }
+  conversationApi.setParts(id, streamStateToMessageParts(state));
+  conversationApi.clearWorking(id);
 }
 
 function removeMessage(card: HTMLElement | null) {
@@ -2881,6 +3012,7 @@ async function loadProjectMenuCredits() {
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     const balance = Number(wallet.balance ?? 0);
+    lastWalletBalance = Number.isFinite(balance) ? balance : null;
     const monthly = Number(wallet.buckets?.monthly_credits ?? 0);
     const percent = monthly > 0 ? Math.max(0, Math.min(100, Math.round((balance / monthly) * 100))) : 100;
     syncBuilderPlanBadges(wallet.plan || 'free');
@@ -3194,6 +3326,15 @@ function ensureToolbar() {
       void openPublishPanel();
     });
   });
+
+  const shareBtn = document.getElementById('btn-share-project') as HTMLButtonElement | null;
+  if (shareBtn && shareBtn.dataset.shareBound !== 'true') {
+    shareBtn.dataset.shareBound = 'true';
+    shareBtn.addEventListener('click', event => {
+      event.preventDefault();
+      void shareProjectLink(shareBtn);
+    });
+  }
 }
 
 function publishPrimaryLabel(status: PublishStatusPayload | null) {
@@ -3429,6 +3570,46 @@ async function openPublishPanel() {
     renderPublishPanel(payload);
   } catch (error) {
     renderPublishPanel(null, false, error instanceof Error ? error.message : 'Unable to load publish status.');
+  }
+}
+
+async function shareProjectLink(button: HTMLButtonElement) {
+  const label = button.querySelector('.btn-share-label') as HTMLElement | null;
+  const fallbackText = button.textContent?.trim() || 'Partager';
+  const original = label?.textContent || fallbackText;
+  const setLabel = (text: string) => {
+    if (label) label.textContent = text;
+    else button.textContent = text;
+  };
+  const flash = (text: string, copied: boolean) => {
+    setLabel(text);
+    button.classList.toggle('is-copied', copied);
+    window.setTimeout(() => {
+      setLabel(original);
+      button.classList.remove('is-copied');
+      button.disabled = false;
+    }, 1800);
+  };
+
+  if (!currentProjectId) {
+    flash("Publiez d'abord", false);
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
+    const status = payload?.publish || null;
+    const hasLiveDeployment = Boolean(payload?.deployment && status && (status.state === 'published' || status.state === 'changes_unpublished'));
+    const publicUrl = hasLiveDeployment ? status?.public_url || '' : '';
+    if (!publicUrl) {
+      flash("Publiez d'abord", false);
+      return;
+    }
+    await navigator.clipboard?.writeText(publicUrl);
+    flash('Lien copié', true);
+  } catch {
+    flash("Publiez d'abord", false);
   }
 }
 
@@ -4382,8 +4563,15 @@ function activateBuilderView(view: 'preview' | 'code' | 'database' | 'analysis')
     node.style.display = name === view ? (view === 'code' ? 'grid' : 'flex') : 'none';
     node.setAttribute('aria-hidden', name === view ? 'false' : 'true');
   });
-  document.querySelectorAll('.sub-nav-tab').forEach(tab => tab.classList.remove('active'));
+  document.querySelectorAll('.sub-nav-tab, .builder-more-item').forEach(tab => tab.classList.remove('active'));
   document.getElementById(`tab-btn-${view}`)?.classList.add('active');
+  const moreTrigger = document.getElementById('tab-btn-more');
+  const moreWrapper = document.getElementById('builder-more-wrapper');
+  if (moreTrigger) {
+    moreTrigger.classList.toggle('active', view === 'analysis' || view === 'database');
+    moreTrigger.setAttribute('aria-expanded', 'false');
+  }
+  moreWrapper?.classList.remove('open');
   if (view === 'database') void loadDatabase();
   if (view === 'analysis') {
     void loadAnalysis();
@@ -4474,7 +4662,7 @@ function emptyBuilderProjectPayload(workspaceState: UserWorkspaceState | null = 
     success: true,
     project: {
       id: '',
-      name: currentProjectName || 'Untitled app',
+      name: currentProjectName || 'Projet sans titre',
       preview_status: 'idle',
     },
     files: [],
@@ -4543,7 +4731,7 @@ function projectNameFromPrompt(prompt: string) {
 async function ensureProjectForPrompt(prompt: string) {
   if (currentProjectId) return;
   const initialPrompt = prompt || getInitialDashboardPrompt() || 'Create a polished fullstack web application.';
-  const selectedName = currentProjectName && currentProjectName !== 'Untitled app'
+  const selectedName = currentProjectName && currentProjectName !== 'Projet sans titre'
     ? currentProjectName
     : projectNameFromPrompt(initialPrompt);
   const created = await apiFetch<ProjectPayload>('/api/projects', {
@@ -4691,8 +4879,8 @@ async function loadProject() {
     }
     syncProjectReadinessClass();
     restoreMessages(payload);
-    const restoredWorkline = restoreWorklineFromPayloadEvents(payload);
-    if (!restoredWorkline) await restoreLatestWorklineFromRunHistory(payload);
+    const restoredStreamParts = restoreStreamPartsFromPayloadEvents(payload);
+    if (!restoredStreamParts) await restoreLatestStreamPartsFromRunHistory(payload);
     const activeTab = payload.workspace_state?.active_tab || userWorkspaceState?.builder_active_tab;
     if (activeTab === 'code' || activeTab === 'database' || activeTab === 'analysis') {
       activateBuilderView(activeTab);
@@ -4740,9 +4928,9 @@ function restoreMessages(payload: ProjectPayload) {
     });
 }
 
-function restoreWorklineFromPayloadEvents(payload: ProjectPayload) {
+function restoreStreamPartsFromPayloadEvents(payload: ProjectPayload) {
   const scroll = chatScroll();
-  if (!scroll || scroll.dataset.worklineRestored === 'true' || !payload.events?.length) return false;
+  if (!scroll || scroll.dataset.streamPartsRestored === 'true' || !payload.events?.length) return false;
   const steps = payload.events.map((event, index) => ({
     sequence_number: Number(event.sequence_number || index + 1),
     event_type: event.event_type,
@@ -4751,24 +4939,24 @@ function restoreWorklineFromPayloadEvents(payload: ProjectPayload) {
     public_payload: event.public_payload || event.payload || {},
     created_at: event.created_at,
   })) as AgentRunStep[];
-  const journal = buildHuggyWorklineFromSteps(steps, { status: 'completed' } as AgentRunSummary);
+  const journal = buildStreamPartsFromSteps(steps, { status: 'completed' } as AgentRunSummary);
   if (!journal) return false;
   const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
   if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
     journal.finalText = '';
   }
   const card = appendMessage('assistant', '');
-  setWorkJournalBlock(card, journal);
-  scroll.dataset.worklineRestored = 'true';
+  setStreamMessageParts(card, journal);
+  scroll.dataset.streamPartsRestored = 'true';
   return true;
 }
 
-function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyWorklineBlock | null {
+function buildStreamPartsFromSteps(steps: AgentRunStep[], run?: AgentRunSummary): HuggyStreamPartsState | null {
   const relevant = steps
     .slice()
     .sort((a, b) => Number(a.sequence_number || 0) - Number(b.sequence_number || 0))
     .filter(step => step?.event_type);
-  const hasWorklineEvents = relevant.some(step => [
+  const hasStreamEvents = relevant.some(step => [
     'narration',
     'thinking',
     'file_edit',
@@ -4784,9 +4972,9 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
     'error',
     'cancelled',
   ].includes(step.event_type));
-  if (!hasWorklineEvents) return null;
+  if (!hasStreamEvents) return null;
 
-  const journal = createHuggyWorklineBlock();
+  const journal = createHuggyStreamPartsState();
   journal.status = run?.status === 'failed'
     ? 'failed'
     : run?.status === 'cancelled'
@@ -4796,7 +4984,7 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
         : 'active';
   journal.elapsed = run?.duration_ms ? formatWorkingDuration(Number(run.duration_ms || 0)) : undefined;
   journal.activeText = journal.status === 'active' ? 'Huggy reprend le travail' : '';
-  const fileEntries = new Map<string, HuggyWorklineEntry>();
+  const fileEntries = new Map<string, HuggyStreamEntry>();
   const commandItems: string[] = [];
   const checkItems: string[] = [];
   let finalText = '';
@@ -4887,25 +5075,25 @@ function buildHuggyWorklineFromSteps(steps: AgentRunStep[], run?: AgentRunSummar
   return journal.entries.length || journal.finalText ? journal : null;
 }
 
-async function restoreLatestWorklineFromRunHistory(payload: ProjectPayload) {
+async function restoreLatestStreamPartsFromRunHistory(payload: ProjectPayload) {
   const scroll = chatScroll();
-  if (!scroll || scroll.dataset.worklineRestored === 'true' || !currentProjectId) return;
-  scroll.dataset.worklineRestored = 'true';
+  if (!scroll || scroll.dataset.streamPartsRestored === 'true' || !currentProjectId) return;
+  scroll.dataset.streamPartsRestored = 'true';
   try {
     const runsPayload = await apiFetch<{ success: boolean; runs: AgentRunSummary[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs?limit=1`);
     const run = runsPayload.runs?.[0];
     if (!run?.id) return;
     const details = await apiFetch<{ success: boolean; run: AgentRunSummary; steps: AgentRunStep[] }>(`/api/projects/${encodeURIComponent(currentProjectId)}/agent/runs/${encodeURIComponent(run.id)}`);
-    const journal = buildHuggyWorklineFromSteps(details.steps || [], details.run || run);
+    const journal = buildStreamPartsFromSteps(details.steps || [], details.run || run);
     if (!journal) return;
     const latestAssistantContent = (payload.messages || []).slice().reverse().find(message => message.role !== 'user')?.content || '';
     if (journal.finalText && latestAssistantContent.includes(journal.finalText.slice(0, 80))) {
       journal.finalText = '';
     }
     const card = appendMessage('assistant', '');
-    setWorkJournalBlock(card, journal);
+    setStreamMessageParts(card, journal);
   } catch (error) {
-    console.warn('[huggy] Unable to restore workline.', error);
+    console.warn('[huggy] Unable to restore rich stream parts.', error);
   }
 }
 
@@ -4953,6 +5141,51 @@ function journalTextKey(value: string) {
 function semanticJournalKey(value: string) {
   const key = journalTextKey(value);
   if (!key) return '';
+  if (/\b(agents specialises en parallele|specialized agents in parallel)\b/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/^\d+\s+\d+\s+agents?\s+(specialises|specialized|completed|completes)/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/\b(analyse des dependances ast|analyzing dependencies ast)\b/.test(key)) {
+    return 'project_influence_scan';
+  }
+  if (/\b(extraction de la memoire architecturale rag|architectural memory rag)\b/.test(key)) {
+    return 'project_context_loaded';
+  }
+  if (/\b(chargement des tokens design|chargement des jetons design|loading design tokens)\b/.test(key)) {
+    return 'visual_style_aligned';
+  }
+  if (/\b(brief affine|bref affine|brief refined)\b/.test(key)) {
+    return 'brief_made_concrete';
+  }
+  if (/\b(demande recue|request received)\b/.test(key)) {
+    return 'goal_framed';
+  }
+  if (/\b(je prepare le travail|huggy prepare le travail|preparing the work)\b/.test(key)) {
+    return 'goal_framed';
+  }
+  if (/\b(je commence par cadrer le resultat attendu avant de toucher au projet)\b/.test(key)) {
+    return 'goal_framed';
+  }
+  if (/\b(je repere les parties du projet qui peuvent influencer ce changement)\b/.test(key)) {
+    return 'project_influence_scan';
+  }
+  if (/\b(je verifie les angles importants en une seule passe pour eviter les oublis)\b/.test(key)) {
+    return 'specialist_context_checked';
+  }
+  if (/\b(les points de vigilance sont clairs je passe a la generation)\b/.test(key)) {
+    return 'specialist_context_checked_done';
+  }
+  if (/\b(je recupere le contexte utile pour rester coherent avec le projet)\b/.test(key)) {
+    return 'project_context_loaded';
+  }
+  if (/\b(j aligne les couleurs l espacement et la typographie avec l existant)\b/.test(key)) {
+    return 'visual_style_aligned';
+  }
+  if (/\b(je precise le brief pour construire quelque chose de concret)\b/.test(key)) {
+    return 'brief_made_concrete';
+  }
   if (/\b(draft recuperable|recoverable draft|work recoverable|false ready preview|preview reste en attente)\b/.test(key)) {
     return 'recoverable_draft_preview_waiting';
   }
@@ -4966,6 +5199,52 @@ function semanticJournalKey(value: string) {
     return 'preview_ready';
   }
   return key;
+}
+
+function professionalStreamNarration(value: unknown, speaksFrench: boolean, fallback = ''): string {
+  const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).replace(/\s+/g, ' ').trim();
+  if (!raw) return '';
+  const fr: Record<string, string> = {
+    goal_framed: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
+    project_influence_scan: 'Je repère les parties du projet qui peuvent influencer ce changement.',
+    specialist_context_checked: 'Les points de vigilance sont clairs, je passe à la génération.',
+    project_context_loaded: 'Je récupère le contexte utile pour rester cohérent avec le projet.',
+    visual_style_aligned: 'J’aligne les couleurs, l’espacement et la typographie avec l’existant.',
+    brief_made_concrete: 'Je précise le brief pour construire quelque chose de concret.',
+    first_version_generated: 'Je produis une première version complète de l’application.',
+    corrected_version_generated: 'J’intègre la correction et je régénère la partie concernée.',
+    quality_checked: 'Je vérifie maintenant que la version peut vraiment s’afficher.',
+    structure_validated: 'La structure passe les contrôles principaux, je prépare la preview.',
+  };
+  const en: Record<string, string> = {
+    goal_framed: 'I am framing the expected result before touching the project.',
+    project_influence_scan: 'I am finding the project areas that can affect this change.',
+    specialist_context_checked: 'The important risks are clear, so I am moving into generation.',
+    project_context_loaded: 'I am pulling the useful context to stay consistent with the project.',
+    visual_style_aligned: 'I am aligning color, spacing, and typography with the existing app.',
+    brief_made_concrete: 'I am tightening the brief into something concrete to build.',
+    first_version_generated: 'I am producing a complete first version of the app.',
+    corrected_version_generated: 'I am applying the fix and regenerating the affected part.',
+    quality_checked: 'I am checking that this version can actually render.',
+    structure_validated: 'The main structure checks passed, so I am preparing the preview.',
+  };
+  const dictionary = speaksFrench ? fr : en;
+  if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) return dictionary.goal_framed;
+  if (/\b(je pr[ée]pare le travail|huggy pr[ée]pare le travail|preparing the work)\b/i.test(raw)) return dictionary.goal_framed;
+  if (/\b(analyse des d[ée]pendances|dependencies)\b/i.test(raw) && /\bAST\b/i.test(raw)) return dictionary.project_influence_scan;
+  if (/\bagents?\s+sp[ée]cialis[ée]s?\s+en\s+parall[èe]le\b/i.test(raw) || /\bspecialized agents in parallel\b/i.test(raw)) return dictionary.specialist_context_checked;
+  if (/^\s*\d+\s*\/\s*\d+\s+agents?\b/i.test(raw)) return dictionary.specialist_context_checked;
+  if (/\b(extraction de la m[ée]moire|architectural memory)\b/i.test(raw) && /\bRAG\b/i.test(raw)) return dictionary.project_context_loaded;
+  if (/\b(chargement des (tokens|jetons) design|loading design tokens)\b/i.test(raw)) return dictionary.visual_style_aligned;
+  if (/^(brief|bref)\s+affin[ée]\.?$/i.test(raw) || /^brief refined\.?$/i.test(raw)) return dictionary.brief_made_concrete;
+  if (/^premi[èe]re version g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^first version generated\.?$/i.test(raw)) return dictionary.first_version_generated;
+  if (/^version corrig[ée]e g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^corrected version generated\.?$/i.test(raw)) return dictionary.corrected_version_generated;
+  if (/^qualit[ée] v[ée]rifi[ée]e\.?$/i.test(raw) || /^quality checked\.?$/i.test(raw)) return dictionary.quality_checked;
+  if (/^code valid[ée]\.?$/i.test(raw) || /^code validated\.?$/i.test(raw)) return dictionary.structure_validated;
+  if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|model names?|pipeline)\b/i.test(raw)) return '';
+  if (/^\s*(done|working|processing|loading|analyzing|termin[ée]|travail termin[ée])\.?\s*$/i.test(raw)) return '';
+  if (/^\s*\d+\s*\/\s*\d+\b/.test(raw)) return '';
+  return raw;
 }
 
 function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = ''): string {
@@ -5000,6 +5279,9 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
     return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
   }
   const compact = withoutFence.replace(/\s+/g, ' ').trim();
+  const professional = professionalStreamNarration(compact, speaksFrench);
+  if (!professional) return '';
+  if (professional !== compact) return professional;
   if (looksLikeInternalRecoveryText(compact)) return cleanRecoveryText(speaksFrench);
   if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
     return cleanRecoveryText(speaksFrench);
@@ -5164,7 +5446,7 @@ function normalizedFileEditPayload(payload: Record<string, any>) {
   };
 }
 
-function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): HuggyWorklineEntry | null {
+function createFileEditJournalEntry(payload: Record<string, any>, speaksFrench: boolean): HuggyStreamEntry | null {
   const edit = normalizedFileEditPayload(payload);
   if (!edit) return null;
   return {
@@ -5198,10 +5480,71 @@ function localizeJournalStatus(value: string, speaksFrench: boolean) {
     .replace(/\bcheck\b/gi, 'vérification');
 }
 
+// ── Chat-to-Build: 3-state layout machine ────────────────────────────────────
+// data-layout on .workspace-body: "chat-rest" (centered landing composer) ->
+// "chat" (full-screen conversation, composer docked) -> "workspace" (IDE).
+// CSS does the animation; these helpers only flip the attribute and await the morph.
+type BuilderLayout = 'chat-rest' | 'chat' | 'revealing' | 'workspace';
+
+function getWorkspaceBodyEl(): HTMLElement | null {
+  return document.querySelector('.workspace-body') as HTMLElement | null;
+}
+
+function currentBuilderLayout(): string {
+  return getWorkspaceBodyEl()?.dataset.layout || '';
+}
+
+function setBuilderLayout(state: BuilderLayout) {
+  const body = getWorkspaceBodyEl();
+  if (body) body.dataset.layout = state;
+}
+
+function focusComposer() {
+  (document.getElementById('chat-textarea-box') as HTMLElement | null)?.focus?.();
+}
+
+async function revealWorkspaceLayout(): Promise<void> {
+  const body = getWorkspaceBodyEl();
+  if (!body || body.dataset.layout === 'workspace') return;
+  const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
+  const reduceMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  body.dataset.layout = 'revealing';
+  if (!reduceMotion) {
+    await new Promise<void>(resolve => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        sidebar?.removeEventListener('transitionend', onEnd);
+        resolve();
+      };
+      const onEnd = (event: TransitionEvent) => { if (event.target === sidebar) finish(); };
+      sidebar?.addEventListener('transitionend', onEnd);
+      window.setTimeout(finish, 450);
+    });
+  }
+  body.dataset.layout = 'workspace';
+  focusComposer();
+}
+
+// Initial layout when the builder loads: a project with files opens straight into
+// the workspace; an empty project opens the centered "chat-rest" landing.
+function applyInitialBuilderLayout() {
+  const body = getWorkspaceBodyEl();
+  if (!body || body.dataset.layout === 'revealing') return;
+  // The builder always opens in the normal side-by-side workspace (sidebar +
+  // preview). The centered chat-rest/chat landing belongs to the dashboard entry,
+  // not the builder — forcing it here pushed every builder element to the center.
+  body.dataset.layout = 'workspace';
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
   const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
   if (isGenerating || !safePrompt) return;
+  // First send from the resting landing: drop the composer to the bottom and open
+  // the conversation BEFORE rendering the message (state 1 -> state 2).
+  if (currentBuilderLayout() === 'chat-rest') setBuilderLayout('chat');
   const speaksFrench = isLikelyFrenchText(safePrompt);
   const promptUiContext = extra.confirmedCriticalAction ? 'project_mission' : classifyPromptUiContext(safePrompt, requestedMode);
   const handoff = getInitialBuilderHandoff();
@@ -5245,6 +5588,20 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   if (handoff.importContext && effectiveExtra.importContext === handoff.importContext) {
     delete handoff.importContext;
   }
+
+  // Intent gate (state 2 -> state 3): reaching here means promptUiContext is the
+  // build/edit run path (conversation/plan/clarify/critical returned earlier). If
+  // we are not already in the workspace, reveal the builder before running — unless
+  // credits are known-empty client-side, in which case show the upgrade prompt and
+  // do not reveal/run.
+  if (currentBuilderLayout() && currentBuilderLayout() !== 'workspace') {
+    if (lastWalletBalance === 0) {
+      showCreditsModal();
+      return;
+    }
+    await revealWorkspaceLayout();
+  }
+
   stopRequested = false;
   setBusy(true);
   activeAbort = new AbortController();
@@ -5258,10 +5615,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let plainResponseMode = false;
   const say = (fr: string, en: string) => speaksFrench ? fr : en;
   let responseCard: HTMLElement | null = status;
-  const journal = createHuggyWorklineBlock();
-  const journalGroups = new Map<string, HuggyWorklineEntry>();
-  const fileEditEntries = new Map<string, HuggyWorklineEntry>();
-  const runningCommandEntries = new Map<string, HuggyWorklineEntry>();
+  const journal = createHuggyStreamPartsState();
+  const journalGroups = new Map<string, HuggyStreamEntry>();
+  const fileEditEntries = new Map<string, HuggyStreamEntry>();
+  const runningCommandEntries = new Map<string, HuggyStreamEntry>();
   const seenJournalKeys = new Set<string>();
   let journalFrame = 0;
   let journalFlushTimer: number | null = null;
@@ -5277,7 +5634,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journalFrame = 0;
     lastJournalFlushAt = Date.now();
     journal.elapsed = elapsedForStatus() || journal.elapsed;
-    setWorkJournalBlock(status, journal);
+    setStreamMessageParts(status, journal);
   };
   const scheduleJournal = (immediate = false) => {
     if (journalFrame) return;
@@ -5310,11 +5667,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     setMessageBlock(status, null);
   };
   // Map of step key → journal entry, so finishAgentStep can flip active→done.
-  const activeStepEntries = new Map<string, HuggyWorklineEntry>();
-  const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyWorklineEntry['status'] = 'done') => {
-    const clean = cleanPublicJournalText(text, speaksFrench);
+  const activeStepEntries = new Map<string, HuggyStreamEntry>();
+  const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyStreamEntry['status'] = 'done') => {
+    const clean = professionalStreamNarration(cleanPublicJournalText(text, speaksFrench), speaksFrench);
     if (!clean) return;
-    const cleanDetail = cleanPublicJournalText(detail, speaksFrench);
+    const cleanDetail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench);
     const contentKey = semanticJournalKey(clean);
     const dedupeKey = key ? `${key}:${contentKey}` : contentKey;
     if (seenJournalKeys.has(dedupeKey)) return;
@@ -5339,7 +5696,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.entries.push({ id: journalEntryId('divider'), kind: 'divider', text });
     scheduleJournal();
   };
-  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyWorklineEntry['status'] = 'done') => {
+  const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyStreamEntry['status'] = 'done') => {
     const cleanItem = localizeJournalStatus(cleanPublicJournalText(item, speaksFrench) || redactSecrets(item).trim(), speaksFrench);
     if (!cleanItem) return;
     const itemKey = semanticJournalKey(cleanItem);
@@ -5408,7 +5765,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes exécutées' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
   const setJournalActive = (label: string, urgent = false) => {
-    const clean = cleanPublicJournalText(label, speaksFrench);
+    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
     if (!clean || journal.activeText === clean) return;
     const now = Date.now();
     if (!urgent && now - lastActiveTextAt < 900) return;
@@ -5418,7 +5775,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     setJournalActive(headline);
-    const clean = cleanPublicJournalText(label, speaksFrench);
+    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
     if (clean) {
       // Mark any previous active step as done before adding the new one.
       for (const [, entry] of activeStepEntries) {
@@ -5431,11 +5788,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         existing.status = 'active';
       } else if (!seenJournalKeys.has(dedupeKey)) {
         seenJournalKeys.add(dedupeKey);
-        const entry: HuggyWorklineEntry = {
+        const entry: HuggyStreamEntry = {
           id: journalEntryId('line'),
           kind: 'update',
           text: clean,
-          detail: detail ? cleanPublicJournalText(detail, speaksFrench) || undefined : undefined,
+          detail: detail ? professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined : undefined,
           status: 'active',
         };
         activeStepEntries.set(key, entry);
@@ -5449,8 +5806,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const existing = activeStepEntries.get(key);
     if (existing) {
       existing.status = 'done';
-      if (label) existing.text = cleanPublicJournalText(label, speaksFrench) || existing.text;
-      if (detail) existing.detail = cleanPublicJournalText(detail, speaksFrench) || undefined;
+      if (label) existing.text = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench) || existing.text;
+      if (detail) existing.detail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined;
       activeStepEntries.delete(key);
       scheduleJournal();
     } else if (label) {
@@ -5497,8 +5854,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const startBuildStream = () => {
     journal.status = 'active';
-    journal.activeText = say('Je prépare le travail.', 'Preparing the work.');
-    setWorkJournalBlock(status, journal);
+    journal.activeText = say('Je commence par cadrer le résultat attendu avant de toucher au projet.', 'I am framing the expected result before touching the project.');
+    setStreamMessageParts(status, journal);
     journalTimer = window.setInterval(() => {
       journal.elapsed = elapsedForStatus() || journal.elapsed;
       scheduleJournal(true);
@@ -6164,7 +6521,7 @@ function showCreditsModal() {
       <button data-action="cancel">Cancel</button>
     </div>
   `, (action) => {
-    if (action === 'upgrade') document.getElementById('btn-upgrade')?.click();
+    if (action === 'upgrade') ((document.getElementById('btn-upgrade') as HTMLElement | null) || document.querySelector<HTMLElement>('.btn-upgrade'))?.click();
     if (action === 'auto') {
       applySelectedModel('auto', { persist: true, saveWorkspace: true });
       const label = document.getElementById('current-model-label');
@@ -6378,7 +6735,7 @@ function hydrateDashboardPrompt() {
   const prompt = getInitialDashboardPrompt();
   setChatMode(mode);
   if (!input || !prompt || input.value.trim()) return;
-  if (!currentProjectId && currentProjectName === 'Untitled app') {
+  if (!currentProjectId && currentProjectName === 'Projet sans titre') {
     setProjectNameDisplay(projectNameFromPrompt(prompt));
   }
   input.value = repairTextEncoding(prompt);
@@ -6543,7 +6900,10 @@ function init() {
   normalizeAiChatInputs();
   bindChat();
   hydrateDashboardPrompt();
-  void loadProject().then(() => maybeStartInitialGeneration());
+  void loadProject().then(() => {
+    applyInitialBuilderLayout();
+    maybeStartInitialGeneration();
+  });
 }
 
 window.addEventListener('huggy:auth-ready', init);

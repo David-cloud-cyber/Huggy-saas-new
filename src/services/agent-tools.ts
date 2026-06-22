@@ -12,12 +12,15 @@ export type AgentToolDefinition = {
   name: AgentToolName;
   description: string;
   parameters: Record<string, unknown>;
+  needsApproval: boolean;
+  approvalReason?: string;
 };
 
 export const HUGGY_AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'write_file',
     description: 'Create or overwrite a project file with full content. Use one call per file. Paths are repo-relative (e.g. src/App.tsx).',
+    needsApproval: false,
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -32,6 +35,7 @@ export const HUGGY_AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'read_file',
     description: 'Read an existing project file before editing it, to avoid clobbering unrelated code.',
+    needsApproval: false,
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -42,6 +46,7 @@ export const HUGGY_AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'run_check',
     description: 'Request a verification check on the generated project (typecheck, build, or smoke test).',
+    needsApproval: false,
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -54,6 +59,8 @@ export const HUGGY_AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'apply_migration',
     description: 'Apply a generated SQL migration to the project Supabase backend. Requires explicit user confirmation for destructive statements.',
+    needsApproval: true,
+    approvalReason: 'Database migrations can change user data or production structure and require explicit approval.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -65,6 +72,18 @@ export const HUGGY_AGENT_TOOLS: AgentToolDefinition[] = [
     },
   },
 ];
+
+export function getAgentToolDefinition(name: string) {
+  return HUGGY_AGENT_TOOLS.find(tool => tool.name === name);
+}
+
+export function toolNeedsApproval(name: string, args: Record<string, unknown> = {}) {
+  const tool = getAgentToolDefinition(name);
+  if (!tool?.needsApproval) return false;
+  if (name === 'apply_migration') return true;
+  if (typeof args.destructive === 'boolean') return args.destructive;
+  return true;
+}
 
 export type RawToolCall = {
   id?: string;

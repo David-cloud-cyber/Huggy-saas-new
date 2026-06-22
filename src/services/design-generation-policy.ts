@@ -388,9 +388,11 @@ const appTypeRules: Record<GeneratedAppType, string[]> = {
     'Avoid static marketing composition; the first screen should invite interaction.',
   ],
   generic_web_app: [
-    'Infer the most likely product type from the prompt and make the first screen immediately useful.',
-    'Avoid generic template composition; choose one clear focal point and app-specific controls.',
-    'If the platform is ambiguous, still create a coherent product experience with working controls and honest placeholder states.',
+    'GENERIC PRODUCT PATH (the rich fallback — use whenever the type is unclear or novel). This is the most complete guidance, not the poorest: most original apps land here and must feel as finished as a typed one.',
+    'Infer the core domain object(s) and the one primary action a user comes to do, then make the first screen immediately useful around it.',
+    'Give it real information architecture: a clear primary surface (list, board, canvas, feed, or form — whichever fits the domain), persistent predictable navigation, and one obvious focal point per screen.',
+    'Implement real state: create / read / update / delete or the domain equivalent, with empty, loading, error, and success states and visible feedback.',
+    'Pick a deliberate aesthetic direction and full design tokens. Never ship a hero-and-three-cards placeholder as "the app".',
   ],
   productivity_tool: [
     'Create a focused, fast utility: primary action area, clean item list, filters/tabs, empty state.',
@@ -688,51 +690,101 @@ const platformIntelligence: Partial<Record<GeneratedAppType, PlatformIntelligenc
   },
 };
 
+// v26 consolidated anti-generic + token guidance (single list, no 4x duplication).
 const antiAiDesignRules = [
-  'Never produce UI that looks AI-generated, like a Tailwind starter kit, purple-blue gradient page, generic hero, or identical card grid.',
-  'Design Heuristics & Tone: Commit to a bold, context-specific aesthetic (brutalist, retro-futuristic, organic, luxury minimal, editorial, etc.) with high intentionality. Avoid neutral/generic templates.',
-  'Accessibility (CRITICAL): Ensure WCAG AA contrast (4.5:1 ratio minimum for normal text, slate-900 for text, slate-600 minimum for muted text in light mode, gray-200 borders in light mode). Use visible focus rings on interactive elements, alt attributes for images, aria-labels for icon-only buttons, keyboard tab-nav, and form labels linked with `htmlFor` or `for`.',
-  'Touch & Interaction (CRITICAL): Ensure touch target size is at least 44x44px for buttons/controls. Use click/tap (not hover) for primary interactions. Apply `cursor-pointer` to all clickable elements (including cards and lists). Disable buttons during asynchronous operations, and show error feedback near the source of the issue.',
-  'Layout & Responsive (HIGH): Implement responsive design (mobile/desktop rules). Ensure readable mobile body text of at least 16px. Prevent any horizontal scroll/overflow on mobile viewports. Standardize z-index scale (e.g. 10, 20, 30, 50). Use floating navbars with top-4 left-4 right-4 margins and offset content padding instead of sticking elements blindly to top-0.',
-  'Performance & Motion (HIGH): Reserve space for async content to prevent content jumping. Respect prefers-reduced-motion fallback. Use animations (150-300ms duration) only for high-impact micro-interactions using transform/opacity properties, avoiding width/height transitions that trigger browser reflow.',
-  'Typography & Color Selection (MEDIUM): Pair a distinctive display font with a highly readable body font. Never use generic/overused fonts like Inter, Space Grotesk, Roboto, Arial, or default system fonts. Set line-height to 1.5-1.75 for body text and limit line-length to 65-75 characters per line.',
-  'Visual Polish Heuristics (MEDIUM): SVG vector icons only (Lucide/Heroicons). Emojis (e.g., 🎨, 🚀, ⚙️) are strictly forbidden as UI icons. Use stable hover states that do not shift layout (avoid scale transforms that alter container dimensions). Research and use correct brand logos (Simple Icons).',
-  'Use a deliberate mini design system: CSS custom properties for color, semantic states, type, spacing, radius, shadows, z-index, and motion.',
-  'Define one primary color, one secondary/accent color, neutral surfaces/text/borders, and semantic --success, --warning, --error, and --info tokens.',
-  'Use a fixed type scale close to 12 / 14 / 16 / 20 / 24 / 32 / 48px, context-specific line heights, and tabular numbers for metrics or data.',
-  'Use 4px/8px-grid spacing. Every value must feel deliberate and consistent, never random one-off spacing.',
-  'Use real perceived-performance patterns: skeletons for loading lists/cards and graceful empty states.',
-  'Never include secrets, API keys, .env files, lockfiles, node_modules, absolute paths, or path traversal.',
-  'Generate production-ready code that is self-contained for preview and would pass a senior product design review.',
+  'ROLE: design and build the visual and interaction layer to the bar a funded product team with a dedicated designer would ship — expressed as concrete, checkable criteria, not a vibe.',
+  'Never produce UI that looks AI-generated, like a Tailwind starter kit, purple/blue gradient page, generic hero, or identical card grid.',
+  'ANTI-GENERIC (reject and redesign before output if any appears): a purple/blue gradient hero or any decorative gradient with no meaning; three identical feature cards or identical-card grids as the whole layout; an oversized hero-only page with a vague headline and two buttons; a fake SaaS dashboard shell for something that is not one (and the reverse: a marketing hero on what should be an operational tool); meaningless glassmorphism, random elevation, lifeless flat cards, decorative blobs/orbs, or animated backgrounds that compete with the workflow; template copy ("Welcome to our platform"), lorem ipsum, inert CTAs; nesting decorative cards inside cards or turning every section into a floating card.',
+  'Cards are for repeated items, tools, panels, and modals — not for every section.',
+  'DESIGN TOKENS (mandatory, concrete) via CSS custom properties or a Tailwind-consistent theme, never scattered one-off values: one neutral family (warm or cool), one primary accent used sparingly for the main action, and semantic --success / --warning / --error / --info.',
+  'Type scale near 12 / 14 / 16 / 20 / 24 / 32 / 48px; body line-height 1.5-1.7; reading width 65-75ch for long text; tabular numbers for metrics/money.',
+  'Spacing on a strict 4/8px rhythm; related elements group tight, unrelated ones separate clearly. No random one-off gaps. One radius scale, one shadow/elevation scale, one z-index scale (e.g. 10/20/30/50), one motion duration set (fast ~120ms, base ~180ms, slow ~280ms).',
+  'AESTHETIC DIRECTION: commit to one deliberate direction that fits the product (calm operational, editorial, refined minimal, warm local-business, fintech sober, technical/devtool, playful consumer, immersive creative). Subtle layered background tints separate zones; avoid flat pure-white or pure-black slabs unless the direction is deliberately stark.',
+  'RESPONSIVE & ACCESSIBILITY (checkable): mobile-first, works at mobile/tablet/desktop with no horizontal scroll and no overlapping text; a mobile layout is rethought, not a desktop page squeezed. Touch targets must be at least 44x44px (except inside a dense data surface with an accessible equivalent). Primary interactions on tap/click, not hover; cursor-pointer on all clickable elements.',
+  'WCAG AA contrast (>= 4.5:1 normal text). Visible focus rings, full keyboard navigation, semantic HTML, labels tied to inputs, alt text for meaningful images, aria-label on icon-only buttons, aria-live for dynamic status. Modals/popovers/menus open and close reliably, support Escape, and never trap the user. Reserve space for async content so layout does not jump.',
+  'MOTION explains state changes; it does not decorate. Animate only transform, opacity, and color (never width/height/top/left). 150-300ms, ease-out. Respect prefers-reduced-motion. Never rely on motion alone to convey state.',
+  'TYPOGRAPHY: pair a distinctive display feel for headings with a highly readable body; do not let a single ubiquitous UI font carry the entire personality by default. Readability and availability always win — if no web font is reliably available, build a deliberate, well-hierarchized system stack rather than forcing a novel font that degrades legibility. Vector icons only (Lucide); never emoji as UI icons.',
+  'Never include secrets, API keys, .env files, lockfiles, node_modules, absolute paths, or path traversal. Generate production-ready code that is self-contained for preview and would pass a senior product design review.',
 ];
 
+// v26 section 8 — the one canonical functional gate.
 const functionalQualityGate = [
   'A beautiful app that is broken is a failed generation.',
-  'Never sacrifice functionality for aesthetics. Every primary UI control must have a working interaction, visible feedback, or an honest placeholder state.',
-  'The app must render without a blank preview or obvious JavaScript crash.',
-  'Buttons, forms, filters, tabs, modals, menus, toggles, carts, and navigation must update visible state when present.',
-  'Forms must include labels, validation, field-level errors, disabled/loading submit state when sending, and success feedback.',
-  'Search must filter visible data in real time with debounce when the dataset is non-trivial. Filters and sorting must visibly change the displayed content.',
-  'Add actions must add an item locally. Delete/remove actions must ask for confirmation or provide an undo-safe interaction, then update the list.',
-  'Tabs must switch content. Modals/drawers must open, close, support Escape, and not trap the user visually.',
-  'Do not claim real backend, payments, auth, emails, AI calls, or persistence unless the generated project actually implements or clearly labels the behavior as demo/local.',
-  'If package.json exists, the generated scripts should be runnable by the runner without hidden packages or secrets.',
-  'If functionality is mocked, the UI must remain honest, useful, and interactive.',
+  'The app renders without a blank preview or JS crash.',
+  'Every primary control works or shows an honest placeholder/demo state: buttons, forms, filters, tabs, modals, menus, toggles, carts, and navigation update visible state.',
+  'Forms: labels, validation, field-level errors, disabled/loading submit, success feedback.',
+  'Search filters visible data; sort/filter visibly change content; add mutates state; delete confirms or offers undo.',
+  'Never claim real backend, payments, auth, email, AI, or persistence unless implemented or clearly labeled demo/local. If mocked, the UI stays honest and still usable.',
 ];
 
+// v26 section 10 — one self-audit gate before JSON.
 const selfAudit = [
-  'Before returning JSON, silently audit whether the platform type, layout, typography, color, spacing, motion, loading, empty, error, and responsive states match the prompt.',
-  'Write an internal design brief before coding: problem solved, end user, primary action, critical journey, visual mood, truly necessary screens/components, interactions, states, motion, and platform risks.',
-  'Apply the 3-second rule to every screen: useful title, obvious primary action, discreet secondary actions, clean grid, and clearly separated zones.',
-  'If the design feels generic, revise it internally before output.',
-  'If the prompt asks for an operational app, do not output a landing page.',
-  'If the prompt asks for a landing page, do not output a generic dashboard shell.',
-  'If the prompt asks for a mobile app, do not output a desktop page simply squeezed to mobile.',
-  'If the prompt asks for finance, health, auth, or admin, prioritize trust, clarity, confirmations, and error states.',
-  'Ensure the preview is not blank and index.html is a Vite shell for new apps, not the whole product.',
-  'Ensure every primary UI control has behavior, visible feedback, or an honest demo state.',
-  'Ensure final summary is product-oriented, not raw file accounting. Mention what users can test next.',
+  'Silently confirm, fix, then deliver — do not describe the audit.',
+  'Write an internal design brief before code: the real problem solved, the end user, the single primary action, the critical journey from first paint to that action, the product mood, the genuinely necessary screens/components, the required interaction states, and the top accessibility risks. Build to this brief, not to a template.',
+  'Platform shape matches the prompt: an operational app is not a landing page, a landing page is not a dashboard shell, a mobile app is not a squeezed desktop page.',
+  'Design tokens present at :root; one clear focal point and a 3-second hierarchy per screen; clearly separated zones.',
+  'Loading/empty/error/success states exist for the core flows; responsive with no overflow; primary controls have real behavior or an honest demo state; copy is specific and in the user language.',
+  'If finance, health, auth, or admin: prioritize trust, clarity, confirmations, and error states. Ensure index.html is a Vite shell for new apps, not the whole product, and the preview is not blank.',
+  'If it reads as a generic AI template, redesign before returning. Final summary is product-oriented, not raw file accounting; mention what users can test next.',
+  'FEW-SHOT CONTRAST (imitate the crafted column, reject the generic one). Invoice dashboard — reject: centered hero, three identical Paid/Pending/Overdue cards, purple gradient header, a dead CTA. Target: an operational layout with left nav, compact metric tiles in tabular numerals, a dense sortable/filterable table with status pills (color + label), row actions, an empty state with a primary action, and a working "mark as paid" that updates the row and metrics. Mood app — reject: a SaaS dashboard shell with sidebar and KPI cards. Target: a focused single-column mobile-first surface, today entry front and center, a gentle save with success feedback, a quiet history list with empty state, warm restrained palette.',
 ];
+
+
+// Few-shot reference bank. Models imitate a concrete good example far better than
+// they follow abstract adjectives. One example is injected per generation — only
+// the family that matches the resolved app type — so the prompt stays small.
+const FEW_SHOT_DASHBOARD = [
+  'Reference example for an operational dashboard (imitate the crafted version, never the generic one):',
+  'Generic (reject): a centered hero titled "Dashboard", three identical KPI cards, a purple gradient header, and a CTA button that does nothing.',
+  'Crafted (target): a left nav, a top row of compact metric tiles with tabular numerals (outstanding total, items due this week, average days), then a dense sortable + filterable table with status pills (color AND label), row actions, an empty state with a primary "create" action, and a working primary mutation that updates both the row and the metrics. Sober palette, one accent reserved for the primary action.',
+].join('\n');
+
+const FEW_SHOT_ECOMMERCE = [
+  'Reference example for commerce (imitate the crafted version):',
+  'Generic (reject): identical product cards in a 3-column grid, no price/stock hierarchy, an "Add" button with no cart feedback.',
+  'Crafted (target): a filterable catalog with clear price + variant + stock hierarchy, an add-to-cart that opens a cart drawer and updates totals live, quantity steppers, an empty-cart state, and a checkout summary with honest demo labeling when no backend is wired.',
+].join('\n');
+
+const FEW_SHOT_TOOL = [
+  'Reference example for an AI/utility tool (imitate the crafted version):',
+  'Generic (reject): a marketing panel inside the tool, a single big "Generate" button, no streaming or honest status.',
+  'Crafted (target): a compact prompt/input area, a result/output surface that streams progressively with cancel + retry + error states, persistent history, a settings/model state, and a clear setup-required state when keys are unconfigured — never a faked completed response.',
+].join('\n');
+
+const FEW_SHOT_LANDING = [
+  'Reference example for a landing page (imitate the crafted version):',
+  'Generic (reject): a giant headline + two-line subtitle + two buttons over a gradient blob, then three identical feature cards.',
+  'Crafted (target): a first viewport that shows the actual product and its specific value, real proof (numbers, logos, or a product shot), differentiated sections with specific copy, one primary CTA repeated, and an honest pricing or sign-up handoff. No vague filler.',
+].join('\n');
+
+const FEW_SHOT_GENERIC = [
+  'Reference example for an out-of-category product (imitate the crafted version):',
+  'Generic (reject): a hero-and-three-cards placeholder that could belong to any app.',
+  'Crafted (target): identify the core domain object and the one primary action, give it a real primary surface (list, board, canvas, feed, or form — whichever fits), persistent navigation, full create/read/update/delete with empty/loading/error/success states and visible feedback. As finished as a typed app.',
+].join('\n');
+
+export function getFewShotExample(appType: GeneratedAppType): string {
+  switch (appType) {
+    case 'analytics_dashboard':
+    case 'saas_dashboard':
+    case 'admin_panel':
+    case 'crm_erp':
+    case 'fintech_billing':
+      return FEW_SHOT_DASHBOARD;
+    case 'ecommerce':
+    case 'marketplace':
+      return FEW_SHOT_ECOMMERCE;
+    case 'ai_tool':
+    case 'data_tool':
+    case 'creative_tool':
+      return FEW_SHOT_TOOL;
+    case 'landing_page':
+    case 'portfolio':
+      return FEW_SHOT_LANDING;
+    default:
+      return FEW_SHOT_GENERIC;
+  }
+}
 
 function normalizePrompt(prompt: string) {
   return prompt
@@ -950,10 +1002,11 @@ export function buildWorldClassUiPolicy(input: {
   const designBrief = buildGeneratedDesignBrief({ prompt: input.prompt, appType, designDirection });
 
   const systemPrompt = [
-    'WORLD-CLASS UI GENERATION ENGINE / Anti-AI-Design Protocol V6.',
+    'HUGGY DESIGN SYSTEM PROMPT v26. Design and build the visual and interaction layer of the generated app.',
     'Act as a Principal Product Designer, Senior Frontend Engineer, and Product QA reviewer.',
-    `Detected platform type: ${appType}.`,
-    `Design direction: ${designDirection}.`,
+    'CLASSIFICATION IS A HINT, NOT A CAGE: the detected platform type and design direction below are a strong starting hypothesis passed as context, not a hard rule. If the prompt clearly describes a different product, follow the prompt and adjust the direction — the user words outrank the classifier. If the type is unclear or novel, do NOT fall back to a thin generic shell; use the GENERIC PRODUCT PATH in the app-type rules, which is the most complete guidance here.',
+    `Detected platform type (hint): ${appType}.`,
+    `Design direction (hint): ${designDirection}.`,
     '',
     'Structured design brief to follow before coding:',
     JSON.stringify(designBrief, null, 2),
@@ -977,6 +1030,8 @@ export function buildWorldClassUiPolicy(input: {
     bulletList('Global anti-AI-design rules:', antiAiDesignRules),
     bulletList('Functional quality gate:', functionalQualityGate),
     bulletList('Self-audit before output:', selfAudit),
+    '',
+    getFewShotExample(appType),
   ].join('\n');
 
   return {

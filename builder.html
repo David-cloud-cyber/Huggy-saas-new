@@ -69,6 +69,13 @@
       --text-muted: #b3b8c3;
       --text-sub: #71717a;
       --text-dark: #52525b;
+      /* Editor top bar — semantic tokens (Lovable-grade bar, Huggy blue accent). */
+      --topbar-bg: #0a0a0a;
+      --topbar-border: rgba(255, 255, 255, 0.08);
+      --topbar-fg: rgba(255, 255, 255, 0.92);
+      --topbar-fg-muted: rgba(255, 255, 255, 0.70);
+      --topbar-hover: rgba(255, 255, 255, 0.08);
+      --topbar-focus-ring: rgba(255, 255, 255, 0.30);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -95,6 +102,12 @@
       --text-muted: #52525b;
       --text-sub: #71717a;
       --text-dark: #52525b;
+      --topbar-bg: #ffffff;
+      --topbar-border: rgba(9, 9, 11, 0.08);
+      --topbar-fg: rgba(9, 9, 11, 0.92);
+      --topbar-fg-muted: rgba(9, 9, 11, 0.55);
+      --topbar-hover: rgba(9, 9, 11, 0.06);
+      --topbar-focus-ring: rgba(9, 9, 11, 0.30);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
@@ -159,12 +172,13 @@
 
     /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
     .brand-topbar {
-      height: 48px;
+      height: 54px;
       border-bottom: 1px solid var(--border);
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto minmax(280px, 1fr);
       align-items: center;
-      justify-content: space-between;
-      padding: 0 16px;
+      gap: 14px;
+      padding: 0 14px;
       background: var(--bg);
       user-select: none;
     }
@@ -173,6 +187,15 @@
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 0;
     }
 
     .brand-title {
@@ -496,7 +519,101 @@
     .brand-right {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-preview-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .builder-more-wrapper {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .builder-more-menu {
+      position: absolute;
+      top: calc(100% + 12px);
+      left: 50%;
+      width: min(292px, calc(100vw - 24px));
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+      box-shadow: var(--shadow-lg, 0 18px 48px rgba(0,0,0,.42));
+      backdrop-filter: blur(22px) saturate(150%);
+      -webkit-backdrop-filter: blur(22px) saturate(150%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translate(-50%, -4px) scale(.98);
+      transition: opacity 140ms cubic-bezier(.22,1,.36,1), transform 140ms cubic-bezier(.22,1,.36,1), visibility 140ms;
+      z-index: 2400;
+    }
+
+    .builder-more-wrapper.open .builder-more-menu {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translate(-50%, 0) scale(1);
+    }
+
+    .builder-more-item {
+      width: 100%;
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      padding: 0 12px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 760;
+      text-align: left;
+      transition: background 140ms cubic-bezier(.22,1,.36,1), color 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .builder-more-item svg {
+      width: 17px;
+      height: 17px;
+      opacity: .92;
+    }
+
+    .builder-more-item:hover,
+    .builder-more-item.active {
+      background: var(--accent-dim);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .builder-more-item[aria-disabled="true"] {
+      opacity: .54;
+      cursor: default;
+    }
+
+    .builder-more-item[aria-disabled="true"]:hover {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-muted);
+    }
+
+    .builder-more-soon {
+      margin-left: auto;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 6px;
+      color: var(--text-sub);
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
     }
 
     .btn-integration {
@@ -566,6 +683,425 @@
       background: #f1a98c; /* Warm salmon pink peach matching screenshot */
       border: 1px solid var(--border);
       cursor: pointer;
+    }
+
+    .brand-topbar.lovable-builder-topbar {
+      height: 52px;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 0 12px;
+      background: var(--topbar-bg);
+      color: var(--topbar-fg);
+      border-bottom: 1px solid var(--topbar-border);
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    /* Focus ring on every interactive top bar control (a11y). */
+    .brand-topbar.lovable-builder-topbar button:focus-visible,
+    .brand-topbar.lovable-builder-topbar [tabindex]:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--topbar-bg), 0 0 0 4px var(--topbar-focus-ring);
+    }
+
+    .lovable-topbar-left,
+    .lovable-topbar-actions {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .lovable-topbar-left {
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    /* Desktop: the builder-views cluster (history / panel / Preview pill / file /
+       ⋮) starts exactly at the chat|preview divider — the brand (logo + project)
+       fills the sidebar-width column, the views begin at the divider and run
+       toward the right actions. Mirrors the body's --huggy-sidebar-width track. */
+    @media (min-width: 761px) {
+      .brand-topbar .lovable-topbar-left {
+        display: grid;
+        grid-template-columns: var(--huggy-sidebar-width, 380px) auto;
+        align-items: center;
+        gap: 0;
+      }
+      .brand-topbar #builder-topbar-center {
+        padding-left: 12px;
+        justify-content: flex-start;
+      }
+    }
+
+    .lovable-left-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .lovable-topbar-center {
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .lovable-topbar-actions {
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .project-mini-trigger {
+      max-width: 200px;
+      height: 34px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 8px 0 0;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 150ms cubic-bezier(.22,1,.36,1), color 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .project-mini-trigger:hover,
+    .project-mini-trigger[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--text) 5%, transparent);
+    }
+
+    .project-mini-trigger .brand-logo {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 auto;
+      border-radius: 7px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.18) inset;
+    }
+
+    .project-mini-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 720;
+      letter-spacing: -.025em;
+    }
+
+    .lovable-nav-icon-btn,
+    .brand-topbar .collapse-sidebar-arrow {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--topbar-fg-muted);
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      cursor: pointer;
+      transition: color 150ms cubic-bezier(.22,1,.36,1), background 150ms cubic-bezier(.22,1,.36,1), transform 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .lovable-nav-icon-btn:hover,
+    .brand-topbar .collapse-sidebar-arrow:hover {
+      color: var(--topbar-fg);
+      background: var(--topbar-hover);
+    }
+
+    .lovable-nav-icon-btn svg,
+    .brand-topbar .collapse-sidebar-arrow svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+
+    .brand-topbar .sub-nav-tabs {
+      height: 34px;
+      align-items: center;
+      gap: 3px;
+      padding: 3px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 82%, #000 8%);
+      border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+      overflow: visible;
+    }
+
+    :root[data-theme="light"] .brand-topbar .sub-nav-tabs {
+      background: #ffffff;
+      border-color: rgba(9, 9, 11, .10);
+      box-shadow: 0 1px 0 rgba(9, 9, 11, .04) inset, 0 10px 28px rgba(9, 9, 11, .06);
+    }
+
+    .brand-topbar .sub-nav-tab {
+      height: 26px;
+      min-width: 26px;
+      gap: 6px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      font-weight: 760;
+      letter-spacing: -.025em;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .brand-topbar .sub-nav-tab svg {
+      width: 15px;
+      height: 15px;
+      opacity: .94;
+    }
+
+    .brand-topbar .sub-nav-tab:hover:not(.active) {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 6%, transparent);
+    }
+
+    .brand-topbar .sub-nav-tab.active,
+    .brand-topbar .builder-more-trigger.active,
+    .brand-topbar .builder-more-wrapper.open .builder-more-trigger {
+      color: #b8d0ff;
+      background: linear-gradient(180deg, rgba(48, 91, 190, .72), rgba(35, 69, 165, .88));
+      border-color: rgba(111, 150, 255, .58);
+      box-shadow:
+        0 0 0 1px rgba(86, 124, 255, .22),
+        0 0 22px rgba(59, 130, 246, .28),
+        0 1px 0 rgba(255,255,255,.16) inset;
+    }
+
+    .brand-topbar .builder-more-trigger {
+      width: 30px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-topbar .topbar-code-tab:not(.active) span {
+      display: none;
+    }
+
+    .lovable-tab-separator {
+      width: 1px;
+      height: 16px;
+      margin: 0 3px;
+      background: color-mix(in srgb, var(--text) 12%, transparent);
+      flex: 0 0 auto;
+    }
+
+    .brand-topbar .builder-more-menu {
+      top: calc(100% + 12px);
+      left: auto;
+      right: 0;
+      width: min(300px, calc(100vw - 24px));
+      transform: translateY(-4px) scale(.98);
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+      border-color: color-mix(in srgb, var(--text) 10%, transparent);
+    }
+
+    :root[data-theme="light"] .brand-topbar .builder-more-menu {
+      background: rgba(255,255,255,.96);
+      border-color: rgba(9,9,11,.10);
+    }
+
+    .brand-topbar .builder-more-wrapper.open .builder-more-menu {
+      transform: translateY(0) scale(1);
+    }
+
+    .brand-topbar .builder-more-item {
+      min-height: 44px;
+      border-radius: 15px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+    }
+
+    .brand-topbar .preview-toolbar-controls {
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .brand-topbar .preview-toolbar-controls .preview-address-row {
+      display: none !important;
+    }
+
+    .brand-topbar .preview-device-toggle {
+      width: 30px;
+      height: 30px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .brand-topbar .preview-device-trigger,
+    .brand-topbar .preview-refresh-btn,
+    .brand-topbar .preview-external-btn {
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-muted);
+      box-shadow: none;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+      transition: color 150ms cubic-bezier(.22,1,.36,1), background 150ms cubic-bezier(.22,1,.36,1), transform 150ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .brand-topbar .preview-device-trigger:hover,
+    .brand-topbar .preview-device-trigger[aria-expanded="true"],
+    .brand-topbar .preview-refresh-btn:hover,
+    .brand-topbar .preview-external-btn:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--text) 7%, transparent);
+      transform: translateY(-1px);
+    }
+
+    .brand-topbar .preview-device-trigger-label {
+      display: none !important;
+    }
+
+    .brand-topbar .preview-device-trigger svg,
+    .brand-topbar .preview-refresh-btn svg,
+    .brand-topbar .preview-external-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2.2;
+    }
+
+    .preview-page-selector {
+      height: 32px;
+      min-width: min(200px, 20vw);
+      max-width: 300px;
+      padding: 0 12px;
+      border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--bg-input) 82%, #000 8%);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 780;
+      letter-spacing: -.02em;
+      white-space: nowrap;
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
+      cursor: default;
+    }
+
+    :root[data-theme="light"] .preview-page-selector {
+      background: #ffffff;
+      border-color: rgba(9, 9, 11, .10);
+      box-shadow: 0 10px 26px rgba(9, 9, 11, .05);
+    }
+
+    .preview-page-selector svg {
+      width: 14px;
+      height: 14px;
+      color: var(--text-sub);
+    }
+
+    .btn-share,
+    .btn-upgrade,
+    .btn-publish {
+      height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -.025em;
+      border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+      cursor: pointer;
+      transition: transform 140ms cubic-bezier(.22,1,.36,1), filter 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), box-shadow 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .btn-share {
+      background: transparent;
+      color: var(--topbar-fg);
+      border-color: transparent;
+    }
+
+    .btn-share:hover {
+      background: var(--topbar-hover);
+    }
+
+    .btn-share.is-copied {
+      border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 42%, var(--border));
+      color: var(--accent-blue-deep, #2458dc);
+    }
+
+    .btn-share:disabled {
+      opacity: .58;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .brand-topbar .btn-upgrade {
+      border-color: color-mix(in srgb, var(--accent-blue) 38%, transparent);
+      background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+      color: color-mix(in srgb, var(--accent-blue) 35%, #ffffff);
+      box-shadow: none;
+    }
+
+    .brand-topbar .btn-upgrade:hover {
+      background: color-mix(in srgb, var(--accent-blue) 24%, transparent);
+    }
+
+    .brand-topbar .btn-upgrade svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .brand-topbar .btn-publish {
+      padding: 0 16px;
+      border-color: transparent;
+      background: var(--accent-blue, #3b82f6);
+      color: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    }
+
+    .brand-topbar .btn-publish:hover {
+      filter: brightness(1.08);
+    }
+
+    .btn-share:active,
+    .brand-topbar .btn-upgrade:active,
+    .brand-topbar .btn-publish:active {
+      transform: scale(.98);
+    }
+
+    .brand-topbar .avatar-circle {
+      width: 28px;
+      height: 28px;
+      margin-left: 6px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--topbar-border);
+      background: linear-gradient(135deg, var(--accent-blue, #3b82f6), var(--accent-blue-deep, #1d4ed8));
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+
+    /* Responsive: below 640px hide the quick-action icons (History/GitHub/Plus)
+       and the Invite/Share label, per spec, to keep the bar uncluttered. */
+    @media (max-width: 640px) {
+      .brand-topbar.lovable-builder-topbar .lovable-nav-icon-btn { display: none; }
+      .brand-topbar.lovable-builder-topbar .btn-share-label { display: none; }
+      .brand-topbar.lovable-builder-topbar .btn-share { padding: 0; width: 32px; }
     }
 
     /* Pricing Modal Styling */
@@ -845,6 +1381,79 @@
       visibility: hidden;
       opacity: 0;
       pointer-events: none;
+    }
+
+    /* ── Chat-to-Build : machine à 3 états (data-layout sur .workspace-body) ──
+       chat-rest  = écran d'accueil, composer centré, fil masqué
+       chat       = conversation plein écran, fil en haut, composer docké en bas
+       workspace  = IDE actuel (sidebar + editor côte à côte)
+       Desktop uniquement (min-width 761px) pour ne pas entrer en conflit avec les
+       règles mobiles data-mobile-view ; gardé :not(.sidebar-collapsed) pour la
+       cohabitation avec l'état replié. La transition grid-template-columns
+       (au-dessus) anime le morph ; prefers-reduced-motion plus bas le neutralise. */
+    @media (min-width: 761px) {
+      /* chat-rest + chat : sidebar plein écran centrée, editor masqué + fade */
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed),
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) {
+        grid-template-columns: minmax(0, 1fr) 0px;
+        justify-items: center;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sidebar-pane,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .sidebar-pane {
+        width: 100%;
+        max-width: 760px;
+        border-right: 0;
+        background: var(--bg);
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .editor-pane,
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sub-navbar,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .editor-pane,
+      .workspace-body[data-layout="chat"]:not(.sidebar-collapsed) .sub-navbar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+
+      /* ÉTAT 1 — repos : composer + empty-state centrés verticalement, fil masqué,
+         onglets de panneau cachés (écran d'accueil épuré). */
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .sidebar-pane {
+        justify-content: center;
+        gap: 14px;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .pane-header-row {
+        display: none;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) #sidebar-scroll-area {
+        flex: 0 0 auto;
+        overflow: visible;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) #chat-empty-state {
+        display: flex;
+      }
+      .workspace-body[data-layout="chat-rest"]:not(.sidebar-collapsed) .chat-input-row {
+        width: 100%;
+      }
+
+      /* ÉTAT 3 — révélation : la grille revient aux pistes workspace (animée) et
+         l'éditeur réapparaît en fondu. */
+      .workspace-body[data-layout="revealing"] .editor-pane,
+      .workspace-body[data-layout="revealing"] .sub-navbar {
+        opacity: 1;
+        transition: opacity 300ms ease 120ms;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .workspace-body,
+      .workspace-body .sidebar-pane,
+      .workspace-body[data-layout="chat-rest"] .editor-pane,
+      .workspace-body[data-layout="chat-rest"] .sub-navbar,
+      .workspace-body[data-layout="chat"] .editor-pane,
+      .workspace-body[data-layout="chat"] .sub-navbar,
+      .workspace-body[data-layout="revealing"] .editor-pane,
+      .workspace-body[data-layout="revealing"] .sub-navbar {
+        transition: none !important;
+      }
     }
 
     /* Toast animation support */
@@ -1574,7 +2183,15 @@
       padding: 2px;
       border: 1px solid var(--border);
       scrollbar-width: none;
-      box-shadow: 0 1px 0 rgba(255,255,255,.45) inset;
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 34%, transparent) inset;
+    }
+
+    .brand-center .sub-nav-tabs {
+      height: 34px;
+      align-items: center;
+      padding: 3px;
+      background: color-mix(in srgb, var(--bg-input) 92%, transparent);
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 36%, transparent) inset, 0 10px 32px rgba(0,0,0,.12);
     }
 
     .sub-nav-tabs::-webkit-scrollbar {
@@ -1599,10 +2216,27 @@
       flex: 0 0 auto;
     }
 
+    .brand-center .sub-nav-tab {
+      height: 28px;
+      gap: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 780;
+    }
+
     .sub-nav-tab.active {
       background: var(--bg-surface);
       color: var(--text);
       box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 8px 22px rgba(9,9,11,.10);
+    }
+
+    .brand-center .sub-nav-tab.active,
+    .brand-center .builder-more-trigger.active,
+    .brand-center .builder-more-wrapper.open .builder-more-trigger {
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent-blue) 92%, #fff 8%), var(--accent-blue-deep, #1d4ed8));
+      border: 1px solid color-mix(in srgb, var(--accent-blue) 70%, #fff 18%);
+      color: #fff;
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 42%, transparent), 0 8px 24px color-mix(in srgb, var(--accent-blue) 32%, transparent);
     }
 
     .sub-nav-tab:hover:not(.active) {
@@ -2091,12 +2725,37 @@
       pointer-events: auto;
     }
 
+    .brand-right .preview-address-row {
+      position: static;
+      inset: auto;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0;
+      gap: 7px;
+      z-index: auto;
+      pointer-events: auto;
+    }
+
     .sub-nav-right .preview-address-row.address-hidden {
+      display: none;
+    }
+
+    .brand-right .preview-address-row.address-hidden {
       display: none;
     }
 
     .sub-nav-right .preview-address-glow {
       height: 28px;
+      max-width: 238px;
+      opacity: 1;
+      pointer-events: auto;
+      box-shadow: none;
+    }
+
+    .brand-right .preview-address-glow {
+      height: 30px;
       max-width: 238px;
       opacity: 1;
       pointer-events: auto;
@@ -2112,8 +2771,23 @@
       pointer-events: none;
     }
 
+    .brand-right .preview-address-row.address-hidden .preview-address-glow,
+    .brand-right .preview-address-row.address-hidden:hover .preview-address-glow,
+    .brand-right .preview-address-row.address-hidden .preview-address-glow:focus-within {
+      max-width: 0;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
     .sub-nav-right .preview-address-row:hover .preview-address-glow,
     .sub-nav-right .preview-address-glow:focus-within {
+      max-width: 300px;
+      opacity: 1;
+    }
+
+    .brand-right .preview-address-row:hover .preview-address-glow,
+    .brand-right .preview-address-glow:focus-within {
       max-width: 300px;
       opacity: 1;
     }
@@ -2301,6 +2975,26 @@
       display: none;
     }
 
+    .brand-right .sub-nav-action-btn {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--border);
+      background: transparent;
+    }
+
+    .workspace-body .sub-navbar {
+      display: none !important;
+      height: 0 !important;
+      min-height: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      overflow: visible;
+    }
+
+    .workspace-body .editor-pane {
+      padding-top: 0 !important;
+    }
+
     body.huggy-new-project-mode .sub-nav-tab:not(#tab-btn-preview),
     body.huggy-new-project-mode .sub-nav-action-btn {
       display: none;
@@ -2319,8 +3013,40 @@
 
       .brand-topbar {
         height: 44px;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         padding: 0 10px;
         gap: 8px;
+      }
+
+      .brand-center {
+        max-width: 42vw;
+        overflow: hidden;
+      }
+
+      .brand-center .sub-nav-tabs {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      .brand-center .sub-nav-tab {
+        height: 26px;
+        padding: 0 9px;
+        font-size: 11px;
+      }
+
+      .brand-center .sub-nav-tab svg {
+        width: 11px;
+        height: 11px;
+      }
+
+      .builder-more-menu {
+        left: auto;
+        right: 0;
+        transform: translate(0, -4px) scale(.98);
+      }
+
+      .builder-more-wrapper.open .builder-more-menu {
+        transform: translate(0, 0) scale(1);
       }
 
       .brand-left {
@@ -2975,6 +3701,129 @@
       .analysis-chart-card { padding: 14px; }
       .analysis-seo-checks { grid-template-columns: 1fr; }
     }
+
+    /* Final toolbar compatibility: the builder now uses one Lovable-like topbar. */
+    @media (max-width: 1180px) {
+      .brand-topbar.lovable-builder-topbar {
+        grid-template-columns: minmax(300px, 1fr) minmax(260px, auto) auto;
+        gap: 10px;
+      }
+
+      .project-mini-name {
+        max-width: 120px;
+      }
+
+      .preview-page-selector {
+        min-width: 220px;
+      }
+
+      .btn-share {
+        display: none;
+      }
+    }
+
+    body.huggy-new-project-mode .brand-topbar .sub-nav-tab:not(#tab-btn-preview),
+    body.huggy-new-project-mode .brand-topbar .builder-more-wrapper {
+      display: inline-flex !important;
+    }
+
+    body.huggy-new-project-mode .brand-topbar .sub-nav-tabs {
+      max-width: 100% !important;
+    }
+
+    @media (max-width: 860px) {
+      .brand-topbar.lovable-builder-topbar {
+        height: 58px !important;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 0 10px !important;
+      }
+
+      .project-mini-name,
+      .lovable-topbar-center,
+      .brand-topbar .avatar-circle {
+        display: none !important;
+      }
+
+      .lovable-topbar-left {
+        gap: 8px !important;
+      }
+
+      .brand-topbar .sub-nav-tabs {
+        max-width: calc(100vw - 184px) !important;
+        overflow-x: auto !important;
+      }
+
+      .brand-topbar .sub-nav-tab {
+        height: 30px !important;
+        padding: 0 9px !important;
+        font-size: 12px !important;
+      }
+
+      .brand-topbar .btn-upgrade {
+        display: none !important;
+      }
+
+      .brand-topbar .btn-publish {
+        height: 36px !important;
+        padding: 0 13px !important;
+        font-size: 13px !important;
+      }
+
+      .workspace-body[data-mobile-view="preview"] .editor-pane,
+      .workspace-body[data-mobile-view="code"] .editor-pane {
+        padding-top: 0 !important;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .brand-topbar.lovable-builder-topbar {
+        grid-template-columns: 1fr auto;
+      }
+
+      .project-mini-trigger {
+        display: none !important;
+      }
+
+      .lovable-nav-icon-btn,
+      .brand-topbar .collapse-sidebar-arrow {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+      }
+
+      .brand-topbar .sub-nav-tabs {
+        max-width: calc(100vw - 126px) !important;
+        height: 38px !important;
+      }
+
+      .brand-topbar .sub-nav-tab span,
+      .lovable-tab-separator {
+        display: none !important;
+      }
+
+      .brand-topbar .sub-nav-tab {
+        width: 30px !important;
+        min-width: 30px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+      }
+
+      .brand-topbar .btn-publish {
+        width: 38px !important;
+        padding: 0 !important;
+        color: transparent !important;
+        position: relative;
+      }
+
+      .brand-topbar .btn-publish::after {
+        content: "";
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        background: #fff;
+        position: absolute;
+      }
+    }
   </style>
 </head>
 <body>
@@ -2982,41 +3831,30 @@
   <div class="app-workspace">
 
     <!-- ── BRANDED NAVBAR ──────────────────────────────────────── -->
-    <header class="brand-topbar">
-      <div class="brand-left">
-        <span class="brand-title" style="display: flex; align-items: center; gap: 8px;">
-          <!-- SVG logo of Huggy -->
-          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" class="brand-logo">
+    <header class="brand-topbar lovable-builder-topbar" aria-label="Huggy builder toolbar">
+      <div class="brand-left lovable-topbar-left" id="builder-topbar-left">
+        <button class="lovable-icon-btn project-mini-trigger" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Project menu">
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none" class="brand-logo" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
             <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#1c1c1c"/>
             <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#1c1c1c"/>
             <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#1c1c1c"/>
           </svg>
-          <span style="font-weight: 600; font-size: 14px; letter-spacing: -0.015em; color: var(--text);">Huggy</span>
-          <span class="brand-sep">/</span>
-          <button class="project-selector" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
-            <span id="project-name">Untitled app</span>
-            <svg style="color: var(--text-sub); margin-left:2px;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-        </span>
+          <span id="project-name" class="project-mini-name">Projet sans titre</span>
+        </button>
+        <div class="lovable-left-tools" id="builder-topbar-center" aria-label="Builder views"></div>
       </div>
 
-      <div class="brand-right">
-        <button class="btn-integration" id="btn-connectors" type="button" aria-haspopup="dialog">
-          <svg style="color: var(--text-sub);" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="7" cy="7" r="3"></circle>
-            <circle cx="17" cy="7" r="3"></circle>
-            <circle cx="7" cy="17" r="3"></circle>
-            <path d="M10 7h4"></path>
-            <path d="M7 10v4"></path>
-            <path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
+      <div class="brand-center lovable-topbar-center" id="builder-topbar-preview-tools" aria-label="Preview tools"></div>
+
+      <div class="brand-right lovable-topbar-actions">
+        <button class="btn-upgrade" id="btn-upgrade" type="button" aria-label="Mettre le plan à niveau">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z"></path>
           </svg>
-          Connecteur
+          <span>Mise à niveau</span>
         </button>
-        <button class="btn-upgrade">Upgrade plan</button>
-        <button class="btn-publish" type="button">Publish</button>
+        <button class="btn-publish" type="button">Publier</button>
       </div>
     </header>
 
@@ -3029,7 +3867,7 @@
       <div class="project-menu-workspace">
         <div class="project-menu-avatar" id="project-menu-avatar">H</div>
         <div>
-          <div class="project-menu-name" id="project-menu-title">Untitled app</div>
+          <div class="project-menu-name" id="project-menu-title">Projet sans titre</div>
           <div class="project-menu-muted">Workspace project</div>
         </div>
         <div class="project-menu-badge" id="project-menu-plan-badge">FREE</div>
@@ -3038,7 +3876,7 @@
         <div class="project-menu-card-row">
           <div class="project-menu-card-title">Credits</div>
           <button class="project-menu-upgrade" type="button" id="project-menu-upgrade">
-            <span>Upgrade</span>
+            <span>Mise à niveau</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
@@ -3049,7 +3887,7 @@
         <label class="project-menu-field">
           <span class="project-menu-label">Project name</span>
           <span class="project-menu-input-row">
-            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Untitled app" autocomplete="off">
+            <input class="project-menu-input" id="project-name-input" type="text" maxlength="80" value="Projet sans titre" autocomplete="off">
             <button class="project-menu-save" id="project-name-save" type="button">Save</button>
           </span>
         </label>
@@ -3166,7 +4004,7 @@
               <span id="huggy-workshop-context-label">Huggy Design</span>
               <span class="huggy-workshop-beta">Beta</span>
             </div>
-            <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
+            <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
             
             <div class="input-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 12px; background: transparent;">
                 <div class="actions-left" style="display: flex; gap: 6px;">
@@ -3220,45 +4058,109 @@
       <!-- Control tab row for the right preview/code workspace -->
       <header class="sub-navbar">
           <div class="sub-nav-left">
-            <button class="collapse-sidebar-arrow" type="button" title="Collapse left sidebar" aria-label="Collapse left sidebar" aria-expanded="true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="11 17 6 12 11 7"/>
-                <polyline points="18 17 13 12 18 7"/>
+            <button class="lovable-nav-icon-btn" id="builder-history-shortcut" type="button" data-open-history title="History" aria-label="History and rollback">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+                <path d="M3 4v5h5"></path>
+                <path d="M12 7v5l3 2"></path>
+              </svg>
+            </button>
+            <button class="collapse-sidebar-arrow lovable-nav-icon-btn" type="button" title="Toggle sidebar" aria-label="Toggle sidebar" aria-expanded="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                <path d="M9 5v14"></path>
               </svg>
             </button>
             
-            <div class="sub-nav-tabs">
-              <button class="sub-nav-tab active" id="tab-btn-preview">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
+            <div class="sub-nav-tabs" aria-label="Builder views">
+              <button class="sub-nav-tab active" id="tab-btn-preview" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="2" y1="12" x2="22" y2="12"></line>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
-                Preview
+                <span>Preview</span>
               </button>
-              <button class="sub-nav-tab" id="tab-btn-code">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-                  <polyline points="16 18 22 12 16 6"></polyline>
-                  <polyline points="8 6 2 12 8 18"></polyline>
+              <button class="sub-nav-tab topbar-code-tab" id="tab-btn-code" type="button" aria-label="Code">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"></path>
+                  <path d="M14 2v5h5"></path>
+                  <path d="m10 13-2 2 2 2"></path>
+                  <path d="m14 17 2-2-2-2"></path>
                 </svg>
-                Code
+                <span>Code</span>
               </button>
-              <button class="sub-nav-tab" id="tab-btn-database">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-                  <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
-                  <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
-                  <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
-                </svg>
-                Database
-              </button>
-              <button class="sub-nav-tab" id="tab-btn-analysis">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-                  <line x1="18" y1="20" x2="18" y2="10"></line>
-                  <line x1="12" y1="20" x2="12" y2="4"></line>
-                  <line x1="6" y1="20" x2="6" y2="14"></line>
-                </svg>
-                Analysis
-              </button>
+              <span class="lovable-tab-separator" aria-hidden="true"></span>
+              <div class="builder-more-wrapper" id="builder-more-wrapper">
+                <button class="sub-nav-tab builder-more-trigger" id="tab-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="builder-more-menu" aria-label="More">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="5" r="1"></circle>
+                    <circle cx="12" cy="12" r="1"></circle>
+                    <circle cx="12" cy="19" r="1"></circle>
+                  </svg>
+                </button>
+                <div class="builder-more-menu" id="builder-more-menu" role="menu" aria-label="More builder tools">
+                  <button class="builder-more-item" type="button" role="menuitem" data-open-connectors>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="7" cy="7" r="3"></circle><circle cx="17" cy="7" r="3"></circle><circle cx="7" cy="17" r="3"></circle><path d="M10 7h4"></path><path d="M7 10v4"></path><path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
+                    </svg>
+                    Connectors
+                  </button>
+                  <button class="builder-more-item" id="tab-btn-database" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+                      <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
+                      <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
+                    </svg>
+                    Database / Cloud
+                  </button>
+                  <button class="builder-more-item" id="tab-btn-analysis" type="button" role="menuitem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 20h18"></path>
+                      <path d="M6 16V9"></path>
+                      <path d="M12 16V4"></path>
+                      <path d="M18 16v-6"></path>
+                    </svg>
+                    Analytics
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M3 10h18"></path>
+                    </svg>
+                    Payments <span class="builder-more-soon">Soon</span>
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path>
+                    </svg>
+                    Security <span class="builder-more-soon">Soon</span>
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
+                    </svg>
+                    SEO & AI search <span class="builder-more-soon">Soon</span>
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-open-history>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path>
+                    </svg>
+                    History / Rollback
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-trigger-visual-edit>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                    Visual edit
+                  </button>
+                  <button class="builder-more-item" type="button" role="menuitem" data-trigger-download>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path>
+                    </svg>
+                    Download code
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3310,6 +4212,19 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                   <path d="M21 3v6h-6"></path>
+                </svg>
+              </button>
+              <button class="preview-page-selector" id="preview-page-selector" type="button" aria-label="Preview page selector">
+                <span id="preview-page-label">Homepage</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </button>
+              <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Open preview in a new tab" title="Open preview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M15 3h6v6"></path>
+                  <path d="M10 14 21 3"></path>
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                 </svg>
               </button>
             </div>
@@ -3557,6 +4472,89 @@
 
   <script type="module">
     document.addEventListener("DOMContentLoaded", () => {
+      const topbarCenter = document.getElementById("builder-topbar-center");
+      const topbarPreviewTools = document.getElementById("builder-topbar-preview-tools");
+      const subNavTabs = document.querySelector(".sub-nav-tabs");
+      const historyShortcut = document.getElementById("builder-history-shortcut");
+      const collapseSidebarButton = document.querySelector(".collapse-sidebar-arrow");
+      const previewToolbarControls = document.querySelector(".preview-toolbar-controls");
+      const visualEditButton = document.getElementById("btn-visual-edit");
+      const downloadButton = document.getElementById("action-download-zip");
+
+      if (topbarCenter && subNavTabs) {
+        if (historyShortcut) topbarCenter.appendChild(historyShortcut);
+        if (collapseSidebarButton) topbarCenter.appendChild(collapseSidebarButton);
+        topbarCenter.appendChild(subNavTabs);
+      }
+      if (topbarPreviewTools) {
+        if (previewToolbarControls) topbarPreviewTools.appendChild(previewToolbarControls);
+      }
+
+      document.getElementById("btn-preview-external")?.addEventListener("click", () => {
+        const frame = document.getElementById("preview-iframe-element");
+        const iframe = frame instanceof HTMLIFrameElement ? frame : null;
+        if (iframe?.src && iframe.src !== "about:blank") {
+          window.open(iframe.src, "_blank", "noopener,noreferrer");
+          return;
+        }
+        const doc = iframe?.srcdoc || "";
+        if (!doc.trim()) return;
+        const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+        if (!previewWindow) return;
+        previewWindow.document.open();
+        previewWindow.document.write(doc);
+        previewWindow.document.close();
+      });
+
+      document.querySelectorAll("[data-open-history]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          document.getElementById("project-menu-history")?.click();
+        });
+      });
+
+      const moreWrapper = document.getElementById("builder-more-wrapper");
+      const moreTrigger = document.getElementById("tab-btn-more");
+      const moreMenu = document.getElementById("builder-more-menu");
+      function closeBuilderMore() {
+        moreWrapper?.classList.remove("open");
+        moreTrigger?.setAttribute("aria-expanded", "false");
+      }
+      moreTrigger?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const willOpen = !moreWrapper?.classList.contains("open");
+        moreWrapper?.classList.toggle("open", willOpen);
+        moreTrigger.setAttribute("aria-expanded", String(willOpen));
+      });
+      moreMenu?.addEventListener("click", (event) => {
+        const item = event.target instanceof Element ? event.target.closest(".builder-more-item") : null;
+        if (!item) return;
+        if (item.getAttribute("aria-disabled") === "true") {
+          event.preventDefault();
+          return;
+        }
+        closeBuilderMore();
+        if (item.hasAttribute("data-open-history")) {
+          event.preventDefault();
+          document.getElementById("project-menu-history")?.click();
+        }
+        if (item.hasAttribute("data-trigger-visual-edit")) {
+          event.preventDefault();
+          visualEditButton?.click();
+        }
+        if (item.hasAttribute("data-trigger-download")) {
+          event.preventDefault();
+          downloadButton?.click();
+        }
+      });
+      document.addEventListener("click", (event) => {
+        if (!moreWrapper?.contains(event.target)) closeBuilderMore();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeBuilderMore();
+      });
+
       const openFileTabLabel = document.getElementById("open-file-tab-label");
       const codeContentView = document.getElementById("code-content-view-panel");
 

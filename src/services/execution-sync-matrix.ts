@@ -26,7 +26,7 @@ export type ExecutionSyncMatrix = {
   required_layers: ExecutionSystemLayer[];
   optional_layers: ExecutionSystemLayer[];
   evidence_required: string[];
-  user_visible_surface: 'plain_chat' | 'light_plan' | 'huggy_workline' | 'confirmation';
+  user_visible_surface: 'plain_chat' | 'light_plan' | 'rich_parts_stream' | 'confirmation';
   mutation_policy: 'never' | 'only_after_confirmation' | 'allowed';
   save_policy: 'none' | 'atomic_draft' | 'atomic_versioned';
   recovery_policy: 'none' | 'ask_missing_info' | 'autofix_then_draft';
@@ -114,7 +114,7 @@ export function buildExecutionSyncMatrix(contract: ExecutionContract): Execution
 
   if (contract.can_mutate_files) {
     required.push('planner', 'tool_loop', 'browser_testing', 'autofix', 'atomic_save', 'recovery', 'preview', 'security', 'memory');
-    userVisibleSurface = 'huggy_workline';
+    userVisibleSurface = 'rich_parts_stream';
     mutationPolicy = 'allowed';
     savePolicy = 'atomic_versioned';
     recoveryPolicy = 'autofix_then_draft';
@@ -123,7 +123,7 @@ export function buildExecutionSyncMatrix(contract: ExecutionContract): Execution
 
   if (contract.mode === 'verify') {
     required.push('browser_testing', 'preview', 'security');
-    userVisibleSurface = 'huggy_workline';
+    userVisibleSurface = 'rich_parts_stream';
     savePolicy = 'atomic_draft';
   }
 
@@ -169,7 +169,7 @@ export function validateExecutionSync(matrix: ExecutionSyncMatrix, evidence: Exe
   if (matrix.user_visible_surface === 'plain_chat' && (evidence.previewReady || evidence.runnerChecked || evidence.browserChecked)) {
     findings.push(finding('plain_chat_side_effects', 'fail', 'Plain chat must not touch preview, runner, or browser testing.'));
   }
-  if (matrix.user_visible_surface === 'huggy_workline' && matrix.required_layers.includes('browser_testing') && !evidence.browserChecked) {
+  if (matrix.user_visible_surface === 'rich_parts_stream' && matrix.required_layers.includes('browser_testing') && !evidence.browserChecked) {
     findings.push(finding('browser_test_missing', 'warn', 'Project missions should include browser testing evidence.'));
   }
   if (matrix.save_policy === 'atomic_versioned' && evidence.filesChanged && !evidence.versionSaved && !evidence.draftSaved) {
