@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ChevronDown, Code2, Copy, Eye, FileText, Maximize2, MessageSquareIcon, Pencil, Search, Terminal as TerminalIcon, ThumbsDown, ThumbsUp, Wrench, XIcon } from "lucide-react";
+import { Check, ChevronDown, Code2, Copy, Eye, FileText, Maximize2, MessageSquareIcon, Pencil, Search, Terminal as TerminalIcon, ThumbsDown, ThumbsUp, Wrench, XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -39,6 +39,26 @@ export type HuggyAgentTrace = {
   elapsed?: string;
   status?: "active" | "done" | "failed" | "cancelled";
   steps?: HuggyAgentTraceStep[];
+};
+
+export type HuggyFlowChecklistItem = {
+  id: string;
+  label: string;
+  status: "pending" | "active" | "done" | "failed";
+};
+
+export type HuggyAgentFlowBlock = {
+  type: "agent_flow";
+  status: "active" | "done" | "failed" | "cancelled";
+  intro?: string;
+  checklist: HuggyFlowChecklistItem[];
+  streamingText?: string;
+  isStreaming?: boolean;
+  phase?: string;
+  elapsed?: string;
+  summary?: string;
+  startedAt?: string;
+  restored?: boolean;
 };
 
 export type HuggyConversationBlock =
@@ -83,7 +103,8 @@ export type HuggyConversationBlock =
       state: ConfirmationState;
       approveLabel?: string;
       rejectLabel?: string;
-    };
+    }
+  | HuggyAgentFlowBlock;
 
 export type HuggyConversationMessage = {
   id: string;
@@ -105,6 +126,7 @@ export type HuggyConversationApi = {
   clearWorking: (id: string) => void;
   setTrace: (id: string, trace: HuggyAgentTrace | null) => void;
   setBlock: (id: string, block: HuggyConversationBlock | null) => void;
+  setFlow: (id: string, flow: Partial<HuggyAgentFlowBlock>) => void;
   removeMessage: (id: string) => void;
   addAction: (id: string, label: string, onClick: () => void) => void;
   clear: () => void;
@@ -1147,6 +1169,227 @@ function ensureConversationStyles() {
       to { opacity: 1; transform: translateY(0) scale(1); }
     }
 
+    .huggy-agent-flow {
+      display: grid;
+      gap: 12px;
+      width: min(100%, 560px);
+      padding: 14px 16px;
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 16px;
+      background: var(--bg-surface);
+      color: var(--text);
+      box-shadow: 0 1px 0 rgba(9,9,11,.03) inset, 0 6px 20px rgba(9,9,11,.04);
+      animation: huggy-buildstream-in 200ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-agent-flow-intro {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 720;
+      line-height: 1.4;
+      letter-spacing: -.01em;
+      animation: huggy-buildstream-in 220ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-agent-flow-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 20px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 88%, transparent);
+      font-size: 12px;
+      font-weight: 680;
+      letter-spacing: -.01em;
+    }
+
+    .huggy-agent-flow-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      background: var(--accent-blue, #2f6df6);
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(47,109,246,.12));
+      animation: huggy-dot-pulse 1.1s cubic-bezier(.22,1,.36,1) infinite;
+    }
+
+    .huggy-agent-flow[data-status="done"] .huggy-agent-flow-dot,
+    .huggy-agent-flow[data-status="failed"] .huggy-agent-flow-dot,
+    .huggy-agent-flow[data-status="cancelled"] .huggy-agent-flow-dot {
+      animation: none;
+      opacity: .5;
+    }
+
+    .huggy-agent-flow-phase {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .huggy-agent-flow-elapsed {
+      margin-left: auto;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 64%, transparent);
+      font-size: 11px;
+      font-weight: 680;
+      font-variant-numeric: tabular-nums;
+      flex: 0 0 auto;
+    }
+
+    .huggy-agent-flow-checklist {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .huggy-agent-flow-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 22px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 82%, transparent);
+      font-size: 13px;
+      line-height: 1.35;
+      opacity: 0;
+      animation: huggy-buildstream-in 220ms cubic-bezier(.22,1,.36,1) forwards;
+    }
+
+    .huggy-agent-flow-item[data-status="active"] {
+      color: var(--text);
+      font-weight: 710;
+    }
+
+    .huggy-agent-flow-item[data-status="done"] {
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 70%, transparent);
+    }
+
+    .huggy-agent-flow-item[data-status="failed"] {
+      color: #ef4444;
+    }
+
+    .huggy-agent-flow-mark {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--text-sub, var(--text-muted)) 42%, transparent);
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: inherit;
+    }
+
+    .huggy-agent-flow-mark svg {
+      width: 10px;
+      height: 10px;
+      stroke-width: 3;
+    }
+
+    .huggy-agent-flow-item[data-status="active"] .huggy-agent-flow-mark {
+      border-style: dashed;
+      border-color: var(--accent-blue, #2f6df6);
+      animation: huggy-buildstream-spin 1.2s linear infinite;
+    }
+
+    .huggy-agent-flow-item[data-status="done"] .huggy-agent-flow-mark {
+      border-color: #22c55e;
+      background: #22c55e;
+      color: #fff;
+      animation: huggy-buildstream-pop 180ms cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .huggy-agent-flow-item[data-status="failed"] .huggy-agent-flow-mark {
+      border-color: #ef4444;
+      color: #ef4444;
+    }
+
+    .huggy-agent-flow-label {
+      min-width: 0;
+    }
+
+    .huggy-agent-flow-stream {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      min-height: 1.6em;
+    }
+
+    .huggy-agent-flow-stream-text {
+      white-space: pre-wrap;
+    }
+
+    .huggy-agent-flow-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.05em;
+      margin-left: 1px;
+      vertical-align: text-bottom;
+      background: var(--accent-blue, #2f6df6);
+      border-radius: 1px;
+      animation: huggy-flow-cursor 1s step-start infinite;
+    }
+
+    @keyframes huggy-flow-cursor {
+      50% { opacity: 0; }
+    }
+
+    .huggy-agent-flow-summary {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .huggy-agent-flow-summary .huggy-message-markdown {
+      display: grid;
+      gap: 8px;
+    }
+
+    .huggy-agent-flow-condensed {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: color-mix(in srgb, var(--text-sub, var(--text-muted)) 78%, transparent);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .huggy-agent-flow-condensed-mark {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border: 1px solid #22c55e;
+      background: #22c55e;
+      color: #fff;
+    }
+
+    .huggy-agent-flow-condensed-mark svg {
+      width: 11px;
+      height: 11px;
+      stroke-width: 3;
+    }
+
+    .huggy-agent-flow[data-status="failed"] .huggy-agent-flow-condensed-mark {
+      border-color: #ef4444;
+      background: #ef4444;
+    }
+
+    .huggy-agent-flow[data-status="cancelled"] .huggy-agent-flow-condensed-mark {
+      border-color: color-mix(in srgb, var(--text-muted, #6f6a5f) 60%, transparent);
+      background: color-mix(in srgb, var(--text-muted, #6f6a5f) 60%, transparent);
+    }
+
+    .huggy-agent-flow[data-restored="true"] *,
+    .huggy-agent-flow[data-restored="true"] {
+      animation: none !important;
+      opacity: 1 !important;
+    }
+
     @media (hover: none) {
       .huggy-message-utility {
         opacity: .52;
@@ -1177,6 +1420,8 @@ function ensureConversationStyles() {
       .huggy-agent-trace-dot,
       .huggy-agent-step-mark,
       .huggy-reasoning-streaming .huggy-reasoning-dot,
+      .huggy-agent-flow *,
+      .huggy-agent-flow-cursor,
       .huggy-agent-trace[data-status="active"]::after {
         transition: none !important;
         animation: none !important;
@@ -1568,9 +1813,101 @@ function renderRichMessageParts(message: HuggyConversationMessage) {
   );
 }
 
+function uiFrench() {
+  const lang = (typeof document !== "undefined" ? document.documentElement.lang : "") || "";
+  return lang.toLowerCase().startsWith("fr");
+}
+
+function AgentFlowView({ block }: { block: HuggyAgentFlowBlock }) {
+  const items = block.checklist || [];
+  const isDone = block.status === "done";
+  const isFailed = block.status === "failed";
+  const isCancelled = block.status === "cancelled";
+  const isFinished = isDone || isFailed || isCancelled;
+  const doneCount = items.filter(i => i.status === "done").length;
+  const showStreaming = Boolean(block.isStreaming) && !isFinished;
+  const streamingText = block.streamingText || "";
+  const summary = block.summary?.trim();
+  const showSummary = isFinished && summary;
+  const fr = uiFrench();
+  const stepWord = fr ? "étape" : "step";
+  const stepWordPl = fr ? "étapes" : "steps";
+
+  return (
+    <div
+      className="huggy-agent-flow"
+      data-status={block.status}
+      data-restored={block.restored ? "true" : "false"}
+      role="status"
+      aria-live="polite"
+    >
+      {block.intro ? <p className="huggy-agent-flow-intro">{block.intro}</p> : null}
+
+      {!isFinished ? (
+        <div className="huggy-agent-flow-meta">
+          <span className="huggy-agent-flow-dot" aria-hidden="true" />
+          <span className="huggy-agent-flow-phase">{block.phase || (fr ? "Réflexion…" : "Thinking…")}</span>
+          {block.elapsed ? <span className="huggy-agent-flow-elapsed">{block.elapsed}</span> : null}
+        </div>
+      ) : null}
+
+      {items.length && !isFinished ? (
+        <ul className="huggy-agent-flow-checklist">
+          {items.map((item, index) => (
+            <li
+              key={item.id}
+              className="huggy-agent-flow-item"
+              data-status={item.status}
+              style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
+            >
+              <span className="huggy-agent-flow-mark" aria-hidden="true">
+                {item.status === "done" ? (
+                  <Check size={11} strokeWidth={3} />
+                ) : item.status === "failed" ? (
+                  <XIcon size={10} strokeWidth={3} />
+                ) : null}
+              </span>
+              <span className="huggy-agent-flow-label">{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {isFinished && items.length ? (
+        <div className="huggy-agent-flow-condensed">
+          <span className="huggy-agent-flow-condensed-mark" aria-hidden="true">
+            <Check size={12} strokeWidth={3} />
+          </span>
+          <span className="huggy-agent-flow-condensed-text">
+            {isDone
+              ? `${doneCount} ${doneCount > 1 ? stepWordPl : stepWord}`
+              : isFailed
+                ? (fr ? "Échec" : "Failed")
+                : (fr ? "Annulé" : "Cancelled")}
+          </span>
+          {block.elapsed ? <span className="huggy-agent-flow-elapsed">{block.elapsed}</span> : null}
+        </div>
+      ) : null}
+
+      {showStreaming && streamingText ? (
+        <div className="huggy-agent-flow-stream">
+          <span className="huggy-agent-flow-stream-text">{streamingText.slice(-1400)}</span>
+          <span className="huggy-agent-flow-cursor" aria-hidden="true" />
+        </div>
+      ) : null}
+
+      {showSummary ? <div className="huggy-agent-flow-summary">{renderAssistantMarkdown(summary!)}</div> : null}
+    </div>
+  );
+}
+
 function renderMessageBlock(message: HuggyConversationMessage) {
   const block = message.block;
   if (!block) return null;
+
+  if (block.type === "agent_flow") {
+    return <AgentFlowView block={block} />;
+  }
 
   if (block.type === "reasoning" ||
       block.type === "tool_call" ||
@@ -2073,6 +2410,23 @@ export function mountBuilderConversation(host: HTMLElement): HuggyConversationAp
     },
     setBlock(id, block) {
       messages = messages.map(message => message.id === id ? { ...message, block: block || undefined } : message);
+      render();
+    },
+    setFlow(id, flow) {
+      messages = messages.map(message => {
+        if (message.id !== id) return message;
+        const current =
+          message.block && message.block.type === "agent_flow"
+            ? message.block
+            : ({ type: "agent_flow", status: "active", checklist: [] } as HuggyAgentFlowBlock);
+        const merged: HuggyAgentFlowBlock = {
+          ...current,
+          ...flow,
+          type: "agent_flow",
+          checklist: flow.checklist ?? current.checklist,
+        };
+        return { ...message, block: merged, working: merged.status === "active" };
+      });
       render();
     },
     removeMessage(id) {

@@ -14,7 +14,7 @@ import {
 } from './prompt-input-actions';
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
-import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock } from './builder-conversation-island';
+import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock, type HuggyFlowChecklistItem } from './builder-conversation-island';
 import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
@@ -2439,6 +2439,47 @@ function createHuggyStreamPartsState(): HuggyStreamPartsState {
     entries: [],
     activeText: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
   };
+}
+
+const FLOW_MILESTONE_INDEX: Record<string, number> = {
+  understanding: 0, inspecting: 0,
+  planning: 1,
+  generating: 2, generation: 2,
+  checking: 3, eval: 3, eval_ok: 3, eval_fail: 3, fixing: 3,
+  preview_ready: 4, preview: 4,
+};
+
+function buildInitialFlowChecklist(speaksFrench: boolean): HuggyFlowChecklistItem[] {
+  const labels = speaksFrench
+    ? [
+        'Comprendre la demande',
+        'Planifier la construction',
+        'Générer les fichiers',
+        'Vérifier le résultat',
+        "Préparer l'aperçu",
+      ]
+    : [
+        'Understand the request',
+        'Plan the build',
+        'Generate the files',
+        'Verify the result',
+        'Prepare the preview',
+      ];
+  return labels.map((label, index) => ({
+    id: `flow_${index}`,
+    label,
+    status: 'pending' as const,
+  }));
+}
+
+function advanceFlowChecklist(list: HuggyFlowChecklistItem[], key: string): HuggyFlowChecklistItem[] {
+  const targetIndex = FLOW_MILESTONE_INDEX[key];
+  if (targetIndex === undefined) return list;
+  return list.map((item, index) => {
+    if (index < targetIndex) return { ...item, status: 'done' as const };
+    if (index === targetIndex && item.status !== 'done') return { ...item, status: 'active' as const };
+    return item;
+  });
 }
 
 function streamEntryStatus(status: HuggyStreamEntry['status']) {
@@ -5626,6 +5667,55 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let lastWorkingTickAt = 0;
   let lastActiveTextAt = 0;
   let journalTimer: number | null = null;
+  const useAgentFlow = Boolean(conversationApi?.setFlow);
+  let flowStatus: 'active' | 'done' | 'failed' | 'cancelled' = 'active';
+  let flowChecklist: HuggyFlowChecklistItem[] = [];
+  let flowStreamingText = '';
+  let flowIsStreaming = false;
+  let flowPhase = say('Réflexion…', 'Thinking…');
+  let flowIntro = say('Je regarde ta demande et je mets en place le plan.', 'Looking at your request and setting up the plan.');
+  let flowSummary = '';
+
+  const flowId = () => messageHandleId(status);
+
+  const flushFlow = () => {
+    const sid = flowId();
+    if (!sid || !conversationApi?.setFlow) return;
+    conversationApi.setFlow(sid, {
+      status: flowStatus,
+      intro: flowIntro,
+      checklist: flowChecklist,
+      streamingText: flowStreamingText,
+      isStreaming: flowIsStreaming,
+      phase: flowPhase,
+      elapsed: elapsedForStatus(),
+      summary: flowSummary,
+    });
+    const scroll = document.getElementById('sidebar-scroll-area');
+    if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
+      scroll.scrollTop = scroll.scrollHeight;
+    }
+  };
+
+  const initFlow = () => {
+    flowChecklist = buildInitialFlowChecklist(speaksFrench);
+    flowStatus = 'active';
+    flowIsStreaming = false;
+    flowStreamingText = '';
+    flowSummary = '';
+    flowPhase = say('Réflexion…', 'Thinking…');
+    const sid = flowId();
+    if (!sid || !conversationApi?.setFlow) return;
+    conversationApi.setFlow(sid, {
+      status: 'active',
+      intro: flowIntro,
+      checklist: flowChecklist,
+      isStreaming: false,
+      phase: flowPhase,
+      startedAt: new Date().toISOString(),
+    });
+  };
+
   const elapsedForStatus = () => {
     const startedAt = Number(status?.dataset.workingStartedAt || 0);
     return startedAt ? formatWorkingDuration(Date.now() - startedAt) : undefined;
@@ -5634,6 +5724,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journalFrame = 0;
     lastJournalFlushAt = Date.now();
     journal.elapsed = elapsedForStatus() || journal.elapsed;
+    if (useAgentFlow) {
+      flushFlow();
+      return;
+    }
     setStreamMessageParts(status, journal);
   };
   const scheduleJournal = (immediate = false) => {
@@ -5801,6 +5895,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       }
       scheduleJournal();
     }
+    if (useAgentFlow) {
+      flowChecklist = advanceFlowChecklist(flowChecklist, key);
+      flowPhase = headline;
+      flowIsStreaming = false;
+      flushFlow();
+    }
   };
   const finishAgentStep = (key: string, label?: string, detail?: string) => {
     const existing = activeStepEntries.get(key);
@@ -5856,6 +5956,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journal.status = 'active';
     journal.activeText = say('Je commence par cadrer le résultat attendu avant de toucher au projet.', 'I am framing the expected result before touching the project.');
     setStreamMessageParts(status, journal);
+    if (useAgentFlow) {
+      initFlow();
+    }
     journalTimer = window.setInterval(() => {
       journal.elapsed = elapsedForStatus() || journal.elapsed;
       scheduleJournal(true);
@@ -5941,6 +6044,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       const delta = visible.slice(smoothTokens.length);
       smoothTokens = visible;
       if (delta) appendToMessageShimmer(status, delta);
+      if (useAgentFlow) {
+        flowStreamingText = visible;
+        flowIsStreaming = true;
+        flushFlow();
+      }
     });
 
     // Huggy Stream v2 client: spec-compliant SSE parsing, automatic
@@ -6057,11 +6165,22 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     );
 
     clearMessageShimmer(status);
-    const target = commitAssistantText([
+    const finalJoined = [
       finalText,
       diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
       verificationMessage ? `${speaksFrench ? 'Verification' : 'Checks'}: ${verificationMessage}` : '',
-    ].filter(Boolean).join('\n'), 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
+    ].filter(Boolean).join('\n');
+    if (useAgentFlow) {
+      flowStatus = hasNeedsFix ? 'failed' : 'done';
+      flowIsStreaming = false;
+      flowStreamingText = '';
+      flowSummary = finalJoined;
+      flowChecklist = flowChecklist.map(item => ({ ...item, status: item.status === 'failed' ? 'failed' : 'done' as const }));
+      flowPhase = hasNeedsFix ? say('Échec', 'Failed') : say('Terminé', 'Done');
+      flushFlow();
+      updateMessage(status, finalJoined);
+    }
+    const target = commitAssistantText(finalJoined, 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
     if (hasNeedsFix && target === status) {
       journal.status = 'failed';
       journal.activeText = '';
@@ -6089,6 +6208,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
         ? (speaksFrench ? 'Génération arrêtée.' : 'Generation stopped.')
         : (speaksFrench ? 'Build annulé.' : 'Build cancelled.');
       clearMessageShimmer(status);
+      if (useAgentFlow) {
+        flowStatus = 'cancelled';
+        flowIsStreaming = false;
+        flowStreamingText = '';
+        flowSummary = stoppedText;
+        flowPhase = say('Annulé', 'Cancelled');
+        flushFlow();
+      }
       journal.status = 'cancelled';
       journal.activeText = '';
       journal.finalText = stoppedText;
@@ -6097,6 +6224,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     } else {
       const errorText = error instanceof Error ? error.message : 'Generation failed.';
       clearMessageShimmer(status);
+      if (useAgentFlow) {
+        flowStatus = 'failed';
+        flowIsStreaming = false;
+        flowStreamingText = '';
+        flowSummary = errorText;
+        flowPhase = say('Échec', 'Failed');
+        flushFlow();
+      }
       journal.status = 'failed';
       journal.activeText = '';
       journal.finalText = errorText;
