@@ -3825,6 +3825,13 @@ function syncSubmitButtonState() {
   submit.style.cursor = shouldStop || hasPrompt ? 'pointer' : 'not-allowed';
 }
 
+function autoResizeChatInput() {
+  const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
+  if (!input) return;
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+}
+
 function setBusy(busy: boolean) {
   isGenerating = busy;
   const cancel = document.getElementById('btn-live-cancel') as HTMLButtonElement | null;
@@ -6778,6 +6785,7 @@ function bindChat() {
   };
 
   input.addEventListener('input', () => {
+    autoResizeChatInput();
     syncSubmitButtonState();
     scheduleWorkspaceSave();
   });
@@ -7003,8 +7011,46 @@ function bindMobileBuilderShell() {
   });
 }
 
+function isAnyBuilderOverlayOpen() {
+  if (document.getElementById('project-menu-panel')?.classList.contains('open')) return true;
+  if (document.getElementById('huggy-publish-panel')) return true;
+  if (document.getElementById('preview-device-toggle')?.classList.contains('open')) return true;
+  if (document.getElementById('pane-studio-wrapper')?.classList.contains('open')) return true;
+  if (document.getElementById('builder-more-wrapper')?.classList.contains('open')) return true;
+  if (document.getElementById('huggy-design-popover')) return true;
+  if (document.getElementById('huggy-media-popover')) return true;
+  return false;
+}
+
+function bindGlobalKeyboardShortcuts() {
+  document.addEventListener('keydown', (event) => {
+    const meta = event.metaKey || event.ctrlKey;
+    if (meta && (event.key === 'k' || event.key === 'K')) {
+      event.preventDefault();
+      (document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null)?.focus();
+      return;
+    }
+    if (meta && (event.key === 'b' || event.key === 'B')) {
+      event.preventDefault();
+      (document.querySelector('.collapse-sidebar-arrow') as HTMLElement | null)?.click();
+      return;
+    }
+    if (event.key === 'Escape' && isGenerating && !isAnyBuilderOverlayOpen()) {
+      event.preventDefault();
+      void cancelBuild();
+      return;
+    }
+    if (meta && event.shiftKey && (event.key === '1' || event.key === '2')) {
+      event.preventDefault();
+      activateBuilderView(event.key === '1' ? 'preview' : 'code');
+      return;
+    }
+  });
+}
+
 function init() {
   initHuggyMotion();
+  bindGlobalKeyboardShortcuts();
   void ensureSettingsPanelLazy();
   ensureConversationApi();
   bindSharedModelSelectionEvents();
