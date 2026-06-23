@@ -209,13 +209,13 @@ function ensureConversationStyles() {
       max-width: min(92%, 520px);
       overflow-wrap: anywhere;
       border: 1px solid var(--border-light, var(--border));
-      border-radius: 13px;
-      padding: 10px 12px;
+      border-radius: 14px;
+      padding: 11px 13px;
       font-size: 12.5px;
-      line-height: 1.58;
+      line-height: 1.6;
       color: var(--text);
       background: var(--bg-surface);
-      box-shadow: 0 1px 0 rgba(9,9,11,.03) inset;
+      box-shadow: 0 1px 2px rgba(9,9,11,.04);
       transition:
         transform 160ms cubic-bezier(.22,1,.36,1),
         border-color 160ms cubic-bezier(.22,1,.36,1),
@@ -498,19 +498,32 @@ function ensureConversationStyles() {
     }
 
     .huggy-message-user .huggy-message-content {
-      color: var(--bg);
-      background: var(--text);
+      color: #ffffff;
+      background: var(--accent-blue, #3b82f6);
       border-color: transparent;
-      box-shadow: 0 10px 28px rgba(0,0,0,.10);
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-blue, #3b82f6) 24%, transparent);
     }
 
     .huggy-message-system .huggy-message-content {
       max-width: 100%;
       color: var(--text-muted);
-      background: var(--bg-input);
-      border-style: dashed;
+      background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+      border: 1px solid var(--border-light, var(--border));
+      border-radius: 10px;
       font-size: 11.5px;
       text-align: center;
+      padding: 8px 12px;
+    }
+
+    .huggy-message-user .huggy-message-markdown code {
+      background: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+    }
+
+    .huggy-message-user .huggy-message-markdown a {
+      color: #ffffff;
+      text-decoration: underline;
     }
 
     .huggy-message-stack {
@@ -1173,12 +1186,12 @@ function ensureConversationStyles() {
       display: grid;
       gap: 12px;
       width: min(100%, 560px);
-      padding: 14px 16px;
+      padding: 15px 16px;
       border: 1px solid var(--border-light, var(--border));
       border-radius: 16px;
-      background: var(--bg-surface);
+      background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
       color: var(--text);
-      box-shadow: 0 1px 0 rgba(9,9,11,.03) inset, 0 6px 20px rgba(9,9,11,.04);
+      box-shadow: 0 1px 2px rgba(9,9,11,.04), 0 4px 16px rgba(9,9,11,.03);
       animation: huggy-buildstream-in 200ms cubic-bezier(.22,1,.36,1) both;
     }
 

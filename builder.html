@@ -1744,20 +1744,41 @@
 
     .sidebar-empty-state,
     .code-empty-state {
-      border: 1px dashed var(--border);
-      border-radius: 12px;
-      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--bg-input) 72%, transparent);
       color: var(--text-muted);
-      padding: 18px;
+      padding: 20px 18px;
       text-align: left;
+      transition: border-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .sidebar-empty-state:hover,
+    .code-empty-state:hover {
+      border-color: var(--border-mid);
     }
 
     .sidebar-empty-state h3,
     .code-empty-state h3 {
       color: var(--text);
       font-size: 14px;
-      font-weight: 650;
-      margin: 0 0 8px;
+      font-weight: 680;
+      letter-spacing: -.01em;
+      margin: 0 0 7px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .sidebar-empty-state h3::before,
+    .code-empty-state h3::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent-blue, #3b82f6);
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(59, 130, 246, 0.12));
+      flex: 0 0 auto;
     }
 
     .sidebar-empty-state p,
@@ -2044,8 +2065,8 @@
         z-index: -1;
     }
     .chat-input-row .input-wrapper:focus-within {
-        border-color: var(--border-mid) !important;
-        box-shadow: 0 1px 0 rgba(255,255,255,.72) inset, 0 12px 30px rgba(28,28,28,0.08) !important;
+        border-color: color-mix(in srgb, var(--accent-blue, #3b82f6) 30%, var(--border-mid)) !important;
+        box-shadow: 0 0 0 3px var(--accent-blue-soft, rgba(59, 130, 246, 0.10)), 0 8px 24px rgba(9,9,11,.06) !important;
     }
     .chat-input-row .icon-btn:hover {
         border-color: var(--border-focus);
@@ -2069,15 +2090,28 @@
         background: var(--accent-hover);
     }
     .chat-input-row .submit-btn.active {
-        background: var(--accent) !important;
+        background: var(--accent-blue, #3b82f6) !important;
         border-color: transparent !important;
-        color: var(--bg) !important;
+        color: #ffffff !important;
         cursor: pointer !important;
         pointer-events: auto !important;
+        box-shadow: 0 2px 10px color-mix(in srgb, var(--accent-blue, #3b82f6) 36%, transparent) !important;
     }
     .chat-input-row .submit-btn.active:hover {
-        opacity: 0.9;
-        transform: scale(1.02);
+        filter: brightness(1.1);
+        transform: scale(1.06);
+    }
+    .chat-input-row .submit-btn.is-generating {
+        background: #ef4444 !important;
+        border-color: transparent !important;
+        color: #ffffff !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        box-shadow: 0 2px 10px rgba(239, 68, 68, 0.36) !important;
+    }
+    .chat-input-row .submit-btn.is-generating:hover {
+        filter: brightness(1.1);
+        transform: scale(1.06);
     }
     .chat-input-row .dropdown.open {
         opacity: 1 !important;
@@ -2271,6 +2305,11 @@
     .sub-nav-action-btn:hover {
       color: var(--text);
       background-color: var(--accent-dim);
+    }
+
+    .sub-nav-action-btn.active {
+      color: var(--accent-blue, #3b82f6);
+      background-color: var(--accent-blue-soft, rgba(59, 130, 246, 0.10));
     }
 
     /* Viewport Frame Holder */
@@ -2873,10 +2912,8 @@
       align-items: stretch;
       overflow: auto;
       background:
-        linear-gradient(90deg, color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1px),
-        linear-gradient(180deg, color-mix(in srgb, var(--text) 4%, transparent) 1px, transparent 1px),
+        radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-blue, #3b82f6) 3%, transparent), transparent 40%),
         var(--preview-stage-bg, var(--bg-panel));
-      background-size: 24px 24px;
       padding: 0;
     }
 
@@ -4039,8 +4076,8 @@
         <!-- Chat feed -->
         <div class="sidebar-scroll-area" id="sidebar-scroll-area">
           <div class="sidebar-empty-state" id="chat-empty-state">
-            <h3>Chat ready</h3>
-            <p>Your real project conversation and agent events will appear here after synchronization. Auto lets Huggy decide whether to answer, plan, fix or build.</p>
+            <h3>Start building</h3>
+            <p>Describe the app, feature, or fix you want. Auto lets Huggy decide whether to answer, plan, fix, or build — switch to Build or Plan for more control.</p>
           </div>
         </div>
 
@@ -4054,7 +4091,7 @@
               <span id="huggy-workshop-context-label">Huggy Design</span>
               <span class="huggy-workshop-beta">Beta</span>
             </div>
-            <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 150px; display: block;"></textarea>
+            <textarea id="chat-textarea-box" class="chat-input-textarea" placeholder="Ask a follow up" style="width: 100%; background: transparent; border: none; outline: none; padding: 12px 14px 0; font-family: 'Instrument Sans', system-ui, sans-serif; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--text); caret-color: var(--accent); resize: none; min-height: 48px; max-height: 200px; display: block;"></textarea>
             
             <div class="input-actions" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px 12px; background: transparent;">
                 <div class="actions-left" style="display: flex; gap: 6px;">
@@ -4318,7 +4355,7 @@
               <div class="explorer-tree-scroll">
                 <div class="code-empty-state" style="margin:8px;">
                   <h3>No files yet</h3>
-                  <p>Ask Huggy for an app, feature, or fix. Generated files from your backend will appear here.</p>
+                  <p>Ask Huggy to build an app, feature, or fix. Generated files will appear here automatically.</p>
                 </div>
               </div>
             </div>
@@ -4341,7 +4378,7 @@
               </div>
 
               <div class="editor-main-scroll" id="editor-source-output">
-                <div class="code-editor-pre" id="code-content-view-panel"><div class="code-empty-state"><h3>No source file loaded</h3><p>Generated files will be loaded from the project once Huggy receives them from the backend.</p></div></div>
+                <div class="code-editor-pre" id="code-content-view-panel"><div class="code-empty-state"><h3>No file selected</h3><p>Pick a file from the explorer to view its source. Files are loaded from the project once Huggy generates them.</p></div></div>
               </div>
             </div>
           </div>
