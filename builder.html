@@ -3925,6 +3925,24 @@
       .btn-upgrade,
       .sub-nav-tab { transition: none !important; }
     }
+
+    /* 8 ── Zone preview : canvas flottant à coins arrondis (réf. Lovable).
+       Le bureau était edge-to-edge ; on le fait « flotter » sur la scène. */
+    .preview-screen-panel[data-preview-device="desktop"] .preview-device-frame {
+      width: calc(100% - 28px);
+      height: calc(100% - 14px);
+      margin-top: 14px;
+      align-self: flex-start;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* 9 ── Pastille d'adresse du preview : surface et rayon cohérents */
+    .preview-address-glow {
+      box-shadow: var(--shadow-sm);
+      border-radius: 999px;
+    }
   </style>
 </head>
 <body>
