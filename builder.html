@@ -3917,75 +3917,6 @@
       <aside class="sidebar-pane">
 
 
-        <div class="pane-tabs">
-          <button class="pane-tab-btn active" id="btn-sidebar-chat">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;">
-              <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
-            </svg>
-            <span>Chat</span>
-          </button>
-          <div class="pane-studio-wrapper" id="pane-studio-wrapper">
-            <button class="pane-tab-btn" id="btn-sidebar-studio" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="pane-studio-menu">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;" aria-hidden="true">
-                <path d="M12 3l1.35 4.15L17.5 8.5l-4.15 1.35L12 14l-1.35-4.15L6.5 8.5l4.15-1.35L12 3z"></path>
-                <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z"></path>
-                <path d="M5 14l.6 1.4L7 16l-1.4.6L5 18l-.6-1.4L3 16l1.4-.6L5 14z"></path>
-              </svg>
-              <span>Studio</span>
-              <span class="pane-tab-caret" aria-hidden="true">v</span>
-            </button>
-            <div class="pane-studio-menu" id="pane-studio-menu" role="menu" aria-label="Studio tools">
-              <button class="pane-studio-option" type="button" role="menuitem" data-studio-panel="design">
-                <span class="pane-studio-option-icon" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                    <path d="M8 4v16"></path>
-                    <path d="M3 9h18"></path>
-                    <path d="M12 13h5"></path>
-                    <path d="M12 16h3"></path>
-                  </svg>
-                </span>
-                <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Design <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="pro">Pro</span></span>
-                  <span class="pane-studio-option-desc">UI, layout, branding and product polish</span>
-                </span>
-              </button>
-              <button class="pane-studio-option" type="button" role="menuitem" data-studio-panel="decks">
-                <span class="pane-studio-option-icon" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="4" y="5" width="16" height="12" rx="2"></rect>
-                    <path d="M8 21h8"></path>
-                    <path d="M12 17v4"></path>
-                    <path d="M8 9h8"></path>
-                    <path d="M8 12h5"></path>
-                  </svg>
-                </span>
-                <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Decks <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="pro">Pro</span></span>
-                  <span class="pane-studio-option-desc">Pitch decks, slides and one-pagers</span>
-                </span>
-              </button>
-              <button class="pane-studio-option" type="button" role="menuitem" data-studio-panel="media">
-                <span class="pane-studio-option-icon" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                    <path d="M8 5v14"></path>
-                    <path d="M16 5v14"></path>
-                    <path d="M3 10h5"></path>
-                    <path d="M16 10h5"></path>
-                    <path d="M3 14h5"></path>
-                    <path d="M16 14h5"></path>
-                  </svg>
-                </span>
-                <span class="pane-studio-option-copy">
-                  <span class="pane-studio-option-title">Huggy Media <span class="pane-studio-beta">Beta</span><span class="pane-plan-tag" data-plan-min="scale">Scale</span></span>
-                  <span class="pane-studio-option-desc">Campaigns, UGC, product visuals and thumbnails</span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-
         <!-- Chat feed -->
         <div class="sidebar-scroll-area" id="sidebar-scroll-area">
           <div class="sidebar-empty-state" id="chat-empty-state">
@@ -4586,55 +4517,6 @@
         tabBtnAnalysis.addEventListener("click", () => activateView(screenAnalysis, tabBtnAnalysis));
       }
 
-      // Sidebar action buttons
-      const sidebarChatTab = document.getElementById("btn-sidebar-chat");
-      const sidebarStudioWrapper = document.getElementById("pane-studio-wrapper");
-      const sidebarStudioTab = document.getElementById("btn-sidebar-studio");
-      const sidebarStudioMenu = document.getElementById("pane-studio-menu");
-
-      function closeStudioMenu() {
-        if (!sidebarStudioWrapper || !sidebarStudioTab) return;
-        sidebarStudioWrapper.classList.remove("open");
-        sidebarStudioTab.setAttribute("aria-expanded", "false");
-      }
-
-      function openStudioMenu() {
-        if (!sidebarStudioWrapper || !sidebarStudioTab) return;
-        sidebarStudioWrapper.classList.add("open");
-        sidebarStudioTab.setAttribute("aria-expanded", "true");
-      }
-
-      sidebarChatTab.addEventListener("click", () => {
-        sidebarChatTab.classList.add("active");
-        sidebarStudioTab?.classList.remove("active");
-        closeStudioMenu();
-      });
-
-      sidebarStudioTab?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const isOpen = sidebarStudioWrapper?.classList.contains("open");
-        if (isOpen) {
-          closeStudioMenu();
-        } else {
-          openStudioMenu();
-        }
-      });
-
-      sidebarStudioMenu?.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const option = event.target instanceof Element ? event.target.closest("[data-studio-panel]") : null;
-        if (!option) return;
-        if (option.getAttribute("aria-disabled") === "true") return;
-        sidebarStudioTab?.classList.add("active");
-        sidebarChatTab.classList.remove("active");
-        closeStudioMenu();
-      });
-
-      document.addEventListener("click", (event) => {
-        if (!sidebarStudioWrapper?.contains(event.target)) {
-          closeStudioMenu();
-        }
-      });
       // Live file rendering is handled by src/builder-live.ts.
 
       // Submit new chat query interactions

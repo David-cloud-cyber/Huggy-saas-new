@@ -300,6 +300,65 @@
 
     .nav-divider { height: 1px; background: var(--border); margin: 8px 0; }
 
+    /* Studio expandable nav */
+    .nav-studio { width: 100%; margin-bottom: 12px; }
+    .nav-studio-toggle {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px;
+      width: 100%; border: 1px solid var(--border);
+      background: transparent; cursor: pointer;
+      transition: all 150ms; text-align: left;
+    }
+    .nav-studio-toggle:hover {
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+    }
+    .nav-studio-icon { color: var(--text-sub); flex-shrink: 0; transition: color 150ms; }
+    .nav-studio-label {
+      font-family: "Instrument Sans"; font-size: 12px; font-weight: 500;
+      color: var(--text-sub); flex: 1; transition: color 150ms;
+    }
+    .nav-studio-toggle:hover .nav-studio-icon,
+    .nav-studio-toggle:hover .nav-studio-label,
+    .nav-studio.open .nav-studio-icon,
+    .nav-studio.open .nav-studio-label { color: var(--text); }
+    .nav-studio-caret {
+      color: var(--text-sub); flex-shrink: 0;
+      transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1), color 150ms;
+    }
+    .nav-studio.open .nav-studio-toggle { border-color: var(--border-mid); background: var(--accent-dim); }
+    .nav-studio.open .nav-studio-caret { transform: rotate(180deg); }
+
+    .nav-studio-menu {
+      display: grid; grid-template-rows: 0fr;
+      transition: grid-template-rows 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .nav-studio.open .nav-studio-menu { grid-template-rows: 1fr; }
+    .nav-studio-menu-inner {
+      overflow: hidden; min-height: 0;
+      display: flex; flex-direction: column; gap: 1px;
+      padding-left: 9px;
+    }
+    .nav-studio.open .nav-studio-menu-inner { padding-top: 4px; padding-bottom: 2px; }
+    .nav-studio-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 6px;
+      width: 100%; border: 1px solid transparent;
+      background: transparent; text-align: left;
+      cursor: not-allowed; opacity: 0.5;
+    }
+    .nav-studio-item svg { color: var(--text-sub); flex-shrink: 0; }
+    .nav-studio-item-label {
+      font-family: "Instrument Sans"; font-size: 12px; font-weight: 500;
+      color: var(--text-muted); flex: 1; white-space: nowrap;
+    }
+    .nav-studio-soon {
+      font-family: "JetBrains Mono"; font-size: 9px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-sub); padding: 1px 5px; border-radius: 3px;
+      background: var(--bg-elevated); border: 1px solid var(--border); flex-shrink: 0;
+    }
+
     .nav-project {
       display: flex; align-items: center; gap: 8px;
       padding: 7px 10px; border-radius: 6px;
@@ -1996,6 +2055,59 @@
           <span>New project</span>
         </button>
 
+        <!-- Studio (expandable menu) -->
+        <div class="nav-studio" id="nav-studio">
+          <button class="nav-studio-toggle" id="btn-studio-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="studio-submenu">
+            <svg class="nav-studio-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l1.4 4.3L17.7 8.7l-4.3 1.4L12 14.4l-1.4-4.3L6.3 8.7l4.3-1.4L12 3z"></path>
+              <path d="M19 13l.7 2L22 16l-2.3.7L19 19l-.7-2.3L16 16l2.3-.7L19 13z"></path>
+            </svg>
+            <span class="nav-studio-label">Studio</span>
+            <svg class="nav-studio-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div class="nav-studio-menu" id="studio-submenu" role="group" aria-label="Studio tools">
+            <div class="nav-studio-menu-inner">
+              <button class="nav-studio-item" type="button" disabled aria-disabled="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                  <path d="M8 4v16"></path>
+                  <path d="M3 9h18"></path>
+                  <path d="M12 13h5"></path>
+                  <path d="M12 16h3"></path>
+                </svg>
+                <span class="nav-studio-item-label">Huggy Design</span>
+                <span class="nav-studio-soon">Soon</span>
+              </button>
+              <button class="nav-studio-item" type="button" disabled aria-disabled="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                  <path d="M8 5v14"></path>
+                  <path d="M16 5v14"></path>
+                  <path d="M3 10h5"></path>
+                  <path d="M16 10h5"></path>
+                  <path d="M3 14h5"></path>
+                  <path d="M16 14h5"></path>
+                </svg>
+                <span class="nav-studio-item-label">Huggy Media</span>
+                <span class="nav-studio-soon">Soon</span>
+              </button>
+              <button class="nav-studio-item" type="button" disabled aria-disabled="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="4" y="5" width="16" height="12" rx="2"></rect>
+                  <path d="M8 21h8"></path>
+                  <path d="M12 17v4"></path>
+                  <path d="M8 9h8"></path>
+                  <path d="M8 12h5"></path>
+                </svg>
+                <span class="nav-studio-item-label">Huggy Decks</span>
+                <span class="nav-studio-soon">Soon</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="nav-divider"></div>
 
         <div class="sidebar-promo">
@@ -3000,6 +3112,16 @@
       setSidebarCollapsed(localStorage.getItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY) === '1');
     } catch {
       setSidebarCollapsed(false);
+    }
+
+    // Studio expandable menu (sidebar). Submenu items stay disabled for now.
+    const navStudio = document.getElementById('nav-studio');
+    const btnStudioToggle = document.getElementById('btn-studio-toggle');
+    if (navStudio && btnStudioToggle) {
+      btnStudioToggle.addEventListener('click', () => {
+        const isOpen = navStudio.classList.toggle('open');
+        btnStudioToggle.setAttribute('aria-expanded', String(isOpen));
+      });
     }
 
     // Save simulation triggered by Ctrl+S / Cmd+S
