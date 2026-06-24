@@ -200,6 +200,27 @@
       }
     }
 
+    /* La top bar est transparente : elle laisse voir le fond de l'espace de
+       travail. Sur desktop on peint la bande gauche (largeur de la sidebar) en
+       --bg-panel pour que la zone du logo se fonde avec le panneau chat, et le
+       reste en --bg pour rester continu avec le preview — un seul bloc encastré.
+       Sidebar repliée / chat plein écran → fond uni --bg. */
+    @media (min-width: 761px) {
+      .app-workspace {
+        background: linear-gradient(
+          to right,
+          var(--bg-panel) 0,
+          var(--bg-panel) var(--huggy-sidebar-width, 380px),
+          var(--bg) var(--huggy-sidebar-width, 380px)
+        );
+      }
+      .app-workspace:has(.workspace-body.sidebar-collapsed),
+      .app-workspace:has(.workspace-body[data-layout="chat-rest"]),
+      .app-workspace:has(.workspace-body[data-layout="chat"]) {
+        background: var(--bg);
+      }
+    }
+
     /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
     .brand-topbar {
       height: 44px;
