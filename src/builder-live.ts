@@ -1767,6 +1767,7 @@ function applySidebarWidthPreference(width?: number) {
   const body = document.querySelector('.workspace-body') as HTMLElement | null;
   const sidebar = document.querySelector('.sidebar-pane') as HTMLElement | null;
   if (!body || !sidebar || !width || window.matchMedia('(max-width: 760px)').matches) return;
+  if (body.classList.contains('sidebar-collapsed')) return;
   const next = Math.min(520, Math.max(280, Number(width || 380)));
   body.style.gridTemplateColumns = `${next}px minmax(0, 1fr)`;
   body.style.setProperty('--huggy-sidebar-width', `${next}px`);
@@ -6928,14 +6929,20 @@ function ensureResizableSidebar() {
     localStorage.setItem('huggy-sidebar-width', String(next));
     syncCompactClass(next);
   };
-  applyWidth(savedWidth);
+  if (!body.classList.contains('sidebar-collapsed')) {
+    applyWidth(savedWidth);
+  }
   const handle = document.createElement('div');
   handle.id = 'huggy-sidebar-resizer';
   handle.title = 'Resize chat panel';
   handle.style.cssText = 'position:absolute;top:0;bottom:0;left:calc(var(--huggy-sidebar-width, 380px) - 4px);width:8px;cursor:col-resize;z-index:20;background:linear-gradient(90deg,transparent,rgba(9,9,11,.16),transparent);opacity:.45;touch-action:none;';
   body.style.position = 'relative';
   body.appendChild(handle);
-  window.addEventListener('resize', () => applyWidth(Number(localStorage.getItem('huggy-sidebar-width') || 380)));
+  window.addEventListener('resize', () => {
+    if (!body.classList.contains('sidebar-collapsed')) {
+      applyWidth(Number(localStorage.getItem('huggy-sidebar-width') || 380));
+    }
+  });
   handle.addEventListener('dblclick', () => applyWidth(380));
   handle.addEventListener('pointerdown', event => {
     if (window.matchMedia('(max-width: 760px)').matches) return;

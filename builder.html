@@ -4855,6 +4855,20 @@
 
       function setSidebarCollapsed(collapsed) {
         if (!workspaceBody) return;
+        if (collapsed) {
+          workspaceBody.dataset.savedGridCols = workspaceBody.style.gridTemplateColumns || "";
+          workspaceBody.style.gridTemplateColumns = "";
+          workspaceBody.style.removeProperty("--huggy-sidebar-width");
+        } else {
+          const saved = workspaceBody.dataset.savedGridCols || "";
+          if (saved) {
+            workspaceBody.style.gridTemplateColumns = saved;
+          }
+          const savedWidth = workspaceBody.dataset.savedGridCols?.match(/^([\d.]+)px/);
+          if (savedWidth) {
+            workspaceBody.style.setProperty("--huggy-sidebar-width", savedWidth[1] + "px");
+          }
+        }
         workspaceBody.classList.toggle("sidebar-collapsed", collapsed);
         arrowCollapseSidebar?.setAttribute("aria-expanded", String(!collapsed));
         arrowCollapseSidebar?.setAttribute("title", collapsed ? "Expand left sidebar" : "Collapse left sidebar");
