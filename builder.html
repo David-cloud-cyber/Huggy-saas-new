@@ -853,6 +853,7 @@
     .brand-topbar .sub-nav-tab svg {
       width: 15px;
       height: 15px;
+      flex: 0 0 auto;
       opacity: .94;
     }
 
@@ -1006,6 +1007,7 @@
     .preview-page-selector svg {
       width: 14px;
       height: 14px;
+      flex: 0 0 auto;
       color: var(--text-sub);
     }
 
@@ -4181,14 +4183,14 @@
               </svg>
             </button>
             
-            <div class="sub-nav-tabs" aria-label="Builder views">
+            <div class="sub-nav-tabs" aria-label="Vues de l'éditeur" translate="no">
               <button class="sub-nav-tab active" id="tab-btn-preview" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="2" y1="12" x2="22" y2="12"></line>
                   <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
                 </svg>
-                <span>Preview</span>
+                <span>Aperçu</span>
               </button>
               <button class="sub-nav-tab topbar-code-tab" id="tab-btn-code" type="button" aria-label="Code">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -4201,19 +4203,19 @@
               </button>
               <span class="lovable-tab-separator" aria-hidden="true"></span>
               <div class="builder-more-wrapper" id="builder-more-wrapper">
-                <button class="sub-nav-tab builder-more-trigger" id="tab-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="builder-more-menu" aria-label="More">
+                <button class="sub-nav-tab builder-more-trigger" id="tab-btn-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="builder-more-menu" aria-label="Plus">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="5" r="1"></circle>
                     <circle cx="12" cy="12" r="1"></circle>
                     <circle cx="12" cy="19" r="1"></circle>
                   </svg>
                 </button>
-                <div class="builder-more-menu" id="builder-more-menu" role="menu" aria-label="More builder tools">
+                <div class="builder-more-menu" id="builder-more-menu" role="menu" aria-label="Plus d'outils de création">
                   <button class="builder-more-item" type="button" role="menuitem" data-open-connectors>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <circle cx="7" cy="7" r="3"></circle><circle cx="17" cy="7" r="3"></circle><circle cx="7" cy="17" r="3"></circle><path d="M10 7h4"></path><path d="M7 10v4"></path><path d="M10 17h3a4 4 0 0 0 4-4v-3"></path>
                     </svg>
-                    Connectors
+                    Connecteurs
                   </button>
                   <button class="builder-more-item" id="tab-btn-database" type="button" role="menuitem">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -4221,7 +4223,7 @@
                       <path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
                       <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"></path>
                     </svg>
-                    Database / Cloud
+                    Base de données / Cloud
                   </button>
                   <button class="builder-more-item" id="tab-btn-analysis" type="button" role="menuitem">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -4230,43 +4232,43 @@
                       <path d="M12 16V4"></path>
                       <path d="M18 16v-6"></path>
                     </svg>
-                    Analytics
+                    Analytique
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M3 10h18"></path>
                     </svg>
-                    Payments <span class="builder-more-soon">Soon</span>
+                    Paiements <span class="builder-more-soon">Bientôt</span>
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path>
                     </svg>
-                    Security <span class="builder-more-soon">Soon</span>
+                    Sécurité <span class="builder-more-soon">Bientôt</span>
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" aria-disabled="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
                     </svg>
-                    SEO & AI search <span class="builder-more-soon">Soon</span>
+                    SEO & recherche IA <span class="builder-more-soon">Bientôt</span>
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" data-open-history>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path>
                     </svg>
-                    History / Rollback
+                    Historique / Restauration
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" data-trigger-visual-edit>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
                     </svg>
-                    Visual edit
+                    Édition visuelle
                   </button>
                   <button class="builder-more-item" type="button" role="menuitem" data-trigger-download>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path>
                     </svg>
-                    Download code
+                    Télécharger le code
                   </button>
                 </div>
               </div>
@@ -4274,15 +4276,15 @@
           </div>
 
           <div class="sub-nav-right">
-            <div class="preview-toolbar-controls" aria-label="Preview controls" aria-hidden="true">
+            <div class="preview-toolbar-controls" aria-label="Contrôles d'aperçu" aria-hidden="true" translate="no">
               <div class="preview-address-row address-hidden">
                 <div class="preview-address-glow">
                   <span class="preview-address-live-dot"></span>
                   <span></span>
                 </div>
               </div>
-              <div class="preview-device-toggle" id="preview-device-toggle" aria-label="Preview viewport">
-                <button class="preview-device-trigger" id="preview-device-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Preview device: desktop" title="Preview device">
+              <div class="preview-device-toggle" id="preview-device-toggle" aria-label="Affichage de l'aperçu">
+                <button class="preview-device-trigger" id="preview-device-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Appareil d'aperçu : ordinateur" title="Appareil d'aperçu">
                   <span class="preview-device-trigger-icon" id="preview-device-trigger-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                       <rect x="3" y="4" width="18" height="13" rx="2"></rect>
@@ -4290,25 +4292,25 @@
                       <path d="M12 17v4"></path>
                     </svg>
                   </span>
-                  <span class="preview-device-trigger-label" id="preview-device-trigger-label">Desktop</span>
+                  <span class="preview-device-trigger-label" id="preview-device-trigger-label">Ordinateur</span>
                 </button>
-                <div class="preview-device-menu" id="preview-device-menu" role="menu" aria-label="Preview device options">
-                  <button class="preview-device-btn active" type="button" role="menuitemradio" data-preview-device-option="desktop" aria-label="Desktop preview" title="Desktop preview" aria-pressed="true">
+                <div class="preview-device-menu" id="preview-device-menu" role="menu" aria-label="Options d'appareil d'aperçu">
+                  <button class="preview-device-btn active" type="button" role="menuitemradio" data-preview-device-option="desktop" aria-label="Aperçu ordinateur" title="Aperçu ordinateur" aria-pressed="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <rect x="3" y="4" width="18" height="13" rx="2"></rect>
                       <path d="M8 21h8"></path>
                       <path d="M12 17v4"></path>
                     </svg>
-                    <span>Desktop</span>
+                    <span>Ordinateur</span>
                   </button>
-                  <button class="preview-device-btn" type="button" role="menuitemradio" data-preview-device-option="tablet" aria-label="Tablet preview" title="Tablet preview" aria-pressed="false">
+                  <button class="preview-device-btn" type="button" role="menuitemradio" data-preview-device-option="tablet" aria-label="Aperçu tablette" title="Aperçu tablette" aria-pressed="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <rect x="6" y="3" width="12" height="18" rx="2"></rect>
                       <path d="M11.9 17.5h.2"></path>
                     </svg>
-                    <span>Tablet</span>
+                    <span>Tablette</span>
                   </button>
-                  <button class="preview-device-btn" type="button" role="menuitemradio" data-preview-device-option="mobile" aria-label="Mobile preview" title="Mobile preview" aria-pressed="false">
+                  <button class="preview-device-btn" type="button" role="menuitemradio" data-preview-device-option="mobile" aria-label="Aperçu mobile" title="Aperçu mobile" aria-pressed="false">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <rect x="8" y="2.5" width="8" height="19" rx="2"></rect>
                       <path d="M11.9 18h.2"></path>
@@ -4317,19 +4319,19 @@
                   </button>
                 </div>
               </div>
-              <button class="preview-refresh-btn" id="btn-preview-refresh" type="button" aria-label="Refresh preview" title="Refresh preview">
+              <button class="preview-refresh-btn" id="btn-preview-refresh" type="button" aria-label="Actualiser l'aperçu" title="Actualiser l'aperçu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                   <path d="M21 3v6h-6"></path>
                 </svg>
               </button>
-              <button class="preview-page-selector" id="preview-page-selector" type="button" aria-label="Preview page selector">
-                <span id="preview-page-label">Homepage</span>
+              <button class="preview-page-selector" id="preview-page-selector" type="button" aria-label="Sélecteur de page d'aperçu">
+                <span id="preview-page-label">Page d'accueil</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="m6 9 6 6 6-6"></path>
                 </svg>
               </button>
-              <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Open preview in a new tab" title="Open preview">
+              <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Ouvrir l'aperçu dans un nouvel onglet" title="Ouvrir l'aperçu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M15 3h6v6"></path>
                   <path d="M10 14 21 3"></path>
@@ -4959,7 +4961,7 @@
       // Preview page selector — cycle available HTML pages or show notice
       const previewPageSelector = document.getElementById("preview-page-selector");
       const previewPageLabel = document.getElementById("preview-page-label");
-      const availablePreviewPages = ["Homepage"];
+      const availablePreviewPages = ["Page d'accueil"];
       let previewPageIndex = 0;
       previewPageSelector?.addEventListener("click", () => {
         if (availablePreviewPages.length <= 1) {
