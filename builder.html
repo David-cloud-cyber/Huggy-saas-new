@@ -202,14 +202,14 @@
 
     /* ── TOP NAVIGATION NAVBAR ───────────────────────────────── */
     .brand-topbar {
-      height: 54px;
-      border-bottom: 1px solid var(--border);
+      height: 44px;
+      border-bottom: none;
       display: grid;
       grid-template-columns: minmax(220px, 1fr) auto minmax(280px, 1fr);
       align-items: center;
       gap: 14px;
       padding: 0 14px;
-      background: var(--bg);
+      background: transparent;
       user-select: none;
     }
 
@@ -716,13 +716,13 @@
     }
 
     .brand-topbar.lovable-builder-topbar {
-      height: 52px;
+      height: 44px;
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       gap: 10px;
       padding: 0 12px;
-      background: var(--topbar-bg);
+      background: transparent;
       color: var(--topbar-fg);
-      border-bottom: 1px solid var(--topbar-border);
+      border-bottom: none;
       box-shadow: none;
       font-size: 13px;
       font-weight: 500;
@@ -1389,6 +1389,12 @@
       user-select: none;
     }
 
+    /* The chat|preview seam stays invisible at rest (the --bg-panel vs --bg tint
+       difference separates them); the blue guide only appears while dragging. */
+    .workspace-body.is-resizing-sidebar .sidebar-pane {
+      border-right-color: var(--accent-blue);
+    }
+
     .workspace-body > * {
       min-width: 0;
     }
@@ -1401,7 +1407,7 @@
     .sidebar-pane {
       grid-column: 1;
       grid-row: 1;
-      border-right: 1px solid var(--border);
+      border-right: 1px solid transparent;
       background: var(--bg-panel);
       display: flex;
       flex-direction: column;
