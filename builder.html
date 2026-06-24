@@ -2934,19 +2934,19 @@
 
     .preview-screen-panel[data-preview-device="tablet"] .preview-device-frame {
       width: 768px;
-      max-width: calc(100% - 32px);
-      height: calc(100% - 32px);
-      margin: 16px 0;
+      max-width: calc(100% - 20px);
+      height: calc(100% - 16px);
+      margin: 8px 0;
       border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: 0 22px 80px rgba(9,9,11,.20);
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
     }
 
     .preview-screen-panel[data-preview-device="mobile"] .preview-device-frame {
       width: 390px;
-      max-width: calc(100% - 32px);
-      height: calc(100% - 32px);
-      margin: 16px 0;
+      max-width: calc(100% - 20px);
+      height: calc(100% - 16px);
+      margin: 8px 0;
       border: 1px solid var(--border);
       border-radius: 28px;
       box-shadow: 0 24px 88px rgba(9,9,11,.22);
@@ -3902,12 +3902,27 @@
 
     /* 3 ── Topbar : boutons plus nets, élévation discrète et cohérente */
     .brand-topbar .btn-publish {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       border-radius: var(--radius-sm);
       box-shadow: var(--shadow-sm);
       transition: filter 140ms var(--ease), transform 140ms var(--ease), box-shadow 160ms var(--ease);
     }
-    .brand-topbar .btn-publish:hover { box-shadow: var(--shadow-md); }
+    .brand-topbar .btn-publish:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .brand-topbar .btn-publish:active { transform: scale(0.98); }
     .brand-topbar .btn-upgrade { border-radius: var(--radius-sm); }
+
+    .brand-topbar .project-mini-trigger .brand-logo {
+      border: 1px solid var(--border);
+      transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease);
+    }
+    .brand-topbar .project-mini-trigger:hover .brand-logo {
+      border-color: var(--border-mid);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand-topbar .btn-publish svg { opacity: .9; }
 
     /* 4 ── Composer (chat) : élévation propre + anneau au focus */
     .chat-input-row .input-wrapper {
@@ -3966,13 +3981,13 @@
     /* 8 ── Zone preview : canvas flottant à coins arrondis (réf. Lovable).
        Le bureau était edge-to-edge ; on le fait « flotter » sur la scène. */
     .preview-screen-panel[data-preview-device="desktop"] .preview-device-frame {
-      width: calc(100% - 28px);
-      height: calc(100% - 14px);
-      margin-top: 14px;
+      width: calc(100% - 8px);
+      height: calc(100% - 6px);
+      margin: 3px auto 0;
       align-self: flex-start;
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
     }
 
     /* 9 ── Pastille d'adresse du preview : surface et rayon cohérents */
@@ -3991,10 +4006,10 @@
       <div class="brand-left lovable-topbar-left" id="builder-topbar-left">
         <button class="lovable-icon-btn project-mini-trigger" id="project-combo-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Project menu">
           <svg width="18" height="18" viewBox="0 0 32 32" fill="none" class="brand-logo" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="#f4f4f5"/>
-            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="#1c1c1c"/>
-            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="#1c1c1c"/>
-            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="#1c1c1c"/>
+            <rect width="32" height="32" rx="8" fill="var(--bg-elevated, #f4f4f5)"/>
+            <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--text, #1c1c1c)"/>
+            <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--text, #1c1c1c)"/>
+            <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--text, #1c1c1c)"/>
           </svg>
           <span id="project-name" class="project-mini-name">Projet sans titre</span>
         </button>
@@ -4010,7 +4025,14 @@
           </svg>
           <span>Mise à niveau</span>
         </button>
-        <button class="btn-publish" type="button">Publier</button>
+        <button class="btn-publish" type="button">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <span>Publier</span>
+        </button>
       </div>
     </header>
 
@@ -4892,6 +4914,50 @@
       setExplorerCollapsed(readUiPreference(BUILDER_EXPLORER_COLLAPSED_KEY) === "1");
       window.addEventListener("resize", updateSidebarCompactState);
       requestAnimationFrame(updateSidebarCompactState);
+
+      // Explorer Files / Search tab toggle
+      const explorerFilesTab = document.getElementById("explorer-files-tab");
+      const explorerSearchTab = document.getElementById("explorer-search-tab");
+      const explorerTreeScroll = document.querySelector(".explorer-tree-scroll");
+      function setExplorerTab(tab) {
+        if (!explorerFilesTab || !explorerSearchTab) return;
+        const isFiles = tab === "files";
+        explorerFilesTab.classList.toggle("active", isFiles);
+        explorerSearchTab.classList.toggle("active", !isFiles);
+        if (explorerTreeScroll instanceof HTMLElement) {
+          if (isFiles) {
+            explorerTreeScroll.dataset.view = "files";
+          } else {
+            explorerTreeScroll.dataset.view = "search";
+            if (!explorerTreeScroll.querySelector(".explorer-search-hint")) {
+              const hint = document.createElement("div");
+              hint.className = "explorer-search-hint code-empty-state";
+              hint.style.margin = "8px";
+              hint.innerHTML = "<h3>Search</h3><p>File content search will be available once generated files are loaded.</p>";
+              explorerTreeScroll.appendChild(hint);
+            }
+          }
+        }
+      }
+      explorerFilesTab?.addEventListener("click", () => setExplorerTab("files"));
+      explorerSearchTab?.addEventListener("click", () => setExplorerTab("search"));
+
+      // Preview page selector — cycle available HTML pages or show notice
+      const previewPageSelector = document.getElementById("preview-page-selector");
+      const previewPageLabel = document.getElementById("preview-page-label");
+      const availablePreviewPages = ["Homepage"];
+      let previewPageIndex = 0;
+      previewPageSelector?.addEventListener("click", () => {
+        if (availablePreviewPages.length <= 1) {
+          const frame = document.getElementById("preview-iframe-element");
+          if (!frame || !frame.srcdoc?.trim()) return;
+          previewPageSelector.style.opacity = "0.5";
+          window.setTimeout(() => { previewPageSelector.style.opacity = ""; }, 400);
+          return;
+        }
+        previewPageIndex = (previewPageIndex + 1) % availablePreviewPages.length;
+        if (previewPageLabel) previewPageLabel.textContent = availablePreviewPages[previewPageIndex];
+      });
 
       // Save simulation triggered by Ctrl+S / Cmd+S
       function showSaveToast() {
