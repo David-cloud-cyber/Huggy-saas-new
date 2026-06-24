@@ -211,10 +211,14 @@
           to right,
           var(--bg-panel) 0,
           var(--bg-panel) var(--huggy-sidebar-width, 380px),
-          var(--bg) var(--huggy-sidebar-width, 380px)
+          var(--preview-stage-bg, var(--bg-surface)) var(--huggy-sidebar-width, 380px)
         );
       }
-      .app-workspace:has(.workspace-body.sidebar-collapsed),
+      /* Sidebar repliée : le preview occupe tout → teinte exacte du preview. */
+      .app-workspace:has(.workspace-body.sidebar-collapsed) {
+        background: var(--preview-stage-bg, var(--bg-surface));
+      }
+      /* Chat plein écran (pas de preview) → teinte du chat plein écran (--bg). */
       .app-workspace:has(.workspace-body[data-layout="chat-rest"]),
       .app-workspace:has(.workspace-body[data-layout="chat"]) {
         background: var(--bg);
