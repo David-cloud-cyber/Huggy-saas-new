@@ -40,72 +40,90 @@
       document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
   <script type="module" src="/src/auth-guard.ts"></script>
   
   <style>
     /* Absolute pixel-perfect UI style matches the Huggy AI Workspace layout precisely */
     /* Huggy theme v2 — Zinc surfaces + Indigo 500 signature.
        Aligned with src/builder.css and src/design-system.css. */
+    /* Design tokens mirrored from dashboard.html (single source of truth) — dark */
     :root {
-      --bg: #09090b;
-      --bg-surface: #18181b;
-      --bg-panel: #131316;
-      --bg-input: #0f0f12;
-      --border: color-mix(in srgb, var(--text, #fafafa) 6%, transparent);
-      --border-light: color-mix(in srgb, var(--text, #fafafa) 4%, transparent);
-      --border-mid: rgba(255, 255, 255, 0.12);
-      --border-focus: rgba(59, 130, 246, 0.50);
-      --accent: #60a5fa;
+      --bg: #0f1014;
+      --bg-surface: #15171c;
+      --bg-panel: #13151a;
+      --bg-input: #181b21;
+      --border: rgba(226, 232, 240, 0.12);
+      --border-light: rgba(226, 232, 240, 0.06);
+      --border-mid: rgba(226, 232, 240, 0.18);
+      --border-focus: rgba(59, 130, 246, 0.46);
+      --accent: #f5f7fb;
       --accent-spark: #3b82f6;
       --accent-blue: #3b82f6;
       --accent-blue-deep: #93c5fd;
-      --accent-blue-soft: rgba(59, 130, 246, 0.14);
+      --accent-blue-soft: rgba(59, 130, 246, 0.16);
       --accent-blue-hover: rgba(59, 130, 246, 0.22);
       --accent-blue-active: rgba(59, 130, 246, 0.30);
-      --accent-dim: rgba(244, 244, 245, 0.06);
-      --accent-hover: rgba(244, 244, 245, 0.10);
-      --text: #fafafa;
-      --text-muted: #b3b8c3;
-      --text-sub: #71717a;
+      --accent-dim: rgba(245, 247, 251, 0.07);
+      --accent-hover: rgba(245, 247, 251, 0.11);
+      --accent-active: rgba(245, 247, 251, 0.15);
+      --text: #f5f7fb;
+      --text-muted: #c6cad3;
+      --text-sub: #8d95a3;
       --text-dark: #52525b;
-      /* Editor top bar — semantic tokens (Lovable-grade bar, Huggy blue accent). */
-      --topbar-bg: #0a0a0a;
-      --topbar-border: rgba(255, 255, 255, 0.08);
-      --topbar-fg: rgba(255, 255, 255, 0.92);
-      --topbar-fg-muted: rgba(255, 255, 255, 0.70);
-      --topbar-hover: rgba(255, 255, 255, 0.08);
-      --topbar-focus-ring: rgba(255, 255, 255, 0.30);
+      --success: #4ade80;
+      --success-dim: rgba(74, 222, 128, 0.10);
+      --warning: #fbbf24;
+      --warning-dim: rgba(251, 191, 36, 0.10);
+      --error: #f87171;
+      --error-dim: rgba(248, 113, 113, 0.10);
+      --grain-opacity: 0.022;
+      /* Editor top bar — harmonized with the dashboard slate palette. */
+      --topbar-bg: #0f1014;
+      --topbar-border: rgba(226, 232, 240, 0.12);
+      --topbar-fg: rgba(245, 247, 251, 0.92);
+      --topbar-fg-muted: rgba(245, 247, 251, 0.70);
+      --topbar-hover: rgba(245, 247, 251, 0.08);
+      --topbar-focus-ring: rgba(245, 247, 251, 0.30);
       --blue: var(--accent-blue);
       --blue-dim: var(--accent-blue-soft);
     }
 
+    /* Design tokens mirrored from dashboard.html (single source of truth) — light */
     :root[data-theme="light"] {
       --bg: #fafafa;
       --bg-surface: #ffffff;
       --bg-panel: #f4f4f5;
       --bg-input: #ffffff;
-      --border: rgba(9, 9, 11, 0.08);
-      --border-light: rgba(9, 9, 11, 0.05);
-      --border-mid: rgba(9, 9, 11, 0.14);
-      --border-focus: rgba(59, 130, 246, 0.40);
-      --accent: #2563eb;
+      --border: #eceae4;
+      --border-light: #f1f0ec;
+      --border-mid: #dedbd2;
+      --border-focus: rgba(59, 130, 246, 0.36);
+      --accent: #3b82f6;
       --accent-spark: #3b82f6;
       --accent-blue: #3b82f6;
       --accent-blue-deep: #1d4ed8;
       --accent-blue-soft: rgba(59, 130, 246, 0.10);
-      --accent-blue-hover: rgba(59, 130, 246, 0.16);
-      --accent-blue-active: rgba(59, 130, 246, 0.22);
-      --accent-dim: rgba(9, 9, 11, 0.05);
-      --accent-hover: rgba(9, 9, 11, 0.08);
-      --text: #09090b;
-      --text-muted: #52525b;
-      --text-sub: #71717a;
+      --accent-blue-hover: rgba(59, 130, 246, 0.14);
+      --accent-blue-active: rgba(59, 130, 246, 0.18);
+      --accent-dim: rgba(59, 130, 246, 0.10);
+      --accent-hover: rgba(59, 130, 246, 0.14);
+      --accent-active: rgba(59, 130, 246, 0.18);
+      --text: #1c1c1c;
+      --text-muted: #5f5f5d;
+      --text-sub: #77736b;
       --text-dark: #52525b;
+      --success: #22c55e;
+      --success-dim: rgba(34, 197, 94, 0.08);
+      --warning: #d97706;
+      --warning-dim: rgba(217, 119, 6, 0.08);
+      --error: #dc2626;
+      --error-dim: rgba(220, 38, 38, 0.08);
+      --grain-opacity: 0.018;
       --topbar-bg: #ffffff;
-      --topbar-border: rgba(9, 9, 11, 0.08);
-      --topbar-fg: rgba(9, 9, 11, 0.92);
-      --topbar-fg-muted: rgba(9, 9, 11, 0.55);
+      --topbar-border: #eceae4;
+      --topbar-fg: rgba(28, 28, 28, 0.92);
+      --topbar-fg-muted: rgba(28, 28, 28, 0.55);
       --topbar-hover: rgba(9, 9, 11, 0.06);
       --topbar-focus-ring: rgba(9, 9, 11, 0.30);
       --blue: var(--accent-blue);
@@ -120,8 +138,8 @@
 
     /* Make all vertical and horizontal scrollbars almost invisible */
     ::-webkit-scrollbar {
-      width: 2.5px !important;
-      height: 2.5px !important;
+      width: 3px !important;
+      height: 3px !important;
     }
     ::-webkit-scrollbar-track {
       background: transparent !important;
@@ -138,12 +156,24 @@
       background: var(--bg);
       color: var(--text);
       font-family: "Instrument Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "ss01","cv01";
       margin: 0;
       padding: 0;
       overflow: hidden;
       height: 100vh;
       display: flex;
       flex-direction: column;
+    }
+
+    /* GRAIN — subtle texture overlay mirrored from dashboard.html */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+      background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+      background-repeat: repeat;
+      background-size: 200px 200px;
+      opacity: var(--grain-opacity);
     }
 
     @supports (height: 100dvh) {
@@ -1181,8 +1211,10 @@
     }
 
     .p-modal-title {
+      font-family: "Instrument Serif", serif;
+      font-style: italic;
       font-size: 24px;
-      font-weight: 700;
+      font-weight: 400;
       letter-spacing: -0.02em;
       color: var(--text);
       margin: 0;
@@ -1762,9 +1794,11 @@
 
     .sidebar-empty-state h3,
     .code-empty-state h3 {
+      font-family: "Instrument Serif", serif;
+      font-style: italic;
       color: var(--text);
-      font-size: 14px;
-      font-weight: 680;
+      font-size: 16px;
+      font-weight: 400;
       letter-spacing: -.01em;
       margin: 0 0 7px;
       display: flex;
@@ -2964,8 +2998,8 @@
     }
 
     :root[data-theme="light"] {
-      --preview-shell-bg: #f4f7fb;
-      --preview-stage-bg: #f8fafc;
+      --preview-shell-bg: #f4f4f5;
+      --preview-stage-bg: #fafafa;
     }
 
     :root[data-theme="light"] .preview-device-frame {
@@ -2973,8 +3007,8 @@
     }
 
     :root[data-theme="dark"] {
-      --preview-shell-bg: #0f0f0d;
-      --preview-stage-bg: #151410;
+      --preview-shell-bg: #0f1014;
+      --preview-stage-bg: #15171c;
     }
 
     @media (max-width: 760px) {
@@ -3873,7 +3907,7 @@
     /* 1 ── Tokens manquants : élévation / rayon / focus cohérents.
        (--bg-elevated et --shadow-* étaient référencés mais jamais définis.) */
     :root {
-      --bg-elevated: #1f1f23;
+      --bg-elevated: #1b1e25;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, .30);
       --shadow-md: 0 6px 18px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .26);
       --shadow-lg: 0 22px 52px rgba(0, 0, 0, .55), 0 8px 18px rgba(0, 0, 0, .34);
@@ -5094,7 +5128,7 @@
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%) translateY(20px);
-            background: #18181b;
+            background: var(--bg-elevated);
             border: 1px solid var(--border-focus, rgba(59, 130, 246,0.36));
             border-left: 3px solid var(--accent-spark);
             border-radius: 8px;
