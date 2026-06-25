@@ -15,6 +15,7 @@ import { DiffView } from "./components/ai-elements/diff-view";
 import { Reasoning } from "./components/ai-elements/reasoning";
 import { TerminalBlock } from "./components/ai-elements/terminal";
 import { ToolCall } from "./components/ai-elements/tool-call";
+import { Response } from "./components/ui/response";
 import type { HuggyMessagePart } from "./lib/chat-message-parts";
 import "./styles/agent-activity-stream-v2.css";
 import "./styles/huggy-ai-elements.css";
@@ -1579,7 +1580,7 @@ function textFromConversationParts(parts: HuggyConversationMessage["parts"], fal
 
 function renderStandardMessageContent(message: HuggyConversationMessage) {
   const content = textFromConversationParts(message.parts, message.content);
-  if (message.role === "assistant") return renderAssistantMarkdown(content);
+  if (message.role === "assistant") return <Response>{content}</Response>;
   return renderPlainMessage(content);
 }
 
@@ -1738,7 +1739,7 @@ function renderRichMessagePart(part: HuggyMessagePart, index: number) {
     const text = String(part.text || "").trim();
     return text ? (
       <div key={key} className="huggy-streamline-text">
-        {renderAssistantMarkdown(text)}
+        <Response>{text}</Response>
       </div>
     ) : null;
   }

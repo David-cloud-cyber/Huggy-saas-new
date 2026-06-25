@@ -11,6 +11,8 @@ import { openConnectorsPanel } from './connectors-panel';
 import { startCreateProjectFlow } from './services/create-project-flow';
 import { understandUserIntent } from './services/intent-understanding';
 import { deriveProjectName } from './services/project-naming';
+import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
+import { createSmoothTextRenderer, openHuggyStream } from './lib/stream-client';
 
 type ProjectListResponse = {
   success: boolean;
@@ -105,6 +107,18 @@ let dashboardWorkspaceTimer: number | null = null;
 let dashboardWorkspaceState: UserWorkspaceState | null = null;
 let aiUsageLoaded = false;
 let aiUsageSettingsBound = false;
+let dashboardAssistantBusy = false;
+let dashboardActiveStream: { cancel: () => void } | null = null;
+
+type DashboardChatRole = 'user' | 'assistant' | 'system';
+type DashboardChatMessage = {
+  id: string;
+  role: DashboardChatRole;
+  content: string;
+  streaming?: boolean;
+};
+
+const dashboardChatMessages: DashboardChatMessage[] = [];
 
 function getTemplateDescription(template: string): string {
   const labels: Record<string, string> = {
@@ -365,6 +379,163 @@ function installDashboardUxPolish() {
   const style = document.createElement('style');
   style.id = 'huggy-dashboard-ux-polish';
   style.textContent = `
+    .sidebar-profile {
+      position: relative;
+    }
+
+    .profile-settings-btn {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 31px;
+      height: 31px;
+      margin-left: auto;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+    }
+
+    .profile-settings-btn:hover,
+    .profile-settings-btn:focus-visible {
+      transform: translateY(-1px);
+      border-color: var(--border-focus);
+      background: var(--accent-dim);
+      color: var(--text);
+      outline: none;
+    }
+
+    .create-section {
+      transition: min-height 280ms ease, padding 280ms ease, align-content 280ms ease;
+    }
+
+    .create-section[data-chat-state="idle"] {
+      min-height: min(58vh, 560px);
+      display: grid;
+      align-content: center;
+    }
+
+    .create-section[data-chat-state="conversation"],
+    .create-section[data-chat-state="promoting"] {
+      min-height: calc(100dvh - 128px);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 15px;
+    }
+
+    .create-section[data-chat-state="conversation"] .create-title,
+    .create-section[data-chat-state="conversation"] .create-subtitle,
+    .create-section[data-chat-state="conversation"] .chips-row,
+    .create-section[data-chat-state="promoting"] .create-title,
+    .create-section[data-chat-state="promoting"] .create-subtitle,
+    .create-section[data-chat-state="promoting"] .chips-row {
+      display: none;
+    }
+
+    .dashboard-chat-thread {
+      display: none;
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 6px 2px 2px;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+    }
+
+    .create-section[data-chat-state="conversation"] .dashboard-chat-thread,
+    .create-section[data-chat-state="promoting"] .dashboard-chat-thread {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .dashboard-chat-message {
+      display: flex;
+      width: 100%;
+      animation: dashboard-chat-rise 180ms ease both;
+    }
+
+    .dashboard-chat-message.user {
+      justify-content: flex-end;
+    }
+
+    .dashboard-chat-message.assistant,
+    .dashboard-chat-message.system {
+      justify-content: flex-start;
+    }
+
+    .dashboard-chat-bubble {
+      max-width: min(760px, 92%);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.62;
+      white-space: pre-wrap;
+      box-shadow: 0 12px 32px rgba(18, 22, 32, 0.05);
+    }
+
+    .dashboard-chat-message.user .dashboard-chat-bubble {
+      max-width: min(680px, 88%);
+      border-color: transparent;
+      background: var(--text);
+      color: var(--bg);
+      box-shadow: none;
+    }
+
+    .dashboard-chat-message.system .dashboard-chat-bubble {
+      border-color: transparent;
+      background: transparent;
+      color: var(--text-sub);
+      padding: 2px 4px;
+      box-shadow: none;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .dashboard-chat-cursor {
+      display: inline-block;
+      width: 7px;
+      height: 1.1em;
+      margin-left: 2px;
+      border-radius: 1px;
+      background: currentColor;
+      vertical-align: -0.15em;
+      opacity: 0.55;
+      animation: dashboard-chat-cursor 900ms steps(2, start) infinite;
+    }
+
+    .create-section[data-chat-state="conversation"] .input-wrapper,
+    .create-section[data-chat-state="promoting"] .input-wrapper {
+      position: sticky;
+      bottom: 12px;
+      z-index: 4;
+      margin-top: auto;
+      backdrop-filter: blur(16px);
+    }
+
+    @keyframes dashboard-chat-rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes dashboard-chat-cursor {
+      0%, 45% { opacity: 0.65; }
+      46%, 100% { opacity: 0; }
+    }
+
     .dashboard-overview-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -814,8 +985,13 @@ function installDashboardUxPolish() {
       .dashboard-overview-card,
       .project-filter-pill,
       .project-card,
-      .dashboard-activity-item {
+      .dashboard-activity-item,
+      .profile-settings-btn,
+      .create-section,
+      .dashboard-chat-message,
+      .dashboard-chat-cursor {
         transition: none;
+        animation: none;
       }
     }
   `;
@@ -1088,7 +1264,7 @@ async function loadLiveWallet() {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     syncDashboardPlanBadges(wallet.plan || 'free');
     if (count) count.textContent = String(wallet.balance ?? 0);
-    if (total) total.textContent = ` credits · ${planLabel(normalizePlanKey(wallet.plan))}`;
+    if (total) total.textContent = ` credits Â· ${planLabel(normalizePlanKey(wallet.plan))}`;
   } catch {
     syncDashboardPlanBadges('free');
     if (count) count.textContent = '--';
@@ -1201,7 +1377,7 @@ function renderAiUsage(data: AiUsageResponse, rates: ModelRateResponse) {
           <span class="usage-credit-pill">${escapeHtml(formatCredits(item.credits_charged))} credits</span>
         </div>
         <div class="usage-row-meta">
-          ${escapeHtml(item.model_name || 'Auto')} · ${escapeHtml(item.project_name || 'Project')} · ${escapeHtml(item.status || 'completed')} · ${escapeHtml(formatDate(item.created_at))}
+          ${escapeHtml(item.model_name || 'Auto')} Â· ${escapeHtml(item.project_name || 'Project')} Â· ${escapeHtml(item.status || 'completed')} Â· ${escapeHtml(formatDate(item.created_at))}
         </div>
       </div>
     `).join('') : '<div class="usage-empty">AI usage history will appear here after your first Plan, Build, Fix or Deploy action.</div>';
@@ -1347,6 +1523,169 @@ function bindLiveProjectCreation() {
   });
 }
 
+function dashboardMessageId(role: DashboardChatRole) {
+  return `dash_${role}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function dashboardSelectedModel() {
+  return localStorage.getItem('huggy-selected-model') || 'auto';
+}
+
+function dashboardSetChatState(state: 'idle' | 'conversation' | 'promoting') {
+  const createSection = document.querySelector('.create-section') as HTMLElement | null;
+  createSection?.setAttribute('data-chat-state', state);
+}
+
+function ensureDashboardChatThread() {
+  let thread = document.getElementById('dashboard-chat-thread') as HTMLElement | null;
+  if (thread) return thread;
+  const createSection = document.querySelector('.create-section') as HTMLElement | null;
+  const inputWrapper = createSection?.querySelector('.input-wrapper') as HTMLElement | null;
+  if (!createSection || !inputWrapper) return null;
+  thread = document.createElement('div');
+  thread.id = 'dashboard-chat-thread';
+  thread.className = 'dashboard-chat-thread';
+  thread.setAttribute('aria-live', 'polite');
+  inputWrapper.insertAdjacentElement('beforebegin', thread);
+  return thread;
+}
+
+function dashboardChatHtml(text: string) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function renderDashboardChat() {
+  const thread = ensureDashboardChatThread();
+  if (!thread) return;
+  thread.innerHTML = dashboardChatMessages.map(message => `
+    <article class="dashboard-chat-message ${message.role}" data-message-id="${escapeHtml(message.id)}">
+      <div class="dashboard-chat-bubble">
+        ${dashboardChatHtml(message.content)}
+        ${message.streaming ? '<span class="dashboard-chat-cursor" aria-hidden="true"></span>' : ''}
+      </div>
+    </article>
+  `).join('');
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function appendDashboardMessage(role: DashboardChatRole, content: string, streaming = false) {
+  const message: DashboardChatMessage = {
+    id: dashboardMessageId(role),
+    role,
+    content,
+    streaming,
+  };
+  dashboardChatMessages.push(message);
+  renderDashboardChat();
+  return message.id;
+}
+
+function updateDashboardMessage(id: string, content: string, streaming = false) {
+  const message = dashboardChatMessages.find(item => item.id === id);
+  if (!message) return;
+  message.content = content;
+  message.streaming = streaming;
+  renderDashboardChat();
+}
+
+function dashboardPromptRequiresBuilder(prompt: string, mode: DashboardMode) {
+  if (mode === 'build') return true;
+  if (mode === 'plan') return false;
+  const normalized = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const questionOnly = /^(comment|pourquoi|c'est quoi|explique|dis-moi|donne-moi|que pense|compare|what|why|how|tell me|explain)\b/.test(normalized);
+  const actionSignal = /\b(cree|creer|genere|generer|construis|build|create|make|developpe|implemente|ajoute|modifie|change|corrige|fix|refais|publie|deploie)\b/.test(normalized);
+  const appTargetSignal = /\b(app|application|site|web\s*app|dashboard|crm|marketplace|portfolio|landing|e-?commerce|interface|page|composant|component|auth|database|supabase|stripe|preview|bug|publication|publish|deploiement)\b/.test(normalized);
+  const featureListSignal = normalized.length > 140 && /\b(fonctionnalites?|features?|avec|doit|doivent|bouton|formulaire|tableau|utilisateur|admin|paiement|stockage)\b/.test(normalized);
+  if (questionOnly && !/\b(cree|genere|build|implemente|corrige|publie|deploie)\b/.test(normalized)) return false;
+  return actionSignal && (appTargetSignal || featureListSignal);
+}
+
+function recentDashboardConversationForAssistant() {
+  return dashboardChatMessages
+    .filter(message => message.role === 'user' || message.role === 'assistant')
+    .slice(-10)
+    .map(message => ({ role: message.role, content: message.content }));
+}
+
+async function streamDashboardConversation(prompt: string, assistantMessageId: string) {
+  dashboardActiveStream?.cancel();
+  dashboardAssistantBusy = true;
+  let verified = await getVerifiedSession({ allowRefresh: true });
+  if (!verified?.session?.access_token) verified = await refreshVerifiedSession();
+  const token = verified?.session?.access_token;
+  if (!token) {
+    updateDashboardMessage(assistantMessageId, 'Ta session a expirÃ©. Reconnecte-toi pour continuer.', false);
+    window.location.href = `/auth.html?redirect=${encodeURIComponent('/dashboard.html')}`;
+    dashboardAssistantBusy = false;
+    return;
+  }
+
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  let finalText = '';
+  let visibleText = '';
+  let streamError: Error | null = null;
+  const smoothText = createSmoothTextRenderer((visible) => {
+    visibleText = visible;
+    updateDashboardMessage(assistantMessageId, visible, true);
+  }, { minCharsPerFrame: 2, maxCharsPerFrame: 36 });
+
+  const stream = openHuggyStream({
+    url: `${API_BASE_URL}/api/assistant/chat/stream`,
+    init: {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        prompt,
+        modelId: dashboardSelectedModel(),
+        messages: recentDashboardConversationForAssistant(),
+      }),
+    },
+    maxRetries: 0,
+    onEvent: (eventType, data) => {
+      if (!data || typeof data !== 'object') return;
+      if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
+        smoothText.push(String(data.text || ''));
+        return;
+      }
+      if (eventType === 'error' || data.type === 'error') {
+        streamError = new Error(String(data.message || data.error || 'Huggy could not answer right now.'));
+        return;
+      }
+      if (eventType === 'done' || data.type === 'done') {
+        const payload = data.payload || {};
+        finalText = String(payload.text || payload.message || '').trim();
+      }
+    },
+  });
+
+  dashboardActiveStream = stream;
+  try {
+    await stream.done;
+    await smoothText.finish();
+    if (streamError) throw streamError;
+    const content = finalText || visibleText;
+    updateDashboardMessage(
+      assistantMessageId,
+      content.trim() || 'Je suis prÃªt. Donne-moi simplement ce que tu veux construire ou clarifier.',
+      false,
+    );
+  } catch (error) {
+    const message = error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : 'Huggy nâ€™a pas pu rÃ©pondre pour le moment. RÃ©essaie dans un instant.';
+    updateDashboardMessage(assistantMessageId, message, false);
+  } finally {
+    if (dashboardActiveStream === stream) dashboardActiveStream = null;
+    dashboardAssistantBusy = false;
+  }
+}
+
 function bindDashboardPromptCreation() {
   const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
   const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
@@ -1354,72 +1693,53 @@ function bindDashboardPromptCreation() {
   submit.dataset.huggyCreateFlowBound = 'true';
   submit.addEventListener('click', event => {
     const prompt = textarea.value.trim();
-    if (!prompt) return;
+    if (!prompt || dashboardAssistantBusy) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    submit.classList.add('is-loading');
     const original = submit.innerHTML;
+    const mode = selectedDashboardMode();
+    const intent = understandUserIntent({ prompt, hasFiles: false });
+    const wantsBuild = mode === 'build' || (mode !== 'plan' && (dashboardPromptRequiresBuilder(prompt, mode) || intent.allowsFileAction));
+    textarea.value = '';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    dashboardSetChatState('conversation');
+    appendDashboardMessage('user', prompt);
 
-    // Intent gate (Claude-style states 2 vs 3): a real build/edit request opens
-    // the builder workspace (creates the project); a plain discussion goes into
-    // the full-screen chat WITHOUT creating a project (no builder/editor) and
-    // streams its answer there. Explicit "build" mode always builds.
-    const dashboardMode = selectedDashboardMode();
-    const wantsBuild = dashboardMode === 'build' || understandUserIntent({ prompt, hasFiles: false }).allowsFileAction;
-
-    // Claude-style "descent": drop the composer, fade the hero, and show the
-    // prompt + a thinking indicator while the builder opens with the same prompt.
-    const section = textarea.closest('.create-section') as HTMLElement | null;
-    const wrapper = textarea.closest('.input-wrapper') as HTMLElement | null;
-    if (section && wrapper && !section.querySelector('.launch-thread')) {
-      const thread = document.createElement('div');
-      thread.className = 'launch-thread';
-      const userBubble = document.createElement('div');
-      userBubble.className = 'launch-bubble-user';
-      userBubble.textContent = prompt;
-      const aiRow = document.createElement('div');
-      aiRow.className = 'launch-bubble-ai';
-      const aiLabel = document.createElement('span');
-      aiLabel.textContent = 'Huggy ouvre votre espace';
-      const dots = document.createElement('span');
-      dots.className = 'launch-dots';
-      dots.innerHTML = '<i></i><i></i><i></i>';
-      aiRow.append(aiLabel, dots);
-      thread.append(userBubble, aiRow);
-      section.insertBefore(thread, wrapper);
-      section.classList.add('is-launching');
+    if (!wantsBuild) {
+      const assistantId = appendDashboardMessage('assistant', '', true);
+      void streamDashboardConversation(prompt, assistantId);
+      return;
     }
 
+    dashboardSetChatState('promoting');
+    const statusMessageId = appendDashboardMessage('system', "J'ouvre le builder et je commence la creation du projet.", true);
+    submit.classList.add('is-loading');
     void startCreateProjectFlow({
       prompt,
-      mode: dashboardMode,
+      mode,
       source: 'dashboard',
       projectName: projectNameFromPrompt(prompt),
-      model: 'auto',
+      model: dashboardSelectedModel(),
       template: 'custom',
       theme: 'light',
     }, {
-      createProject: wantsBuild,
+      createProject: true,
       onStatus: status => {
+        updateDashboardMessage(statusMessageId, status, true);
         submit.textContent = status;
       },
     }).catch(error => {
       submit.classList.remove('is-loading');
       submit.innerHTML = original;
-      const grid = document.querySelector('.projects-grid') as HTMLElement | null;
-      if (grid) {
-        grid.insertAdjacentHTML('afterbegin', `
-          <div class="empty-state" style="padding:14px;margin-bottom:10px;">
-            <h3 class="empty-title">Workspace could not start</h3>
-            <p class="empty-desc">${escapeHtml(error instanceof Error ? error.message : 'Unable to create the project.')}</p>
-          </div>
-        `);
-      }
+      updateDashboardMessage(
+        statusMessageId,
+        error instanceof Error ? error.message : 'Impossible de demarrer le projet pour le moment.',
+        false,
+      );
     });
   }, true);
 }
-
 type DashboardMobileTarget = 'create' | 'projects' | 'usage' | 'account';
 
 function setDashboardMobileTarget(target: DashboardMobileTarget) {
@@ -1466,6 +1786,7 @@ function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
   initDashboardChrome();
+  if (!dashboardChatMessages.length) dashboardSetChatState('idle');
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();
   bindDashboardPromptCreation();
