@@ -408,7 +408,7 @@ function installDashboardUxPolish() {
     }
 
     .create-section {
-      transition: min-height 280ms ease, padding 280ms ease, align-content 280ms ease;
+      transition: min-height 400ms ease, padding 400ms ease, align-content 400ms ease;
     }
 
     .create-section[data-chat-state="idle"] {
@@ -463,15 +463,19 @@ function installDashboardUxPolish() {
       scrollbar-width: thin;
       scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent;
     }
-    /* Scrollbar fine et discrète (jamais la grosse barre par défaut). */
-    .dashboard-chat-thread::-webkit-scrollbar { width: 6px; }
+    /* Scrollbar : 4px, invisible au repos, fade-in discret au survol du fil. */
+    .dashboard-chat-thread::-webkit-scrollbar { width: 4px; height: 4px; }
     .dashboard-chat-thread::-webkit-scrollbar-track { background: transparent; }
     .dashboard-chat-thread::-webkit-scrollbar-thumb {
-      background: color-mix(in srgb, var(--text) 14%, transparent);
+      background: transparent;
       border-radius: 999px;
+      transition: background 0.3s ease;
+    }
+    .dashboard-chat-thread:hover::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--text) 18%, transparent);
     }
     .dashboard-chat-thread::-webkit-scrollbar-thumb:hover {
-      background: color-mix(in srgb, var(--text) 26%, transparent);
+      background: color-mix(in srgb, var(--text) 30%, transparent);
     }
 
     .create-section[data-chat-state="conversation"] .dashboard-chat-thread,
@@ -485,7 +489,7 @@ function installDashboardUxPolish() {
       display: flex;
       width: 100%;
       align-items: flex-start;
-      animation: dashboard-chat-rise 180ms ease both;
+      animation: dashboard-chat-rise 250ms cubic-bezier(.22, 1, .36, 1) both;
     }
 
     .dashboard-chat-message.user {
@@ -521,10 +525,10 @@ function installDashboardUxPolish() {
       border-radius: 14px;
       background: color-mix(in srgb, var(--text) 8%, transparent);
       color: var(--text);
-      padding: 8px 13px;
+      padding: 9px 13px;
       font-size: 14px;
       line-height: 1.45;
-      box-shadow: none;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
     }
 
     .dashboard-chat-message.system .dashboard-chat-bubble {
@@ -572,6 +576,18 @@ function installDashboardUxPolish() {
       font-size: 14px !important;
     }
 
+    /* La compaction du composer (repos -> conversation) s'anime en douceur. */
+    .create-section .input-wrapper {
+      transition: padding 0.3s ease, border-radius 0.3s ease,
+                  border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .create-section #ai-textarea {
+      transition: min-height 0.3s ease;
+      scrollbar-width: none;
+    }
+    /* Pas de 2e scrollbar : le textarea scrolle en interne sans barre visible. */
+    .create-section #ai-textarea::-webkit-scrollbar { width: 0; height: 0; }
+
     /* Le grand wordmark HUGGY (hero du repos) disparaît en conversation pour
        que les messages occupent l'espace — épuré, conversations bien visibles. */
     .create-section[data-chat-state="conversation"]::before,
@@ -582,7 +598,7 @@ function installDashboardUxPolish() {
     @keyframes dashboard-chat-rise {
       from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(6px);
       }
       to {
         opacity: 1;
@@ -1047,10 +1063,14 @@ function installDashboardUxPolish() {
       .dashboard-activity-item,
       .profile-settings-btn,
       .create-section,
+      .create-section .input-wrapper,
+      .create-section #ai-textarea,
+      .dashboard-chat-thread,
+      .dashboard-chat-thread::-webkit-scrollbar-thumb,
       .dashboard-chat-message,
       .dashboard-chat-cursor {
-        transition: none;
-        animation: none;
+        transition: none !important;
+        animation: none !important;
       }
     }
   `;
