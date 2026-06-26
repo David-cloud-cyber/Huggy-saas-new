@@ -1,8 +1,6 @@
 import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
-import { openHuggyStream, createSmoothTextRenderer } from './lib/stream-client';
-import { messageTextFromParts, type HuggyMessagePart } from './lib/chat-message-parts';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
@@ -14,7 +12,7 @@ import {
 } from './prompt-input-actions';
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
-import { mountBuilderConversation, type HuggyAgentTrace, type HuggyConversationApi, type HuggyConversationBlock, type HuggyFlowChecklistItem } from './builder-conversation-island';
+import { mountBuilderConversation, type HuggyConversationApi } from './builder-conversation-island';
 import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
@@ -33,6 +31,26 @@ type PromptUiContext = 'chat_simple' | 'clarification_only' | 'planning_only' | 
 type StudioWorkshop = 'chat' | 'design' | 'decks' | 'media';
 type MessageHandle = HTMLElement & { __huggyMessageId?: string };
 type PlanKey = 'free' | 'pro' | 'scale' | 'enterprise';
+type HuggyConversationBlock = unknown;
+type HuggyMessagePart = Record<string, any> & { id?: string; type?: string; text?: string; result?: string };
+type HuggyFlowChecklistItem = {
+  id: string;
+  label: string;
+  status: 'pending' | 'active' | 'done' | 'failed';
+};
+
+function messageTextFromParts(parts: unknown, fallbackContent: unknown = '') {
+  if (!Array.isArray(parts)) return String(fallbackContent || '');
+  const text = parts
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const record = part as { text?: unknown; result?: unknown; content?: unknown };
+      return String(record.text ?? record.result ?? record.content ?? '');
+    })
+    .filter(Boolean)
+    .join('\n');
+  return text || String(fallbackContent || '');
+}
 
 let activePromptAttachments: PendingPromptAttachment[] = [];
 
@@ -53,7 +71,7 @@ type ProjectPayload = {
     preview_status?: string;
   };
   files: GeneratedFile[];
-  messages?: Array<{ role: string; content: string; parts?: HuggyMessagePart[]; intent?: string }>;
+  messages?: Array<{ role: string; content: string; parts?: unknown[]; intent?: string }>;
   events?: Array<{ event_type: string; message: string; sequence_number: number; payload?: any; public_payload?: any; status?: string; agent_run_id?: string; created_at?: string }>;
   workspace_state?: WorkspaceState | null;
   preview?: {
@@ -262,11 +280,6 @@ let lastAgentRunId = '';
 let activeGenerationTouchesPreview = false;
 let activeAbort: AbortController | null = null;
 let stopRequested = false;
-let workingTimer: number | null = null;
-let activeWorkingCard: HTMLElement | null = null;
-let activeWorkingLabel = 'Huggy is preparing';
-let activeWorkingDetails: string[] = [];
-let activeWorkingSteps: NonNullable<HuggyAgentTrace['steps']> = [];
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
 let designSettings: DesignWorkshopSettings = {
@@ -293,7 +306,6 @@ let analysisRange = '30d';
 let projectWorkspaceState: WorkspaceState | null = null;
 let userWorkspaceState: UserWorkspaceState | null = null;
 let workspaceSaveTimer: number | null = null;
-let chatShimmerStyleInstalled = false;
 let emptyPreviewMode: EmptyPreviewMode | 'ready' = 'idle';
 let emptyPreviewLabel = '';
 let currentPreviewStatus = 'idle';
@@ -1845,52 +1857,6 @@ function bindConversationFeedbackBridge() {
     input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
     syncSubmitButtonState();
   });
-  window.addEventListener('huggy:stream-preview-action', (event: Event) => {
-    const action = String((event as CustomEvent).detail?.action || '');
-    if (action === 'open') activateBuilderView('preview');
-    if (action === 'mobile') {
-      activateBuilderView('preview');
-      setPreviewDevice('mobile');
-    }
-    if (action === 'publish') void openPublishPanel();
-  });
-  window.addEventListener('huggy:stream-file-action', (event: Event) => {
-    const detail = (event as CustomEvent).detail || {};
-    const action = String(detail.action || '');
-    const path = String(detail.path || '');
-    if (!path) return;
-    if (action === 'open') {
-      activateBuilderView('code');
-      const target = Array.from(document.querySelectorAll<HTMLElement>('.tree-file')).find(item => item.textContent?.includes(path));
-      target?.click();
-    }
-    if (action === 'rollback') {
-      appendMessage('system', `Rollback for ${path} will use the project history panel.`);
-      void openHistoryPanel();
-    }
-  });
-  window.addEventListener('huggy:stream-command', (event: Event) => {
-    const action = String((event as CustomEvent).detail?.action || '');
-    if (action === 'stop') {
-      void cancelBuild();
-      return;
-    }
-    if (action === 'files') {
-      activateBuilderView('code');
-      return;
-    }
-    if (action === 'rollback') {
-      void openHistoryPanel();
-      return;
-    }
-    if (action === 'media') {
-      setActiveWorkshop('media', { focusInput: true });
-      return;
-    }
-    if (action === 'focus-input') {
-      document.getElementById('chat-textarea-box')?.focus();
-    }
-  });
 }
 
 function createMessageHandle(messageId: string): MessageHandle {
@@ -1909,159 +1875,6 @@ function formatWorkingDuration(ms: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}m ${seconds}s`;
-}
-
-function currentWorkingDetail() {
-  const active = activeWorkingDetails.find(detail => detail.startsWith('now:'));
-  const latest = active || [...activeWorkingDetails].reverse().find(Boolean) || '';
-  return latest.replace(/^(done|now):\s*/, '').trim();
-}
-
-function publicWorkingHeadline(label: string) {
-  const normalized = String(label || '').toLowerCase();
-  if (normalized.includes('planning')) return 'Planning the work';
-  if (normalized.includes('building')) return 'Generating files';
-  if (normalized.includes('running checks')) return 'Checking the result';
-  if (normalized.includes('retesting')) return 'Retesting after the fix';
-  if (normalized.includes('fixing')) return 'Applying a targeted fix';
-  if (normalized.includes('preview')) return 'Preparing preview';
-  return 'Understanding the request';
-}
-
-function buildWorkingTrace(card: HTMLElement | null, label: string, status: HuggyAgentTrace['status'] = 'active'): HuggyAgentTrace {
-  const startedAt = Number(card?.dataset.workingStartedAt || 0);
-  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
-  const detail = currentWorkingDetail();
-  const headline = publicWorkingHeadline(label);
-  const fallbackStatus: NonNullable<NonNullable<HuggyAgentTrace['steps']>[number]['status']> = status === 'done' ? 'done' : status || 'active';
-  const steps = activeWorkingSteps.length
-    ? activeWorkingSteps.map(step => ({
-        ...step,
-        status: status === 'done' && step.status === 'active' ? 'done' : step.status,
-      }))
-    : [{
-        id: 'current',
-        label: detail || label || 'Working',
-        status: fallbackStatus,
-      }];
-  return {
-    title: status === 'done' ? 'Run complete' : headline,
-    elapsed,
-    status,
-    steps,
-  };
-}
-
-function applyWorkingTrace(card: HTMLElement | null, label = activeWorkingLabel, status: HuggyAgentTrace['status'] = 'active') {
-  // Legacy traces are kept as a compatibility surface only. The visible
-  // streaming UI is now driven by AI Elements blocks.
-  void card;
-  void label;
-  void status;
-}
-
-function renderWorkingLabel(label = activeWorkingLabel) {
-  if (!activeWorkingCard) return;
-  activeWorkingLabel = label || 'Huggy is preparing';
-  const startedAt = Number(activeWorkingCard.dataset.workingStartedAt || 0);
-  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '0m 00s';
-  const detail = currentWorkingDetail();
-  const headline = publicWorkingHeadline(activeWorkingLabel);
-  const normalizedLabel = headline.toLowerCase();
-  const normalizedDetail = detail.toLowerCase();
-  const detailSuffix = detail && !normalizedLabel.includes(normalizedDetail) ? ` · ${detail}` : '';
-  applyWorkingTrace(activeWorkingCard, activeWorkingLabel, 'active');
-  updateMessage(activeWorkingCard, `${headline} · Working for ${elapsed}${detailSuffix}`);
-}
-
-function startWorkingTimer(card: HTMLElement | null, label = 'Huggy is preparing') {
-  if (!card) return;
-  if (workingTimer !== null) window.clearInterval(workingTimer);
-  activeWorkingCard = card;
-  activeWorkingLabel = label;
-  activeWorkingDetails = [];
-  activeWorkingSteps = [];
-  card.dataset.workingStartedAt = String(Date.now());
-  renderWorkingLabel(label);
-  workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
-}
-
-function stopWorkingTimer(card?: HTMLElement | null) {
-  if (workingTimer !== null) {
-    window.clearInterval(workingTimer);
-    workingTimer = null;
-  }
-  const target = card || activeWorkingCard;
-  if (target) delete target.dataset.workingStartedAt;
-  activeWorkingCard = null;
-  activeWorkingDetails = [];
-  activeWorkingSteps = [];
-}
-
-function ensureChatShimmerStyle() {
-  if (chatShimmerStyleInstalled || typeof document === 'undefined') return;
-  const style = document.createElement('style');
-  style.id = 'huggy-chat-shimmer-style';
-  style.textContent = `
-    .message-card.message-card-shimmer {
-      overflow: hidden;
-      position: relative;
-      /* Effet de lueur (glow) pendant la réflexion/génération */
-      box-shadow: 0 0 15px var(--accent-blue-soft);
-      border-color: var(--accent-blue-active);
-      transition: box-shadow 0.3s ease, border-color 0.3s ease;
-    }
-
-    .message-card.message-card-shimmer .msg-body-paragraph {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text-sub, #52525b);
-      font-weight: 650;
-      animation: text-reveal 0.3s ease-in-out;
-    }
-
-    /* Le curseur clignotant (blinking cursor) */
-    .message-card.message-card-shimmer .msg-body-paragraph::after {
-      content: "▮";
-      color: var(--accent-blue);
-      animation: huggy-blinking-cursor 1s step-start infinite;
-      margin-left: 2px;
-      font-size: 1.1em;
-    }
-
-    /* Suppression des vieux points de chargement s'ils interfèrent */
-    .message-card.message-card-shimmer .msg-body-paragraph::before {
-      content: none;
-    }
-
-    [data-theme="dark"] .message-card.message-card-shimmer::after {
-      content: none; /* Le after originel du theme, on le laisse vide car on utilise ::after sur msg-body-paragraph */
-    }
-
-    @keyframes text-reveal {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes huggy-blinking-cursor {
-      50% { opacity: 0; }
-    }
-
-    @keyframes huggy-chat-shimmer {
-      from { background-position: 100% 0; }
-      to { background-position: -100% 0; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .message-card.message-card-shimmer,
-      .message-card.message-card-shimmer .msg-body-paragraph::after {
-        animation: none !important;
-      }
-    }
-  `;
-  document.head.appendChild(style);
-  chatShimmerStyleInstalled = true;
 }
 
 function ensureInlineBlockHost() {
@@ -2125,7 +1938,6 @@ function repairTextEncoding(value: unknown): string {
 }
 
 function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, options: { working?: boolean } = {}) {
-  ensureChatShimmerStyle();
   const safeBody = repairTextEncoding(redactSecrets(body));
   const api = ensureConversationApi();
   if (api) {
@@ -2143,244 +1955,45 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, opti
   `;
   const paragraph = card.querySelector('.msg-body-paragraph');
   if (paragraph) paragraph.textContent = safeBody;
-  if (options.working) {
-    card.classList.add('message-card-shimmer');
-    card.setAttribute('aria-busy', 'true');
-  }
+  if (options.working) card.setAttribute('aria-busy', 'true');
   scroll.appendChild(card);
   scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
   return card;
 }
 
 function setMessageShimmer(card: HTMLElement | null, label = 'Huggy is writing', withTimer = true) {
+  // [REMPLACEMENT STREAMING UI ICI]
+  // Ancien shimmer/progress/token streaming retire: on conserve seulement un
+  // etat d'attente textuel pour ne pas casser le flux d'envoi.
   if (!card) return;
-  ensureChatShimmerStyle();
+  void withTimer;
   const id = messageHandleId(card);
-  if (id && conversationApi) {
-    conversationApi.setWorking(id, label);
-  }
-  card.classList.add('message-card-shimmer');
+  if (id && conversationApi) conversationApi.setWorking(id, label);
   card.setAttribute('aria-busy', 'true');
-  if (isGenerating && withTimer) {
-    if (!card.dataset.workingStartedAt) card.dataset.workingStartedAt = String(Date.now());
-    activeWorkingCard = card;
-    if (workingTimer === null) {
-      workingTimer = window.setInterval(() => renderWorkingLabel(), 1000);
-    }
-    renderWorkingLabel(label);
-    return;
-  }
   updateMessage(card, label);
 }
 
 function clearMessageShimmer(card: HTMLElement | null) {
   if (!card) return;
-  stopWorkingTimer(card);
   const id = messageHandleId(card);
   if (id && conversationApi) conversationApi.clearWorking(id);
-  card.classList.remove('message-card-shimmer');
   card.removeAttribute('aria-busy');
-  // Flush and release the smooth renderer for this card.
-  const renderer = shimmerRenderers.get(card);
-  if (renderer) {
-    renderer.stop();
-    shimmerRenderers.delete(card);
-    shimmerBuffers.delete(card);
-  }
-  // Clean up any live-token streaming container
-  card.querySelector('.huggy-live-token-stream')?.remove();
 }
-
-/**
- * Pro streaming UI helpers — manage the phase timeline, progress bar,
- * model badge, elapsed timer, and token counter.
- */
-const STREAM_PHASE_ORDER = ['understanding','inspecting','planning','ast','rag','meta_prompt','generating','generation','eval','eval_ok','checking','eval_fail','fixing','preview','preview_ready','done'];
-const STREAM_PHASE_LABELS: Record<string, string> = {
-  // v2 typed milestones (clear, user-facing)
-  understanding: 'Compréhension',
-  inspecting: 'Inspection',
-  planning: 'Plan',
-  generating: 'Génération',
-  checking: 'Vérification',
-  fixing: 'Correction',
-  preview_ready: 'Aperçu prêt',
-  ast: 'Analyse',
-  rag: 'Mémoire',
-  meta_prompt: 'Enrichissement',
-  generation: 'Génération',
-  eval: 'Révision',
-  eval_ok: 'Validé',
-  eval_fail: 'Correction',
-  preview: 'Aperçu',
-  done: 'Livraison',
-  // English aliases
-  analyzing: 'Analysis',
-  memory: 'Memory',
-  enriching: 'Enriching',
-  reviewing: 'Review',
-  validated: 'Validated',
-  correcting: 'Fixing',
-  rendering: 'Preview',
-  delivering: 'Delivery',
-};
-const STEP_SVG_SPIN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
-const STEP_SVG_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
-const STEP_SVG_FAIL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-
-let streamStartedAt = 0;
-let streamElapsedTimer: number | null = null;
-let streamTotalTokens = 0;
-let streamActivePhase = '';
-
-function getOrCreateStreamUI(card: HTMLElement | null) {
-  if (!card) return null;
-  let ui = card.querySelector<HTMLElement>('.huggy-stream-ui');
-  if (!ui) {
-    ui = document.createElement('div');
-    ui.className = 'huggy-stream-ui';
-    ui.innerHTML = `
-      <div class="huggy-stream-meta">
-        <span class="huggy-stream-model-badge" aria-label="AI model">
-          ${STEP_SVG_SPIN}<span class="huggy-stream-model-name">Auto</span>
-        </span>
-        <span class="huggy-stream-token-count" aria-label="Token count"></span>
-        <span class="huggy-stream-elapsed" aria-label="Elapsed time">0s</span>
-      </div>
-      <div class="huggy-stream-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="huggy-stream-progress-bar" style="width:4%"></div>
-      </div>
-      <div class="huggy-stream-phases" role="list" aria-label="Generation phases"></div>
-    `;
-    const ref = card.querySelector('.huggy-live-token-stream') || card.firstChild;
-    card.insertBefore(ui, ref);
-    streamStartedAt = Date.now();
-    // Start elapsed timer
-    if (streamElapsedTimer !== null) window.clearInterval(streamElapsedTimer);
-    streamElapsedTimer = window.setInterval(() => {
-      const elapsed = Math.round((Date.now() - streamStartedAt) / 1000);
-      const el = card.querySelector<HTMLElement>('.huggy-stream-elapsed');
-      if (el) el.textContent = `${elapsed}s`;
-    }, 1000);
-  }
-  return ui;
-}
-
-function updateStreamPhase(key: string, label: string, status: 'active' | 'done' | 'failed') {
-  const card = document.querySelector<HTMLElement>('.message-card-shimmer');
-  if (!card) return;
-  const ui = getOrCreateStreamUI(card);
-  if (!ui) return;
-  const phasesEl = ui.querySelector<HTMLElement>('.huggy-stream-phases');
-  if (!phasesEl) return;
-
-  // Mark previous active phase as done
-  if (streamActivePhase && streamActivePhase !== key) {
-    const prev = phasesEl.querySelector<HTMLElement>(`[data-phase="${CSS.escape(streamActivePhase)}"]`);
-    if (prev && prev.dataset.status === 'active') {
-      prev.dataset.status = 'done';
-      prev.innerHTML = `${STEP_SVG_CHECK} ${STREAM_PHASE_LABELS[streamActivePhase] || streamActivePhase}`;
-    }
-  }
-
-  // Create or update current phase pill
-  let pill = phasesEl.querySelector<HTMLElement>(`[data-phase="${CSS.escape(key)}"]`);
-  if (!pill) {
-    pill = document.createElement('div');
-    pill.className = 'huggy-stream-phase';
-    pill.setAttribute('role', 'listitem');
-    pill.dataset.phase = key;
-    phasesEl.appendChild(pill);
-  }
-  pill.dataset.status = status;
-  const icon = status === 'done' ? STEP_SVG_CHECK : status === 'failed' ? STEP_SVG_FAIL : STEP_SVG_SPIN;
-  pill.innerHTML = `${icon} ${STREAM_PHASE_LABELS[key] || label.slice(0, 20)}`;
-
-  if (status === 'active') streamActivePhase = key;
-}
-
-function advanceStreamProgress(key: string) {
-  const card = document.querySelector<HTMLElement>('.message-card-shimmer');
-  if (!card) return;
-  const progressBar = card.querySelector<HTMLElement>('.huggy-stream-progress-bar');
-  if (!progressBar) return;
-  const idx = STREAM_PHASE_ORDER.indexOf(key);
-  const pct = idx >= 0 ? Math.min(95, Math.round(((idx + 1) / STREAM_PHASE_ORDER.length) * 100)) : 15;
-  progressBar.style.width = `${pct}%`;
-  card.querySelector('.huggy-stream-progress')?.setAttribute('aria-valuenow', String(pct));
-}
-
-function updateStreamModelBadge(model: string) {
-  document.querySelectorAll<HTMLElement>('.huggy-stream-model-name').forEach(el => {
-    const short = model.split('/').pop() || model;
-    el.textContent = short.slice(0, 22);
-  });
-}
-
-function updateStreamTokenCount(delta: number) {
-  streamTotalTokens += delta;
-  document.querySelectorAll<HTMLElement>('.huggy-stream-token-count').forEach(el => {
-    el.textContent = streamTotalTokens > 0 ? `${streamTotalTokens.toLocaleString()} tk` : '';
-  });
-}
-
-function finalizeStreamUI(card: HTMLElement | null, status: 'done' | 'failed', elapsedMs?: number) {
-  if (!card) return;
-  if (streamElapsedTimer !== null) { window.clearInterval(streamElapsedTimer); streamElapsedTimer = null; }
-  const progressEl = card.querySelector<HTMLElement>('.huggy-stream-progress');
-  if (progressEl) progressEl.dataset.status = status;
-  const bar = card.querySelector<HTMLElement>('.huggy-stream-progress-bar');
-  if (bar) bar.style.width = status === 'done' ? '100%' : bar.style.width;
-  // Mark last active phase as done
-  card.querySelectorAll<HTMLElement>('.huggy-stream-phase[data-status="active"]').forEach(p => {
-    p.dataset.status = status === 'done' ? 'done' : 'failed';
-    p.innerHTML = (status === 'done' ? STEP_SVG_CHECK : STEP_SVG_FAIL) + ' ' + (p.textContent || '').trim().split(' ').slice(1).join(' ');
-  });
-  // Update elapsed
-  if (elapsedMs) {
-    const elapsed = Math.round(elapsedMs / 1000);
-    card.querySelectorAll<HTMLElement>('.huggy-stream-elapsed').forEach(el => { el.textContent = `${elapsed}s`; });
-  }
-  // Mark token stream as done (removes cursor)
-  card.querySelectorAll<HTMLElement>('.huggy-live-token-stream').forEach(el => { el.dataset.done = 'true'; });
-  // Reset counters
-  streamTotalTokens = 0;
-  streamActivePhase = '';
-}
-
-
-// Per-card smooth renderer registry so streamed code reveals fluidly
-// (one DOM write per animation frame) instead of jumping on every chunk.
-const shimmerRenderers = new WeakMap<HTMLElement, ReturnType<typeof createSmoothTextRenderer>>();
-const shimmerBuffers = new WeakMap<HTMLElement, string>();
 
 function appendToMessageShimmer(card: HTMLElement | null, text: string) {
-  if (!card || !text) return;
-  return; // Disabled token-by-token streaming UI
+  void card;
+  void text;
+  // [REMPLACEMENT STREAMING UI ICI]
+  // Token-by-token rendering intentionally removed.
 }
 
 function completeMessageShimmer(card: HTMLElement | null, label = 'Completed') {
   if (!card) return;
-  const startedAt = Number(card.dataset.workingStartedAt || 0);
-  const elapsed = startedAt ? formatWorkingDuration(Date.now() - startedAt) : '';
-  const detail = currentWorkingDetail();
-  stopWorkingTimer(card);
   const id = messageHandleId(card);
-  if (id && conversationApi) {
-    conversationApi.clearWorking(id);
-  }
-  card.classList.remove('message-card-shimmer');
+  if (id && conversationApi) conversationApi.clearWorking(id);
   card.removeAttribute('aria-busy');
-  const normalizedLabel = label.toLowerCase();
-  const normalizedDetail = detail.toLowerCase();
-  const parts = [
-    label,
-    elapsed,
-    detail && !normalizedLabel.includes(normalizedDetail) ? detail : '',
-  ].filter(Boolean);
-  updateMessage(card, parts.join(' · '));
+  updateMessage(card, label);
 }
-
 function updateMessage(card: HTMLElement | null, body: string) {
   const safeBody = repairTextEncoding(redactSecrets(body));
   const id = messageHandleId(card);
@@ -2790,16 +2403,15 @@ function recentConversationForAssistant(currentPrompt = '') {
   const api = ensureConversationApi();
   const normalizedPrompt = redactSecrets(currentPrompt).trim();
   const messages = (api?.messages() || [])
-    .filter(message => (message.role === 'user' || message.role === 'assistant') && !message.working && messageTextFromParts((message as any).parts, message.content || '').trim())
+    .filter(message => (message.role === 'user' || message.role === 'assistant') && !message.working && String(message.content || '').trim())
     .slice(-12);
   const latest = messages[messages.length - 1];
-  if (latest?.role === 'user' && redactSecrets(messageTextFromParts((latest as any).parts, latest.content || '')).trim() === normalizedPrompt) {
+  if (latest?.role === 'user' && redactSecrets(String(latest.content || '')).trim() === normalizedPrompt) {
     messages.pop();
   }
   return messages.map(message => ({
       role: message.role,
-      content: redactSecrets(messageTextFromParts((message as any).parts, message.content || '')).slice(0, 2400),
-      parts: (message as any).parts,
+      content: redactSecrets(String(message.content || '')).slice(0, 2400),
     }));
 }
 
@@ -2863,70 +2475,19 @@ function generationReadyText(speaksFrench: boolean) {
 
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
-  let verified = await getVerifiedSession();
-  if (!verified?.session?.access_token) {
-    verified = await refreshVerifiedSession();
-  }
-  const token = verified?.session?.access_token || '';
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-  const chatAbort = new AbortController();
-  const clientMessageId = `msg_user_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const assistantMessageId = `msg_asst_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  activeAbort = chatAbort;
   setBusy(true);
   try {
-    let finalText = '';
-    let streamError: Error | null = null;
-    let visibleText = '';
-    const smoothText = createSmoothTextRenderer((visible) => {
-      visibleText = visible;
-      // Do not update message content token-by-token during streaming
+    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt,
+        modelId: selectedModel(),
+        projectId: currentProjectId || undefined,
+        messages: recentConversationForAssistant(prompt),
+      }),
     });
-
-    const stream = openHuggyStream({
-      url: `${API_BASE_URL}/api/assistant/chat/stream`,
-      init: {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          prompt,
-          modelId: selectedModel(),
-          projectId: currentProjectId || undefined,
-          clientMessageId,
-          assistantMessageId,
-          messages: recentConversationForAssistant(prompt),
-        }),
-      },
-      maxRetries: 0,
-      onEvent: (eventType, data) => {
-        if (!data || typeof data !== 'object') return;
-        if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
-          smoothText.push(String(data.text || ''));
-          return;
-        }
-        if (eventType === 'error' || data.type === 'error') {
-          streamError = new Error(String(data.message || data.error || fallback));
-          return;
-        }
-        if (eventType === 'done' || data.type === 'done') {
-          const payload = data.payload || {};
-          finalText = String(payload.text || payload.message || '').trim();
-        }
-      },
-    });
-
-    chatAbort.signal.addEventListener('abort', () => {
-      smoothText.stop();
-      stream.cancel();
-    }, { once: true });
-
-    await stream.done;
-    await smoothText.finish();
-    if (streamError) throw streamError;
-    const content = finalText || visibleText;
+    if (payload?.success === false) throw new Error(payload.message || payload.error || fallback);
+    const content = String(payload?.text || payload?.message || '').trim();
     if (!content.trim()) throw new Error('Assistant response was empty.');
     updateMessage(card, safeAssistantDisplayText(content, speaksFrench, fallback));
     clearMessageShimmer(card);
@@ -2944,7 +2505,6 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
     }
     await showAssistantBubble(card, fallback);
   } finally {
-    if (activeAbort === chatAbort) activeAbort = null;
     setBusy(false);
   }
 }
@@ -5926,7 +5486,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (assistantHasFinalContent) return;
     setJournalActive(label);
   };
-  const promoteToPreviewWork = (label = activeWorkingLabel || say('Je prépare la preview', 'Preparing preview')) => {
+  const promoteToPreviewWork = (label = say('Je prépare la preview', 'Preparing preview')) => {
     if (generationTouchesPreview) return;
     generationTouchesPreview = true;
     activeGenerationTouchesPreview = true;
@@ -6035,87 +5595,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
     }
 
-    let verified = await getVerifiedSession();
-    if (!verified?.session?.access_token) {
-      verified = await refreshVerifiedSession();
-    }
-    const token = verified?.session?.access_token || '';
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-
-    let payload: any = null;
-    let streamError: Error | null = null;
-
-    // Smooth, jank-free token rendering: queue incoming chunks and reveal them
-    // progressively via requestAnimationFrame (respects prefers-reduced-motion).
-    let smoothTokens = '';
-    const smoothText = createSmoothTextRenderer((visible) => {
-      const delta = visible.slice(smoothTokens.length);
-      smoothTokens = visible;
-      if (delta) appendToMessageShimmer(status, delta);
-      if (useAgentFlow) {
-        flowStreamingText = visible;
-        flowIsStreaming = true;
-        flushFlow();
-      }
+    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
     });
 
-    // Huggy Stream v2 client: spec-compliant SSE parsing, automatic
-    // reconnection with Last-Event-ID, AbortController cancellation.
-    // Understands both the typed v2 protocol and the legacy event shape,
-    // so the server can migrate its emitters incrementally.
-    const stream = openHuggyStream({
-      url: `${API_BASE_URL}/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`,
-      init: {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      },
-      // The build stream is a single POST job; reconnecting would replay it.
-      maxRetries: 0,
-      onEvent: (eventType, data) => {
-        if (!data || typeof data !== 'object') return;
-        try {
-          // ── Huggy Stream v2 typed events ──
-          if (eventType === 'milestone' || data.type === 'milestone') {
-            markAgentStep(String(data.milestone || ''), data.label || '');
-            return;
-          }
-          if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
-            setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
-            smoothText.push(String(data.text ?? ''));
-            return;
-          }
-          if (eventType === 'done' || data.type === 'done') {
-            payload = data.payload;
-            return;
-          }
-          if (eventType === 'error' || data.type === 'error') {
-            streamError = new Error(String(data.message || data.error || 'SSE stream error'));
-            return;
-          }
-          // ── Legacy event shape (still emitted by the server) ──
-          if (data.type === 'agent_step') {
-            markAgentStep(data.step, data.message);
-          } else if (data.type === 'token') {
-            setJournalActive(say('Je produis les fichiers.', 'Generating the files.'));
-            const tokenText = String(data.text ?? data.content ?? '');
-            if (tokenText) smoothText.push(tokenText);
-          }
-        } catch (dispatchErr: any) {
-          console.warn('[huggy:sse_dispatch]', dispatchErr?.message);
-        }
-      },
-    });
-
-    // Cancellation flows through the existing AbortController.
-    activeAbort.signal.addEventListener('abort', () => stream.cancel(), { once: true });
-
-    await stream.done;
-    await smoothText.finish();
-    if (streamError) throw streamError;
+    // [REMPLACEMENT STREAMING UI ICI]
+    // Le nouveau rendu agent pourra consommer le transport SSE existant plus tard.
+    // Pour l'instant, le builder utilise seulement la reponse finale non-streamee.
     if (!payload) throw new Error('Generation failed or empty response');
 
     const responsePayload = redactInternalModelFields(payload || {});

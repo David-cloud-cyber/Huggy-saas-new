@@ -12,7 +12,6 @@ import { startCreateProjectFlow } from './services/create-project-flow';
 import { understandUserIntent } from './services/intent-understanding';
 import { deriveProjectName } from './services/project-naming';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
-import { createSmoothTextRenderer, openHuggyStream } from './lib/stream-client';
 
 type ProjectListResponse = {
   success: boolean;
@@ -108,7 +107,6 @@ let dashboardWorkspaceState: UserWorkspaceState | null = null;
 let aiUsageLoaded = false;
 let aiUsageSettingsBound = false;
 let dashboardAssistantBusy = false;
-let dashboardActiveStream: { cancel: () => void } | null = null;
 
 type DashboardChatRole = 'user' | 'assistant' | 'system';
 type DashboardChatMessage = {
@@ -1690,65 +1688,26 @@ function recentDashboardConversationForAssistant() {
 }
 
 async function streamDashboardConversation(prompt: string, assistantMessageId: string) {
-  dashboardActiveStream?.cancel();
   dashboardAssistantBusy = true;
   let verified = await getVerifiedSession({ allowRefresh: true });
   if (!verified?.session?.access_token) verified = await refreshVerifiedSession();
-  const token = verified?.session?.access_token;
-  if (!token) {
+  if (!verified?.session?.access_token) {
     updateDashboardMessage(assistantMessageId, 'Ta session a expirÃ©. Reconnecte-toi pour continuer.', false);
     window.location.href = `/auth.html?redirect=${encodeURIComponent('/dashboard.html')}`;
     dashboardAssistantBusy = false;
     return;
   }
-
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-  let finalText = '';
-  let visibleText = '';
-  let streamError: Error | null = null;
-  const smoothText = createSmoothTextRenderer((visible) => {
-    visibleText = visible;
-    updateDashboardMessage(assistantMessageId, visible, true);
-  }, { minCharsPerFrame: 2, maxCharsPerFrame: 36 });
-
-  const stream = openHuggyStream({
-    url: `${API_BASE_URL}/api/assistant/chat/stream`,
-    init: {
+  try {
+    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({
         prompt,
         modelId: dashboardSelectedModel(),
         messages: recentDashboardConversationForAssistant(),
       }),
-    },
-    maxRetries: 0,
-    onEvent: (eventType, data) => {
-      if (!data || typeof data !== 'object') return;
-      if (eventType === 'assistant_delta' || data.type === 'assistant_delta') {
-        smoothText.push(String(data.text || ''));
-        return;
-      }
-      if (eventType === 'error' || data.type === 'error') {
-        streamError = new Error(String(data.message || data.error || 'Huggy could not answer right now.'));
-        return;
-      }
-      if (eventType === 'done' || data.type === 'done') {
-        const payload = data.payload || {};
-        finalText = String(payload.text || payload.message || '').trim();
-      }
-    },
-  });
-
-  dashboardActiveStream = stream;
-  try {
-    await stream.done;
-    await smoothText.finish();
-    if (streamError) throw streamError;
-    const content = finalText || visibleText;
+    });
+    if (payload?.success === false) throw new Error(payload.message || payload.error || 'Huggy could not answer right now.');
+    const content = String(payload?.text || payload?.message || '').trim();
     updateDashboardMessage(
       assistantMessageId,
       content.trim() || 'Je suis prÃªt. Donne-moi simplement ce que tu veux construire ou clarifier.',
@@ -1760,7 +1719,6 @@ async function streamDashboardConversation(prompt: string, assistantMessageId: s
       : 'Huggy nâ€™a pas pu rÃ©pondre pour le moment. RÃ©essaie dans un instant.';
     updateDashboardMessage(assistantMessageId, message, false);
   } finally {
-    if (dashboardActiveStream === stream) dashboardActiveStream = null;
     dashboardAssistantBusy = false;
   }
 }
