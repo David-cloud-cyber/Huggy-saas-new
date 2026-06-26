@@ -458,8 +458,20 @@ function installDashboardUxPolish() {
       overflow-y: auto;
       overflow-x: hidden;
       padding: 6px 2px 10px;
+      text-align: left;
       scroll-behavior: smooth;
       scrollbar-width: thin;
+      scrollbar-color: color-mix(in srgb, var(--text) 16%, transparent) transparent;
+    }
+    /* Scrollbar fine et discrète (jamais la grosse barre par défaut). */
+    .dashboard-chat-thread::-webkit-scrollbar { width: 6px; }
+    .dashboard-chat-thread::-webkit-scrollbar-track { background: transparent; }
+    .dashboard-chat-thread::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--text) 14%, transparent);
+      border-radius: 999px;
+    }
+    .dashboard-chat-thread::-webkit-scrollbar-thumb:hover {
+      background: color-mix(in srgb, var(--text) 26%, transparent);
     }
 
     .create-section[data-chat-state="conversation"] .dashboard-chat-thread,
@@ -472,6 +484,7 @@ function installDashboardUxPolish() {
     .dashboard-chat-message {
       display: flex;
       width: 100%;
+      align-items: flex-start;
       animation: dashboard-chat-rise 180ms ease both;
     }
 
@@ -486,26 +499,31 @@ function installDashboardUxPolish() {
 
     /* Assistant: texte discret, sans cadre lourd (façon Claude/ChatGPT). */
     .dashboard-chat-bubble {
-      max-width: min(680px, 100%);
+      width: fit-content;
+      max-width: min(640px, 100%);
       border: 0;
       border-radius: 14px;
       background: transparent;
       color: var(--text);
-      padding: 4px 2px;
-      font-size: 14px;
-      line-height: 1.7;
+      padding: 2px 0;
+      font-size: 14.5px;
+      line-height: 1.62;
       white-space: pre-wrap;
+      word-break: break-word;
       box-shadow: none;
     }
 
-    /* Utilisateur : bulle sombre subtile à droite (jamais blanche), compacte. */
+    /* Utilisateur : bulle sombre subtile à droite, compacte (taille du contenu). */
     .dashboard-chat-message.user .dashboard-chat-bubble {
-      max-width: min(520px, 76%);
+      width: fit-content;
+      max-width: 70%;
       border: 0;
-      border-radius: 16px;
-      background: color-mix(in srgb, var(--text) 9%, transparent);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--text) 8%, transparent);
       color: var(--text);
-      padding: 10px 14px;
+      padding: 8px 13px;
+      font-size: 14px;
+      line-height: 1.45;
       box-shadow: none;
     }
 
@@ -538,6 +556,27 @@ function installDashboardUxPolish() {
       z-index: 4;
       margin-top: auto;
       backdrop-filter: blur(16px);
+    }
+
+    /* En conversation, le composer se compacte (l'immense input du repos
+       descend et rétrécit) pour laisser respirer le fil. */
+    .create-section[data-chat-state="conversation"] .input-wrapper,
+    .create-section[data-chat-state="promoting"] .input-wrapper {
+      padding: 9px 12px !important;
+      border-radius: 16px !important;
+    }
+    .create-section[data-chat-state="conversation"] #ai-textarea,
+    .create-section[data-chat-state="promoting"] #ai-textarea {
+      min-height: 40px !important;
+      padding-top: 8px !important;
+      font-size: 14px !important;
+    }
+
+    /* Le grand wordmark HUGGY (hero du repos) disparaît en conversation pour
+       que les messages occupent l'espace — épuré, conversations bien visibles. */
+    .create-section[data-chat-state="conversation"]::before,
+    .create-section[data-chat-state="promoting"]::before {
+      display: none !important;
     }
 
     @keyframes dashboard-chat-rise {
