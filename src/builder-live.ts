@@ -1,5 +1,7 @@
 import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
+import { openHuggyStream, type HuggyStreamHandle } from './lib/stream-client';
+import type { HuggyStreamEvent } from './lib/stream-protocol';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -25,6 +27,8 @@ import {
   normalizeDesignWorkshopSettings,
   type DesignWorkshopSettings,
 } from './services/design-workshop';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 type ChatMode = 'auto' | 'plan' | 'build';
 type PromptUiContext = 'chat_simple' | 'clarification_only' | 'planning_only' | 'project_mission' | 'critical_action';
@@ -279,6 +283,7 @@ let lastBuildSessionId = '';
 let lastAgentRunId = '';
 let activeGenerationTouchesPreview = false;
 let activeAbort: AbortController | null = null;
+let activeStream: HuggyStreamHandle | null = null;
 let stopRequested = false;
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
@@ -1893,6 +1898,50 @@ function clearInlineBlocks() {
   if (host) host.innerHTML = '';
 }
 
+async function buildStreamJsonHeaders(): Promise<HeadersInit> {
+  let verified = await getVerifiedSession();
+  if (!verified?.session?.access_token) {
+    verified = await refreshVerifiedSession();
+  }
+  if (!verified?.session?.access_token) {
+    window.location.href = `/auth.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+    throw new Error('Authentication required');
+  }
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${verified.session.access_token}`,
+  };
+}
+
+function streamEndpoint(path: string) {
+  return `${API_BASE_URL}${path}`;
+}
+
+function appendAssistantDelta(card: HTMLElement | null, text: string) {
+  if (!card || !text) return;
+  const id = messageHandleId(card);
+  if (id && conversationApi?.appendAssistantDelta) {
+    conversationApi.appendAssistantDelta(id, repairTextEncoding(redactSecrets(text)));
+    return;
+  }
+  updateMessage(card, `${card.textContent || ''}${text}`);
+}
+
+function startLiveRun(card: HTMLElement | null, meta: { intent?: string; activeText?: string } = {}) {
+  const id = messageHandleId(card);
+  if (id && conversationApi?.startLiveRun) conversationApi.startLiveRun(id, meta);
+}
+
+function applyLiveRunEvent(card: HTMLElement | null, event: HuggyStreamEvent) {
+  const id = messageHandleId(card);
+  if (id && conversationApi?.applyStreamEvent) conversationApi.applyStreamEvent(id, event);
+}
+
+function finishLiveRun(card: HTMLElement | null, summary = '') {
+  const id = messageHandleId(card);
+  if (id && conversationApi?.finishLiveRun) conversationApi.finishLiveRun(id, summary);
+}
+
 function repairTextEncoding(value: unknown): string {
   let text = String(value ?? '');
   if (!text) return text;
@@ -2476,7 +2525,59 @@ function generationReadyText(speaksFrench: boolean) {
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
   setBusy(true);
+  let streamed = '';
+  let streamStarted = false;
+  let streamError: Error | null = null;
   try {
+    const headers = await buildStreamJsonHeaders();
+    const handle = openHuggyStream({
+      url: streamEndpoint('/api/assistant/chat/stream'),
+      init: {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          prompt,
+          modelId: selectedModel(),
+          projectId: currentProjectId || undefined,
+          messages: recentConversationForAssistant(prompt),
+        }),
+      },
+      maxRetries: 1,
+      onProtocolEvent(event) {
+        if (event.type === 'assistant_delta') {
+          streamStarted = true;
+          streamed += event.text;
+          appendAssistantDelta(card, event.text);
+        } else if (event.type === 'status' && !streamStarted) {
+          const id = messageHandleId(card);
+          if (id && conversationApi) conversationApi.setWorking(id, event.message);
+        } else if (event.type === 'error') {
+          streamError = new Error(event.message);
+        }
+      },
+      onEvent(type, data) {
+        if (data && typeof data === 'object' && typeof data.v === 'number') return;
+        const eventType = String(data?.type || type || '');
+        if (eventType === 'assistant_delta' || eventType === 'token') {
+          const text = String(data?.text ?? data?.content ?? '');
+          if (text) {
+            streamStarted = true;
+            streamed += text;
+            appendAssistantDelta(card, text);
+          }
+        }
+      },
+    });
+    activeStream = handle;
+    await handle.done;
+    activeStream = null;
+    if (streamError) throw streamError;
+    if (streamed.trim()) {
+      updateMessage(card, safeAssistantDisplayText(streamed, speaksFrench, fallback));
+      clearMessageShimmer(card);
+      return;
+    }
+
     const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
       method: 'POST',
       body: JSON.stringify({
@@ -2505,6 +2606,7 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
     }
     await showAssistantBubble(card, fallback);
   } finally {
+    activeStream = null;
     setBusy(false);
   }
 }
@@ -5588,6 +5690,75 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       ...effectiveExtra,
     };
 
+    const streamGenerationResponse = async () => {
+      let finalPayload: any = null;
+      let streamError: Error | null = null;
+      let sawStreamEvent = false;
+      startLiveRun(status, {
+        intent: say('Je prépare le travail demandé.', 'I am preparing the requested work.'),
+        activeText: say('Connexion au flux de génération...', 'Connecting to the generation stream...'),
+      });
+      const headers = await buildStreamJsonHeaders();
+      const handle = openHuggyStream({
+        url: streamEndpoint(`/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`),
+        init: {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+        },
+        maxRetries: 1,
+        onProtocolEvent(event) {
+          sawStreamEvent = true;
+          applyLiveRunEvent(status, event);
+          if (event.type === 'done') {
+            finalPayload = event.payload;
+          } else if (event.type === 'error') {
+            streamError = new Error(event.message);
+          }
+        },
+        onEvent(type, data) {
+          if (data && typeof data === 'object' && typeof data.v === 'number') return;
+          sawStreamEvent = true;
+          const eventType = String(data?.type || type || '');
+          if (eventType === 'done') {
+            finalPayload = data?.payload || data;
+            return;
+          }
+          if (eventType === 'error') {
+            streamError = new Error(String(data?.message || data?.error || 'Generation failed.'));
+            startLiveRun(status, { activeText: streamError.message });
+            return;
+          }
+          if (eventType === 'token') {
+            const text = String(data?.text ?? data?.content ?? '');
+            if (text) appendAssistantDelta(status, text);
+            return;
+          }
+          if (eventType === 'agent_step') {
+            const message = String(data?.message || '').trim();
+            if (message) startLiveRun(status, { activeText: repairTextEncoding(redactSecrets(message)) });
+          }
+        },
+      });
+      activeStream = handle;
+      try {
+        await handle.done;
+      } finally {
+        if (activeStream === handle) activeStream = null;
+      }
+      if (streamError) throw streamError;
+      if (!finalPayload) {
+        const error = new Error('Generation stream ended without a final payload.');
+        (error as Error & { sawStreamEvent?: boolean }).sawStreamEvent = sawStreamEvent;
+        throw error;
+      }
+      const statusCode = Number(finalPayload.status_code || 200);
+      if (statusCode >= 400 || finalPayload.success === false) {
+        throw new Error(String(finalPayload.message || finalPayload.error || `Generation failed with ${statusCode}`));
+      }
+      return finalPayload;
+    };
+
     if (requestedMode === 'build' || requestedMode === 'auto') {
       generationTouchesPreview = true;
       activeGenerationTouchesPreview = true;
@@ -5595,14 +5766,22 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
     }
 
-    const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
+    let payload: any;
+    try {
+      payload = await streamGenerationResponse();
+    } catch (streamError) {
+      const sawStreamEvent = Boolean((streamError as Error & { sawStreamEvent?: boolean }).sawStreamEvent);
+      if (sawStreamEvent) throw streamError;
+      console.warn('[huggy] generation stream fallback', streamError);
+      payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+    }
 
     // [REMPLACEMENT STREAMING UI ICI]
-    // Le nouveau rendu agent pourra consommer le transport SSE existant plus tard.
-    // Pour l'instant, le builder utilise seulement la reponse finale non-streamee.
+    // Le nouveau rendu React consomme le transport SSE existant et retombe sur
+    // cette reponse finale uniquement si le flux ne demarre pas.
     if (!payload) throw new Error('Generation failed or empty response');
 
     const responsePayload = redactInternalModelFields(payload || {});
@@ -5737,6 +5916,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (journalTimer !== null) window.clearInterval(journalTimer);
     if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);
+    activeStream = null;
     clearMessageShimmer(status);
     setBusy(false);
     activeAbort = null;
@@ -5748,6 +5928,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 async function cancelBuild() {
   if (!isGenerating) return;
   stopRequested = true;
+  activeStream?.cancel();
+  activeStream = null;
   activeAbort?.abort();
   if (currentProjectId) {
     await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {

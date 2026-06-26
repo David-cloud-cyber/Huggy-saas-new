@@ -21,15 +21,19 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
     "@tailwindcss/vite": "^4.3.0",
-    "@webcontainer/api": "^1.6.1",
     "@types/express": "^5.0.6",
     "@types/node-fetch": "^2.6.13",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
+    "@webcontainer/api": "^1.6.1",
+    "dompurify": "^3.4.11",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.17.0",
     "lucide-react": "^1.17.0",
+    "markdown-it": "^14.2.0",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
     "node-fetch": "^3.3.2",
@@ -42,6 +46,7 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "sharp": "^0.34.5",
     "typescript": "^6.0.3"
   }
