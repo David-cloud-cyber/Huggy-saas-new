@@ -419,11 +419,26 @@ function installDashboardUxPolish() {
 
     .create-section[data-chat-state="conversation"],
     .create-section[data-chat-state="promoting"] {
-      min-height: calc(100dvh - 128px);
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      gap: 15px;
+      gap: 10px;
+    }
+
+    /* Le chat occupe toute la zone : un seul scroll (le fil des messages),
+       pas de double barre, et les sections projets sont masquées pendant la
+       conversation (prise en charge facon Claude/ChatGPT). */
+    .content-area:has(.create-section[data-chat-state="conversation"]),
+    .content-area:has(.create-section[data-chat-state="promoting"]) {
+      overflow: hidden;
+      min-height: 0;
+    }
+    .content-area:has(.create-section[data-chat-state="conversation"]) > :not(.create-section),
+    .content-area:has(.create-section[data-chat-state="promoting"]) > :not(.create-section) {
+      display: none;
     }
 
     .create-section[data-chat-state="conversation"] .create-title,
@@ -440,8 +455,9 @@ function installDashboardUxPolish() {
       width: 100%;
       flex: 1 1 auto;
       min-height: 0;
-      overflow: auto;
-      padding: 6px 2px 2px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 6px 2px 10px;
       scroll-behavior: smooth;
       scrollbar-width: thin;
     }
@@ -468,24 +484,28 @@ function installDashboardUxPolish() {
       justify-content: flex-start;
     }
 
+    /* Assistant: texte discret, sans cadre lourd (façon Claude/ChatGPT). */
     .dashboard-chat-bubble {
-      max-width: min(760px, 92%);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+      max-width: min(680px, 100%);
+      border: 0;
+      border-radius: 14px;
+      background: transparent;
       color: var(--text);
-      padding: 12px 14px;
-      font-size: 13px;
-      line-height: 1.62;
+      padding: 4px 2px;
+      font-size: 14px;
+      line-height: 1.7;
       white-space: pre-wrap;
-      box-shadow: 0 12px 32px rgba(18, 22, 32, 0.05);
+      box-shadow: none;
     }
 
+    /* Utilisateur : bulle sombre subtile à droite (jamais blanche), compacte. */
     .dashboard-chat-message.user .dashboard-chat-bubble {
-      max-width: min(680px, 88%);
-      border-color: transparent;
-      background: var(--text);
-      color: var(--bg);
+      max-width: min(520px, 76%);
+      border: 0;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--text) 9%, transparent);
+      color: var(--text);
+      padding: 10px 14px;
       box-shadow: none;
     }
 
