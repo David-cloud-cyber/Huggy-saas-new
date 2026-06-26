@@ -1619,14 +1619,14 @@ function dashboardChatHtml(text: string) {
 function renderDashboardChat() {
   const thread = ensureDashboardChatThread();
   if (!thread) return;
-  thread.innerHTML = dashboardChatMessages.map(message => `
-    <article class="dashboard-chat-message ${message.role}" data-message-id="${escapeHtml(message.id)}">
-      <div class="dashboard-chat-bubble">
-        ${dashboardChatHtml(message.content)}
-        ${message.streaming ? '<span class="dashboard-chat-cursor" aria-hidden="true"></span>' : ''}
-      </div>
-    </article>
-  `).join('');
+  // No indentation/newlines inside the bubble: it has white-space: pre-wrap,
+  // so any template whitespace would render as real space and inflate the bubble.
+  thread.innerHTML = dashboardChatMessages.map(message =>
+    `<article class="dashboard-chat-message ${message.role}" data-message-id="${escapeHtml(message.id)}">` +
+    `<div class="dashboard-chat-bubble">${dashboardChatHtml(message.content)}` +
+    `${message.streaming ? '<span class="dashboard-chat-cursor" aria-hidden="true"></span>' : ''}</div>` +
+    `</article>`
+  ).join('');
   thread.scrollTop = thread.scrollHeight;
 }
 
