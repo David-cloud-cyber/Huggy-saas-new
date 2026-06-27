@@ -14,6 +14,8 @@ import MarkdownIt from "markdown-it";
 import { nanoid } from "nanoid";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { AnimatePresence, motion } from "motion/react";
+import { Response } from "./components/ui/response";
 import type { HuggyStreamEvent } from "./lib/stream-protocol";
 
 hljs.registerLanguage("bash", bash);
@@ -374,7 +376,13 @@ function createStore() {
             break;
           case "assistant_delta":
             run.assistantText += event.text;
-            message.content += event.text;
+            // First delta after a working placeholder: replace the shimmer label
+            // with the streamed text so the shimmer cleanly hands off to <Response>.
+            if (message.working && message.content && run.assistantText === event.text) {
+              message.content = event.text;
+            } else {
+              message.content += event.text;
+            }
             break;
           case "file_start":
             run.activeText = `Ecriture de ${event.path}`;
@@ -413,7 +421,14 @@ function createStore() {
         const message = find(id);
         if (!message) return;
         if (message.liveRun) message.liveRun.assistantText += text;
-        message.content += text;
+        // First token after a "thinking" placeholder: replace the shimmer
+        // label with the real content so we hand off cleanly to <Response>
+        // without flashing the label text.
+        if (message.working && message.content) {
+          message.content = text;
+        } else {
+          message.content += text;
+        }
         message.working = false;
       });
     },
@@ -540,6 +555,35 @@ function ensureConversationStyles() {
       background: var(--accent, #3b82f6);
       box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #3b82f6) 42%, transparent);
       animation: huggy-pulse 1.25s ease-in-out infinite;
+    }
+
+    .huggy-typing-indicator {
+      position: sticky;
+      bottom: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
+      color: var(--text-sub);
+      font-size: 12px;
+      width: fit-content;
+    }
+    .huggy-typing-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--accent, #3b82f6);
+      animation: huggy-typing-bounce 1s ease-in-out infinite;
+    }
+    .huggy-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .huggy-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+    .huggy-typing-label { margin-left: 4px; }
+    @keyframes huggy-typing-bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-3px); opacity: 1; }
     }
 
     .huggy-live-run {
@@ -757,6 +801,41 @@ function ShimmeringText({ text }: { text: string }) {
   return <span className="huggy-shimmer-text">{text}</span>;
 }
 
+import { CYCLING_PHRASES_FR, CYCLING_INTERVAL_MS } from "./lib/shimmer-config";
+
+function CyclingShimmer({ initialLabel }: { initialLabel?: string }) {
+  const phrases = useMemo(() => {
+    const base = [...CYCLING_PHRASES_FR];
+    const seed = (initialLabel || "").trim();
+    if (seed && !base.includes(seed)) base.unshift(seed);
+    return base;
+  }, [initialLabel]);
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setIndex((value) => (value + 1) % phrases.length);
+    }, CYCLING_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [phrases.length]);
+  return (
+    <span className="huggy-cycling-shimmer" aria-live="polite">
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={phrases[index]}
+          className="huggy-shimmer-text"
+          initial={{ opacity: 0, y: 6, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -6, filter: "blur(4px)" }}
+          transition={{ duration: 0.42, ease: "easeOut" }}
+          style={{ display: "inline-block" }}
+        >
+          {phrases[index]}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
 function formatElapsed(startedAt: number) {
   const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -802,16 +881,21 @@ function LiveRunView({ run }: { run: LiveRunState }) {
 function MessageView({ message }: { message: HuggyConversationMessage }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
-  const hasRichContent = isAssistant && message.content.trim().length > 0;
+  const hasStreamedText = isAssistant && message.content.trim().length > 0;
+  const showThinking = isAssistant && message.working && !message.liveRun && !hasStreamedText;
 
   return (
     <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
       <div className="huggy-chat-bubble">
         {message.liveRun ? <LiveRunView run={message.liveRun} /> : null}
-        {message.working && !message.liveRun && !message.content.trim() ? (
-          <span className="huggy-chat-working">Huggy ecrit...</span>
+        {showThinking ? <CyclingShimmer initialLabel={message.content} /> : null}
+        {isUser ? (
+          <>{message.content}</>
+        ) : hasStreamedText ? (
+          <Response>{message.content}</Response>
+        ) : !isAssistant && !message.liveRun && message.content ? (
+          <>{message.content}</>
         ) : null}
-        {isUser ? <>{message.content}</> : hasRichContent ? <RichResponse content={message.content} /> : !message.liveRun && message.content ? <>{message.content}</> : null}
         {message.actions?.length ? (
           <div className="huggy-chat-actions">
             {message.actions.map((action) => (
@@ -830,17 +914,18 @@ function ConversationApp({ store, host }: { store: ReturnType<typeof createStore
   const [version, setVersion] = useState(0);
   const messages = store.messages();
   const lastLengthRef = useRef(0);
+  const isStreaming = messages.some((m) => m.role === "assistant" && m.working);
 
   useEffect(() => store.subscribe(() => setVersion((value) => value + 1)), [store]);
 
   useEffect(() => {
     void version;
     const distanceFromBottom = host.scrollHeight - host.clientHeight - host.scrollTop;
-    if (distanceFromBottom < 180 || messages.length !== lastLengthRef.current) {
+    if (isStreaming || distanceFromBottom < 180 || messages.length !== lastLengthRef.current) {
       host.scrollTo({ top: host.scrollHeight, behavior: "smooth" });
     }
     lastLengthRef.current = messages.length;
-  }, [host, messages.length, version]);
+  }, [host, messages.length, version, isStreaming]);
 
   return (
     <div className="huggy-conversation-react">
@@ -852,6 +937,14 @@ function ConversationApp({ store, host }: { store: ReturnType<typeof createStore
           <p>Les messages apparaitront ici pendant que Huggy repond, planifie ou construit.</p>
         </div>
       )}
+      {isStreaming ? (
+        <div className="huggy-typing-indicator" aria-live="polite">
+          <span className="huggy-typing-dot" />
+          <span className="huggy-typing-dot" />
+          <span className="huggy-typing-dot" />
+          <span className="huggy-typing-label">Huggy est en train d’écrire…</span>
+        </div>
+      ) : null}
     </div>
   );
 }

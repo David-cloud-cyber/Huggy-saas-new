@@ -2608,6 +2608,9 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
   } finally {
     activeStream = null;
     setBusy(false);
+    // Safety net: if the stream ended, was cancelled, or failed before any
+    // assistant_delta arrived, ensure the thinking shimmer never sticks.
+    clearMessageShimmer(card);
   }
 }
 
