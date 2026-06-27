@@ -751,10 +751,14 @@
       box-shadow: none;
       font-size: 13px;
       font-weight: 500;
-      /* Le menu déroulant des contrôles d'aperçu (toggle appareil) est ancré dans
-         cette barre ; le panneau de preview est en position:absolute z-index:10.
-         On hisse la barre dans son propre contexte d'empilement au-dessus du
-         preview pour que le menu reste cliquable (sinon l'iframe capte le clic). */
+    }
+
+    /* Le menu déroulant du toggle appareil est ancré dans le cluster des contrôles
+       d'aperçu (relogé ici par script) ; le panneau de preview est en
+       position:absolute z-index:10 et captait sinon le clic. On donne son propre
+       contexte d'empilement au seul cluster d'aperçu — et non à toute la top bar,
+       afin de ne pas piéger le menu "Plus" (.builder-more-menu, z-index 2400). */
+    #builder-topbar-preview-tools {
       position: relative;
       z-index: 100;
     }
@@ -1001,8 +1005,7 @@
     }
 
     .brand-topbar .preview-device-trigger,
-    .brand-topbar .preview-refresh-btn,
-    .brand-topbar .preview-external-btn {
+    .brand-topbar .preview-refresh-btn {
       width: 30px;
       height: 30px;
       min-width: 30px;
@@ -1019,8 +1022,7 @@
 
     .brand-topbar .preview-device-trigger:hover,
     .brand-topbar .preview-device-trigger[aria-expanded="true"],
-    .brand-topbar .preview-refresh-btn:hover,
-    .brand-topbar .preview-external-btn:hover {
+    .brand-topbar .preview-refresh-btn:hover {
       color: var(--text);
       background: color-mix(in srgb, var(--text) 7%, transparent);
       transform: translateY(-1px);
@@ -1031,8 +1033,7 @@
     }
 
     .brand-topbar .preview-device-trigger svg,
-    .brand-topbar .preview-refresh-btn svg,
-    .brand-topbar .preview-external-btn svg {
+    .brand-topbar .preview-refresh-btn svg {
       width: 16px;
       height: 16px;
       stroke-width: 2.2;
@@ -4352,13 +4353,6 @@
                   <path d="M21 3v6h-6"></path>
                 </svg>
               </button>
-              <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Ouvrir l'aperçu dans un nouvel onglet" title="Ouvrir l'aperçu">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M15 3h6v6"></path>
-                  <path d="M10 14 21 3"></path>
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                </svg>
-              </button>
             </div>
             <span class="sub-nav-action-btn" id="btn-visual-edit" role="button" tabindex="0" aria-pressed="false" title="Edit visually: click an element in the preview to target a change" aria-label="Visual edit mode">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -4621,22 +4615,6 @@
       if (topbarPreviewTools) {
         if (previewToolbarControls) topbarPreviewTools.appendChild(previewToolbarControls);
       }
-
-      document.getElementById("btn-preview-external")?.addEventListener("click", () => {
-        const frame = document.getElementById("preview-iframe-element");
-        const iframe = frame instanceof HTMLIFrameElement ? frame : null;
-        if (iframe?.src && iframe.src !== "about:blank") {
-          window.open(iframe.src, "_blank", "noopener,noreferrer");
-          return;
-        }
-        const doc = iframe?.srcdoc || "";
-        if (!doc.trim()) return;
-        const previewWindow = window.open("", "_blank", "noopener,noreferrer");
-        if (!previewWindow) return;
-        previewWindow.document.open();
-        previewWindow.document.write(doc);
-        previewWindow.document.close();
-      });
 
       document.querySelectorAll("[data-open-history]").forEach((button) => {
         button.addEventListener("click", (event) => {
