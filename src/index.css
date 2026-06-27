@@ -3201,6 +3201,7 @@ h1 {
 .workflow-section,
 .build-types-section,
 .proof-strip-section,
+.product-proof-section,
 .pricing-section,
 .faq-section,
 .final-cta-section {
@@ -3350,6 +3351,150 @@ h1 {
     line-height: 1.45;
 }
 
+.product-proof-section {
+    padding-top: clamp(40px, 6vw, 72px);
+}
+
+.product-proof-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.product-proof-card {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 92%, transparent), color-mix(in srgb, var(--bg-elevated) 82%, transparent));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.54),
+        0 22px 56px -48px rgba(15, 23, 42, 0.4);
+    transition: transform 240ms var(--landing-ease), border-color 240ms ease, box-shadow 240ms ease;
+}
+
+.product-proof-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-focus);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.58),
+        0 28px 70px -54px color-mix(in srgb, var(--accent-blue) 35%, #000);
+}
+
+.proof-preview {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    min-height: 154px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--proof-accent, var(--accent-blue)) 22%, transparent), transparent 34%),
+        color-mix(in srgb, var(--bg) 88%, var(--bg-surface));
+}
+
+.proof-preview::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 24%, rgba(255, 255, 255, 0.16) 42%, transparent 58%);
+    transform: translateX(-120%);
+    animation: proofPreviewSweep 6s var(--landing-ease) infinite;
+}
+
+.proof-preview strong,
+.proof-preview span,
+.proof-preview i {
+    position: relative;
+    z-index: 1;
+}
+
+.proof-preview span {
+    grid-column: 1 / -1;
+    width: 44px;
+    height: 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--proof-accent, var(--accent-blue)) 36%, var(--bg));
+}
+
+.proof-preview strong {
+    grid-column: 1 / -1;
+    color: var(--text);
+    font-size: 21px;
+    letter-spacing: -0.04em;
+}
+
+.proof-preview i {
+    display: block;
+    min-height: 52px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--proof-accent, var(--accent-blue)) 13%, var(--bg-surface));
+    border: 1px solid color-mix(in srgb, var(--proof-accent, var(--accent-blue)) 16%, var(--border));
+}
+
+.proof-preview-todo { --proof-accent: #3b82f6; }
+.proof-preview-booking { --proof-accent: #f59e0b; }
+.proof-preview-saas { --proof-accent: #22c55e; }
+
+.product-proof-card h3 {
+    margin: 15px 2px 6px;
+    color: var(--text);
+    font-size: 17px;
+    letter-spacing: -0.02em;
+}
+
+.product-proof-card p {
+    margin: 0 2px 2px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.before-after-proof {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+}
+
+.before-after-proof div {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg) 76%, transparent);
+}
+
+.before-after-proof span {
+    color: var(--text-muted);
+    font: 700 11px/1 "JetBrains Mono", monospace;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.before-after-proof strong {
+    color: var(--text);
+    font-size: 15px;
+    letter-spacing: -0.01em;
+}
+
+.before-after-proof svg {
+    color: var(--accent-blue);
+}
+
+@keyframes proofPreviewSweep {
+    0%, 48% { transform: translateX(-120%); }
+    72%, 100% { transform: translateX(120%); }
+}
+
 .pricing-section {
     padding-top: clamp(48px, 7vw, 76px);
 }
@@ -3433,6 +3578,10 @@ h1 {
     .proof-strip-card {
         grid-template-columns: 1fr;
     }
+
+    .product-proof-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 640px) {
@@ -3458,6 +3607,7 @@ h1 {
     .workflow-section,
     .build-types-section,
     .proof-strip-section,
+    .product-proof-section,
     .pricing-section,
     .faq-section,
     .final-cta-section {
@@ -3479,6 +3629,15 @@ h1 {
         padding: 22px;
         border-radius: 18px;
     }
+
+    .before-after-proof {
+        grid-template-columns: 1fr;
+    }
+
+    .before-after-proof svg {
+        transform: rotate(90deg);
+        margin: 0 auto;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3489,6 +3648,8 @@ h1 {
     .proof-strip-grid article,
     .workflow-step,
     .build-type,
+    .product-proof-card,
+    .proof-preview::before,
     .pricing-card {
         animation: none !important;
         transition: none !important;

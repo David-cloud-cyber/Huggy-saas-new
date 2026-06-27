@@ -10323,6 +10323,41 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 // 3. CUSTOM DOMAINS ENDPOINTS
 // ──────────────────────────────────────────────────────────────────────
 
+app.post('/api/landing/conversion', (req: any, res: any) => {
+  try {
+    const eventName = String(req.body?.event_name || '').replace(/[^\w:.-]/g, '').slice(0, 80);
+    if (!eventName) {
+      return res.status(400).json({ success: false, error: 'event_name is required.' });
+    }
+
+    const metadata = req.body?.metadata && typeof req.body.metadata === 'object'
+      ? Object.fromEntries(
+          Object.entries(req.body.metadata)
+            .slice(0, 20)
+            .map(([key, value]) => [
+              String(key).replace(/[^\w:.-]/g, '').slice(0, 60),
+              String(value ?? '').slice(0, 160),
+            ])
+            .filter(([key]) => Boolean(key)),
+        )
+      : {};
+
+    console.info('[huggy:landing_conversion]', {
+      event_name: eventName,
+      session_id: String(req.body?.session_id || '').slice(0, 120),
+      page_path: String(req.body?.page_path || '/').slice(0, 160),
+      page_theme: String(req.body?.page_theme || 'unknown').slice(0, 40),
+      metadata,
+      occurred_at: String(req.body?.occurred_at || new Date().toISOString()).slice(0, 80),
+    });
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('[huggy:landing_conversion_failed]', { message: error?.message || String(error) });
+    return res.status(500).json({ success: false, error: 'Conversion event could not be collected.' });
+  }
+});
+
 app.post('/api/analytics/collect', async (req: any, res: any) => {
   setAnalyticsCors(res);
   try {

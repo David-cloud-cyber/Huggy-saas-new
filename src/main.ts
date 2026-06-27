@@ -64,6 +64,106 @@ function init() {
         }, 3000);
     }
 
+    const conversionStorageKey = 'huggy-landing-conversion-events';
+    const conversionSessionKey = 'huggy-landing-conversion-session';
+
+    function getConversionSessionId() {
+        let sessionId = sessionStorage.getItem(conversionSessionKey);
+        if (!sessionId) {
+            sessionId = `lc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+            sessionStorage.setItem(conversionSessionKey, sessionId);
+        }
+        return sessionId;
+    }
+
+    function cleanConversionMetadata(metadata: Record<string, unknown>) {
+        return Object.fromEntries(
+            Object.entries(metadata)
+                .filter(([, value]) => value !== undefined && value !== null && value !== '')
+                .map(([key, value]) => [key, String(value).slice(0, 160)]),
+        );
+    }
+
+    function trackConversionEvent(eventName: string, metadata: Record<string, unknown> = {}) {
+        const safeName = eventName.trim().slice(0, 80);
+        if (!safeName) return;
+
+        const payload = {
+            id: `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+            event_name: safeName,
+            session_id: getConversionSessionId(),
+            page_path: window.location.pathname || '/',
+            page_theme: document.documentElement.getAttribute('data-theme') || 'unknown',
+            metadata: cleanConversionMetadata(metadata),
+            occurred_at: new Date().toISOString(),
+        };
+
+        try {
+            const previous = JSON.parse(localStorage.getItem(conversionStorageKey) || '[]');
+            const events = Array.isArray(previous) ? previous.slice(-79) : [];
+            events.push(payload);
+            localStorage.setItem(conversionStorageKey, JSON.stringify(events));
+        } catch {
+            // Local analytics must never block the landing page.
+        }
+
+        try {
+            (window as any).dataLayer = (window as any).dataLayer || [];
+            (window as any).dataLayer.push({ event: safeName, huggy_conversion: payload });
+            window.dispatchEvent(new CustomEvent('huggy:conversion', { detail: payload }));
+        } catch {
+            // Optional third-party analytics bridge.
+        }
+
+        try {
+            const body = JSON.stringify(payload);
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/api/landing/conversion', new Blob([body], { type: 'application/json' }));
+            } else {
+                void fetch('/api/landing/conversion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                    keepalive: true,
+                }).catch(() => undefined);
+            }
+        } catch {
+            // Backend collection is best-effort.
+        }
+    }
+
+    function installLandingConversionTracking() {
+        const productShell = /\/(builder|dashboard|auth|admin)\.html$/.test(window.location.pathname);
+        if (productShell) return;
+
+        trackConversionEvent('landing_view', {
+            referrer: document.referrer ? new URL(document.referrer, window.location.origin).hostname : 'direct',
+        });
+
+        document.addEventListener('click', event => {
+            const target = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-conversion-event]');
+            if (!target) return;
+            trackConversionEvent(target.dataset.conversionEvent || 'click', {
+                place: target.dataset.conversionPlace,
+                source: target.dataset.conversionSource,
+                template: target.dataset.conversionTemplate,
+                plan: target.dataset.conversionPlan,
+                text: target.textContent?.trim().replace(/\s+/g, ' '),
+            });
+        });
+
+        document.querySelectorAll<HTMLTextAreaElement>('.input-wrapper textarea').forEach(textarea => {
+            let trackedFocus = false;
+            textarea.addEventListener('focus', () => {
+                if (trackedFocus) return;
+                trackedFocus = true;
+                trackConversionEvent('input_focus', {
+                    place: textarea.closest('.final-cta-prompt') ? 'final_cta' : 'hero',
+                });
+            });
+        });
+    }
+
     function installScrollTextReveal() {
         const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll-text-reveal]'));
         if (!targets.length) return;
@@ -248,6 +348,7 @@ function init() {
 
     installMarketingEnhancements();
     installPublicPageEnhancements();
+    installLandingConversionTracking();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
 
@@ -421,6 +522,20 @@ function init() {
             if (!textarea || !submitBtn) return;
             const val = textarea.value.trim();
             if (!val) return;
+
+            const ctaPlace = wrapper.classList.contains('final-cta-prompt') ? 'final_cta' : wrapper.classList.contains('marketing-prompt-card') ? 'marketing_prompt' : 'hero';
+            trackConversionEvent('start_building_click', {
+                place: ctaPlace,
+                prompt_length: val.length,
+                prompt_mode: selectedPromptMode,
+            });
+            if (!localStorage.getItem('huggy-first-generation-started')) {
+                localStorage.setItem('huggy-first-generation-started', 'true');
+                trackConversionEvent('first_generation_started', {
+                    place: ctaPlace,
+                    prompt_length: val.length,
+                });
+            }
 
             submitBtn.disabled = true;
             const btnSpan = submitBtn.querySelector('span');

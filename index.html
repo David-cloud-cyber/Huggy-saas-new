@@ -140,7 +140,7 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button class="sign-in-btn" onclick="navigate('/auth.html')">Sign In</button>
+            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign In</button>
         </div>
     </nav>
 
@@ -232,7 +232,7 @@
             <div class="import-row">
                 <span class="import-label">or import from</span>
                 <div class="import-btn-group">
-                    <button class="import-btn" data-import-source="figma" data-tooltip="Import Figma design">
+                    <button class="import-btn" data-import-source="figma" data-conversion-event="import_click" data-conversion-source="figma" data-tooltip="Import Figma design">
                         <svg viewBox="0 0 38 57" fill="currentColor" width="12" height="12">
                             <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"/>
                             <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 0 1-19 0z"/>
@@ -242,13 +242,13 @@
                         </svg>
                         <span>Figma</span>
                     </button>
-                    <button class="import-btn" data-import-source="github" data-tooltip="Import GitHub repo">
+                    <button class="import-btn" data-import-source="github" data-conversion-event="import_click" data-conversion-source="github" data-tooltip="Import GitHub repo">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
                             <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466 -.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647 .35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848 -2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.746 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
                         </svg>
                         <span>GitHub</span>
                     </button>
-                    <button class="import-btn" data-import-source="image" data-tooltip="Upload screenshot">
+                    <button class="import-btn" data-import-source="image" data-conversion-event="import_click" data-conversion-source="image" data-tooltip="Upload screenshot">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                             <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -256,7 +256,7 @@
                         </svg>
                         <span>Image</span>
                     </button>
-                    <button class="import-btn" data-import-source="url" data-tooltip="Import website URL">
+                    <button class="import-btn" data-import-source="url" data-conversion-event="import_click" data-conversion-source="url" data-tooltip="Import website URL">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="M2 12h20"></path>
@@ -401,7 +401,7 @@
                     <span class="build-type-label">SaaS</span>
                 </div>
                 <p>Dashboards, auth, onboarding, billing and workspace flows.</p>
-                <button type="button" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">Try this</button>
+                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">Try this</button>
             </article>
             <article class="build-type reveal" data-build-accent="green">
                 <div class="build-type-top">
@@ -409,7 +409,7 @@
                     <span class="build-type-label">Marketplace</span>
                 </div>
                 <p>Search, listings, sellers, cart, orders and trust states.</p>
-                <button type="button" data-build-prompt="Create a marketplace app with search, seller profiles, product listings, favorites, cart and order tracking.">Try this</button>
+                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="marketplace" data-build-prompt="Create a marketplace app with search, seller profiles, product listings, favorites, cart and order tracking.">Try this</button>
             </article>
             <article class="build-type reveal" data-build-accent="amber">
                 <div class="build-type-top">
@@ -417,7 +417,7 @@
                     <span class="build-type-label">Booking</span>
                 </div>
                 <p>Availability, forms, confirmations, reminders and payments.</p>
-                <button type="button" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">Try this</button>
+                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">Try this</button>
             </article>
             <article class="build-type reveal" data-build-accent="violet">
                 <div class="build-type-top">
@@ -425,7 +425,7 @@
                     <span class="build-type-label">AI tool</span>
                 </div>
                 <p>Prompt input, result history, exports, usage and loading states.</p>
-                <button type="button" data-build-prompt="Create an AI writing tool with prompt input, generated results, history, loading states and export actions.">Try this</button>
+                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="ai-tool" data-build-prompt="Create an AI writing tool with prompt input, generated results, history, loading states and export actions.">Try this</button>
             </article>
         </div>
     </section>
@@ -454,6 +454,57 @@
         </div>
     </section>
 
+    <section class="product-proof-section reveal" aria-label="Generated app proof">
+        <div class="section-header compact">
+            <p class="section-kicker">Product proof</p>
+            <h2>Show the app, not just the promise.</h2>
+            <p>Short generated-app examples make the result tangible before someone signs up.</p>
+        </div>
+        <div class="product-proof-grid">
+            <article class="product-proof-card reveal">
+                <div class="proof-preview proof-preview-todo" aria-hidden="true">
+                    <span></span>
+                    <strong>TodoFlow</strong>
+                    <i></i><i></i><i></i>
+                </div>
+                <h3>Interactive task app</h3>
+                <p>Add, complete, filter and keep tasks in local storage.</p>
+            </article>
+            <article class="product-proof-card reveal">
+                <div class="proof-preview proof-preview-booking" aria-hidden="true">
+                    <span></span>
+                    <strong>Bookly</strong>
+                    <i></i><i></i><i></i>
+                </div>
+                <h3>Booking workflow</h3>
+                <p>Availability, customer form, confirmation and clear states.</p>
+            </article>
+            <article class="product-proof-card reveal">
+                <div class="proof-preview proof-preview-saas" aria-hidden="true">
+                    <span></span>
+                    <strong>Metric OS</strong>
+                    <i></i><i></i><i></i>
+                </div>
+                <h3>SaaS dashboard</h3>
+                <p>Cards, charts, sidebar, onboarding and publishing flow.</p>
+            </article>
+        </div>
+        <div class="before-after-proof reveal">
+            <div>
+                <span>Before Huggy</span>
+                <strong>Idea, blank repo, scattered decisions.</strong>
+            </div>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M5 12h14"></path>
+                <path d="m13 6 6 6-6 6"></path>
+            </svg>
+            <div>
+                <span>After Huggy</span>
+                <strong>Working preview, editable files, publish path.</strong>
+            </div>
+        </div>
+    </section>
+
     <section id="pricing" class="pricing-section reveal">
         <div class="section-header">
             <h2>Simple, transparent pricing</h2>
@@ -469,7 +520,7 @@
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Live preview + Huggy subdomain</li>
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> $1 Cloud balance included</li>
                 </ul>
-                <button class="pricing-btn" onclick="navigate('/auth.html')">Get Started</button>
+                <button class="pricing-btn" data-conversion-event="pricing_click" data-conversion-plan="free" onclick="navigate('/auth.html')">Get Started</button>
             </div>
 
             <div class="pricing-card featured reveal">
@@ -484,7 +535,7 @@
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Custom domain + badge removal</li>
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Export, versions, rollback</li>
                 </ul>
-                <button class="pricing-btn primary" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
+                <button class="pricing-btn primary" data-conversion-event="upgrade_click" data-conversion-plan="pro" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
             </div>
 
             <div class="pricing-card reveal">
@@ -498,7 +549,7 @@
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 20 GB DB, 100 GB files, 250 GB bandwidth</li>
                     <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Team workspace + premium models</li>
                 </ul>
-                <button class="pricing-btn" onclick="navigate('/auth.html')">Go Scale</button>
+                <button class="pricing-btn" data-conversion-event="upgrade_click" data-conversion-plan="scale" onclick="navigate('/auth.html')">Go Scale</button>
             </div>
         </div>
     </section>
@@ -596,7 +647,7 @@
         </div>
     </section>
 
-    <a href="/auth.html" class="sticky-cta" id="sticky-cta">
+    <a href="/auth.html" class="sticky-cta" id="sticky-cta" data-conversion-event="start_building_click" data-conversion-place="sticky">
         Build with Huggy
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
