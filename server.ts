@@ -201,6 +201,18 @@ import {
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
 import {
+  STORAGE_BUCKET,
+  MAX_STORAGE_FILE_BYTES,
+  validateUpload,
+  buildObjectKey,
+  buildProjectPrefix,
+  resolveObjectKey,
+  keyBelongsToProject,
+  objectNameFromKey,
+  storageChargeUsd,
+  egressChargeUsd,
+} from './src/services/cloud-file-storage.ts';
+import {
   applyHuggyFullstackKit,
   shouldApplyHuggyFullstackKit,
 } from './src/services/fullstack-generation.ts';
@@ -12314,6 +12326,287 @@ app.post('/api/projects/:id/assets', async (req: any, res: any) => {
   }
   if (error) return res.status(500).json({ success: false, error: error.message });
   res.json({ success: true, asset: fullAsset });
+});
+
+// ── Cloud File Storage ───────────────────────────────────────────────────────
+// Per-project file storage in our managed Supabase Storage (single PRIVATE
+// bucket `project-files`, isolation by key prefix `<projectId>/`). Every route
+// is behind requireAuth (app.use('/api/projects', requireAuth)) AND re-checks
+// ownership via loadProject() -> resolveProjectRole(). Uploads and downloads are
+// metered against the project's Cloud wallet with the atomic debit_cloud_balance
+// RPC. No server key (service_role / management / storage) is ever returned to
+// the client; all storage I/O happens here, server-side, via the proxy.
+
+// Load the project and enforce ownership for a storage request. Returns null and
+// sends 404 (chosen over 403 to avoid leaking another user's project existence)
+// when the authenticated user has no role on the target project.
+async function resolveStorageOwner(req: any, res: any): Promise<{ project: GeneratedProject; orgId: string } | null> {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId, req);
+  if (!project) {
+    res.status(404).json({ success: false, error: 'Project not found.' });
+    return null;
+  }
+  return { project, orgId: String(project.organization_id || userId) };
+}
+
+// Honest provisioning gate: storage is available only once the project has a
+// Huggy Cloud backend record (cloud project or detected requirements). No
+// phantom storage before the backend exists.
+async function projectBackendProvisioned(projectId: string): Promise<boolean> {
+  try {
+    const cloud = await loadProjectHuggyCloud(projectId);
+    return Boolean(cloud.project || cloud.requirements);
+  } catch {
+    return false;
+  }
+}
+
+async function readCloudWallet(client: any, orgId: string): Promise<{ status: string; balanceUsd: number } | null> {
+  const { data } = await client.from('cloud_wallets').select('status,balance_usd').eq('organization_id', orgId).maybeSingle();
+  if (!data) return null;
+  return { status: String(data.status || 'active'), balanceUsd: Number(data.balance_usd || 0) };
+}
+
+// No wallet, suspended, or zero balance => blocked (never serve at a loss).
+function cloudWalletBlocked(wallet: { status: string; balanceUsd: number } | null): boolean {
+  return !wallet || wallet.status === 'suspended' || wallet.balanceUsd <= 0;
+}
+
+function cloudWalletState(wallet: { status: string; balanceUsd: number } | null) {
+  return {
+    balance_usd: wallet ? wallet.balanceUsd : 0,
+    status: wallet ? wallet.status : 'inactive',
+    suspended: cloudWalletBlocked(wallet),
+  };
+}
+
+async function ensureStorageBucket(client: any): Promise<{ ok: boolean }> {
+  try {
+    const { error } = await client.storage.createBucket(STORAGE_BUCKET, {
+      public: false,
+      fileSizeLimit: MAX_STORAGE_FILE_BYTES,
+    });
+    if (!error) return { ok: true };
+    const message = String(error.message || '').toLowerCase();
+    // Idempotent: an existing bucket is success, not an error.
+    if (message.includes('already exists') || message.includes('duplicate') || String((error as any).statusCode || '') === '409') {
+      return { ok: true };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// POST ensure/create the storage bucket for the project (idempotent).
+app.post('/api/projects/:id/storage/ensure', async (req: any, res: any) => {
+  const ctx = await resolveStorageOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'build', ctx.project)) return;
+  if (!(await projectBackendProvisioned(ctx.project.id))) {
+    return res.status(409).json({
+      success: false,
+      provisioning_required: true,
+      error: 'Backend cloud non provisionné. Décrivez vos besoins de fichiers à Huggy pour activer le stockage.',
+    });
+  }
+  const client = requireSupabase('Cloud file storage ensure');
+  const ensured = await ensureStorageBucket(client);
+  if (!ensured.ok) {
+    return res.status(503).json({ success: false, error: 'Stockage indisponible pour le moment. Réessayez plus tard.' });
+  }
+  res.json({ success: true, ready: true });
+});
+
+// GET list a project's files (paginated) + usage and Cloud wallet state.
+app.get('/api/projects/:id/storage', async (req: any, res: any) => {
+  const ctx = await resolveStorageOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const client = requireSupabase('Cloud file storage list');
+  const wallet = cloudWalletState(await readCloudWallet(client, ctx.orgId));
+
+  if (!(await projectBackendProvisioned(ctx.project.id))) {
+    return res.json({
+      success: true,
+      provisioning_required: true,
+      files: [],
+      usage: { used_bytes: 0, file_count: 0 },
+      wallet,
+      pagination: { limit: 0, offset: 0, total: 0 },
+    });
+  }
+
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const folder = ctx.project.id; // list strictly within the project's prefix
+  try {
+    const { data, error } = await client.storage
+      .from(STORAGE_BUCKET)
+      .list(folder, { limit, offset, sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) {
+      const message = String(error.message || '').toLowerCase();
+      if (message.includes('not found') || message.includes('bucket')) {
+        return res.json({ success: true, files: [], usage: { used_bytes: 0, file_count: 0 }, wallet, pagination: { limit, offset, total: 0 } });
+      }
+      return res.status(500).json({ success: false, error: 'Listing du stockage indisponible.' });
+    }
+    const files = (data || [])
+      .filter((object: any) => object && object.name && object.id !== null)
+      .map((object: any) => ({
+        name: object.name,
+        size_bytes: Number(object.metadata?.size || 0),
+        mime_type: String(object.metadata?.mimetype || 'application/octet-stream'),
+        created_at: object.created_at || object.updated_at || null,
+      }));
+    const usedBytes = files.reduce((sum: number, file: any) => sum + file.size_bytes, 0);
+    res.json({
+      success: true,
+      files,
+      usage: { used_bytes: usedBytes, file_count: files.length },
+      wallet,
+      pagination: { limit, offset, total: files.length },
+    });
+  } catch {
+    res.status(500).json({ success: false, error: 'Listing du stockage indisponible.' });
+  }
+});
+
+// POST upload a file (server proxy — the client never holds a storage key).
+app.post('/api/projects/:id/storage', async (req: any, res: any) => {
+  const ctx = await resolveStorageOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'build', ctx.project)) return;
+  if (!(await projectBackendProvisioned(ctx.project.id))) {
+    return res.status(409).json({ success: false, provisioning_required: true, error: 'Backend cloud non provisionné.' });
+  }
+  const client = requireSupabase('Cloud file storage upload');
+
+  // Block before doing any work when the Cloud balance is exhausted.
+  const wallet = await readCloudWallet(client, ctx.orgId);
+  if (cloudWalletBlocked(wallet)) {
+    return res.status(402).json({
+      success: false,
+      code: 'cloud_balance_exhausted',
+      error: 'Solde Cloud épuisé. Rechargez votre solde Cloud pour téléverser des fichiers.',
+    });
+  }
+
+  const mimeType = String(req.body?.mime_type || req.body?.mimeType || '').toLowerCase().trim();
+  const raw = String(req.body?.content_base64 || req.body?.contentBase64 || '');
+  const clean = raw.replace(/^data:[^;]+;base64,/i, '').trim();
+  if (!clean || !/^[A-Za-z0-9+/]+={0,2}$/.test(clean)) {
+    return res.status(400).json({ success: false, error: 'Encodage du fichier invalide.' });
+  }
+  const buffer = Buffer.from(clean, 'base64');
+  const validation = validateUpload({ mimeType, sizeBytes: buffer.length });
+  if (!validation.ok) {
+    return res.status(400).json({ success: false, code: validation.code, error: validation.error });
+  }
+
+  const fileId = randomUUID();
+  const key = buildObjectKey(ctx.project.id, fileId, req.body?.name);
+  // Defensive: the key must live under this project's prefix.
+  if (!keyBelongsToProject(key, ctx.project.id)) {
+    return res.status(400).json({ success: false, error: 'Nom de fichier invalide.' });
+  }
+
+  const { error: uploadError } = await client.storage
+    .from(STORAGE_BUCKET)
+    .upload(key, buffer, { contentType: mimeType, upsert: false });
+  if (uploadError) {
+    const message = String(uploadError.message || '').toLowerCase();
+    if (message.includes('bucket') || message.includes('not found')) {
+      return res.status(503).json({ success: false, error: 'Bucket de stockage absent. Initialisez le stockage puis réessayez.' });
+    }
+    return res.status(500).json({ success: false, error: 'Échec du téléversement.' });
+  }
+
+  // Meter the stored bytes against the Cloud wallet (atomic debit).
+  let newBalance: number | null = null;
+  try {
+    const { data } = await client.rpc('debit_cloud_balance', {
+      org_id: ctx.orgId,
+      spend_usd: storageChargeUsd(buffer.length),
+      category: 'file_storage',
+      qty: buffer.length,
+      unit_label: 'bytes',
+      note: `Upload ${objectNameFromKey(key, ctx.project.id)}`,
+      ref: `storage_upload_${fileId}`,
+      proj_id: ctx.project.id,
+    });
+    newBalance = data == null ? null : Number(data);
+  } catch (error: any) {
+    console.warn('[huggy:storage_upload_meter_failed]', redactSecrets(error?.message || String(error), '[redacted]'));
+  }
+
+  res.json({
+    success: true,
+    file: {
+      name: objectNameFromKey(key, ctx.project.id),
+      size_bytes: buffer.length,
+      mime_type: mimeType,
+      created_at: new Date().toISOString(),
+    },
+    wallet: newBalance == null ? undefined : { balance_usd: newBalance, suspended: newBalance <= 0 },
+  });
+});
+
+// GET download/serve a file (ownership-checked, metered egress).
+app.get('/api/projects/:id/storage/file/:name', async (req: any, res: any) => {
+  const ctx = await resolveStorageOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const key = resolveObjectKey(ctx.project.id, req.params.name);
+  if (!key) return res.status(400).json({ success: false, error: 'Nom de fichier invalide.' });
+  const client = requireSupabase('Cloud file storage download');
+
+  // Per spec: do not serve files at a loss when the Cloud balance is exhausted.
+  const wallet = await readCloudWallet(client, ctx.orgId);
+  if (cloudWalletBlocked(wallet)) {
+    return res.status(402).json({ success: false, code: 'cloud_balance_exhausted', error: 'Solde Cloud épuisé. Rechargez pour servir des fichiers.' });
+  }
+
+  const { data, error } = await client.storage.from(STORAGE_BUCKET).download(key);
+  if (error || !data) return res.status(404).json({ success: false, error: 'Fichier introuvable.' });
+  const arrayBuffer = await data.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  // Meter the served bytes (egress) against the Cloud wallet (atomic debit).
+  try {
+    await client.rpc('debit_cloud_balance', {
+      org_id: ctx.orgId,
+      spend_usd: egressChargeUsd(buffer.length),
+      category: 'network',
+      qty: buffer.length,
+      unit_label: 'bytes',
+      note: `Serve ${objectNameFromKey(key, ctx.project.id)}`,
+      ref: `storage_serve_${Date.now()}`,
+      proj_id: ctx.project.id,
+    });
+  } catch (error2: any) {
+    console.warn('[huggy:storage_serve_meter_failed]', redactSecrets(error2?.message || String(error2), '[redacted]'));
+  }
+
+  const safeName = objectNameFromKey(key, ctx.project.id).replace(/["\\]/g, '');
+  res.setHeader('Content-Type', String((data as any).type || 'application/octet-stream'));
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(buffer);
+});
+
+// DELETE a file (ownership-checked).
+app.delete('/api/projects/:id/storage/file/:name', async (req: any, res: any) => {
+  const ctx = await resolveStorageOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'build', ctx.project)) return;
+  const key = resolveObjectKey(ctx.project.id, req.params.name);
+  if (!key) return res.status(400).json({ success: false, error: 'Nom de fichier invalide.' });
+  const client = requireSupabase('Cloud file storage delete');
+  const { error } = await client.storage.from(STORAGE_BUCKET).remove([key]);
+  if (error) return res.status(500).json({ success: false, error: 'Suppression impossible.' });
+  res.json({ success: true });
 });
 
 app.get('/api/projects/:id/export', async (req: any, res: any) => {

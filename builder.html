@@ -3728,12 +3728,78 @@
 
     .db-state-error { color: var(--error); }
 
+    .db-storage { display: grid; gap: 14px; }
+
+    .db-uploader {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border: 1px dashed color-mix(in srgb, var(--accent-blue) 38%, var(--border));
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--accent-blue-soft) 40%, transparent);
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: background 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .db-uploader:hover {
+      background: var(--accent-blue-soft);
+      border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border));
+    }
+
+    .db-uploader-disabled {
+      cursor: not-allowed;
+      opacity: .6;
+      border-color: var(--border);
+      background: color-mix(in srgb, var(--bg-input) 55%, transparent);
+    }
+
+    .db-uploader-disabled:hover {
+      background: color-mix(in srgb, var(--bg-input) 55%, transparent);
+      border-color: var(--border);
+    }
+
+    .db-file-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .db-file-btn {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .db-file-btn svg { width: 15px; height: 15px; }
+
+    .db-file-btn:hover {
+      color: var(--text);
+      background: var(--accent-dim);
+      border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--border));
+    }
+
+    .db-file-del:hover {
+      color: var(--error);
+      border-color: color-mix(in srgb, var(--error) 40%, var(--border));
+      background: var(--error-dim);
+    }
+
     @media (max-width: 720px) {
       .db-cloud-head { flex-direction: column; }
       .db-action { align-self: flex-start; }
       .db-section-head { padding: 16px; }
       .db-section-body { padding: 14px 16px 16px; }
       .db-soon { flex-direction: column; align-items: flex-start; }
+      .db-uploader { flex-direction: column; align-items: flex-start; }
     }
 
     .analysis-topbar {

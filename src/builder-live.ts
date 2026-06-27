@@ -6113,18 +6113,12 @@ function renderDatabaseSection2(db: any): string {
     </section>`;
 }
 
-// Section 3 — Stockage de fichiers. Aucun backend d'upload/diffusion n'existe
-// encore : état honnête, sans zone d'upload ni faux fichiers.
-function renderDatabaseSection3(db: any): string {
-  const requirements = (db.cloud && db.cloud.requirements) || null;
-  const needsStorage = Boolean(requirements && requirements.needs_storage);
-  const statusBadge = needsStorage ? dbBadge('warning', 'Configuration requise') : dbBadge('neutral', 'Bientôt disponible');
-  const detail = needsStorage
-    ? 'Votre application requiert du stockage : il sera provisionné lors de la mise en place du backend.'
-    : 'Décrivez vos besoins de fichiers à Huggy (ex. « permets l\'upload d\'avatars ») pour l\'activer.';
-
-  // [STORAGE BACKEND ICI] — brancher l'upload / la liste des fichiers quand le
-  // backend de stockage existera. Tant qu'il n'existe pas : aucune zone d'upload.
+// Section 3 — Stockage de fichiers. Désormais branché sur un backend réel
+// (/api/projects/:id/storage). Le corps est hydraté en asynchrone par
+// loadProjectStorage() : provisioning requis / loading / empty / liste / erreur.
+function renderDatabaseSection3(_db: any): string {
+  // [STORAGE BACKEND ICI] — la zone est hydratée par loadProjectStorage() qui
+  // appelle les endpoints serveur. Aucune donnée factice : tout vient du backend.
   return `
     <section class="db-section">
       <div class="db-section-head">
@@ -6135,16 +6129,207 @@ function renderDatabaseSection3(db: any): string {
         </div>
       </div>
       <div class="db-section-body">
-        <div class="db-soon">
-          <span class="db-soon-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5-5 5 5"></path><path d="M12 5v12"></path></svg></span>
-          <div class="db-soon-text">
-            <p class="db-soon-title">Stockage managé bientôt disponible</p>
-            <p class="db-soon-desc">L'upload, la gestion et la diffusion de médias ne sont pas encore activés. ${escapeHtml(detail)} Aucune zone d'upload n'est affichée tant que le backend n'existe pas.</p>
-          </div>
-          ${statusBadge}
+        <div id="db-storage" class="db-storage" data-state="loading">
+          <div class="db-state">Chargement du stockage…</div>
         </div>
       </div>
     </section>`;
+}
+
+function formatBytes(bytes: number): string {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} o`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} Ko`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} Mo`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} Go`;
+}
+
+function formatCloudUsd(value: unknown): string {
+  return `$${(Number(value) || 0).toFixed(2)}`;
+}
+
+// Strip the server-side `<uuid>-` prefix to show the original filename.
+function storageDisplayName(name: string): string {
+  return String(name || '').replace(/^[0-9a-fA-F-]{36}-/, '');
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function flashStorageError(message: string) {
+  const host = document.getElementById('db-storage');
+  if (!host) return;
+  let banner = host.querySelector('.db-storage-flash') as HTMLElement | null;
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = 'db-state db-state-error db-storage-flash';
+    host.prepend(banner);
+  }
+  banner.textContent = message;
+  window.setTimeout(() => banner?.remove(), 5000);
+}
+
+const DB_ICON_UPLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5-5 5 5"></path><path d="M12 5v12"></path></svg>';
+const DB_ICON_DOWNLOAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>';
+const DB_ICON_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>';
+
+function renderStorageInto(host: HTMLElement, data: any) {
+  if (data?.provisioning_required) {
+    host.innerHTML = `
+      <div class="db-soon">
+        <span class="db-soon-icon">${DB_ICON_UPLOAD}</span>
+        <div class="db-soon-text">
+          <p class="db-soon-title">Provisionnement requis</p>
+          <p class="db-soon-desc">Le stockage s'active une fois le backend cloud du projet provisionné. Décrivez vos besoins de fichiers à Huggy (ex. « permets l'upload d'avatars ») pour le mettre en place.</p>
+        </div>
+        ${dbBadge('warning', 'Provisionnement requis')}
+      </div>`;
+    return;
+  }
+
+  const wallet = data?.wallet || {};
+  const usage = data?.usage || {};
+  const suspended = Boolean(wallet.suspended);
+  const files: any[] = Array.isArray(data?.files) ? data.files : [];
+
+  const walletBanner = `
+    <div class="db-card">
+      <span class="db-card-label">Solde Cloud & quota</span>
+      <div class="db-card-value">${suspended ? dbBadge('warning', 'Solde épuisé') : dbBadge('success', 'Actif')}</div>
+      <div class="db-row-meta">${escapeHtml(formatCloudUsd(wallet.balance_usd))} · ${Number(usage.file_count || 0)} fichier(s) · ${escapeHtml(formatBytes(usage.used_bytes || 0))}</div>
+      ${suspended ? `<div class="db-note">${DB_ICON_INFO}<span>Rechargez votre solde Cloud pour téléverser ou servir des fichiers.</span></div>` : ''}
+    </div>`;
+
+  const uploader = `
+    <label class="db-uploader${suspended ? ' db-uploader-disabled' : ''}">
+      <input type="file" id="db-upload-input" hidden${suspended ? ' disabled' : ''} />
+      <span class="db-soon-icon">${DB_ICON_UPLOAD}</span>
+      <div class="db-soon-text">
+        <p class="db-soon-title">${suspended ? 'Téléversement désactivé' : 'Téléverser un fichier'}</p>
+        <p class="db-soon-desc">${suspended ? 'Solde Cloud épuisé — rechargez pour réactiver.' : 'Cliquez pour choisir un fichier. Max 5 Mo. Images, PDF, texte, audio/vidéo, zip.'}</p>
+      </div>
+    </label>`;
+
+  const fileList = files.length
+    ? `<div class="db-card-list">${files.map((file: any) => `
+        <div class="db-row">
+          <span class="db-row-key">${escapeHtml(storageDisplayName(file.name))}</span>
+          <span class="db-file-actions">
+            <span class="db-row-meta">${escapeHtml(formatBytes(file.size_bytes || 0))}</span>
+            <button class="db-file-btn" type="button" data-storage-download="${escapeHtml(file.name)}" aria-label="Télécharger" title="Télécharger">${DB_ICON_DOWNLOAD}</button>
+            <button class="db-file-btn db-file-del" type="button" data-storage-delete="${escapeHtml(file.name)}" aria-label="Supprimer" title="Supprimer">${DB_ICON_TRASH}</button>
+          </span>
+        </div>`).join('')}</div>`
+    : `<div class="db-empty">Aucun fichier pour l'instant.</div>`;
+
+  host.innerHTML = `
+    <div class="db-grid">${walletBanner}</div>
+    ${uploader}
+    <div class="db-card">
+      <span class="db-card-label">Fichiers</span>
+      ${fileList}
+    </div>`;
+
+  bindStorageHandlers(host);
+}
+
+function bindStorageHandlers(host: HTMLElement) {
+  const input = host.querySelector('#db-upload-input') as HTMLInputElement | null;
+  input?.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (file) await uploadProjectFile(file);
+    input.value = '';
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-storage-download]').forEach(button => {
+    button.addEventListener('click', () => downloadProjectFile(button.getAttribute('data-storage-download') || ''));
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-storage-delete]').forEach(button => {
+    button.addEventListener('click', () => deleteProjectFile(button.getAttribute('data-storage-delete') || ''));
+  });
+}
+
+async function loadProjectStorage() {
+  const host = document.getElementById('db-storage');
+  if (!host) return;
+  if (!currentProjectId) {
+    host.innerHTML = `<div class="db-state">Ouvrez un projet pour gérer ses fichiers.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="db-state">Chargement du stockage…</div>`;
+  try {
+    const data = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/storage`);
+    renderStorageInto(host, data);
+  } catch (error) {
+    host.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Stockage indisponible.')}</div>`;
+  }
+}
+
+async function uploadProjectFile(file: File) {
+  if (!currentProjectId) return;
+  if (file.size > 5 * 1024 * 1024) {
+    flashStorageError('Fichier trop volumineux (max 5 Mo).');
+    return;
+  }
+  const host = document.getElementById('db-storage');
+  if (host) host.innerHTML = `<div class="db-state">Téléversement de « ${escapeHtml(file.name)} »…</div>`;
+  try {
+    // Idempotent: make sure the project's bucket exists before uploading.
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/storage/ensure`, { method: 'POST' }).catch(() => {});
+    const base64 = await fileToBase64(file);
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/storage`, {
+      method: 'POST',
+      body: JSON.stringify({ name: file.name, mime_type: file.type || 'application/octet-stream', content_base64: base64 }),
+    });
+    await loadProjectStorage();
+  } catch (error) {
+    await loadProjectStorage();
+    flashStorageError(error instanceof Error ? error.message : 'Échec du téléversement.');
+  }
+}
+
+async function downloadProjectFile(name: string) {
+  if (!currentProjectId || !name) return;
+  try {
+    const verified = await getVerifiedSession();
+    const token = verified?.session?.access_token;
+    if (!token) throw new Error('Session expirée.');
+    const response = await fetch(
+      `${API_BASE_URL}/api/projects/${encodeURIComponent(currentProjectId)}/storage/file/${encodeURIComponent(name)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error((payload as any)?.error || `Téléchargement échoué (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = storageDisplayName(name);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (error) {
+    flashStorageError(error instanceof Error ? error.message : 'Téléchargement échoué.');
+  }
+}
+
+async function deleteProjectFile(name: string) {
+  if (!currentProjectId || !name) return;
+  if (!window.confirm('Supprimer ce fichier définitivement ?')) return;
+  try {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/storage/file/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await loadProjectStorage();
+  } catch (error) {
+    flashStorageError(error instanceof Error ? error.message : 'Suppression impossible.');
+  }
 }
 
 async function loadDatabase() {
@@ -6159,6 +6344,8 @@ async function loadDatabase() {
     const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
     const db = payload.database || {};
     target.innerHTML = renderDatabaseSection1(db) + renderDatabaseSection2(db) + renderDatabaseSection3(db);
+    // Section 3 is hydrated from the real storage backend (no fake data).
+    void loadProjectStorage();
   } catch (error) {
     target.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Backend cloud indisponible pour le moment.')}</div>`;
   }
