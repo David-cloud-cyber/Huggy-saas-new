@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -123,31 +123,13 @@
             </div>
             <span class="logo-text">Huggy</span>
         </a>
-        <div class="nav-links" aria-label="Primary">
-            <a href="/features.html">Solutions</a>
-            <a href="/documentation.html">Resources</a>
-            <a href="/pricing.html">Pricing</a>
-            <a href="/security.html">Security</a>
+        <div class="nav-links" aria-label="Main navigation">
+            <a href="#discover">Découvrir</a>
+            <a href="#pricing">Tarifs</a>
+            <a href="/showcase.html">Showcase</a>
         </div>
         <div class="nav-actions">
-            <button class="theme-toggle" id="theme-btn" aria-label="Toggle theme">
-                <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-                <svg id="sun-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <line x1="12" y1="1" x2="12" y2="3"></line>
-                    <line x1="12" y1="21" x2="12" y2="23"></line>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    <line x1="1" y1="12" x2="3" y2="12"></line>
-                    <line x1="21" y1="12" x2="23" y2="12"></line>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-            </button>
-            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign in</button>
-            <button class="nav-cta-btn" data-conversion-event="start_building_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Get started</button>
+            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign In</button>
         </div>
     </nav>
 
@@ -159,10 +141,10 @@
                 <span class="badge-text">AI-POWERED APP BUILDER</span>
             </div>
             <h1>
-                <span class="line1">Build something <span id="rotating-word">real</span></span>
-                <span class="line2 neon-highlight neon-glow">just by describing it.</span>
+                <span class="line1">Build any <span id="rotating-word">SaaS</span></span>
+                <span class="line2 neon-highlight neon-glow">instantly.</span>
             </h1>
-            <p class="hero-subtitle">Turn one idea into a working app — live preview, database-ready structure and one-click publish.</p>
+            <p class="hero-subtitle">Create apps and websites by chatting with AI</p>
 
             <div class="input-wrapper">
                 <textarea id="ai-textarea" placeholder="Describe the app you want to build..."></textarea>
@@ -389,34 +371,51 @@
         </div>
     </section>
 
-    <section class="discover-section reveal" aria-label="Discover what to build">
+    <section id="discover" class="discover-section reveal" aria-label="Découvrir des apps créées avec Huggy">
         <div class="discover-head">
             <div>
-                <p class="section-kicker">Discover</p>
-                <h2>Start your next project from a shape.</h2>
+                <p class="section-kicker">Découvrir</p>
+                <h2>Des apps web créées avec Huggy.</h2>
+                <p>Des aperçus courts, lisibles et concrets pour voir le type de résultats que Huggy peut produire.</p>
             </div>
-            <a class="discover-all" href="/showcase.html">See all</a>
+            <button class="discover-all" type="button" data-product-proof-toggle data-conversion-event="discover_view_all_click" aria-expanded="false">Voir tout</button>
         </div>
         <div class="discover-grid stagger-grid">
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">
-                <span class="discover-thumb dt-saas" aria-hidden="true"></span>
-                <h3>SaaS dashboard</h3>
-                <p>Auth, onboarding, billing and workspace flows.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="marketplace" data-build-prompt="Create a marketplace app with search, seller profiles, product listings, favorites, cart and order tracking.">
-                <span class="discover-thumb dt-market" aria-hidden="true"></span>
-                <h3>Marketplace</h3>
-                <p>Search, listings, sellers, cart and orders.</p>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="task-app" data-build-prompt="Create a polished task app with add, complete, filters, empty state and local storage.">
+                <span class="discover-thumb dt-task" aria-hidden="true"></span>
+                <span class="discover-category">Productivity</span>
+                <h3>TodoFlow</h3>
+                <p>Task app with add, complete, filters and local storage.</p>
             </button>
             <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">
                 <span class="discover-thumb dt-booking" aria-hidden="true"></span>
-                <h3>Booking app</h3>
-                <p>Availability, forms, confirmations and payments.</p>
+                <span class="discover-category">Booking</span>
+                <h3>Bookly</h3>
+                <p>Availability, customer form, confirmation and clear states.</p>
             </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="ai-tool" data-build-prompt="Create an AI writing tool with prompt input, generated results, history, loading states and export actions.">
-                <span class="discover-thumb dt-ai" aria-hidden="true"></span>
-                <h3>AI tool</h3>
-                <p>Prompt input, results, history and exports.</p>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">
+                <span class="discover-thumb dt-saas" aria-hidden="true"></span>
+                <span class="discover-category">SaaS</span>
+                <h3>Metric OS</h3>
+                <p>Cards, charts, sidebar, onboarding and publishing flow.</p>
+            </button>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="commerce" data-build-prompt="Create a commerce app with product grid, cart states, checkout feedback and responsive UI.">
+                <span class="discover-thumb dt-commerce" aria-hidden="true"></span>
+                <span class="discover-category">Commerce</span>
+                <h3>Cartly</h3>
+                <p>Product grid, cart states, checkout feedback and responsive UI.</p>
+            </button>
+            <button type="button" class="discover-card reveal proof-extra" hidden data-conversion-event="example_prompt_click" data-conversion-template="restaurant" data-build-prompt="Create a restaurant website with menu, specials, reservation CTA and mobile-first layout.">
+                <span class="discover-thumb dt-restaurant" aria-hidden="true"></span>
+                <span class="discover-category">Restaurant</span>
+                <h3>MenuKit</h3>
+                <p>Menu, specials, reservation CTA and mobile-first layout.</p>
+            </button>
+            <button type="button" class="discover-card reveal proof-extra" hidden data-conversion-event="example_prompt_click" data-conversion-template="education" data-build-prompt="Create an education dashboard with courses, progress cards and learner-friendly states.">
+                <span class="discover-thumb dt-learning" aria-hidden="true"></span>
+                <span class="discover-category">Education</span>
+                <h3>ClassHub</h3>
+                <p>Course dashboard, progress cards and learner-friendly states.</p>
             </button>
         </div>
     </section>
@@ -446,67 +445,6 @@
             </div>
         </div>
         <a class="pricing-link" href="/pricing.html">See full pricing &rarr;</a>
-    </section>
-
-
-    <section class="final-cta-section reveal" aria-label="Start building with Huggy">
-        <div class="final-cta-glow" aria-hidden="true"></div>
-        <div class="final-cta-inner">
-            <p class="section-kicker">Start small. Ship real.</p>
-            <h2>Describe the app you want. Huggy turns it into a working preview.</h2>
-            <div class="input-wrapper final-cta-prompt" aria-label="Describe an app to build with Huggy">
-                <textarea rows="3" placeholder="Describe the app you want to build..."></textarea>
-                <div class="input-actions">
-                    <div class="actions-left">
-                        <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                        </button>
-                        <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                <line x1="12" y1="19" x2="12" y2="23"></line>
-                                <line x1="8" y1="23" x2="16" y2="23"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="actions-right">
-                        <div class="prompt-mode" data-prompt-mode="auto">
-                            <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
-                                <span class="prompt-mode-label">Auto</span>
-                                <span class="prompt-mode-chevron" aria-hidden="true">v</span>
-                            </button>
-                            <div class="prompt-mode-menu" role="menu">
-                                <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active">
-                                    <span>Auto</span>
-                                    <small>Let Huggy decide</small>
-                                </button>
-                                <button type="button" data-prompt-mode-option="build" role="menuitem">
-                                    <span>Build</span>
-                                    <small>Generate the app</small>
-                                </button>
-                                <button type="button" data-prompt-mode-option="plan" role="menuitem">
-                                    <span>Plan</span>
-                                    <small>Think first</small>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="submit-wrapper">
-                            <button class="submit-btn" title="Build now" type="button">
-                                <span>Build now</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="19" x2="12" y2="5"></line>
-                                    <polyline points="5 12 12 5 19 12"></polyline>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </section>
 
     <a href="/auth.html" class="sticky-cta" id="sticky-cta" data-conversion-event="start_building_click" data-conversion-place="sticky">

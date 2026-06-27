@@ -164,6 +164,35 @@ function init() {
         });
     }
 
+    function installProductProofToggle() {
+        const toggle = document.querySelector<HTMLButtonElement>('[data-product-proof-toggle]');
+        const extraCards = Array.from(document.querySelectorAll<HTMLElement>('.product-proof-card.proof-extra, .discover-card.proof-extra'));
+        if (!toggle || extraCards.length === 0) return;
+
+        let expanded = false;
+        toggle.addEventListener('click', () => {
+            expanded = !expanded;
+            toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.textContent = expanded ? 'R\u00e9duire' : 'Voir tout';
+
+            extraCards.forEach((card, index) => {
+                if (expanded) {
+                    card.hidden = false;
+                    card.style.animationDelay = `${index * 45}ms`;
+                    card.classList.add('proof-revealed');
+                } else {
+                    card.classList.remove('proof-revealed');
+                    card.hidden = true;
+                    card.style.animationDelay = '';
+                }
+            });
+
+            trackConversionEvent(expanded ? 'discover_expanded' : 'discover_collapsed', {
+                examples_visible: expanded ? String(4 + extraCards.length) : '4',
+            });
+        });
+    }
+
     function installScrollTextReveal() {
         const targets = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll-text-reveal]'));
         if (!targets.length) return;
@@ -349,6 +378,7 @@ function init() {
     installMarketingEnhancements();
     installPublicPageEnhancements();
     installLandingConversionTracking();
+    installProductProofToggle();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
 
@@ -710,25 +740,8 @@ function init() {
     initProviderModelSelectors();
     normalizeAiChatInputs();
 
-    // 3. Rotating words
-    if (rotatingWord) {
-        const words = ["SaaS", "app", "website", "dashboard", "platform", "tool", "portal", "system"];
-        let idx = 0;
-        setInterval(() => {
-            rotatingWord.classList.add('exit');
-            setTimeout(() => {
-                idx = (idx + 1) % words.length;
-                rotatingWord.textContent = words[idx];
-                rotatingWord.classList.remove('exit');
-                rotatingWord.classList.add('enter');
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        rotatingWord.classList.remove('enter');
-                    });
-                });
-            }, 260);
-        }, 2200);
-    }
+    // 3. Keep the hero title stable for stronger landing-page recall.
+    if (rotatingWord) rotatingWord.textContent = 'SaaS';
 
     // 6. Theme toggle
     themeBtn?.addEventListener('click', () => {
