@@ -31,14 +31,32 @@ function injectProviderSelectorStyle() {
   style.textContent = `
     .huggy-provider-model-select {
       position: relative;
-      min-height: 28px;
-      max-width: min(176px, 40vw);
-      padding: 0 8px;
+      min-height: 30px;
+      max-width: min(168px, 42vw);
+      gap: 7px;
+      padding: 0 9px;
+      border-radius: 999px;
       isolation: isolate;
+      transition:
+        background 180ms cubic-bezier(0.22,1,0.36,1),
+        border-color 180ms cubic-bezier(0.22,1,0.36,1),
+        box-shadow 180ms cubic-bezier(0.22,1,0.36,1),
+        transform 180ms cubic-bezier(0.22,1,0.36,1);
+    }
+    .huggy-provider-model-select[aria-expanded="true"] {
+      border-color: var(--border-focus, var(--accent));
+      background: var(--accent-blue-soft, var(--accent-hover));
+      color: var(--text);
+    }
+    .huggy-provider-model-select:focus-visible {
+      outline: none;
+      border-color: var(--border-focus, var(--accent));
+      box-shadow: 0 0 0 3px var(--accent-blue-soft, var(--accent-dim));
     }
     .huggy-provider-model-select .provider-dot {
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
+      border-radius: 5px;
       color: var(--accent-blue, var(--accent));
       flex: 0 0 auto;
       display: inline-flex;
@@ -240,10 +258,12 @@ function injectProviderSelectorStyle() {
       border: 0;
       background: transparent;
       color: var(--text);
-      border-radius: 8px;
-      padding: 6px 8px;
+      border-radius: 9px;
+      padding: 7px 9px 7px 8px;
       display: grid;
-      gap: 2px;
+      grid-template-columns: 20px 1fr 16px;
+      align-items: center;
+      gap: 9px;
       text-align: left;
       cursor: pointer;
       position: relative;
@@ -257,28 +277,69 @@ function injectProviderSelectorStyle() {
       transform: translateX(2px);
     }
     .huggy-model-item.selected {
-      background: var(--accent-hover, rgba(9,9,11,.10));
+      background: var(--accent-blue-soft, var(--accent-hover, rgba(9,9,11,.10)));
     }
     .huggy-model-item.selected::before {
       content: "";
       position: absolute;
       left: 0;
-      top: 22%;
-      bottom: 22%;
+      top: 20%;
+      bottom: 20%;
       width: 3px;
       border-radius: 0 999px 999px 0;
-      background: var(--accent);
+      background: var(--accent-blue, var(--accent));
     }
+    .model-item-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--provider-color, var(--accent));
+      flex: 0 0 auto;
+      align-self: start;
+      margin-top: 1px;
+      --provider-icon-bg: var(--bg-input);
+    }
+    .model-item-icon svg { width: 13px; height: 13px; display: block; }
+    .model-item-body { min-width: 0; display: grid; gap: 2px; }
+    .model-item-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .model-item-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .model-item-check {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      color: var(--accent-blue, var(--accent));
+      opacity: 0;
+      transform: scale(.6);
+      transition: opacity 150ms ease, transform 200ms cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .model-item-check svg { width: 100%; height: 100%; display: block; }
+    .huggy-model-item.selected .model-item-check { opacity: 1; transform: scale(1); }
     .model-item-name {
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 720;
       color: var(--text);
       line-height: 1.25;
-    }
-    .model-item-meta {
-      font-size: 9px;
-      color: var(--text-muted);
-      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .model-item-badges {
       display: flex;
@@ -303,6 +364,15 @@ function injectProviderSelectorStyle() {
     @keyframes huggy-model-enter {
       from { opacity: 0; transform: translateX(-8px); }
       to { opacity: 1; transform: translateX(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .huggy-model-item { animation: none; }
+      .huggy-model-item:hover,
+      .huggy-provider-card.open { transform: none; }
+      .model-item-check,
+      .huggy-provider-model-select,
+      .provider-chevron,
+      .huggy-model-list-panel { transition: none; }
     }
     @media (max-width: 767px) {
       .huggy-provider-model-menu {
@@ -363,8 +433,10 @@ function updateAllSelectors(selectedId: string, storageKey: string) {
       dot.style.color = selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)';
     }
     root.querySelectorAll<HTMLElement>('[data-model-id]').forEach(item => {
-      item.classList.toggle('active', item.dataset.modelId === normalized);
-      item.classList.toggle('selected', item.dataset.modelId === normalized);
+      const isSel = item.dataset.modelId === normalized;
+      item.classList.toggle('active', isSel);
+      item.classList.toggle('selected', isSel);
+      if (item.getAttribute('role') === 'option') item.setAttribute('aria-selected', isSel ? 'true' : 'false');
     });
     root.querySelectorAll<HTMLElement>('[data-provider]').forEach(card => {
       const provider = card.dataset.provider as ModelProvider;
@@ -389,16 +461,18 @@ function renderModelPanel(provider: ModelProvider, selectedId: string) {
     </div>
     <div class="huggy-model-list-scroll">
       ${models.map((model, index) => `
-        <button type="button" class="huggy-model-item${selectedId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.label)}" style="animation-delay:${index * 25}ms">
-          <span class="model-item-name">${escapeHtml(model.label)}</span>
-          <span class="model-item-meta">${escapeHtml(model.tier)} · ${Math.round(model.contextWindow / 1000)}K ctx</span>
-          <span class="model-item-badges">
-            <span class="huggy-model-badge">${escapeHtml(model.tier)}</span>
-            ${model.isNew ? '<span class="huggy-model-badge new">New</span>' : ''}
-            ${model.isFast ? '<span class="huggy-model-badge fast">Fast</span>' : ''}
-            ${model.isPremium ? '<span class="huggy-model-badge premium">Premium</span>' : ''}
-            ${model.minPlan !== 'free' ? `<span class="huggy-model-badge">Upgrade</span>` : ''}
+        <button type="button" class="huggy-model-item${selectedId === model.id ? ' selected' : ''}" data-model-id="${escapeHtml(model.id)}" data-model-name="${escapeHtml(model.label)}" role="option" aria-selected="${selectedId === model.id ? 'true' : 'false'}" style="animation-delay:${index * 25}ms">
+          <span class="model-item-icon" style="--provider-color:${meta.color};">${selectorIcon(meta.icon)}</span>
+          <span class="model-item-body">
+            <span class="model-item-name-row">
+              <span class="model-item-name">${escapeHtml(model.label)}</span>
+              ${model.isNew ? '<span class="huggy-model-badge new">New</span>' : ''}
+              ${model.isPremium ? '<span class="huggy-model-badge premium">Premium</span>' : (model.isFast ? '<span class="huggy-model-badge fast">Fast</span>' : '')}
+              ${model.minPlan !== 'free' ? '<span class="huggy-model-badge">Upgrade</span>' : ''}
+            </span>
+            <span class="model-item-desc">${escapeHtml(model.description || `${model.tier} · ${Math.round(model.contextWindow / 1000)}K context`)}</span>
           </span>
+          <span class="model-item-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
         </button>
       `).join('')}
     </div>
@@ -426,7 +500,6 @@ export function initProviderModelSelectors(options: SelectorOptions = {}) {
     root.setAttribute('aria-haspopup', 'listbox');
     root.setAttribute('aria-expanded', 'false');
     root.innerHTML = `
-      <span class="model-label-prefix">Model</span>
       <span class="provider-dot" style="color:${selectedProvider ? PROVIDER_META[selectedProvider].color : 'var(--accent)'}">${selectionIcon(selectedId)}</span>
       <span class="${id ? '' : 'current-model-label'}" ${id ? 'id="current-model-label"' : ''}>${escapeHtml(modelLabel(selectedId))}</span>
       <svg class="provider-chevron" id="${id ? 'chevron-icon' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"></polyline></svg>
