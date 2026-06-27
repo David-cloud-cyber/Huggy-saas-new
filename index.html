@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#0a0a0a" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy - AI App Builder for Production-Ready Web Apps" />
@@ -101,7 +101,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'light';
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -123,8 +123,14 @@
             </div>
             <span class="logo-text">Huggy</span>
         </a>
+        <div class="nav-links" aria-label="Primary">
+            <a href="/features.html">Solutions</a>
+            <a href="/documentation.html">Resources</a>
+            <a href="/pricing.html">Pricing</a>
+            <a href="/security.html">Security</a>
+        </div>
         <div class="nav-actions">
-            <button class="theme-toggle" id="theme-btn">
+            <button class="theme-toggle" id="theme-btn" aria-label="Toggle theme">
                 <svg id="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
@@ -140,21 +146,23 @@
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
             </button>
-            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign In</button>
+            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign in</button>
+            <button class="nav-cta-btn" data-conversion-event="start_building_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Get started</button>
         </div>
     </nav>
 
     <section class="hero">
+        <div class="hero-halo" aria-hidden="true"></div>
         <div class="hero-content">
             <div class="badge">
                 <div class="badge-dot"></div>
                 <span class="badge-text">AI-POWERED APP BUILDER</span>
             </div>
             <h1>
-                <span class="line1">Build any <span id="rotating-word">SaaS</span></span>
-                <span class="line2 neon-highlight neon-glow">instantly.</span>
+                <span class="line1">Build something <span id="rotating-word">real</span></span>
+                <span class="line2 neon-highlight neon-glow">just by describing it.</span>
             </h1>
-            <p class="hero-subtitle">Turn one idea into a working React app with live preview, quality checks, database-ready structure and one-click publish.</p>
+            <p class="hero-subtitle">Turn one idea into a working app — live preview, database-ready structure and one-click publish.</p>
 
             <div class="input-wrapper">
                 <textarea id="ai-textarea" placeholder="Describe the app you want to build..."></textarea>
@@ -270,7 +278,8 @@
         </div>
     </section>
 
-    <section class="partners-section reveal" aria-label="Trusted product stack integrations">
+    <section class="partners-section reveal" aria-label="Technologies and integrations">
+        <p class="partners-heading">Built on a modern stack. Integrates the tools you already use.</p>
         <div class="partners-viewport">
             <div class="partners-track">
                 <div class="partners-group">
@@ -349,249 +358,102 @@
         <div class="vision-content">
             <p class="manifest-kicker">Our belief</p>
             <h2 class="vision-quote" data-scroll-text-reveal>"We believe the future of software isn't just about code&mdash;it's about making creation accessible to everyone who has a story to tell."</h2>
-            <div class="founder-info">
-                <div class="founder-avatar">
-                    <img src="https://api.dicebear.com/7.x/micah/svg?seed=founder&backgroundColor=b6e3f4" alt="Founder portrait" style="width:100%; border-radius:50%;">
-                </div>
-                <div class="founder-name">Alex Thorne</div>
-                <div class="founder-title">Founder & CEO, Huggy</div>
-            </div>
+            <p class="manifest-attrib">&mdash; The Huggy team</p>
         </div>
     </section>
 
     <section class="workflow-section reveal" aria-label="How Huggy works">
         <div class="section-header compact">
-            <h2>From prompt to product, without noise.</h2>
-            <p>Huggy keeps the path simple: understand the app, build the right files, verify the preview, then publish only when you are ready.</p>
+            <h2>From idea to live app, in three moves.</h2>
+            <p>Huggy keeps the path simple: describe it, watch it come alive, then refine and ship.</p>
         </div>
-        <div class="workflow-steps stagger-grid">
+        <div class="workflow-steps three stagger-grid">
             <div class="workflow-step reveal">
+                <div class="workflow-visual wv-idea" aria-hidden="true"><span></span><span></span><span></span></div>
                 <span class="step-number">01</span>
-                <h3>Describe</h3>
-                <p>Write the app, workflow, audience or problem in plain language.</p>
+                <h3>Start with an idea</h3>
+                <p>Describe the app you want in plain language &mdash; or drop in a screenshot, a repo or a URL.</p>
             </div>
             <div class="workflow-step reveal">
+                <div class="workflow-visual wv-build" aria-hidden="true"><i></i><i></i><i></i></div>
                 <span class="step-number">02</span>
-                <h3>Preview</h3>
-                <p>Huggy generates a real React/Vite app and shows the working result.</p>
+                <h3>Watch it come alive</h3>
+                <p>Huggy generates a real React app and shows the working preview as it builds.</p>
             </div>
             <div class="workflow-step reveal">
+                <div class="workflow-visual wv-publish" aria-hidden="true"><b></b></div>
                 <span class="step-number">03</span>
-                <h3>Refine</h3>
-                <p>Ask for changes naturally. Huggy edits the existing project instead of starting over.</p>
-            </div>
-            <div class="workflow-step reveal">
-                <span class="step-number">04</span>
-                <h3>Publish</h3>
-                <p>Ship the preview when it is ready, with the live version kept separate.</p>
+                <h3>Refine &amp; publish</h3>
+                <p>Ask for changes in chat &mdash; Huggy edits the project &mdash; then publish in one click.</p>
             </div>
         </div>
     </section>
 
-    <section class="build-types-section reveal" aria-label="What Huggy can build">
-        <div class="section-header compact">
-            <p class="section-kicker">Adaptive app blueprints</p>
-            <h2>Start from any serious product shape.</h2>
-            <p>Huggy keeps the examples compact, then lets the prompt define the real app instead of forcing you into a template.</p>
-        </div>
-        <div class="build-type-grid stagger-grid">
-            <article class="build-type reveal" data-build-accent="blue">
-                <div class="build-type-top">
-                    <span class="build-type-icon">S</span>
-                    <span class="build-type-label">SaaS</span>
-                </div>
-                <p>Dashboards, auth, onboarding, billing and workspace flows.</p>
-                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">Try this</button>
-            </article>
-            <article class="build-type reveal" data-build-accent="green">
-                <div class="build-type-top">
-                    <span class="build-type-icon">M</span>
-                    <span class="build-type-label">Marketplace</span>
-                </div>
-                <p>Search, listings, sellers, cart, orders and trust states.</p>
-                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="marketplace" data-build-prompt="Create a marketplace app with search, seller profiles, product listings, favorites, cart and order tracking.">Try this</button>
-            </article>
-            <article class="build-type reveal" data-build-accent="amber">
-                <div class="build-type-top">
-                    <span class="build-type-icon">B</span>
-                    <span class="build-type-label">Booking</span>
-                </div>
-                <p>Availability, forms, confirmations, reminders and payments.</p>
-                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">Try this</button>
-            </article>
-            <article class="build-type reveal" data-build-accent="violet">
-                <div class="build-type-top">
-                    <span class="build-type-icon">AI</span>
-                    <span class="build-type-label">AI tool</span>
-                </div>
-                <p>Prompt input, result history, exports, usage and loading states.</p>
-                <button type="button" data-conversion-event="example_prompt_click" data-conversion-template="ai-tool" data-build-prompt="Create an AI writing tool with prompt input, generated results, history, loading states and export actions.">Try this</button>
-            </article>
-        </div>
-    </section>
-
-    <section id="features" class="proof-strip-section reveal" aria-label="Why teams trust Huggy">
-        <div class="proof-strip-card reveal">
+    <section class="discover-section reveal" aria-label="Discover what to build">
+        <div class="discover-head">
             <div>
-                <p class="proof-strip-kicker">Built for real shipping</p>
-                <h2>Less page noise. More product confidence.</h2>
-                <p>Huggy focuses on the parts that matter after the first prompt: real files, a visible preview, recoverable drafts and publish control.</p>
+                <p class="section-kicker">Discover</p>
+                <h2>Start your next project from a shape.</h2>
             </div>
-            <div class="proof-strip-grid">
-                <article>
-                    <strong>Working output</strong>
-                    <span>React, TypeScript, Vite, responsive UI and interaction states.</span>
-                </article>
-                <article>
-                    <strong>Guarded execution</strong>
-                    <span>Intent checks, preview validation, recovery drafts and no false ready state.</span>
-                </article>
-                <article>
-                    <strong>Simple path</strong>
-                    <span>Describe, preview, refine, publish. No bloated setup before the product exists.</span>
-                </article>
-            </div>
+            <a class="discover-all" href="/showcase.html">See all</a>
         </div>
-    </section>
-
-    <section class="product-proof-section reveal" aria-label="Generated app proof">
-        <div class="section-header compact">
-            <p class="section-kicker">Product proof</p>
-            <h2>Show the app, not just the promise.</h2>
-            <p>Short generated-app examples make the result tangible before someone signs up.</p>
-        </div>
-        <div class="product-proof-grid">
-            <article class="product-proof-card reveal">
-                <div class="proof-preview proof-preview-todo" aria-hidden="true">
-                    <span></span>
-                    <strong>TodoFlow</strong>
-                    <i></i><i></i><i></i>
-                </div>
-                <h3>Interactive task app</h3>
-                <p>Add, complete, filter and keep tasks in local storage.</p>
-            </article>
-            <article class="product-proof-card reveal">
-                <div class="proof-preview proof-preview-booking" aria-hidden="true">
-                    <span></span>
-                    <strong>Bookly</strong>
-                    <i></i><i></i><i></i>
-                </div>
-                <h3>Booking workflow</h3>
-                <p>Availability, customer form, confirmation and clear states.</p>
-            </article>
-            <article class="product-proof-card reveal">
-                <div class="proof-preview proof-preview-saas" aria-hidden="true">
-                    <span></span>
-                    <strong>Metric OS</strong>
-                    <i></i><i></i><i></i>
-                </div>
+        <div class="discover-grid stagger-grid">
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">
+                <span class="discover-thumb dt-saas" aria-hidden="true"></span>
                 <h3>SaaS dashboard</h3>
-                <p>Cards, charts, sidebar, onboarding and publishing flow.</p>
-            </article>
-        </div>
-        <div class="before-after-proof reveal">
-            <div>
-                <span>Before Huggy</span>
-                <strong>Idea, blank repo, scattered decisions.</strong>
-            </div>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M5 12h14"></path>
-                <path d="m13 6 6 6-6 6"></path>
-            </svg>
-            <div>
-                <span>After Huggy</span>
-                <strong>Working preview, editable files, publish path.</strong>
-            </div>
+                <p>Auth, onboarding, billing and workspace flows.</p>
+            </button>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="marketplace" data-build-prompt="Create a marketplace app with search, seller profiles, product listings, favorites, cart and order tracking.">
+                <span class="discover-thumb dt-market" aria-hidden="true"></span>
+                <h3>Marketplace</h3>
+                <p>Search, listings, sellers, cart and orders.</p>
+            </button>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">
+                <span class="discover-thumb dt-booking" aria-hidden="true"></span>
+                <h3>Booking app</h3>
+                <p>Availability, forms, confirmations and payments.</p>
+            </button>
+            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="ai-tool" data-build-prompt="Create an AI writing tool with prompt input, generated results, history, loading states and export actions.">
+                <span class="discover-thumb dt-ai" aria-hidden="true"></span>
+                <h3>AI tool</h3>
+                <p>Prompt input, results, history and exports.</p>
+            </button>
         </div>
     </section>
 
-    <section id="pricing" class="pricing-section reveal">
-        <div class="section-header">
-            <h2>Simple, transparent pricing</h2>
-            <p>Free validates the idea. Pro is the first serious plan for publishing real apps. Scale gives teams more credits, cloud balance, storage and control.</p>
+    <section id="pricing" class="pricing-teaser reveal">
+        <div class="section-header compact">
+            <p class="section-kicker">Pricing</p>
+            <h2>Start free. Upgrade when you publish.</h2>
+            <p>Free validates the idea. Pro is the first serious plan for shipping real apps. Scale gives teams more.</p>
         </div>
-        <div class="pricing-grid stagger-grid">
-            <div class="pricing-card reveal">
-                <div class="price-name">Free</div>
-                <div class="price-value">$0<span>/mo</span></div>
-                <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 50 starter credits</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 1 active project</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Live preview + Huggy subdomain</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> $1 Cloud balance included</li>
-                </ul>
-                <button class="pricing-btn" data-conversion-event="pricing_click" data-conversion-plan="free" onclick="navigate('/auth.html')">Get Started</button>
+        <div class="pricing-mini-grid stagger-grid">
+            <div class="pricing-mini reveal">
+                <span class="pm-name">Free</span>
+                <span class="pm-price">$0<small>/mo</small></span>
+                <span class="pm-note">Validate the idea</span>
             </div>
-
-            <div class="pricing-card featured reveal">
-                <div class="price-name neon-highlight neon-glow">Pro</div>
-                <div class="price-value">$25<span>/mo</span></div>
-                <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 1,000 credits / month</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 10 active projects</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 3 published apps</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> $10 Cloud balance included</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 1 GB DB, 5 GB files, 50 GB bandwidth</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Custom domain + badge removal</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Export, versions, rollback</li>
-                </ul>
-                <button class="pricing-btn primary" data-conversion-event="upgrade_click" data-conversion-plan="pro" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
+            <div class="pricing-mini featured reveal">
+                <span class="pm-badge">Most popular</span>
+                <span class="pm-name">Pro</span>
+                <span class="pm-price">$25<small>/mo</small></span>
+                <span class="pm-note">Publish real apps</span>
             </div>
-
-            <div class="pricing-card reveal">
-                <div class="price-name">Scale</div>
-                <div class="price-value">$200<span>/mo</span></div>
-                <ul class="pricing-features">
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 10,000 credits / month</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited draft projects</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 25 published apps</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> $75 Cloud balance included</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> 20 GB DB, 100 GB files, 250 GB bandwidth</li>
-                    <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Team workspace + premium models</li>
-                </ul>
-                <button class="pricing-btn" data-conversion-event="upgrade_click" data-conversion-plan="scale" onclick="navigate('/auth.html')">Go Scale</button>
+            <div class="pricing-mini reveal">
+                <span class="pm-name">Scale</span>
+                <span class="pm-price">$200<small>/mo</small></span>
+                <span class="pm-note">Teams &amp; more control</span>
             </div>
         </div>
+        <a class="pricing-link" href="/pricing.html">See full pricing &rarr;</a>
     </section>
 
-    <section class="faq-section reveal">
-        <div class="section-header">
-            <h2>Common <span class="neon-highlight neon-static">questions</span></h2>
-            <p>Everything you need to know about the platform.</p>
-        </div>
-        <div class="faq-item">
-            <button class="faq-question">
-                <h4>How does the AI work?</h4>
-                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="faq-answer">
-                Huggy uses a powerful orchestration layer that breaks down your requirements into technical specifications, which are then implemented by specialized sub-models for code, design, and infrastructure.
-            </div>
-        </div>
-        <div class="faq-item">
-            <button class="faq-question">
-                <h4>Can I export my code?</h4>
-                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="faq-answer">
-                Yes, you own 100% of the code produced. You can export to GitHub, download a ZIP file, or deploy directly to your own infrastructure at any time.
-            </div>
-        </div>
-        <div class="faq-item">
-            <button class="faq-question">
-                <h4>Is my data secure?</h4>
-                <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-            </button>
-            <div class="faq-answer">
-                We take security seriously. All build environments are ephemeral and isolated. We never use your private data or proprietary code to train our base models.
-            </div>
-        </div>
-    </section>
 
     <section class="final-cta-section reveal" aria-label="Start building with Huggy">
+        <div class="final-cta-glow" aria-hidden="true"></div>
         <div class="final-cta-inner">
             <p class="section-kicker">Start small. Ship real.</p>
-            <h2>Describe the app you want and let Huggy turn it into a working preview.</h2>
+            <h2>Describe the app you want. Huggy turns it into a working preview.</h2>
             <div class="input-wrapper final-cta-prompt" aria-label="Describe an app to build with Huggy">
                 <textarea rows="3" placeholder="Describe the app you want to build..."></textarea>
                 <div class="input-actions">
@@ -672,12 +534,19 @@
                 <p>The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
             </div>
             <div class="footer-col">
+                <h5>Company</h5>
+                <ul class="footer-links">
+                    <li><a href="/about.html">About</a></li>
+                    <li><a href="/careers.html">Careers</a></li>
+                    <li><a href="/enterprise.html">Enterprise</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
                 <h5>Product</h5>
                 <ul class="footer-links">
                     <li><a href="/features.html">Features</a></li>
                     <li><a href="/showcase.html">Showcase</a></li>
                     <li><a href="/pricing.html">Pricing</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
@@ -686,25 +555,34 @@
                     <li><a href="/documentation.html">Documentation</a></li>
                     <li><a href="/api-reference.html">API Reference</a></li>
                     <li><a href="/blog.html">Blog</a></li>
-                    <li><a href="/community.html">Community</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Company</h5>
+                <h5>Legal</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
                     <li><a href="/privacy.html">Privacy</a></li>
                     <li><a href="/security.html">Security</a></li>
+                    <li><a href="/terms.html">Terms</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Community</h5>
+                <ul class="footer-links">
+                    <li><a href="/community.html">Community</a></li>
+                    <li><a href="/guides">Guides</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
-            <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
-            </div>
+            <label class="lang-select-wrap">
+                <span class="visually-hidden">Language</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20"></path></svg>
+                <select class="lang-select" id="lang-select" aria-label="Language">
+                    <option value="en" selected>English</option>
+                    <option value="fr">Français</option>
+                </select>
+            </label>
         </div>
     </footer>
 
@@ -744,6 +622,15 @@
             clearTimeout(scrollTimer);
             scrollTimer = setTimeout(activateReveals, 50);
         }, { passive: true });
+
+        // Sticky nav: opacify background slightly once the page is scrolled.
+        (function() {
+            var nav = document.querySelector('.navbar');
+            if (!nav) return;
+            var onScroll = function() { nav.classList.toggle('scrolled', window.scrollY > 8); };
+            onScroll();
+            window.addEventListener('scroll', onScroll, { passive: true });
+        })();
     </script>
     <script>
         // Global navigation helper using standardized curtain
