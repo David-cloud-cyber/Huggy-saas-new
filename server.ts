@@ -201,6 +201,27 @@ import {
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
 import {
+  resolveProjectRef,
+  resolveManagementToken,
+  buildApplyMigrationRequest,
+  classifyMigrationSafety,
+  redactManagementToken,
+} from './src/services/supabase-provisioning.ts';
+import {
+  STATEMENT_TIMEOUT_MS,
+  isExposableSchema,
+  isValidIdentifier,
+  sanitizeLimit,
+  sanitizeOffset,
+  sanitizeOrderDir,
+  assertReadOnlySql,
+  buildSchemasQuery,
+  buildTablesQuery,
+  buildColumnsQuery,
+  buildCountQuery,
+  buildRowsQuery,
+} from './src/services/cloud-db-browser.ts';
+import {
   applyHuggyFullstackKit,
   shouldApplyHuggyFullstackKit,
 } from './src/services/fullstack-generation.ts';
@@ -12134,6 +12155,189 @@ app.get('/api/projects/:id/database/tables', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const schemaFile = files.find(file => file.path === 'supabase/schema.sql');
   res.json({ success: true, tables: schemaFile ? [{ name: 'app_records', rows: 0, schema: schemaFile.content }] : [] });
+});
+
+// ── Cloud DB Browser (READ-ONLY) ─────────────────────────────────────────────
+// A read-only gateway over a project's PROVISIONED Supabase database. The client
+// only ever sends structured params (schema / table / column / page) — never
+// SQL. The server assembles bounded SELECT / information_schema reads from
+// validated, allow-listed identifiers and runs them via the Supabase Management
+// query API using the Management token (server-only, never returned to or cached
+// by the client, redacted from logs). Sensitive schemas (auth, storage, vault,
+// pg_*, information_schema, …) are NEVER exposed, so app end-users' auth
+// identifiers can never be browsed here. Every endpoint re-checks ownership.
+
+// Ownership gate. Spec: cross-project access is rejected with 403.
+async function resolveDbBrowserOwner(req: any, res: any): Promise<{ project: GeneratedProject } | null> {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId, req);
+  if (!project) {
+    res.status(403).json({ success: false, error: 'Accès refusé à ce projet.' });
+    return null;
+  }
+  return { project };
+}
+
+// Resolve the project's provisioned Supabase ref from its cloud runtime config.
+async function resolveProjectManagementRef(projectId: string): Promise<string | null> {
+  try {
+    const cloud = await loadProjectHuggyCloud(projectId);
+    const config = (cloud.project && (cloud.project as any).public_runtime_config) || null;
+    return resolveProjectRef(config);
+  } catch {
+    return null;
+  }
+}
+
+// Execute a SERVER-BUILT read query against the project DB via the Management
+// query API. Read-only is enforced twice (assertReadOnlySql + classifyMigrationSafety).
+async function runProjectReadQuery(
+  projectRef: string,
+  sql: string,
+): Promise<{ ok: true; rows: any[] } | { ok: false; status?: number; error: string }> {
+  if (!assertReadOnlySql(sql)) return { ok: false, error: 'NON_READ_ONLY_BLOCKED' };
+  if (classifyMigrationSafety(sql).destructive) return { ok: false, error: 'DESTRUCTIVE_BLOCKED' };
+  const token = resolveManagementToken();
+  if (!token) return { ok: false, error: 'MISSING_MANAGEMENT_TOKEN' };
+  // Server-controlled, constant statement-timeout prefix; the validated read follows.
+  const wrapped = `set statement_timeout to ${STATEMENT_TIMEOUT_MS}; ${sql}`;
+  let request: { url: string; method: 'POST'; headers: Record<string, string>; body: string };
+  try {
+    request = buildApplyMigrationRequest({ projectRef, sql: wrapped, token });
+  } catch (error) {
+    return { ok: false, error: redactManagementToken((error as Error).message || 'INVALID_REQUEST') };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STATEMENT_TIMEOUT_MS + 4000);
+  try {
+    const response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body, signal: controller.signal });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      return { ok: false, status: response.status, error: redactManagementToken(text).slice(0, 300) || `HTTP ${response.status}` };
+    }
+    const data = await response.json().catch(() => null);
+    let rows: any[] = [];
+    if (Array.isArray(data)) {
+      rows = data.length && Array.isArray(data[data.length - 1]) ? data[data.length - 1] : data;
+    } else if (data && Array.isArray((data as any).result)) {
+      rows = (data as any).result;
+    }
+    return { ok: true, rows: Array.isArray(rows) ? rows : [] };
+  } catch (error) {
+    return { ok: false, error: redactManagementToken((error as Error).message || 'NETWORK_ERROR') };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// GET exposable schemas of the project's database.
+app.get('/api/projects/:id/db/schemas', async (req: any, res: any) => {
+  const ctx = await resolveDbBrowserOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const ref = await resolveProjectManagementRef(ctx.project.id);
+  if (!ref) return res.json({ success: true, provisioning_required: true, schemas: [] });
+  const result = await runProjectReadQuery(ref, buildSchemasQuery());
+  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des schémas indisponible.' });
+  const schemas = result.rows.map((row: any) => String(row.schema_name)).filter(isExposableSchema);
+  res.json({ success: true, schemas });
+});
+
+// GET tables/views of one exposable schema.
+app.get('/api/projects/:id/db/tables', async (req: any, res: any) => {
+  const ctx = await resolveDbBrowserOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const schema = String(req.query.schema || 'public');
+  if (!isExposableSchema(schema)) return res.status(400).json({ success: false, error: 'Schéma non autorisé.' });
+  const ref = await resolveProjectManagementRef(ctx.project.id);
+  if (!ref) return res.json({ success: true, provisioning_required: true, schema, tables: [] });
+  let sql: string;
+  try {
+    sql = buildTablesQuery(schema);
+  } catch {
+    return res.status(400).json({ success: false, error: 'Schéma non autorisé.' });
+  }
+  const result = await runProjectReadQuery(ref, sql);
+  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des tables indisponible.' });
+  const tables = result.rows
+    .filter((row: any) => isExposableSchema(String(row.table_schema)))
+    .map((row: any) => ({ schema: row.table_schema, name: row.table_name, type: row.table_type }));
+  res.json({ success: true, schema, tables });
+});
+
+// GET columns + types of one table.
+app.get('/api/projects/:id/db/columns', async (req: any, res: any) => {
+  const ctx = await resolveDbBrowserOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const schema = String(req.query.schema || 'public');
+  const table = String(req.query.table || '');
+  if (!isExposableSchema(schema) || !isValidIdentifier(table)) {
+    return res.status(400).json({ success: false, error: 'Schéma ou table non autorisé.' });
+  }
+  const ref = await resolveProjectManagementRef(ctx.project.id);
+  if (!ref) return res.json({ success: true, provisioning_required: true, schema, table, columns: [] });
+  const result = await runProjectReadQuery(ref, buildColumnsQuery(schema, table));
+  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des colonnes indisponible.' });
+  const columns = result.rows.map((row: any) => ({
+    name: row.column_name,
+    type: row.data_type,
+    nullable: row.is_nullable === 'YES',
+  }));
+  if (!columns.length) return res.status(404).json({ success: false, error: 'Table introuvable.' });
+  res.json({ success: true, schema, table, columns });
+});
+
+// GET rows of one table: bounded SELECT, optional sort on a verified column,
+// separate total count.
+app.get('/api/projects/:id/db/rows', async (req: any, res: any) => {
+  const ctx = await resolveDbBrowserOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
+  const schema = String(req.query.schema || 'public');
+  const table = String(req.query.table || '');
+  if (!isExposableSchema(schema) || !isValidIdentifier(table)) {
+    return res.status(400).json({ success: false, error: 'Schéma ou table non autorisé.' });
+  }
+  const ref = await resolveProjectManagementRef(ctx.project.id);
+  if (!ref) return res.json({ success: true, provisioning_required: true, schema, table, columns: [], rows: [], pagination: { limit: 0, offset: 0, total: 0 } });
+
+  // Authoritative column allow-list = the table's real columns (verifies existence too).
+  const colsResult = await runProjectReadQuery(ref, buildColumnsQuery(schema, table));
+  if (!colsResult.ok) return res.status(502).json({ success: false, error: 'Lecture des colonnes indisponible.' });
+  const realColumns = colsResult.rows.map((row: any) => String(row.column_name)).filter(isValidIdentifier);
+  if (!realColumns.length) return res.status(404).json({ success: false, error: 'Table introuvable.' });
+
+  const requestedOrderBy = req.query.order_by ? String(req.query.order_by) : null;
+  const orderBy = requestedOrderBy && realColumns.includes(requestedOrderBy) ? requestedOrderBy : null;
+  const orderDir = sanitizeOrderDir(req.query.order_dir);
+  const limit = sanitizeLimit(req.query.limit);
+  const offset = sanitizeOffset(req.query.offset);
+
+  let rowsSql: string;
+  try {
+    rowsSql = buildRowsQuery({ schema, table, columns: realColumns, orderBy, orderDir, limit, offset });
+  } catch {
+    return res.status(400).json({ success: false, error: 'Requête invalide.' });
+  }
+  const rowsResult = await runProjectReadQuery(ref, rowsSql);
+  if (!rowsResult.ok) return res.status(502).json({ success: false, error: 'Lecture des lignes indisponible.' });
+
+  let total: number | null = null;
+  const countResult = await runProjectReadQuery(ref, buildCountQuery(schema, table));
+  if (countResult.ok && countResult.rows[0] && countResult.rows[0].count != null) {
+    total = Number(countResult.rows[0].count);
+  }
+
+  res.json({
+    success: true,
+    schema,
+    table,
+    columns: realColumns,
+    rows: rowsResult.rows,
+    pagination: { limit, offset, total },
+  });
 });
 
 app.get('/api/projects/:id/database/secrets', async (req: any, res: any) => {

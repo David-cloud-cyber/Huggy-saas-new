@@ -6032,17 +6032,14 @@ function renderDatabaseSection1(db: any): string {
         : `<div class="db-empty">Aucune clé configurée — utilisez « Ajouter une clé API ».</div>`}
     </div>`;
 
-  const tablesBlock = appTables.length
-    ? `<div class="db-card">
-        <span class="db-card-label">Tables applicatives</span>
-        <div class="db-card-list">${appTables.map((table: any) => `
-          <div class="db-row"><span class="db-row-key">${escapeHtml(table.name || 'table')}</span><span class="db-row-meta">supabase/schema.sql</span></div>`).join('')}</div>
-        <div class="db-note">${DB_ICON_INFO}<span>Le contenu des lignes et la console des enregistrements seront accessibles après la publication du backend. Aucune ligne n'est simulée ici.</span></div>
-      </div>`
-    : `<div class="db-card">
-        <span class="db-card-label">Tables applicatives</span>
-        <div class="db-empty">Aucune table définie pour l'instant. Demandez à Huggy de modéliser vos données (ex. « ajoute une table produits ») pour générer le schéma.</div>
-      </div>`;
+  // Tables card = live read-only browser, hydrated by loadProjectDbBrowser().
+  const tablesBlock = `
+    <div class="db-card">
+      <span class="db-card-label">Parcourir les données (lecture seule)</span>
+      <div id="db-browser" class="db-browser" data-state="loading">
+        <div class="db-state">Chargement des tables…</div>
+      </div>
+    </div>`;
 
   return `
     <section class="db-section">
@@ -6162,8 +6159,134 @@ async function loadDatabase() {
     const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
     const db = payload.database || {};
     target.innerHTML = renderDatabaseSection1(db) + renderDatabaseSection2(db) + renderDatabaseSection3(db);
+    // Section 1's table browser is hydrated from the real DB (read-only, no fake data).
+    void loadProjectDbBrowser();
   } catch (error) {
     target.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Backend cloud indisponible pour le moment.')}</div>`;
+  }
+}
+
+// ── Read-only table browser (sous-système 2) ─────────────────────────────────
+// Sends ONLY structured params to the server (schema/table/page) — never SQL.
+let dbBrowserSchemas: string[] = [];
+let dbBrowserTables: Array<{ schema: string; name: string; type: string }> = [];
+let dbBrowserCurrent: { schema: string; table: string } | null = null;
+let dbBrowserOffset = 0;
+const DB_BROWSER_PAGE = 50;
+
+function formatDbCell(value: unknown): string {
+  if (value === null || value === undefined) return '∅';
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
+}
+
+async function loadProjectDbBrowser() {
+  const host = document.getElementById('db-browser');
+  if (!host) return;
+  if (!currentProjectId) {
+    host.innerHTML = `<div class="db-empty">Ouvrez un projet pour parcourir ses tables.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="db-state">Chargement des tables…</div>`;
+  try {
+    const schemasResp = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/db/schemas`);
+    if (schemasResp?.provisioning_required) {
+      host.innerHTML = `<div class="db-note">${DB_ICON_INFO}<span>Le parcours des tables s'active une fois le backend du projet provisionné. Aucune donnée n'est simulée ici.</span></div>`;
+      return;
+    }
+    dbBrowserSchemas = Array.isArray(schemasResp?.schemas) ? schemasResp.schemas : [];
+    if (!dbBrowserSchemas.length) {
+      host.innerHTML = `<div class="db-empty">Aucun schéma applicatif exposé.</div>`;
+      return;
+    }
+    const schema = dbBrowserSchemas.includes('public') ? 'public' : dbBrowserSchemas[0];
+    await loadDbBrowserTables(schema, host);
+  } catch (error) {
+    host.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Parcours des tables indisponible.')}</div>`;
+  }
+}
+
+async function loadDbBrowserTables(schema: string, host: HTMLElement) {
+  const tablesResp = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/db/tables?schema=${encodeURIComponent(schema)}`);
+  dbBrowserTables = Array.isArray(tablesResp?.tables) ? tablesResp.tables : [];
+  renderDbBrowserShell(host, schema);
+}
+
+function renderDbBrowserShell(host: HTMLElement, schema: string) {
+  const schemaSelector = dbBrowserSchemas.length > 1
+    ? `<select id="db-schema-select" class="db-select" aria-label="Schéma">${dbBrowserSchemas.map(s => `<option value="${escapeHtml(s)}"${s === schema ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select>`
+    : `<span class="db-row-meta">schéma « ${escapeHtml(schema)} »</span>`;
+  const chips = dbBrowserTables.length
+    ? dbBrowserTables.map(table => `<button type="button" class="db-table-chip" data-db-table="${escapeHtml(table.name)}">${escapeHtml(table.name)}${table.type === 'VIEW' ? ' <span class="db-row-meta">vue</span>' : ''}</button>`).join('')
+    : `<div class="db-empty">Aucune table dans ce schéma.</div>`;
+  host.innerHTML = `
+    <div class="db-browser-top">${dbBadge('neutral', 'Lecture seule')}${schemaSelector}</div>
+    <div class="db-table-chips">${chips}</div>
+    <div id="db-browser-rows"></div>`;
+  host.querySelector('#db-schema-select')?.addEventListener('change', async event => {
+    const next = (event.target as HTMLSelectElement).value;
+    dbBrowserCurrent = null;
+    try {
+      await loadDbBrowserTables(next, host);
+    } catch (error) {
+      host.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Lecture des tables indisponible.')}</div>`;
+    }
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-db-table]').forEach(button => {
+    button.addEventListener('click', () => openDbTable(schema, button.getAttribute('data-db-table') || ''));
+  });
+}
+
+async function openDbTable(schema: string, table: string) {
+  if (!table) return;
+  dbBrowserCurrent = { schema, table };
+  dbBrowserOffset = 0;
+  await renderDbRows();
+}
+
+async function renderDbRows() {
+  const area = document.getElementById('db-browser-rows');
+  if (!area || !dbBrowserCurrent) return;
+  document.querySelectorAll<HTMLButtonElement>('[data-db-table]').forEach(button => {
+    button.classList.toggle('active', button.getAttribute('data-db-table') === dbBrowserCurrent!.table);
+  });
+  area.innerHTML = `<div class="db-state">Chargement des lignes…</div>`;
+  try {
+    const query = `schema=${encodeURIComponent(dbBrowserCurrent.schema)}&table=${encodeURIComponent(dbBrowserCurrent.table)}&limit=${DB_BROWSER_PAGE}&offset=${dbBrowserOffset}`;
+    const data = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/db/rows?${query}`);
+    const columns: string[] = Array.isArray(data?.columns) ? data.columns : [];
+    const rows: any[] = Array.isArray(data?.rows) ? data.rows : [];
+    const total: number | null = data?.pagination?.total ?? null;
+    if (!columns.length) {
+      area.innerHTML = `<div class="db-empty">Table introuvable.</div>`;
+      return;
+    }
+    const header = columns.map(column => `<th>${escapeHtml(column)}</th>`).join('');
+    const body = rows.length
+      ? rows.map(row => `<tr>${columns.map(column => `<td>${escapeHtml(formatDbCell(row[column]))}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${columns.length}" class="db-empty">Aucune ligne.</td></tr>`;
+    const from = rows.length ? dbBrowserOffset + 1 : 0;
+    const to = dbBrowserOffset + rows.length;
+    const atEnd = (total != null && to >= total) || rows.length < DB_BROWSER_PAGE;
+    area.innerHTML = `
+      <div class="db-table-scroll"><table class="db-data-table"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>
+      <div class="db-pager">
+        <span class="db-row-meta">${from}–${to}${total != null ? ` sur ${total}` : ''}</span>
+        <span class="db-pager-btns">
+          <button class="db-file-btn" type="button" id="db-prev"${dbBrowserOffset <= 0 ? ' disabled' : ''} aria-label="Page précédente">‹</button>
+          <button class="db-file-btn" type="button" id="db-next"${atEnd ? ' disabled' : ''} aria-label="Page suivante">›</button>
+        </span>
+      </div>`;
+    area.querySelector('#db-prev')?.addEventListener('click', () => {
+      dbBrowserOffset = Math.max(0, dbBrowserOffset - DB_BROWSER_PAGE);
+      void renderDbRows();
+    });
+    area.querySelector('#db-next')?.addEventListener('click', () => {
+      dbBrowserOffset += DB_BROWSER_PAGE;
+      void renderDbRows();
+    });
+  } catch (error) {
+    area.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Lecture des lignes indisponible.')}</div>`;
   }
 }
 

@@ -3728,6 +3728,116 @@
 
     .db-state-error { color: var(--error); }
 
+    .db-browser { display: grid; gap: 12px; }
+
+    .db-browser-top { display: flex; align-items: center; gap: 10px; }
+
+    .db-select {
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text);
+      font-size: 12.5px;
+      padding: 0 8px;
+      cursor: pointer;
+    }
+
+    .db-table-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .db-table-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-input);
+      color: var(--text-muted);
+      font-size: 12.5px;
+      font-weight: 640;
+      cursor: pointer;
+      transition: color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .db-table-chip:hover {
+      color: var(--text);
+      background: var(--accent-dim);
+      border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--border));
+    }
+
+    .db-table-chip.active {
+      color: var(--accent-blue-deep);
+      background: var(--accent-blue-soft);
+      border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent);
+    }
+
+    .db-table-scroll {
+      overflow: auto;
+      max-height: 420px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+    }
+
+    .db-data-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+    }
+
+    .db-data-table th,
+    .db-data-table td {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-light);
+      white-space: nowrap;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .db-data-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-surface);
+      color: var(--text-sub);
+      font-weight: 720;
+      font-size: 11px;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      z-index: 1;
+    }
+
+    .db-data-table tbody td { color: var(--text); }
+    .db-data-table tbody tr:hover td { background: var(--accent-dim); }
+
+    .db-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .db-pager-btns { display: inline-flex; gap: 6px; }
+
+    .db-file-btn {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      transition: color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .db-file-btn:hover:not([disabled]) {
+      color: var(--text);
+      background: var(--accent-dim);
+      border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--border));
+    }
+
+    .db-file-btn[disabled] { opacity: .4; cursor: default; }
+
     @media (max-width: 720px) {
       .db-cloud-head { flex-direction: column; }
       .db-action { align-self: flex-start; }
