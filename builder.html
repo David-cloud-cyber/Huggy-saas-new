@@ -3728,6 +3728,54 @@
 
     .db-state-error { color: var(--error); }
 
+    .db-endusers { display: grid; gap: 12px; }
+
+    .db-enduser-create { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    .db-input {
+      height: 34px;
+      flex: 1 1 200px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text);
+      font-size: 13px;
+      padding: 0 10px;
+    }
+
+    .db-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent-blue) 45%, var(--border)); }
+
+    .db-enduser-msg { font-size: 12px; }
+    .db-enduser-ok { color: var(--success); }
+
+    .db-enduser-row .db-row-key { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    .db-eu-btn {
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 640;
+      cursor: pointer;
+      transition: color 140ms cubic-bezier(.22,1,.36,1), background 140ms cubic-bezier(.22,1,.36,1), border-color 140ms cubic-bezier(.22,1,.36,1);
+    }
+
+    .db-eu-btn:hover {
+      color: var(--text);
+      background: var(--accent-dim);
+      border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--border));
+    }
+
+    .db-eu-del:hover {
+      color: var(--error);
+      background: var(--error-dim);
+      border-color: color-mix(in srgb, var(--error) 40%, var(--border));
+    }
+
     .db-browser { display: grid; gap: 12px; }
 
     .db-browser-top { display: flex; align-items: center; gap: 10px; }

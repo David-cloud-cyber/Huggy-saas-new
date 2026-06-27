@@ -6101,13 +6101,11 @@ function renderDatabaseSection2(db: any): string {
             <div class="db-row-meta">Service role serveur uniquement — jamais exposé au client.</div>
           </div>
         </div>
-        <div class="db-soon">
-          <span class="db-soon-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-3-3.87"></path><path d="M9 21v-2a4 4 0 0 1 3-3.87"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
-          <div class="db-soon-text">
-            <p class="db-soon-title">Gestion des utilisateurs finaux</p>
-            <p class="db-soon-desc">La console des comptes de votre application sera disponible après la publication du backend. Aucune donnée utilisateur n'est simulée ici.</p>
+        <div class="db-card">
+          <span class="db-card-label">Utilisateurs finaux</span>
+          <div id="db-endusers" class="db-endusers" data-state="loading">
+            <div class="db-state">Chargement des utilisateurs…</div>
           </div>
-          ${dbBadge('neutral', 'Après publication')}
         </div>
       </div>
     </section>`;
@@ -6161,6 +6159,8 @@ async function loadDatabase() {
     target.innerHTML = renderDatabaseSection1(db) + renderDatabaseSection2(db) + renderDatabaseSection3(db);
     // Section 1's table browser is hydrated from the real DB (read-only, no fake data).
     void loadProjectDbBrowser();
+    // Section 2's end-user console is hydrated from the project's real auth.
+    void loadProjectEndUsers();
   } catch (error) {
     target.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Backend cloud indisponible pour le moment.')}</div>`;
   }
@@ -6287,6 +6287,141 @@ async function renderDbRows() {
     });
   } catch (error) {
     area.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Lecture des lignes indisponible.')}</div>`;
+  }
+}
+
+// ── End-user management (sous-système 3) ─────────────────────────────────────
+// Calls the ownership-gated, server-side admin endpoints. Destructive actions
+// have explicit, visible confirmations (delete = double confirmation).
+let endUserRoles: string[] = ['user', 'member', 'editor', 'admin'];
+
+function endUserMsg(message: string, isError: boolean) {
+  const el = document.getElementById('db-enduser-msg');
+  if (!el) return;
+  el.className = `db-enduser-msg${isError ? ' db-state-error' : ' db-enduser-ok'}`;
+  el.textContent = message;
+  window.setTimeout(() => { if (el) el.textContent = ''; }, 6000);
+}
+
+async function loadProjectEndUsers() {
+  const host = document.getElementById('db-endusers');
+  if (!host) return;
+  if (!currentProjectId) {
+    host.innerHTML = `<div class="db-empty">Ouvrez un projet pour gérer ses utilisateurs.</div>`;
+    return;
+  }
+  host.innerHTML = `<div class="db-state">Chargement des utilisateurs…</div>`;
+  try {
+    const data = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/users`);
+    if (data?.auth_configured === false) {
+      host.innerHTML = `<div class="db-note">${DB_ICON_INFO}<span>Authentification non configurée pour ce projet. Provisionnez le backend (auth) pour gérer les utilisateurs finaux. Aucune donnée n'est simulée ici.</span></div>`;
+      return;
+    }
+    if (Array.isArray(data?.roles) && data.roles.length) endUserRoles = data.roles;
+    renderEndUsers(host, data);
+  } catch (error) {
+    host.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Gestion des utilisateurs indisponible.')}</div>`;
+  }
+}
+
+function renderEndUsers(host: HTMLElement, data: any) {
+  const users: any[] = Array.isArray(data?.users) ? data.users : [];
+  const roleOptions = endUserRoles.map(role => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join('');
+  const createRow = `
+    <div class="db-enduser-create">
+      <input type="email" id="db-enduser-email" class="db-input" placeholder="email@exemple.com" autocomplete="off" />
+      <select id="db-enduser-role" class="db-select" aria-label="Rôle">${roleOptions}</select>
+      <button type="button" class="db-action db-action-primary" id="db-enduser-add">Inviter</button>
+    </div>`;
+  const list = users.length
+    ? `<div class="db-card-list">${users.map(user => {
+        const statusBadge = user.banned ? dbBadge('warning', 'banni') : (user.confirmed ? dbBadge('success', 'confirmé') : dbBadge('neutral', 'en attente'));
+        return `
+        <div class="db-row db-enduser-row" data-uid="${escapeHtml(user.id)}" data-email="${escapeHtml(user.email || '')}">
+          <span class="db-row-key">${escapeHtml(user.email || '(sans email)')} ${statusBadge}${user.role ? ` <span class="db-row-meta">${escapeHtml(user.role)}</span>` : ''}</span>
+          <span class="db-file-actions">
+            <button class="db-eu-btn" type="button" data-eu-reset>Réinit. MDP</button>
+            <button class="db-eu-btn" type="button" data-eu-ban data-banned="${user.banned ? '1' : '0'}">${user.banned ? 'Débannir' : 'Bannir'}</button>
+            <button class="db-eu-btn db-eu-del" type="button" data-eu-del>Supprimer</button>
+          </span>
+        </div>`;
+      }).join('')}</div>`
+    : `<div class="db-empty">Aucun utilisateur final pour l'instant.</div>`;
+  host.innerHTML = `${createRow}<div class="db-enduser-msg" id="db-enduser-msg"></div>${list}`;
+  bindEndUserHandlers(host);
+}
+
+function bindEndUserHandlers(host: HTMLElement) {
+  host.querySelector('#db-enduser-add')?.addEventListener('click', () => createEndUser(host));
+  host.querySelectorAll<HTMLElement>('.db-enduser-row').forEach(row => {
+    const uid = row.getAttribute('data-uid') || '';
+    const email = row.getAttribute('data-email') || '';
+    row.querySelector('[data-eu-reset]')?.addEventListener('click', () => resetEndUser(uid, email));
+    const banBtn = row.querySelector('[data-eu-ban]') as HTMLButtonElement | null;
+    banBtn?.addEventListener('click', () => banEndUser(uid, email, banBtn.getAttribute('data-banned') !== '1'));
+    row.querySelector('[data-eu-del]')?.addEventListener('click', () => deleteEndUser(uid, email));
+  });
+}
+
+async function createEndUser(host: HTMLElement) {
+  const emailInput = host.querySelector('#db-enduser-email') as HTMLInputElement | null;
+  const roleSelect = host.querySelector('#db-enduser-role') as HTMLSelectElement | null;
+  const email = (emailInput?.value || '').trim();
+  const role = roleSelect?.value || '';
+  if (!email) { endUserMsg('Saisissez un email.', true); return; }
+  try {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/users`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role, action: 'invite', confirm: true }),
+    });
+    await loadProjectEndUsers();
+  } catch (error) {
+    endUserMsg(error instanceof Error ? error.message : 'Invitation impossible.', true);
+  }
+}
+
+async function resetEndUser(uid: string, email: string) {
+  if (!uid) return;
+  if (!window.confirm(`Envoyer une réinitialisation de mot de passe à ${email || 'cet utilisateur'} ?`)) return;
+  try {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/users/${encodeURIComponent(uid)}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ confirm: true }),
+    });
+    endUserMsg('Réinitialisation déclenchée.', false);
+  } catch (error) {
+    endUserMsg(error instanceof Error ? error.message : 'Réinitialisation impossible.', true);
+  }
+}
+
+async function banEndUser(uid: string, email: string, ban: boolean) {
+  if (!uid) return;
+  if (!window.confirm(`${ban ? 'Bannir' : 'Débannir'} ${email || 'cet utilisateur'} ?`)) return;
+  try {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/users/${encodeURIComponent(uid)}/ban`, {
+      method: 'POST',
+      body: JSON.stringify({ banned: ban, confirm: true }),
+    });
+    await loadProjectEndUsers();
+  } catch (error) {
+    endUserMsg(error instanceof Error ? error.message : 'Action impossible.', true);
+  }
+}
+
+async function deleteEndUser(uid: string, email: string) {
+  if (!uid) return;
+  // Double confirmation, visible and explicit (mirrors the server-side guard).
+  if (!window.confirm(`Supprimer définitivement ${email || 'cet utilisateur'} ? Cette action est irréversible.`)) return;
+  const echoed = window.prompt(`Double confirmation : retapez l'email exact « ${email} » pour confirmer la suppression.`);
+  if (echoed == null) return;
+  try {
+    await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/users/${encodeURIComponent(uid)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: true, confirm_email: echoed.trim() }),
+    });
+    await loadProjectEndUsers();
+  } catch (error) {
+    endUserMsg(error instanceof Error ? error.message : 'Suppression impossible.', true);
   }
 }
 

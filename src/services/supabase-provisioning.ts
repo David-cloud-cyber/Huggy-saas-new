@@ -14,7 +14,7 @@
 //   (drop/truncate/delete-without-where/drop column) are refused unless the caller
 //   explicitly opts in with allowDestructive.
 
-const MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';
+export const MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';
 
 export type MigrationSafety = {
   destructive: boolean;

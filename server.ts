@@ -206,7 +206,18 @@ import {
   buildApplyMigrationRequest,
   classifyMigrationSafety,
   redactManagementToken,
+  MANAGEMENT_API_BASE,
 } from './src/services/supabase-provisioning.ts';
+import {
+  ALLOWED_APP_USER_ROLES,
+  isValidEmail,
+  sanitizeAppRole,
+  safeUserFields,
+  sanitizeUsersPage,
+  sanitizeUsersPerPage,
+  requireConfirmation,
+  requireDeleteConfirmation,
+} from './src/services/cloud-user-management.ts';
 import {
   STATEMENT_TIMEOUT_MS,
   isExposableSchema,
@@ -12338,6 +12349,247 @@ app.get('/api/projects/:id/db/rows', async (req: any, res: any) => {
     rows: rowsResult.rows,
     pagination: { limit, offset, total },
   });
+});
+
+// ── Cloud End-User Management (sous-système 3) ───────────────────────────────
+// Manage the END-USERS of a generated app's OWN Supabase Auth. The project's
+// service_role is fetched SERVER-SIDE via the Management API (/api-keys), used
+// only to build a per-project admin client, and NEVER returned to / cached by
+// the client, nor logged (redactSecrets/redactManagementToken). Every endpoint
+// re-checks PROJECT ownership (the 'secrets' capability = owner/admin), never
+// platform-admin. Responses only ever contain whitelisted, non-sensitive fields
+// (safeUserFields — never password hashes, tokens, sessions, service_role).
+// Mutations require explicit confirmation; deletion needs double confirmation;
+// all mutations are rate-limited and written to an audit log (ids only).
+
+const END_USER_ADMIN_RATE = { limit: 20, windowMs: 60_000 };
+
+async function resolveEndUserAdminOwner(req: any, res: any): Promise<{ project: GeneratedProject; userId: string } | null> {
+  const userId = getUserOrgId(req);
+  const project = await loadProject(req.params.id, userId, req);
+  if (!project) {
+    res.status(403).json({ success: false, error: 'Accès refusé à ce projet.' });
+    return null;
+  }
+  return { project, userId };
+}
+
+// Fetch the project's service_role via the Management API and build a per-project
+// admin client. The key is confined to this scope (inside the client); it is
+// never returned, cached, or logged.
+async function buildProjectAuthAdminClient(projectRef: string): Promise<{ ok: true; client: any } | { ok: false; code: string }> {
+  const token = resolveManagementToken();
+  if (!token) return { ok: false, code: 'missing_management_token' };
+  let response: Response;
+  try {
+    response = await fetch(`${MANAGEMENT_API_BASE}/projects/${projectRef}/api-keys`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    console.warn('[huggy:enduser_apikeys_fetch_failed]', redactSecrets(redactManagementToken((error as Error)?.message || 'network_error'), '[redacted]'));
+    return { ok: false, code: 'apikeys_unavailable' };
+  }
+  if (!response.ok) {
+    console.warn('[huggy:enduser_apikeys_http]', response.status);
+    return { ok: false, code: 'apikeys_unavailable' };
+  }
+  let keys: any;
+  try {
+    keys = await response.json();
+  } catch {
+    return { ok: false, code: 'apikeys_parse_failed' };
+  }
+  const list = Array.isArray(keys) ? keys : [];
+  const entry = list.find((key: any) => key?.name === 'service_role' || key?.type === 'service_role' || key?.tags === 'service_role');
+  const serviceRoleKey = entry?.api_key || entry?.apiKey || entry?.secret;
+  if (!serviceRoleKey || typeof serviceRoleKey !== 'string') return { ok: false, code: 'service_role_unavailable' };
+  try {
+    const client = createClient(`https://${projectRef}.supabase.co`, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    return { ok: true, client };
+  } catch {
+    return { ok: false, code: 'admin_client_failed' };
+  }
+}
+
+// Append an audit entry (ids + action only — no sensitive data). Best-effort.
+async function writeEndUserAudit(project: GeneratedProject, actorId: string, action: string, targetUserId?: string | null) {
+  console.log('[huggy:enduser_admin_audit]', JSON.stringify({ project_id: project.id, actor: actorId, action, target: targetUserId || null, at: new Date().toISOString() }));
+  try {
+    const client = requireSupabase('End-user admin audit');
+    await client.from('agent_events').insert([{
+      project_id: project.id,
+      event_type: 'end_user_admin',
+      message: `${action} target=${targetUserId || '-'} actor=${actorId}`,
+      created_at: new Date().toISOString(),
+    }]);
+  } catch (error) {
+    console.warn('[huggy:enduser_audit_persist_skipped]', redactSecrets((error as Error)?.message || 'persist_failed', '[redacted]'));
+  }
+}
+
+function endUserRateLimited(req: any, res: any, action: string, userId: string, projectId: string): boolean {
+  if (!enforceRateLimit(`enduser:${action}:${userId}:${projectId}`, END_USER_ADMIN_RATE.limit, END_USER_ADMIN_RATE.windowMs)) {
+    res.status(429).json({ success: false, code: 'rate_limited', error: 'Trop d\'opérations. Réessayez dans une minute.' });
+    return true;
+  }
+  return false;
+}
+
+// Resolve the per-project auth admin client, or send the right honest response.
+async function acquireEndUserAdmin(
+  res: any,
+  project: GeneratedProject,
+  forMutation: boolean,
+): Promise<{ client: any } | null> {
+  const ref = await resolveProjectManagementRef(project.id);
+  if (!ref) {
+    if (forMutation) {
+      res.status(409).json({ success: false, auth_configured: false, error: 'Authentification non configurée pour ce projet. Provisionnez le backend pour gérer les utilisateurs.' });
+    } else {
+      res.json({ success: true, auth_configured: false, users: [], pagination: { page: 1, per_page: 0 } });
+    }
+    return null;
+  }
+  const admin = await buildProjectAuthAdminClient(ref);
+  if (!admin.ok) {
+    res.status(502).json({ success: false, error: 'Gestion des utilisateurs indisponible pour ce projet.' });
+    return null;
+  }
+  return { client: admin.client };
+}
+
+// GET list end-users (paginated, safe fields only).
+app.get('/api/projects/:id/users', async (req: any, res: any) => {
+  const ctx = await resolveEndUserAdminOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
+  const admin = await acquireEndUserAdmin(res, ctx.project, false);
+  if (!admin) return;
+  const page = sanitizeUsersPage(req.query.page);
+  const perPage = sanitizeUsersPerPage(req.query.per_page);
+  try {
+    const { data, error } = await admin.client.auth.admin.listUsers({ page, perPage });
+    if (error) return res.status(502).json({ success: false, error: 'Lecture des utilisateurs impossible.' });
+    const users = (Array.isArray(data?.users) ? data.users : []).map(safeUserFields);
+    res.json({ success: true, auth_configured: true, users, pagination: { page, per_page: perPage }, roles: ALLOWED_APP_USER_ROLES });
+  } catch {
+    res.status(502).json({ success: false, error: 'Lecture des utilisateurs impossible.' });
+  }
+});
+
+// POST create or invite an end-user (confirmation + rate-limit).
+app.post('/api/projects/:id/users', async (req: any, res: any) => {
+  const ctx = await resolveEndUserAdminOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
+  if (endUserRateLimited(req, res, 'create', ctx.userId, ctx.project.id)) return;
+  const confirm = requireConfirmation(req.body);
+  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
+  const email = String(req.body?.email || '').trim();
+  if (!isValidEmail(email)) return res.status(400).json({ success: false, error: 'Email invalide.' });
+  let role: string | undefined;
+  if (req.body?.role != null && req.body.role !== '') {
+    const valid = sanitizeAppRole(req.body.role);
+    if (!valid) return res.status(400).json({ success: false, error: 'Rôle non autorisé.' });
+    role = valid;
+  }
+  const mode = req.body?.action === 'invite' ? 'invite' : 'create';
+  const admin = await acquireEndUserAdmin(res, ctx.project, true);
+  if (!admin) return;
+  try {
+    let created: any = null;
+    if (mode === 'invite' && typeof admin.client.auth.admin.inviteUserByEmail === 'function') {
+      const { data, error } = await admin.client.auth.admin.inviteUserByEmail(email, role ? { data: { role } } : undefined);
+      if (error) return res.status(400).json({ success: false, error: 'Invitation impossible.' });
+      created = data?.user;
+    } else {
+      const password = typeof req.body?.password === 'string' && req.body.password.length >= 8 ? req.body.password : undefined;
+      const { data, error } = await admin.client.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: !password,
+        app_metadata: role ? { role } : undefined,
+      });
+      if (error) return res.status(400).json({ success: false, error: 'Création impossible.' });
+      created = data?.user;
+    }
+    await writeEndUserAudit(ctx.project, ctx.userId, mode, created?.id);
+    res.json({ success: true, user: created ? safeUserFields(created) : null });
+  } catch {
+    res.status(502).json({ success: false, error: 'Opération impossible.' });
+  }
+});
+
+// POST reset password / resend recovery (confirmation). Never returns the link.
+app.post('/api/projects/:id/users/:userId/reset-password', async (req: any, res: any) => {
+  const ctx = await resolveEndUserAdminOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
+  if (endUserRateLimited(req, res, 'reset', ctx.userId, ctx.project.id)) return;
+  const confirm = requireConfirmation(req.body);
+  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
+  const admin = await acquireEndUserAdmin(res, ctx.project, true);
+  if (!admin) return;
+  const userId = String(req.params.userId || '');
+  try {
+    const { data: got, error: getError } = await admin.client.auth.admin.getUserById(userId);
+    if (getError || !got?.user?.email) return res.status(404).json({ success: false, error: 'Utilisateur introuvable.' });
+    if (typeof admin.client.auth.admin.generateLink === 'function') {
+      const { error } = await admin.client.auth.admin.generateLink({ type: 'recovery', email: got.user.email });
+      if (error) return res.status(400).json({ success: false, error: 'Réinitialisation impossible.' });
+    }
+    await writeEndUserAudit(ctx.project, ctx.userId, 'reset_password', userId);
+    res.json({ success: true });
+  } catch {
+    res.status(502).json({ success: false, error: 'Opération impossible.' });
+  }
+});
+
+// POST ban / unban an end-user (confirmation).
+app.post('/api/projects/:id/users/:userId/ban', async (req: any, res: any) => {
+  const ctx = await resolveEndUserAdminOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
+  if (endUserRateLimited(req, res, 'ban', ctx.userId, ctx.project.id)) return;
+  const confirm = requireConfirmation(req.body);
+  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
+  const ban = req.body?.banned === true || req.body?.banned === 'true';
+  const admin = await acquireEndUserAdmin(res, ctx.project, true);
+  if (!admin) return;
+  const userId = String(req.params.userId || '');
+  try {
+    const { data, error } = await admin.client.auth.admin.updateUserById(userId, { ban_duration: ban ? '876000h' : 'none' });
+    if (error) return res.status(400).json({ success: false, error: 'Action impossible.' });
+    await writeEndUserAudit(ctx.project, ctx.userId, ban ? 'ban' : 'unban', userId);
+    res.json({ success: true, user: data?.user ? safeUserFields(data.user) : null });
+  } catch {
+    res.status(502).json({ success: false, error: 'Opération impossible.' });
+  }
+});
+
+// DELETE an end-user (DOUBLE confirmation: confirm flag + echoed email).
+app.delete('/api/projects/:id/users/:userId', async (req: any, res: any) => {
+  const ctx = await resolveEndUserAdminOwner(req, res);
+  if (!ctx) return;
+  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
+  if (endUserRateLimited(req, res, 'delete', ctx.userId, ctx.project.id)) return;
+  const admin = await acquireEndUserAdmin(res, ctx.project, true);
+  if (!admin) return;
+  const userId = String(req.params.userId || '');
+  try {
+    const { data: got, error: getError } = await admin.client.auth.admin.getUserById(userId);
+    if (getError || !got?.user) return res.status(404).json({ success: false, error: 'Utilisateur introuvable.' });
+    const guard = requireDeleteConfirmation(req.body, got.user.email || null);
+    if (!guard.ok) return res.status(400).json({ success: false, code: guard.code, error: guard.error });
+    const { error } = await admin.client.auth.admin.deleteUser(userId);
+    if (error) return res.status(400).json({ success: false, error: 'Suppression impossible.' });
+    await writeEndUserAudit(ctx.project, ctx.userId, 'delete', userId);
+    res.json({ success: true });
+  } catch {
+    res.status(502).json({ success: false, error: 'Opération impossible.' });
+  }
 });
 
 app.get('/api/projects/:id/database/secrets', async (req: any, res: any) => {
