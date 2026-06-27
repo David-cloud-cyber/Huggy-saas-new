@@ -229,6 +229,8 @@ export interface HuggyFileDoneEvent extends HuggyStreamEventBase {
   type: 'file_done';
   path: string;
   bytes?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 export interface HuggyCheckEvent extends HuggyStreamEventBase {

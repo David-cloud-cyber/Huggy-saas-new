@@ -35,7 +35,8 @@ for (const source of [builderLive, dashboardLive, conversation]) {
   assert.ok(!source.includes('message-card-shimmer'), 'shimmer streaming class must be removed');
 }
 
-assert.ok(!conversation.includes('<Reasoning'), 'reasoning block UI should be removed');
+assert.ok(conversation.includes('<Reasoning'), 'the improved Reasoning UI should remain available in the React chat runtime');
+assert.ok(conversation.includes('ReasoningTrigger') && conversation.includes('ReasoningContent'), 'Reasoning UI should keep trigger and content primitives');
 assert.ok(!conversation.includes('<ToolCall'), 'tool call card UI should be removed');
 assert.ok(!conversation.includes('<TerminalBlock'), 'terminal stream UI should be removed');
 assert.ok(!conversation.includes('<CodeBlock'), 'streaming code block UI should be removed');

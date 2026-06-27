@@ -131,6 +131,42 @@ function escapeAttr(value: unknown) {
   return String(value ?? "").replace(/[^a-z0-9_-]/gi, "");
 }
 
+function humanCheckName(name: string) {
+  const value = String(name || "").replace(/[_-]+/g, " ").trim();
+  if (!value) return "Verification";
+  if (/build|runner|compile/i.test(value)) return "Build";
+  if (/preview/i.test(value)) return "Preview";
+  if (/browser|interaction/i.test(value)) return "Interactions";
+  if (/security|secret/i.test(value)) return "Security";
+  if (/mobile|responsive/i.test(value)) return "Mobile";
+  if (/quality|design|visual/i.test(value)) return "Quality";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function humanCheckStatus(status: string) {
+  const value = String(status || "").toLowerCase();
+  if (value === "pass") return "OK";
+  if (value === "fail") return "a corriger";
+  if (value === "skip") return "ignore";
+  if (value === "running" || value === "active") return "en cours";
+  return value || "verifie";
+}
+
+function liveLineStatusForCheck(status: string): LiveRunLine["status"] {
+  const value = String(status || "").toLowerCase();
+  if (value === "fail" || value === "failed") return "failed";
+  if (value === "skip" || value === "skipped") return "muted";
+  if (value === "running" || value === "active") return "active";
+  return "done";
+}
+
+function formatFileDoneLine(event: { path: string; additions?: number; deletions?: number }) {
+  const additions = Number(event.additions || 0);
+  const deletions = Number(event.deletions || 0);
+  const suffix = additions || deletions ? ` +${additions} -${deletions}` : "";
+  return `Modification de ${event.path}${suffix}`;
+}
+
 function renderMath(value: string, displayMode: boolean) {
   try {
     return katex.renderToString(value, {
@@ -409,17 +445,21 @@ function createStore() {
             }
             break;
           case "file_start":
-            run.activeText = `Ecriture de ${event.path}`;
+            run.activeText = `Je modifie ${event.path}.`;
             addLine(run, run.activeText, "active");
             break;
           case "file_delta":
-            run.activeText = `${event.path} - ${event.chars} caracteres`;
+            run.activeText = `Je continue ${event.path}.`;
             break;
           case "file_done":
-            addLine(run, `Fichier pret: ${event.path}`, "done");
+            addLine(run, formatFileDoneLine(event), "done");
             break;
           case "check":
-            addLine(run, `${event.name}: ${event.status}${event.detail ? ` - ${event.detail}` : ""}`, event.status === "fail" ? "failed" : event.status === "skip" ? "muted" : "done");
+            addLine(
+              run,
+              `${humanCheckName(event.name)} ${humanCheckStatus(event.status)}${event.detail ? ` - ${event.detail}` : ""}`,
+              liveLineStatusForCheck(event.status),
+            );
             break;
           case "warning":
             addLine(run, event.message, "failed");

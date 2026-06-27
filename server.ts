@@ -1661,6 +1661,22 @@ function isSafeProjectFilePath(filePath: string): boolean {
   return !blocked.some(prefix => filePath === prefix || filePath.startsWith(prefix));
 }
 
+function isPlanOnlyGeneratedContent(filePath: string, content: string): boolean {
+  const normalizedPath = String(filePath || '').toLowerCase();
+  const source = String(content || '').trim();
+  if (!source) return true;
+  const isCodeSurface = /\.(tsx|jsx|ts|js|css|html)$/i.test(normalizedPath);
+  const hasRuntimeSurface = /<(?:html|body|main|section|div|button|form|input)\b|export\s+default|function\s+App\b|createRoot\(|useState\(|onClick=|onSubmit=|@tailwind|body\s*\{|:root\s*\{/i.test(source);
+  const looksLikePlan = /"plan"\s*:|"steps"\s*:|"phase"\s*:|"next_action"\s*:|^\s*(?:here is|voici)\s+(?:a|un)\s+plan|plan de cr[eé]ation|lightweight plan/i.test(source);
+  const looksLikeAssistantEnvelope = /"status"\s*:\s*"success"|"message"\s*:|"assistant_message_id"\s*:|"diagnostic_code"\s*:/i.test(source)
+    && /"plan"\s*:|"steps"\s*:|"next_action"\s*:|"text"\s*:/i.test(source);
+  if (isCodeSurface && (looksLikePlan || looksLikeAssistantEnvelope) && !hasRuntimeSurface) return true;
+  if ((normalizedPath === 'index.html' || normalizedPath === 'src/app.tsx' || normalizedPath === 'src/app.jsx')
+    && /^\s*[{[]/.test(source)
+    && !hasRuntimeSurface) return true;
+  return false;
+}
+
 function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean } = {}): GeneratedFile[] {
   const ensureIndex = options.ensureIndex !== false;
   const entries = Array.isArray(rawFiles)
@@ -1682,7 +1698,8 @@ function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean
         updated_at: new Date().toISOString(),
       };
     })
-    .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0);
+    .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0)
+    .filter((file: GeneratedFile) => !isPlanOnlyGeneratedContent(file.path, file.content));
 
   if (ensureIndex && !files.some(file => file.path === 'index.html')) {
     files.unshift({
@@ -4954,6 +4971,17 @@ function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
     file_stats,
     summary: `${created.length} created, ${modified.length} modified, ${deleted.length} deleted`,
   };
+}
+
+function emitDiffFileEvents(stream: HuggyStreamEmitter | null | undefined, diff: ReturnType<typeof diffFiles>) {
+  if (!stream) return;
+  for (const stat of diff.file_stats || []) {
+    stream.emit('file_done', {
+      path: stat.path,
+      additions: Number(stat.additions || 0),
+      deletions: Number(stat.deletions || 0),
+    });
+  }
 }
 
 function publicFileStreamSnippet(file: GeneratedFile) {
@@ -11610,6 +11638,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         },
       };
       if (isStream) {
+        emitDiffFileEvents(streamV2, diff);
         res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
         return res.end();
       } else {
@@ -11712,6 +11741,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       },
     };
     if (isStream) {
+      emitDiffFileEvents(streamV2, diff);
       res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
       return res.end();
     } else {

@@ -95,7 +95,7 @@ assert.match(extractActionablePromptText(pollutedBudgetPrompt), /^Crée une appl
   assert.match(app, /localStorage/);
   assert.match(app, /deleteTransaction/);
   assert.match(app, /currency/);
-  assert.doesNotMatch(app, /"plan"|Build request|Voici le plan|Modélisation et Persistance/);
+  assert.doesNotMatch(app, /"plan"|Build request|Voici le plan|Modélisation et Persistance|next_action|status.*success/);
 }
 
 assertInteractiveApp('make an AI prompt generator with history', 'ai_tool', [
