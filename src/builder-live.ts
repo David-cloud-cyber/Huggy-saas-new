@@ -5963,51 +5963,204 @@ async function exportCode() {
   URL.revokeObjectURL(url);
 }
 
+type DbBadgeKind = 'success' | 'warning' | 'error' | 'neutral';
+
+function dbBadge(kind: DbBadgeKind, label: string): string {
+  return `<span class="db-badge db-badge-${kind}">${escapeHtml(label)}</span>`;
+}
+
+// Classe l'état réel du provisioning cloud (cf. provisioning-state-machine.ts :
+// pending → provisioning → migrating → ready / failed, + detected/not_detected).
+function dbCloudStatus(rawStatus: string): { kind: DbBadgeKind; label: string } {
+  const status = (rawStatus || '').toLowerCase();
+  if (/not[_ ]?detect|not[_ ]?found|waiting_for_schema/.test(status)) return { kind: 'neutral', label: 'Non détecté' };
+  if (/ready|provisioned|active|enabled|connected/.test(status)) return { kind: 'success', label: 'Provisionné' };
+  if (/fail|error/.test(status)) return { kind: 'error', label: 'Échec du provisioning' };
+  if (/provision|migrat|pending|queue|progress/.test(status)) return { kind: 'warning', label: 'Provisioning en cours' };
+  if (/schema_generated/.test(status)) return { kind: 'warning', label: 'Schéma prêt — non provisionné' };
+  if (/detect/.test(status)) return { kind: 'warning', label: 'Détecté (auto)' };
+  return { kind: 'neutral', label: 'Non détecté' };
+}
+
+function dbProviderName(provider: string): string {
+  const value = (provider || '').toLowerCase();
+  if (value === 'huggy_cloud' || !value) return 'Huggy Cloud';
+  if (value === 'supabase') return 'Supabase';
+  return provider;
+}
+
+const DB_ICON_INFO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>';
+
+// Section 1 — Base de données intégrée. Tout ici reflète un backend réel
+// (provisioning, schéma/migrations, clés API). Le parcours des lignes et la
+// console des utilisateurs finaux n'ont pas d'API : état honnête, jamais de
+// fausses données.
+function renderDatabaseSection1(db: any): string {
+  const cloud = db.cloud || {};
+  const secrets: any[] = Array.isArray(db.secrets) ? db.secrets : [];
+  const appTables: any[] = (Array.isArray(db.tables) ? db.tables : []).filter((table: any) => table && table.source === 'supabase/schema.sql');
+  const hasSchema = db.backend_status === 'schema_generated' || appTables.length > 0;
+  const conn = dbCloudStatus(cloud.status || db.backend_status || '');
+  const region = cloud.region && cloud.region !== 'auto' ? String(cloud.region) : 'Région auto';
+
+  const connectionCard = `
+    <div class="db-card">
+      <span class="db-card-label">Connexion cloud</span>
+      <div class="db-card-value">${dbBadge(conn.kind, conn.label)}</div>
+      <div class="db-row-meta">${escapeHtml(dbProviderName(cloud.provider))} · ${escapeHtml(region)}</div>
+    </div>`;
+
+  const schemaCard = `
+    <div class="db-card">
+      <span class="db-card-label">Schéma & migrations</span>
+      <div class="db-card-value">${hasSchema
+        ? dbBadge('success', appTables.length ? `${appTables.length} table${appTables.length > 1 ? 's' : ''} définie${appTables.length > 1 ? 's' : ''}` : 'Schéma généré')
+        : dbBadge('warning', 'En attente de schéma')}</div>
+      <div class="db-row-meta">${hasSchema ? 'Migrations gérées par Huggy' : 'Décrivez votre modèle de données à Huggy'}</div>
+    </div>`;
+
+  const secretsCard = `
+    <div class="db-card">
+      <span class="db-card-label">Clés API (${secrets.length})</span>
+      ${secrets.length
+        ? `<div class="db-card-list">${secrets.slice(0, 4).map((secret: any) => `
+            <div class="db-row"><span class="db-row-key">${escapeHtml(secret.variable || '—')}</span><span class="db-row-meta">${escapeHtml(secret.masked_value || '••••')}</span></div>`).join('')}
+          ${secrets.length > 4 ? `<div class="db-row-meta">+${secrets.length - 4} autre${secrets.length - 4 > 1 ? 's' : ''}</div>` : ''}</div>`
+        : `<div class="db-empty">Aucune clé configurée — utilisez « Ajouter une clé API ».</div>`}
+    </div>`;
+
+  const tablesBlock = appTables.length
+    ? `<div class="db-card">
+        <span class="db-card-label">Tables applicatives</span>
+        <div class="db-card-list">${appTables.map((table: any) => `
+          <div class="db-row"><span class="db-row-key">${escapeHtml(table.name || 'table')}</span><span class="db-row-meta">supabase/schema.sql</span></div>`).join('')}</div>
+        <div class="db-note">${DB_ICON_INFO}<span>Le contenu des lignes et la console des enregistrements seront accessibles après la publication du backend. Aucune ligne n'est simulée ici.</span></div>
+      </div>`
+    : `<div class="db-card">
+        <span class="db-card-label">Tables applicatives</span>
+        <div class="db-empty">Aucune table définie pour l'instant. Demandez à Huggy de modéliser vos données (ex. « ajoute une table produits ») pour générer le schéma.</div>
+      </div>`;
+
+  return `
+    <section class="db-section">
+      <div class="db-section-head">
+        <span class="db-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg></span>
+        <div class="db-section-head-text">
+          <h2 class="db-section-title">Base de données intégrée</h2>
+          <p class="db-section-desc">Base managée, migrations de schéma et clés d'accès — provisionnées par Huggy.</p>
+        </div>
+      </div>
+      <div class="db-section-body">
+        <div class="db-grid">${connectionCard}${schemaCard}${secretsCard}</div>
+        ${tablesBlock}
+      </div>
+    </section>`;
+}
+
+// Section 2 — Authentification & utilisateurs. On reflète si l'app REQUIERT
+// l'auth (requirements.needs_auth) et l'état de provisioning. La console des
+// utilisateurs finaux n'a pas d'API : état honnête, pas de fausse table.
+function renderDatabaseSection2(db: any): string {
+  const cloud = db.cloud || {};
+  const requirements = cloud.requirements || null;
+  const cloudStatus = (cloud.status || db.backend_status || '').toLowerCase();
+  const provisioned = /ready|provisioned|active|enabled/.test(cloudStatus);
+
+  let authBadge: string;
+  let authMeta: string;
+  if (!requirements) {
+    authBadge = dbBadge('neutral', 'Analyse en attente');
+    authMeta = 'L\'analyse du backend démarre dès la première génération.';
+  } else if (requirements.needs_auth) {
+    authBadge = provisioned ? dbBadge('success', 'Activée') : dbBadge('warning', 'Requise — à configurer');
+    authMeta = provisioned ? 'Connexion / inscription gérées par Huggy Cloud.' : 'Sera provisionnée lors de la mise en place du backend.';
+  } else {
+    authBadge = dbBadge('neutral', 'Non requise par l\'app');
+    authMeta = 'Aucun besoin d\'authentification détecté dans ce projet.';
+  }
+
+  return `
+    <section class="db-section">
+      <div class="db-section-head">
+        <span class="db-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
+        <div class="db-section-head-text">
+          <h2 class="db-section-title">Authentification & utilisateurs</h2>
+          <p class="db-section-desc">Connexion, inscription et gestion des comptes de votre application.</p>
+        </div>
+      </div>
+      <div class="db-section-body">
+        <div class="db-grid">
+          <div class="db-card">
+            <span class="db-card-label">Authentification de l'app</span>
+            <div class="db-card-value">${authBadge}</div>
+            <div class="db-row-meta">${escapeHtml(authMeta)}</div>
+          </div>
+          <div class="db-card">
+            <span class="db-card-label">Fournisseur</span>
+            <div class="db-card-value">${requirements && requirements.needs_auth ? escapeHtml(dbProviderName(cloud.provider) + ' Auth') : '—'}</div>
+            <div class="db-row-meta">Service role serveur uniquement — jamais exposé au client.</div>
+          </div>
+        </div>
+        <div class="db-soon">
+          <span class="db-soon-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-3-3.87"></path><path d="M9 21v-2a4 4 0 0 1 3-3.87"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
+          <div class="db-soon-text">
+            <p class="db-soon-title">Gestion des utilisateurs finaux</p>
+            <p class="db-soon-desc">La console des comptes de votre application sera disponible après la publication du backend. Aucune donnée utilisateur n'est simulée ici.</p>
+          </div>
+          ${dbBadge('neutral', 'Après publication')}
+        </div>
+      </div>
+    </section>`;
+}
+
+// Section 3 — Stockage de fichiers. Aucun backend d'upload/diffusion n'existe
+// encore : état honnête, sans zone d'upload ni faux fichiers.
+function renderDatabaseSection3(db: any): string {
+  const requirements = (db.cloud && db.cloud.requirements) || null;
+  const needsStorage = Boolean(requirements && requirements.needs_storage);
+  const statusBadge = needsStorage ? dbBadge('warning', 'Configuration requise') : dbBadge('neutral', 'Bientôt disponible');
+  const detail = needsStorage
+    ? 'Votre application requiert du stockage : il sera provisionné lors de la mise en place du backend.'
+    : 'Décrivez vos besoins de fichiers à Huggy (ex. « permets l\'upload d\'avatars ») pour l\'activer.';
+
+  // [STORAGE BACKEND ICI] — brancher l'upload / la liste des fichiers quand le
+  // backend de stockage existera. Tant qu'il n'existe pas : aucune zone d'upload.
+  return `
+    <section class="db-section">
+      <div class="db-section-head">
+        <span class="db-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>
+        <div class="db-section-head-text">
+          <h2 class="db-section-title">Stockage de fichiers</h2>
+          <p class="db-section-desc">Upload, gestion et diffusion des fichiers et médias de votre application.</p>
+        </div>
+      </div>
+      <div class="db-section-body">
+        <div class="db-soon">
+          <span class="db-soon-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5-5 5 5"></path><path d="M12 5v12"></path></svg></span>
+          <div class="db-soon-text">
+            <p class="db-soon-title">Stockage managé bientôt disponible</p>
+            <p class="db-soon-desc">L'upload, la gestion et la diffusion de médias ne sont pas encore activés. ${escapeHtml(detail)} Aucune zone d'upload n'est affichée tant que le backend n'existe pas.</p>
+          </div>
+          ${statusBadge}
+        </div>
+      </div>
+    </section>`;
+}
+
 async function loadDatabase() {
-  if (!currentProjectId) return;
   const target = document.getElementById('database-content');
   if (!target) return;
-  target.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Loading database...</div>';
+  if (!currentProjectId) {
+    target.innerHTML = `<div class="db-state">Ouvrez ou créez un projet pour consulter l'état réel de son backend cloud.</div>`;
+    return;
+  }
+  target.innerHTML = `<div class="db-state">Chargement de l'état du backend…</div>`;
   try {
     const payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/database`);
-    const db = payload.database;
-    const secrets = db.secrets || [];
-    const integrations = db.integrations || [];
-    const assets = db.assets || [];
-    const activity = db.activity || [];
-    const records = db.records_preview || [];
-    target.innerHTML = `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Tables</h3>
-        ${(db.tables || []).map((table: any) => `<div style="font-size:12px;color:var(--text);">${escapeHtml(table.name)} <span style="color:var(--text-muted);">${table.rows} rows</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No project data yet.</p>'}
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">API keys</h3>
-        ${secrets.map((secret: any) => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text);margin-bottom:7px;"><span>${escapeHtml(secret.variable)}</span><span style="color:var(--text-muted);">${escapeHtml(secret.masked_value)} &middot; ${escapeHtml(secret.status)}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No API keys configured.</p>'}
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Security</h3>
-        <p style="font-size:12px;color:var(--text-muted);line-height:1.5;margin:0;">RLS required. Secrets masked. Service role is server-only.</p>
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Records</h3>
-        ${records.map((record: any) => `<div style="font-size:11px;color:var(--text);margin-bottom:6px;">${escapeHtml(record.path || record.table || 'record')}</div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No records yet.</p>'}
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Integrations</h3>
-        ${integrations.map((item: any) => `<div style="font-size:12px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.service)} <span style="color:var(--text-muted);">${escapeHtml(item.status)}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No integrations detected.</p>'}
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Storage</h3>
-        ${assets.map((item: any) => `<div style="font-size:12px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.name)} <span style="color:var(--text-muted);">${escapeHtml(item.kind || 'asset')}</span></div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No assets uploaded.</p>'}
-      </div>
-      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--bg-input);">
-        <h3 style="margin:0 0 8px;font-size:13px;">Activity</h3>
-        ${activity.map((item: any) => `<div style="font-size:11px;color:var(--text);margin-bottom:6px;">${escapeHtml(item.event_type)} - ${escapeHtml(item.message || '')}</div>`).join('') || '<p style="font-size:12px;color:var(--text-muted);">No activity yet.</p>'}
-      </div>
-    `;
+    const db = payload.database || {};
+    target.innerHTML = renderDatabaseSection1(db) + renderDatabaseSection2(db) + renderDatabaseSection3(db);
   } catch (error) {
-    target.innerHTML = `<div style="font-size:12px;color:#b91c1c;">${escapeHtml(error instanceof Error ? error.message : 'Database unavailable')}</div>`;
+    target.innerHTML = `<div class="db-state db-state-error">${escapeHtml(error instanceof Error ? error.message : 'Backend cloud indisponible pour le moment.')}</div>`;
   }
 }
 
