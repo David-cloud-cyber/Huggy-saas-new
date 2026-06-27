@@ -751,6 +751,12 @@
       box-shadow: none;
       font-size: 13px;
       font-weight: 500;
+      /* Le menu déroulant des contrôles d'aperçu (toggle appareil) est ancré dans
+         cette barre ; le panneau de preview est en position:absolute z-index:10.
+         On hisse la barre dans son propre contexte d'empilement au-dessus du
+         preview pour que le menu reste cliquable (sinon l'iframe capte le clic). */
+      position: relative;
+      z-index: 100;
     }
 
     /* Focus ring on every interactive top bar control (a11y). */
@@ -1030,40 +1036,6 @@
       width: 16px;
       height: 16px;
       stroke-width: 2.2;
-    }
-
-    .preview-page-selector {
-      height: 32px;
-      min-width: min(200px, 20vw);
-      max-width: 300px;
-      padding: 0 12px;
-      border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--bg-input) 82%, #000 8%);
-      color: var(--text);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-size: 13px;
-      font-weight: 780;
-      letter-spacing: -.02em;
-      white-space: nowrap;
-      box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent) inset;
-      cursor: default;
-    }
-
-    :root[data-theme="light"] .preview-page-selector {
-      background: #ffffff;
-      border-color: rgba(9, 9, 11, .10);
-      box-shadow: 0 10px 26px rgba(9, 9, 11, .05);
-    }
-
-    .preview-page-selector svg {
-      width: 14px;
-      height: 14px;
-      flex: 0 0 auto;
-      color: var(--text-sub);
     }
 
     .btn-share,
@@ -3817,10 +3789,6 @@
         max-width: 120px;
       }
 
-      .preview-page-selector {
-        min-width: 220px;
-      }
-
       .btn-share {
         display: none;
       }
@@ -4382,12 +4350,6 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
                   <path d="M21 3v6h-6"></path>
-                </svg>
-              </button>
-              <button class="preview-page-selector" id="preview-page-selector" type="button" aria-label="Sélecteur de page d'aperçu">
-                <span id="preview-page-label">Page d'accueil</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6"></path>
                 </svg>
               </button>
               <button class="preview-external-btn" id="btn-preview-external" type="button" aria-label="Ouvrir l'aperçu dans un nouvel onglet" title="Ouvrir l'aperçu">
@@ -5016,23 +4978,6 @@
       }
       explorerFilesTab?.addEventListener("click", () => setExplorerTab("files"));
       explorerSearchTab?.addEventListener("click", () => setExplorerTab("search"));
-
-      // Preview page selector — cycle available HTML pages or show notice
-      const previewPageSelector = document.getElementById("preview-page-selector");
-      const previewPageLabel = document.getElementById("preview-page-label");
-      const availablePreviewPages = ["Page d'accueil"];
-      let previewPageIndex = 0;
-      previewPageSelector?.addEventListener("click", () => {
-        if (availablePreviewPages.length <= 1) {
-          const frame = document.getElementById("preview-iframe-element");
-          if (!frame || !frame.srcdoc?.trim()) return;
-          previewPageSelector.style.opacity = "0.5";
-          window.setTimeout(() => { previewPageSelector.style.opacity = ""; }, 400);
-          return;
-        }
-        previewPageIndex = (previewPageIndex + 1) % availablePreviewPages.length;
-        if (previewPageLabel) previewPageLabel.textContent = availablePreviewPages[previewPageIndex];
-      });
 
       // Save simulation triggered by Ctrl+S / Cmd+S
       function showSaveToast() {
