@@ -255,6 +255,12 @@ function init() {
     let publicAuthState: PublicAuthState = 'unknown';
     let publicAuthCheckPromise: Promise<PublicAuthState> | null = null;
 
+    function hasConfiguredPublicSupabase() {
+        const url = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
+        const key = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+        return Boolean(url && key);
+    }
+
     function setPublicAuthCtaState(state: PublicAuthState) {
         const signedIn = state === 'signed-in';
         document.querySelectorAll<HTMLElement>('.sign-in-btn').forEach(button => {
@@ -279,6 +285,11 @@ function init() {
 
         publicAuthCheckPromise = (async () => {
             try {
+                if (!hasConfiguredPublicSupabase()) {
+                    publicAuthState = 'signed-out';
+                    setPublicAuthCtaState('signed-out');
+                    return 'signed-out';
+                }
                 const { getVerifiedSession, supabase } = await import('./lib/supabase-browser');
                 const verified = await getVerifiedSession({ allowRefresh: true });
                 const nextState: PublicAuthState = verified?.user ? 'signed-in' : 'signed-out';
