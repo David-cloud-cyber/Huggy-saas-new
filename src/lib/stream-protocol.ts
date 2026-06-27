@@ -86,7 +86,12 @@ export type HuggyStreamEventType =
   | 'check'
   | 'warning'
   | 'error'
-  | 'done';
+  | 'done'
+  | 'tool_call'
+  | 'tool_result'
+  | 'source'
+  | 'citation'
+  | 'attachment';
 
 const EVENT_TYPES: readonly HuggyStreamEventType[] = [
   'status',
@@ -106,6 +111,11 @@ const EVENT_TYPES: readonly HuggyStreamEventType[] = [
   'warning',
   'error',
   'done',
+  'tool_call',
+  'tool_result',
+  'source',
+  'citation',
+  'attachment',
 ];
 
 interface HuggyStreamEventBase {
@@ -246,6 +256,48 @@ export interface HuggyDoneEvent extends HuggyStreamEventBase {
   payload: unknown;
 }
 
+/** A tool invocation initiated by the agent (input streaming or available). */
+export interface HuggyToolCallEvent extends HuggyStreamEventBase {
+  type: 'tool_call';
+  callId: string;
+  name: string;
+  input?: unknown;
+  state?: 'input-streaming' | 'input-available';
+}
+
+/** The result of a tool invocation. */
+export interface HuggyToolResultEvent extends HuggyStreamEventBase {
+  type: 'tool_result';
+  callId: string;
+  name?: string;
+  output?: unknown;
+  error?: string;
+}
+
+/** A web/source the agent consulted, surfaced as a citation chip. */
+export interface HuggySourceEvent extends HuggyStreamEventBase {
+  type: 'source';
+  url: string;
+  title?: string;
+}
+
+/** An inline citation tied to streamed text. */
+export interface HuggyCitationEvent extends HuggyStreamEventBase {
+  type: 'citation';
+  url: string;
+  title?: string;
+  snippet?: string;
+}
+
+/** A file/image attachment surfaced in the assistant message. */
+export interface HuggyAttachmentEvent extends HuggyStreamEventBase {
+  type: 'attachment';
+  name: string;
+  mediaType?: string;
+  url?: string;
+  size?: number;
+}
+
 export type HuggyStreamEvent =
   | HuggyStatusEvent
   | HuggyMilestoneEvent
@@ -263,7 +315,12 @@ export type HuggyStreamEvent =
   | HuggyCheckEvent
   | HuggyWarningEvent
   | HuggyErrorEvent
-  | HuggyDoneEvent;
+  | HuggyDoneEvent
+  | HuggyToolCallEvent
+  | HuggyToolResultEvent
+  | HuggySourceEvent
+  | HuggyCitationEvent
+  | HuggyAttachmentEvent;
 
 export function isHuggyStreamEvent(value: unknown): value is HuggyStreamEvent {
   if (typeof value !== 'object' || value === null) return false;

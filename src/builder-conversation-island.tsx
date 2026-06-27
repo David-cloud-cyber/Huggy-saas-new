@@ -17,6 +17,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { AnimatePresence, motion } from "motion/react";
 import { Response } from "./components/ui/response";
 import type { HuggyStreamEvent } from "./lib/stream-protocol";
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "./components/ai-elements/tool";
+import { Reasoning, ReasoningTrigger, ReasoningContent } from "./components/ai-elements/reasoning";
+import { Sources, SourcesTrigger, SourcesContent, Source } from "./components/ai-elements/sources";
 
 hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("css", css);
@@ -43,12 +46,28 @@ type LiveRunLine = {
   status: "active" | "done" | "failed" | "muted";
 };
 
+type ToolEntry = {
+  id: string;
+  name: string;
+  status: "input-streaming" | "input-available" | "output-available" | "output-error";
+  input?: unknown;
+  output?: string;
+  error?: string;
+};
+
+type SourceEntry = { id: string; url: string; title?: string };
+type AttachmentEntry = { id: string; name: string; url?: string; mediaType?: string; size?: number };
+
 type LiveRunState = {
   status: "active" | "done" | "failed" | "cancelled";
   intentText: string;
   activeText: string;
   summary: string;
   assistantText: string;
+  reasoningText: string;
+  tools: ToolEntry[];
+  sources: SourceEntry[];
+  attachments: AttachmentEntry[];
   startedAt: number;
   lines: LiveRunLine[];
 };
@@ -206,7 +225,7 @@ function createStore() {
 
   const find = (id: string) => messages.find((message) => message.id === id);
 
-  const ensureLiveRun = (message: HuggyConversationMessage, meta: { intent?: string; activeText?: string } = {}) => {
+  const ensureLiveRun = (message: HuggyConversationMessage, meta: { intent?: string; activeText?: string } = {}): LiveRunState => {
     if (!message.liveRun) {
       message.liveRun = {
         status: "active",
@@ -214,6 +233,10 @@ function createStore() {
         activeText: meta.activeText || "",
         summary: "",
         assistantText: "",
+        reasoningText: "",
+        tools: [],
+        sources: [],
+        attachments: [],
         startedAt: Date.now(),
         lines: [],
       };
@@ -221,7 +244,7 @@ function createStore() {
     if (meta.intent) message.liveRun.intentText = meta.intent;
     if (meta.activeText) message.liveRun.activeText = meta.activeText;
     message.working = true;
-    return message.liveRun;
+    return message.liveRun as LiveRunState;
   };
 
   const addLine = (run: LiveRunState, text: string, status: LiveRunLine["status"] = "done") => {
@@ -373,6 +396,7 @@ function createStore() {
             break;
           case "reasoning_delta":
             run.activeText = event.text;
+            run.reasoningText += event.text;
             break;
           case "assistant_delta":
             run.assistantText += event.text;
@@ -409,6 +433,60 @@ function createStore() {
           case "done":
             run.status = run.status === "failed" ? "failed" : "done";
             message.working = false;
+            break;
+          case "tool_call": {
+            const existing = run.tools.find((t) => t.id === event.callId);
+            if (existing) {
+              existing.input = event.input ?? existing.input;
+              existing.status = event.state || "input-available";
+            } else {
+              run.tools.push({
+                id: event.callId,
+                name: event.name,
+                input: event.input,
+                status: event.state || "input-available",
+              });
+            }
+            addLine(run, `Outil: ${event.name}`, "active");
+            break;
+          }
+          case "tool_result": {
+            const entry = run.tools.find((t) => t.id === event.callId);
+            const outputText = typeof event.output === "string" ? event.output : event.output != null ? JSON.stringify(event.output, null, 2) : undefined;
+            if (entry) {
+              entry.status = event.error ? "output-error" : "output-available";
+              entry.output = outputText;
+              entry.error = event.error;
+            } else {
+              run.tools.push({
+                id: event.callId,
+                name: event.name || "tool",
+                status: event.error ? "output-error" : "output-available",
+                output: outputText,
+                error: event.error,
+              });
+            }
+            addLine(run, `Outil ${event.error ? "echec" : "OK"}: ${event.name || event.callId}`, event.error ? "failed" : "done");
+            break;
+          }
+          case "source":
+            if (!run.sources.find((s) => s.url === event.url)) {
+              run.sources.push({ id: nanoid(), url: event.url, title: event.title });
+            }
+            break;
+          case "citation":
+            if (!run.sources.find((s) => s.url === event.url)) {
+              run.sources.push({ id: nanoid(), url: event.url, title: event.title });
+            }
+            break;
+          case "attachment":
+            run.attachments.push({
+              id: nanoid(),
+              name: event.name,
+              url: event.url,
+              mediaType: event.mediaType,
+              size: event.size,
+            });
             break;
           default:
             break;
@@ -775,6 +853,69 @@ function ensureConversationStyles() {
       100% { background-position: -80% 0; }
     }
 
+    .huggy-tools-stack { display: grid; gap: 6px; margin: 8px 0; }
+    .huggy-tool {
+      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--bg-input) 60%, transparent);
+      overflow: hidden;
+    }
+    .huggy-tool-header {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 8px 10px; background: transparent; border: 0; cursor: pointer;
+      color: var(--text); font: inherit; font-size: 12px; font-weight: 600;
+    }
+    .huggy-tool-chevron { width: 12px; color: var(--text-muted); }
+    .huggy-tool-icon { display: inline-flex; }
+    .huggy-tool-name { flex: 1; text-align: left; }
+    .huggy-tool-status {
+      font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+      background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent);
+      color: color-mix(in srgb, var(--text) 80%, var(--accent, #3b82f6));
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .huggy-tool-status.status-output-error {
+      background: color-mix(in srgb, #ef4444 18%, transparent);
+      color: #ef4444;
+    }
+    .huggy-tool-status.status-output-available {
+      background: color-mix(in srgb, #22c55e 16%, transparent);
+      color: #16a34a;
+    }
+    .huggy-tool-content {
+      padding: 0 10px 10px;
+      display: grid; gap: 8px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    }
+    .huggy-tool-input, .huggy-tool-output-pre {
+      margin: 8px 0 0; padding: 8px 10px;
+      background: #0f1117; color: #e5e7eb;
+      border-radius: 8px; font-size: 11px; line-height: 1.5;
+      overflow: auto; max-height: 280px;
+    }
+    .huggy-tool-output.is-error { color: #ef4444; font-size: 12px; margin-top: 8px; }
+
+    .huggy-reasoning {
+      border-left: 2px solid color-mix(in srgb, var(--accent, #3b82f6) 50%, var(--border));
+      padding-left: 10px; margin: 6px 0 10px; color: var(--text-sub);
+    }
+    .huggy-reasoning-trigger {
+      background: transparent; border: 0; padding: 2px 0;
+      color: var(--text-sub); font-size: 11.5px; font-weight: 600;
+      cursor: pointer;
+    }
+    .huggy-reasoning-content { margin-top: 6px; font-size: 12px; }
+
+    .huggy-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .huggy-attachment {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 8px; text-decoration: none;
+      background: color-mix(in srgb, var(--bg-input) 80%, transparent);
+      color: var(--text); font-size: 11.5px;
+      border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    }
+    .huggy-attachment-meta { color: var(--text-muted); font-size: 10.5px; }
+
     @media (prefers-reduced-motion: reduce) {
       .huggy-chat-message,
       .huggy-live-dot,
@@ -883,18 +1024,69 @@ function MessageView({ message }: { message: HuggyConversationMessage }) {
   const isAssistant = message.role === "assistant";
   const hasStreamedText = isAssistant && message.content.trim().length > 0;
   const showThinking = isAssistant && message.working && !message.liveRun && !hasStreamedText;
+  const run = message.liveRun;
+  const reasoningText = run?.reasoningText || "";
+  const tools = run?.tools || [];
+  const sources = run?.sources || [];
+  const attachments = run?.attachments || [];
 
   return (
     <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
       <div className="huggy-chat-bubble">
         {message.liveRun ? <LiveRunView run={message.liveRun} /> : null}
         {showThinking ? <CyclingShimmer initialLabel={message.content} /> : null}
+        {isAssistant && reasoningText ? (
+          <Reasoning isStreaming={message.working} defaultOpen={false}>
+            <ReasoningTrigger label={message.working ? "Réflexion en cours…" : "Réflexion"} />
+            <ReasoningContent>
+              <Response>{reasoningText}</Response>
+            </ReasoningContent>
+          </Reasoning>
+        ) : null}
+        {isAssistant && tools.length > 0 ? (
+          <div className="huggy-tools-stack">
+            {tools.map((tool) => (
+              <Tool key={tool.id} defaultOpen={false}>
+                <ToolHeader name={tool.name} status={tool.status} />
+                <ToolContent>
+                  {tool.input !== undefined ? <ToolInput input={tool.input} /> : null}
+                  {tool.output !== undefined || tool.error ? (
+                    <ToolOutput
+                      errorText={tool.error}
+                      output={tool.output ? <pre className="huggy-tool-output-pre"><code>{tool.output}</code></pre> : null}
+                    />
+                  ) : null}
+                </ToolContent>
+              </Tool>
+            ))}
+          </div>
+        ) : null}
         {isUser ? (
           <>{message.content}</>
         ) : hasStreamedText ? (
           <Response>{message.content}</Response>
         ) : !isAssistant && !message.liveRun && message.content ? (
           <>{message.content}</>
+        ) : null}
+        {isAssistant && sources.length > 0 ? (
+          <Sources>
+            <SourcesTrigger count={sources.length} />
+            <SourcesContent>
+              {sources.map((s) => (
+                <Source key={s.id} href={s.url} title={s.title || s.url} />
+              ))}
+            </SourcesContent>
+          </Sources>
+        ) : null}
+        {isAssistant && attachments.length > 0 ? (
+          <div className="huggy-attachments">
+            {attachments.map((a) => (
+              <a key={a.id} className="huggy-attachment" href={a.url || "#"} target="_blank" rel="noreferrer">
+                <span className="huggy-attachment-name">{a.name}</span>
+                {a.mediaType ? <span className="huggy-attachment-meta">{a.mediaType}</span> : null}
+              </a>
+            ))}
+          </div>
         ) : null}
         {message.actions?.length ? (
           <div className="huggy-chat-actions">
