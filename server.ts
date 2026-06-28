@@ -2493,6 +2493,82 @@ async function waitForVercelDeploymentReady(initialPayload: any, token: string, 
   );
 }
 
+async function assignCustomDomainToVercelDeployment(
+  project: GeneratedProject,
+  deploymentId: string,
+  customDomain: string,
+  token: string,
+) {
+  const domain = normalizeDomainHost(customDomain);
+  if (!domain) return null;
+
+  const projectName = getVercelProjectName(project);
+  const service = new VercelDomainService(token, process.env.VERCEL_TEAM_ID || undefined);
+
+  console.log('[huggy:vercel_domain_ensure_start]', {
+    project_id: project.id,
+    vercel_project: projectName,
+    domain,
+  });
+
+  try {
+    await service.ensureDomainOnProject(projectName, domain);
+    console.log('[huggy:vercel_domain_ensure_ok]', {
+      project_id: project.id,
+      vercel_project: projectName,
+      domain,
+    });
+  } catch (error: any) {
+    console.error('[huggy:vercel_domain_ensure_failed]', {
+      project_id: project.id,
+      vercel_project: projectName,
+      domain,
+      status: error?.statusCode || null,
+      message: redactSecrets(error?.message || String(error)),
+    });
+    throw createPublicError(
+      `Vercel created the deployment, but could not attach ${domain} to the generated app project. Check that VERCEL_TOKEN can manage domains for this Vercel team/project, then retry Publish.`,
+      502,
+      'VERCEL_DOMAIN_UNASSIGNED',
+      'verify_vercel_domain_scope',
+    );
+  }
+
+  console.log('[huggy:vercel_alias_start]', {
+    project_id: project.id,
+    deployment_id: deploymentId,
+    domain,
+  });
+
+  try {
+    const alias = await service.assignDeploymentAlias(deploymentId, domain);
+    console.log('[huggy:vercel_alias_ok]', {
+      project_id: project.id,
+      deployment_id: deploymentId,
+      domain,
+    });
+    return {
+      domain,
+      url: normalizeDomainUrl(alias.alias || domain),
+      raw: alias.raw,
+    };
+  } catch (error: any) {
+    console.error('[huggy:vercel_alias_failed]', {
+      project_id: project.id,
+      deployment_id: deploymentId,
+      domain,
+      status: error?.statusCode || null,
+      message: redactSecrets(error?.message || String(error)),
+    });
+    throw createPublicError(
+      `Vercel created the deployment, but could not assign ${domain} to it. The previous live app was kept unchanged; verify the domain and token scope, then retry Publish.`,
+      502,
+      'VERCEL_ALIAS_FAILED',
+      'verify_domain_and_retry_publish',
+    );
+  }
+}
+
 function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
   if (!html || html.includes('data-huggy-published-badge="true"')) return html;
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
@@ -8522,7 +8598,7 @@ function createVercelDomainProxy() {
 async function deployFilesToVercel(
   project: GeneratedProject,
   files: GeneratedFile[],
-  options: { includeHuggyBadge?: boolean; publicOrigin?: string } = {},
+  options: { includeHuggyBadge?: boolean; publicOrigin?: string; customDomain?: string | null; requestId?: string } = {},
 ) {
   const token = getVercelToken();
   if (!token) {
@@ -8533,6 +8609,15 @@ async function deployFilesToVercel(
       'configure_vercel_token',
     );
   }
+
+  const customDomain = normalizeDomainHost(options.customDomain || '');
+  console.log('[huggy:vercel_deploy_start]', {
+    request_id: options.requestId || null,
+    project_id: project.id,
+    vercel_project: getVercelProjectName(project),
+    custom_domain: customDomain || null,
+    include_huggy_badge: Boolean(options.includeHuggyBadge),
+  });
 
   const prepareHtml = (html: string) => {
     const enhanced = injectAnalyticsSnippet(
@@ -8617,13 +8702,42 @@ async function deployFilesToVercel(
     throw error;
   }
 
+  console.log('[huggy:vercel_deploy_accepted]', {
+    request_id: options.requestId || null,
+    project_id: project.id,
+    deployment_id: payload?.id || payload?.uid || null,
+    state: getVercelDeploymentState(payload) || null,
+  });
+
   const readyPayload = await waitForVercelDeploymentReady(payload, token, params);
-  const url = getPublicVercelDeploymentUrl(project, readyPayload) || (readyPayload.url ? `https://${String(readyPayload.url).replace(/^https?:\/\//, '')}` : '');
-  return {
-    provider_deployment_id: readyPayload.id || readyPayload.uid || null,
+  const deploymentId = String(readyPayload.id || readyPayload.uid || '').trim();
+  console.log('[huggy:vercel_deploy_ready]', {
+    request_id: options.requestId || null,
+    project_id: project.id,
+    deployment_id: deploymentId || null,
+    state: getVercelDeploymentState(readyPayload) || 'ready',
+  });
+
+  const alias = deploymentId && customDomain
+    ? await assignCustomDomainToVercelDeployment(project, deploymentId, customDomain, token)
+    : null;
+  const vercelUrl = getPublicVercelDeploymentUrl(project, readyPayload) || (readyPayload.url ? `https://${String(readyPayload.url).replace(/^https?:\/\//, '')}` : '');
+  const url = alias?.url || vercelUrl;
+
+  console.log('[huggy:vercel_publish_resolved]', {
+    request_id: options.requestId || null,
+    project_id: project.id,
+    deployment_id: deploymentId || null,
     deployment_url: url,
+    custom_domain_assigned: Boolean(alias?.url),
+  });
+
+  return {
+    provider_deployment_id: deploymentId || null,
+    deployment_url: url,
+    custom_domain_url: alias?.url || null,
     status: getVercelDeploymentState(readyPayload) || 'ready',
-    raw: readyPayload,
+    raw: alias ? { deployment: readyPayload, alias: alias.raw } : readyPayload,
   };
 }
 
@@ -12552,6 +12666,8 @@ async function publishProjectSnapshot(req: any, res: any) {
     const result = await deployFilesToVercel(project, context.files, {
       includeHuggyBadge: badgeRequired,
       publicOrigin,
+      customDomain: context.customDomain,
+      requestId,
     });
     const createdAt = new Date().toISOString();
     const deploy = {

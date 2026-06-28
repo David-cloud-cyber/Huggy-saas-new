@@ -29,6 +29,12 @@ export interface VercelDomainAssociation {
   raw?: any;
 }
 
+export interface VercelDeploymentAlias {
+  alias: string;
+  deployment_id: string;
+  raw?: any;
+}
+
 export class domainPlanLimits {
   static getCustomDomainLimit(plan: string | any): number {
     switch (String(plan).toLowerCase()) {
@@ -114,6 +120,43 @@ export class VercelDomainService {
       verification_token: String(txtChallenge?.value || ''),
       verified: Boolean(payload.verified),
       verification,
+      raw: payload,
+    };
+  }
+
+  async ensureDomainOnProject(projectId: string, domain: string): Promise<VercelDomainAssociation> {
+    try {
+      return await this.addDomainToVercel(projectId, domain);
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      const sameProjectAlreadyConfigured =
+        /already|exists|configured|added/i.test(message) &&
+        !/another|different|other project|other team/i.test(message);
+
+      if (!sameProjectAlreadyConfigured) throw error;
+
+      return {
+        vercel_domain_id: domain,
+        verification_token: '',
+        verified: true,
+        verification: [],
+        raw: error?.payload || { reused: true, message },
+      };
+    }
+  }
+
+  async assignDeploymentAlias(deploymentId: string, domain: string): Promise<VercelDeploymentAlias> {
+    const payload = await this.vercelRequest<any>(
+      `/v2/deployments/${encodeURIComponent(deploymentId)}/aliases${this.buildTeamQuery()}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ alias: domain }),
+      },
+    );
+
+    return {
+      alias: String(payload?.alias || payload?.url || payload?.name || domain),
+      deployment_id: String(payload?.deploymentId || payload?.deployment?.id || deploymentId),
       raw: payload,
     };
   }

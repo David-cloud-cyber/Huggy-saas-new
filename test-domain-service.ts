@@ -36,6 +36,19 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (url.includes('/v10/projects/proj_existing/domains')) {
+    return new Response(JSON.stringify({
+      error: { message: 'Domain already exists in this project' },
+    }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (url.includes('/v2/deployments/dpl_123/aliases')) {
+    return new Response(JSON.stringify({
+      alias: 'example.com',
+      deploymentId: 'dpl_123',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
   if (url.includes('/verify') && url.includes('not-ready.com')) {
     return new Response(JSON.stringify({
       verified: false,
@@ -73,6 +86,17 @@ try {
   assert.equal(calls[0].method, 'POST');
   assert.equal(calls[0].authorization, 'Bearer vc_test_token');
   assert.deepEqual(JSON.parse(calls[0].body || '{}'), { name: 'example.com' });
+
+  const existing = await service.ensureDomainOnProject('proj_existing', 'example.com');
+  assert.equal(existing.vercel_domain_id, 'example.com');
+  assert.equal(existing.verified, true);
+
+  const alias = await service.assignDeploymentAlias('dpl_123', 'example.com');
+  assert.equal(alias.alias, 'example.com');
+  assert.equal(alias.deployment_id, 'dpl_123');
+  assert.ok(calls.some(call => call.url === 'https://api.vercel.com/v2/deployments/dpl_123/aliases?teamId=team_123' && call.method === 'POST'));
+  const aliasCall = calls.find(call => call.url === 'https://api.vercel.com/v2/deployments/dpl_123/aliases?teamId=team_123' && call.method === 'POST');
+  assert.deepEqual(JSON.parse(aliasCall?.body || '{}'), { alias: 'example.com' });
 
   const pending = await service.verifyVercelDomain('proj_123', 'not-ready.com');
   assert.equal(pending.verified, false);
