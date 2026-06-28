@@ -420,34 +420,61 @@
         </div>
     </section>
 
-    <section id="pricing" class="pricing-teaser reveal" translate="no">
+    <section id="pricing" class="pricing-full reveal" translate="no">
         <div class="section-header compact">
             <p class="section-kicker" data-i18n="pricing.kicker">Pricing</p>
             <h2 data-i18n="pricing.title">Start free. Upgrade when you publish.</h2>
             <p data-i18n="pricing.subtitle">Free to validate the idea. Pro to ship real apps. Scale for teams.</p>
         </div>
-        <div class="pricing-mini-grid stagger-grid">
-            <div class="pricing-mini reveal">
-                <span class="pm-name" data-i18n="pricing.free.name">Free</span>
-                <span class="pm-price">$0<small data-i18n="pricing.unit">/mo</small></span>
-                <span class="pm-note" data-i18n="pricing.free.benefit">Validate your idea</span>
-                <a class="pm-cta" href="/auth.html" data-conversion-event="pricing_plan_click" data-conversion-plan="free" data-i18n="pricing.free.cta">Get started</a>
+        <div class="pricing-grid-full stagger-grid">
+            <div class="plan-card reveal">
+                <div class="plan-head">
+                    <span class="plan-name" data-i18n="pricing.free.name">Free</span>
+                    <span class="plan-price">$0<small data-i18n="pricing.unit">/mo</small></span>
+                    <span class="plan-note" data-i18n="pricing.free.benefit">Validate your idea</span>
+                </div>
+                <ul class="plan-features">
+                    <li data-i18n="pricing.free.f1">50 starter credits</li>
+                    <li data-i18n="pricing.free.f2">1 active project</li>
+                    <li data-i18n="pricing.free.f3">Live preview while you build</li>
+                    <li data-i18n="pricing.free.f4">$1 Cloud balance included</li>
+                    <li data-i18n="pricing.free.f5">Huggy subdomain</li>
+                </ul>
+                <a class="plan-cta" href="/auth.html" data-conversion-event="pricing_plan_click" data-conversion-plan="free" data-i18n="pricing.free.cta">Get started</a>
             </div>
-            <div class="pricing-mini featured reveal">
-                <span class="pm-badge" data-i18n="pricing.pro.badge">Most popular</span>
-                <span class="pm-name" data-i18n="pricing.pro.name">Pro</span>
-                <span class="pm-price">$25<small data-i18n="pricing.unit">/mo</small></span>
-                <span class="pm-note" data-i18n="pricing.pro.benefit">Publish real apps</span>
-                <a class="pm-cta pm-cta-primary" href="/auth.html" data-conversion-event="pricing_plan_click" data-conversion-plan="pro" data-i18n="pricing.pro.cta">Choose Pro</a>
+            <div class="plan-card featured reveal">
+                <span class="plan-badge" data-i18n="pricing.pro.badge">Most popular</span>
+                <div class="plan-head">
+                    <span class="plan-name" data-i18n="pricing.pro.name">Pro</span>
+                    <span class="plan-price">$25<small data-i18n="pricing.unit">/mo</small></span>
+                    <span class="plan-note" data-i18n="pricing.pro.benefit">Publish real apps</span>
+                </div>
+                <ul class="plan-features">
+                    <li data-i18n="pricing.pro.f1">1,000 credits / month</li>
+                    <li data-i18n="pricing.pro.f2">10 active projects, 3 published</li>
+                    <li data-i18n="pricing.pro.f3">$10 Cloud balance included</li>
+                    <li data-i18n="pricing.pro.f4">Custom domain &amp; badge removal</li>
+                    <li data-i18n="pricing.pro.f5">Deploy, export, versions, rollback</li>
+                </ul>
+                <a class="plan-cta plan-cta-primary" href="/auth.html?plan=pro" data-conversion-event="pricing_plan_click" data-conversion-plan="pro" data-i18n="pricing.pro.cta">Start with Pro</a>
             </div>
-            <div class="pricing-mini reveal">
-                <span class="pm-name" data-i18n="pricing.scale.name">Scale</span>
-                <span class="pm-price">$200<small data-i18n="pricing.unit">/mo</small></span>
-                <span class="pm-note" data-i18n="pricing.scale.benefit">More control for teams</span>
-                <a class="pm-cta" href="/pricing.html" data-conversion-event="pricing_plan_click" data-conversion-plan="scale" data-i18n="pricing.scale.cta">Choose Scale</a>
+            <div class="plan-card reveal">
+                <div class="plan-head">
+                    <span class="plan-name" data-i18n="pricing.scale.name">Scale</span>
+                    <span class="plan-price">$200<small data-i18n="pricing.unit">/mo</small></span>
+                    <span class="plan-note" data-i18n="pricing.scale.benefit">More control for teams</span>
+                </div>
+                <ul class="plan-features">
+                    <li data-i18n="pricing.scale.f1">10,000 credits / month</li>
+                    <li data-i18n="pricing.scale.f2">Unlimited drafts, 25 published</li>
+                    <li data-i18n="pricing.scale.f3">$75 Cloud balance included</li>
+                    <li data-i18n="pricing.scale.f4">Team workspace &amp; roles</li>
+                    <li data-i18n="pricing.scale.f5">Priority support &amp; premium models</li>
+                </ul>
+                <a class="plan-cta" href="/auth.html?plan=scale" data-conversion-event="pricing_plan_click" data-conversion-plan="scale" data-i18n="pricing.scale.cta">Upgrade to Scale</a>
             </div>
         </div>
-        <a class="pricing-link" href="/pricing.html" data-i18n="pricing.link">See full pricing &rarr;</a>
+        <a class="pricing-link" href="/pricing.html" data-i18n="pricing.link">Compare plans &amp; billing &rarr;</a>
     </section>
 
     <section class="faq-section landing-faq reveal" aria-label="Frequently asked questions" translate="no">

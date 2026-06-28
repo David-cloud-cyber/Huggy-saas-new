@@ -1731,7 +1731,9 @@ h1 {
 .footer {
     padding: 100px 24px 48px;
     border-top: 1px solid var(--border);
-    background: var(--bg-surface);
+    background:
+        radial-gradient(760px 300px at 50% 0%, color-mix(in srgb, var(--accent-blue) 9%, transparent), transparent 62%),
+        var(--bg-surface);
 }
 
 .footer-grid {
@@ -3911,32 +3913,78 @@ h1 {
    Landing — pricing cards + curated FAQ (slate theme, Huggy blue accent)
    ====================================================================== */
 
-/* Pricing: give the section room to breathe under the Discover grid. */
-.pricing-teaser {
-    padding-top: var(--landing-section-space);
-    padding-bottom: clamp(8px, 2vw, 16px);
-}
-.pricing-teaser .section-header { margin-bottom: 8px; }
-.pricing-mini-grid { align-items: stretch; margin: 36px 0 24px; }
-
-/* Three equal-height, top-aligned plan cards with a CTA pinned to the bottom. */
-.pricing-mini {
-    padding: 28px 22px 22px;
-    gap: 10px;
+/* Pricing: full plans shown directly, 3 equal-height cards, Pro featured. */
+.pricing-full {
+    max-width: var(--landing-max-width);
+    margin: 0 auto;
+    padding: var(--landing-section-space) 24px clamp(8px, 2vw, 16px);
     text-align: center;
-    background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg));
+    position: relative;
 }
-.pm-name { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
-.pm-price { font-size: 34px; font-weight: 800; line-height: 1; color: var(--text); }
-.pm-price small { font-size: 13px; font-weight: 500; color: var(--text-sub); }
-.pm-note { font-size: 13.5px; color: var(--text-sub); line-height: 1.5; min-height: 38px; }
-.pm-cta {
+.pricing-full .section-header { margin-bottom: 38px; }
+.pricing-grid-full {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-items: stretch;
+    gap: 18px;
+    margin: 0 0 22px;
+    text-align: left;
+}
+.plan-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 26px 24px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg));
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.plan-card:hover { transform: translateY(-3px); box-shadow: 0 24px 52px -32px rgba(0,0,0,.65); }
+.plan-head { display: flex; flex-direction: column; gap: 8px; }
+.plan-name { font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+.plan-price { font-size: 38px; font-weight: 800; line-height: 1; color: var(--text); }
+.plan-price small { font-size: 14px; font-weight: 500; color: var(--text-sub); }
+.plan-note { font-size: 13.5px; color: var(--text-sub); line-height: 1.45; }
+.plan-features {
+    list-style: none;
+    margin: 0;
+    padding: 16px 0 0;
+    display: grid;
+    gap: 11px;
+    border-top: 1px solid var(--border);
+}
+.plan-features li {
+    position: relative;
+    padding-left: 27px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+.plan-features li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 1px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-blue-soft);
+    color: var(--accent-blue-deep);
+    font-size: 10px;
+    font-weight: 800;
+}
+.plan-cta {
     margin-top: auto;
     align-self: stretch;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 42px;
+    height: 44px;
     padding: 0 16px;
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -3947,24 +3995,23 @@ h1 {
     text-decoration: none;
     transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
-.pm-cta:hover {
+.plan-cta:hover {
     transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
     background: var(--accent-blue-soft);
     color: var(--text);
 }
-.pm-cta:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
-.pm-cta-primary { background: var(--accent-blue); border-color: transparent; color: #fff; }
-.pm-cta-primary:hover { background: var(--accent-blue-deep); color: #fff; box-shadow: 0 10px 26px -8px var(--accent-blue); }
+.plan-cta:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.plan-cta-primary { background: var(--accent-blue); border-color: transparent; color: #fff; }
+.plan-cta-primary:hover { background: var(--accent-blue-deep); color: #fff; box-shadow: 0 10px 26px -8px var(--accent-blue); }
 
-/* Pro: clearly featured, kept aligned with the other two (no vertical offset). */
-.pricing-mini.featured {
-    padding-top: 32px;
+/* Pro: clearly featured, kept aligned with the other two. */
+.plan-card.featured {
     border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border));
-    box-shadow: 0 0 0 1px var(--accent-blue), 0 28px 60px -34px var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue), 0 30px 64px -38px var(--accent-blue);
 }
-.pricing-mini.featured:hover { transform: translateY(-4px); }
-.pm-badge {
+.plan-card.featured .plan-features { border-top-color: color-mix(in srgb, var(--accent-blue) 26%, var(--border)); }
+.plan-badge {
     position: absolute;
     top: -12px;
     left: 50%;
@@ -3979,6 +4026,38 @@ h1 {
     text-transform: uppercase;
     white-space: nowrap;
     box-shadow: 0 8px 20px -6px var(--accent-blue);
+}
+@media (max-width: 860px) {
+    .pricing-grid-full { grid-template-columns: 1fr; max-width: 440px; margin-left: auto; margin-right: auto; }
+}
+
+/* ======================================================================
+   Landing — soft premium gradient backdrop (hero / pricing / footer)
+   CSS-only, no heavy images; gradients are static (no motion).
+   ====================================================================== */
+body { position: relative; }
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(1000px 560px at 50% -10%, color-mix(in srgb, var(--accent-blue) 13%, transparent), transparent 60%),
+        radial-gradient(820px 620px at 50% 112%, color-mix(in srgb, var(--accent-blue) 8%, transparent), transparent 64%);
+}
+.pricing-full::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(640px 320px at 50% 14%, color-mix(in srgb, var(--accent-blue) 9%, transparent), transparent 66%);
+}
+:root[data-theme="light"] body::before {
+    background:
+        radial-gradient(1000px 560px at 50% -10%, color-mix(in srgb, var(--accent-blue) 7%, transparent), transparent 60%),
+        radial-gradient(820px 620px at 50% 112%, color-mix(in srgb, var(--accent-blue) 5%, transparent), transparent 64%);
 }
 
 /* Curated FAQ — airy rows, very subtle separators, no heavy frames, no neon. */
