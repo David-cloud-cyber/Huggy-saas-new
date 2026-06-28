@@ -201,38 +201,6 @@ import {
   type HuggyCloudRequirement,
 } from './src/services/huggy-cloud.ts';
 import {
-  resolveProjectRef,
-  resolveManagementToken,
-  buildApplyMigrationRequest,
-  classifyMigrationSafety,
-  redactManagementToken,
-  MANAGEMENT_API_BASE,
-} from './src/services/supabase-provisioning.ts';
-import {
-  ALLOWED_APP_USER_ROLES,
-  isValidEmail,
-  sanitizeAppRole,
-  safeUserFields,
-  sanitizeUsersPage,
-  sanitizeUsersPerPage,
-  requireConfirmation,
-  requireDeleteConfirmation,
-} from './src/services/cloud-user-management.ts';
-import {
-  STATEMENT_TIMEOUT_MS,
-  isExposableSchema,
-  isValidIdentifier,
-  sanitizeLimit,
-  sanitizeOffset,
-  sanitizeOrderDir,
-  assertReadOnlySql,
-  buildSchemasQuery,
-  buildTablesQuery,
-  buildColumnsQuery,
-  buildCountQuery,
-  buildRowsQuery,
-} from './src/services/cloud-db-browser.ts';
-import {
   applyHuggyFullstackKit,
   shouldApplyHuggyFullstackKit,
 } from './src/services/fullstack-generation.ts';
@@ -1693,22 +1661,6 @@ function isSafeProjectFilePath(filePath: string): boolean {
   return !blocked.some(prefix => filePath === prefix || filePath.startsWith(prefix));
 }
 
-function isPlanOnlyGeneratedContent(filePath: string, content: string): boolean {
-  const normalizedPath = String(filePath || '').toLowerCase();
-  const source = String(content || '').trim();
-  if (!source) return true;
-  const isCodeSurface = /\.(tsx|jsx|ts|js|css|html)$/i.test(normalizedPath);
-  const hasRuntimeSurface = /<(?:html|body|main|section|div|button|form|input)\b|export\s+default|function\s+App\b|createRoot\(|useState\(|onClick=|onSubmit=|@tailwind|body\s*\{|:root\s*\{/i.test(source);
-  const looksLikePlan = /"plan"\s*:|"steps"\s*:|"phase"\s*:|"next_action"\s*:|^\s*(?:here is|voici)\s+(?:a|un)\s+plan|plan de cr[eé]ation|lightweight plan/i.test(source);
-  const looksLikeAssistantEnvelope = /"status"\s*:\s*"success"|"message"\s*:|"assistant_message_id"\s*:|"diagnostic_code"\s*:/i.test(source)
-    && /"plan"\s*:|"steps"\s*:|"next_action"\s*:|"text"\s*:/i.test(source);
-  if (isCodeSurface && (looksLikePlan || looksLikeAssistantEnvelope) && !hasRuntimeSurface) return true;
-  if ((normalizedPath === 'index.html' || normalizedPath === 'src/app.tsx' || normalizedPath === 'src/app.jsx')
-    && /^\s*[{[]/.test(source)
-    && !hasRuntimeSurface) return true;
-  return false;
-}
-
 function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean } = {}): GeneratedFile[] {
   const ensureIndex = options.ensureIndex !== false;
   const entries = Array.isArray(rawFiles)
@@ -1730,8 +1682,7 @@ function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean
         updated_at: new Date().toISOString(),
       };
     })
-    .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0)
-    .filter((file: GeneratedFile) => !isPlanOnlyGeneratedContent(file.path, file.content));
+    .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0);
 
   if (ensureIndex && !files.some(file => file.path === 'index.html')) {
     files.unshift({
@@ -5003,17 +4954,6 @@ function diffFiles(before: GeneratedFile[], after: GeneratedFile[]) {
     file_stats,
     summary: `${created.length} created, ${modified.length} modified, ${deleted.length} deleted`,
   };
-}
-
-function emitDiffFileEvents(stream: HuggyStreamEmitter | null | undefined, diff: ReturnType<typeof diffFiles>) {
-  if (!stream) return;
-  for (const stat of diff.file_stats || []) {
-    stream.emit('file_done', {
-      path: stat.path,
-      additions: Number(stat.additions || 0),
-      deletions: Number(stat.deletions || 0),
-    });
-  }
 }
 
 function publicFileStreamSnippet(file: GeneratedFile) {
@@ -10323,41 +10263,6 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 // 3. CUSTOM DOMAINS ENDPOINTS
 // ──────────────────────────────────────────────────────────────────────
 
-app.post('/api/landing/conversion', (req: any, res: any) => {
-  try {
-    const eventName = String(req.body?.event_name || '').replace(/[^\w:.-]/g, '').slice(0, 80);
-    if (!eventName) {
-      return res.status(400).json({ success: false, error: 'event_name is required.' });
-    }
-
-    const metadata = req.body?.metadata && typeof req.body.metadata === 'object'
-      ? Object.fromEntries(
-          Object.entries(req.body.metadata)
-            .slice(0, 20)
-            .map(([key, value]) => [
-              String(key).replace(/[^\w:.-]/g, '').slice(0, 60),
-              String(value ?? '').slice(0, 160),
-            ])
-            .filter(([key]) => Boolean(key)),
-        )
-      : {};
-
-    console.info('[huggy:landing_conversion]', {
-      event_name: eventName,
-      session_id: String(req.body?.session_id || '').slice(0, 120),
-      page_path: String(req.body?.page_path || '/').slice(0, 160),
-      page_theme: String(req.body?.page_theme || 'unknown').slice(0, 40),
-      metadata,
-      occurred_at: String(req.body?.occurred_at || new Date().toISOString()).slice(0, 80),
-    });
-
-    return res.json({ success: true });
-  } catch (error: any) {
-    console.error('[huggy:landing_conversion_failed]', { message: error?.message || String(error) });
-    return res.status(500).json({ success: false, error: 'Conversion event could not be collected.' });
-  }
-});
-
 app.post('/api/analytics/collect', async (req: any, res: any) => {
   setAnalyticsCors(res);
   try {
@@ -10452,6 +10357,37 @@ app.post('/api/projects', async (req: any, res: any) => {
         return null;
       })
       : null;
+
+    // Auto-provision a dedicated Supabase project (DB + Auth + Storage) for
+    // this app, when a management token is configured. Best-effort: never
+    // blocks project creation; result is returned to the caller for display.
+    let supabaseProvision: any = null;
+    try {
+      const { provisionAppBackend, publicProvisionedProject } = await import('./src/services/supabase-auto-provision');
+      const result = await provisionAppBackend({
+        appName: project.name || `huggy-${project.slug}`,
+        files,
+      });
+      if (result.ok && result.project) {
+        supabaseProvision = {
+          status: 'provisioned',
+          project: publicProvisionedProject(result.project),
+          migration: result.migration || null,
+          storage: result.storage || null,
+        };
+        console.log('[huggy:supabase_auto_provisioned]', {
+          project_id: project.id,
+          supabase_ref: result.project.ref,
+          region: result.project.region,
+        });
+      } else {
+        supabaseProvision = { status: 'skipped', reason: result.reason || result.error || 'unknown' };
+      }
+    } catch (error: any) {
+      console.warn('[huggy:supabase_auto_provision_failed]', { message: error?.message || String(error) });
+      supabaseProvision = { status: 'error', reason: error?.message || 'provision_failed' };
+    }
+
     await upsertUserWorkspaceState(userId, {
       last_project_id: project.id,
       dashboard_draft_prompt: '',
@@ -10485,6 +10421,7 @@ app.post('/api/projects', async (req: any, res: any) => {
           project: huggyCloud.cloudProject,
         }
         : undefined,
+      supabase_provision: supabaseProvision,
     });
   } catch (error: any) {
     const status = error?.statusCode || 500;
@@ -11705,7 +11642,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         },
       };
       if (isStream) {
-        emitDiffFileEvents(streamV2, diff);
         res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
         return res.end();
       } else {
@@ -11808,7 +11744,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       },
     };
     if (isStream) {
-      emitDiffFileEvents(streamV2, diff);
       res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
       return res.end();
     } else {
@@ -12201,430 +12136,6 @@ app.get('/api/projects/:id/database/tables', async (req: any, res: any) => {
   const files = await loadProjectFiles(project.id);
   const schemaFile = files.find(file => file.path === 'supabase/schema.sql');
   res.json({ success: true, tables: schemaFile ? [{ name: 'app_records', rows: 0, schema: schemaFile.content }] : [] });
-});
-
-// ── Cloud DB Browser (READ-ONLY) ─────────────────────────────────────────────
-// A read-only gateway over a project's PROVISIONED Supabase database. The client
-// only ever sends structured params (schema / table / column / page) — never
-// SQL. The server assembles bounded SELECT / information_schema reads from
-// validated, allow-listed identifiers and runs them via the Supabase Management
-// query API using the Management token (server-only, never returned to or cached
-// by the client, redacted from logs). Sensitive schemas (auth, storage, vault,
-// pg_*, information_schema, …) are NEVER exposed, so app end-users' auth
-// identifiers can never be browsed here. Every endpoint re-checks ownership.
-
-// Ownership gate. Spec: cross-project access is rejected with 403.
-async function resolveDbBrowserOwner(req: any, res: any): Promise<{ project: GeneratedProject } | null> {
-  const userId = getUserOrgId(req);
-  const project = await loadProject(req.params.id, userId, req);
-  if (!project) {
-    res.status(403).json({ success: false, error: 'Accès refusé à ce projet.' });
-    return null;
-  }
-  return { project };
-}
-
-// Resolve the project's provisioned Supabase ref from its cloud runtime config.
-async function resolveProjectManagementRef(projectId: string): Promise<string | null> {
-  try {
-    const cloud = await loadProjectHuggyCloud(projectId);
-    const config = (cloud.project && (cloud.project as any).public_runtime_config) || null;
-    return resolveProjectRef(config);
-  } catch {
-    return null;
-  }
-}
-
-// Execute a SERVER-BUILT read query against the project DB via the Management
-// query API. Read-only is enforced twice (assertReadOnlySql + classifyMigrationSafety).
-async function runProjectReadQuery(
-  projectRef: string,
-  sql: string,
-): Promise<{ ok: true; rows: any[] } | { ok: false; status?: number; error: string }> {
-  if (!assertReadOnlySql(sql)) return { ok: false, error: 'NON_READ_ONLY_BLOCKED' };
-  if (classifyMigrationSafety(sql).destructive) return { ok: false, error: 'DESTRUCTIVE_BLOCKED' };
-  const token = resolveManagementToken();
-  if (!token) return { ok: false, error: 'MISSING_MANAGEMENT_TOKEN' };
-  // Server-controlled, constant statement-timeout prefix; the validated read follows.
-  const wrapped = `set statement_timeout to ${STATEMENT_TIMEOUT_MS}; ${sql}`;
-  let request: { url: string; method: 'POST'; headers: Record<string, string>; body: string };
-  try {
-    request = buildApplyMigrationRequest({ projectRef, sql: wrapped, token });
-  } catch (error) {
-    return { ok: false, error: redactManagementToken((error as Error).message || 'INVALID_REQUEST') };
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), STATEMENT_TIMEOUT_MS + 4000);
-  try {
-    const response = await fetch(request.url, { method: request.method, headers: request.headers, body: request.body, signal: controller.signal });
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      return { ok: false, status: response.status, error: redactManagementToken(text).slice(0, 300) || `HTTP ${response.status}` };
-    }
-    const data = await response.json().catch(() => null);
-    let rows: any[] = [];
-    if (Array.isArray(data)) {
-      rows = data.length && Array.isArray(data[data.length - 1]) ? data[data.length - 1] : data;
-    } else if (data && Array.isArray((data as any).result)) {
-      rows = (data as any).result;
-    }
-    return { ok: true, rows: Array.isArray(rows) ? rows : [] };
-  } catch (error) {
-    return { ok: false, error: redactManagementToken((error as Error).message || 'NETWORK_ERROR') };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// GET exposable schemas of the project's database.
-app.get('/api/projects/:id/db/schemas', async (req: any, res: any) => {
-  const ctx = await resolveDbBrowserOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
-  const ref = await resolveProjectManagementRef(ctx.project.id);
-  if (!ref) return res.json({ success: true, provisioning_required: true, schemas: [] });
-  const result = await runProjectReadQuery(ref, buildSchemasQuery());
-  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des schémas indisponible.' });
-  const schemas = result.rows.map((row: any) => String(row.schema_name)).filter(isExposableSchema);
-  res.json({ success: true, schemas });
-});
-
-// GET tables/views of one exposable schema.
-app.get('/api/projects/:id/db/tables', async (req: any, res: any) => {
-  const ctx = await resolveDbBrowserOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
-  const schema = String(req.query.schema || 'public');
-  if (!isExposableSchema(schema)) return res.status(400).json({ success: false, error: 'Schéma non autorisé.' });
-  const ref = await resolveProjectManagementRef(ctx.project.id);
-  if (!ref) return res.json({ success: true, provisioning_required: true, schema, tables: [] });
-  let sql: string;
-  try {
-    sql = buildTablesQuery(schema);
-  } catch {
-    return res.status(400).json({ success: false, error: 'Schéma non autorisé.' });
-  }
-  const result = await runProjectReadQuery(ref, sql);
-  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des tables indisponible.' });
-  const tables = result.rows
-    .filter((row: any) => isExposableSchema(String(row.table_schema)))
-    .map((row: any) => ({ schema: row.table_schema, name: row.table_name, type: row.table_type }));
-  res.json({ success: true, schema, tables });
-});
-
-// GET columns + types of one table.
-app.get('/api/projects/:id/db/columns', async (req: any, res: any) => {
-  const ctx = await resolveDbBrowserOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
-  const schema = String(req.query.schema || 'public');
-  const table = String(req.query.table || '');
-  if (!isExposableSchema(schema) || !isValidIdentifier(table)) {
-    return res.status(400).json({ success: false, error: 'Schéma ou table non autorisé.' });
-  }
-  const ref = await resolveProjectManagementRef(ctx.project.id);
-  if (!ref) return res.json({ success: true, provisioning_required: true, schema, table, columns: [] });
-  const result = await runProjectReadQuery(ref, buildColumnsQuery(schema, table));
-  if (!result.ok) return res.status(502).json({ success: false, error: 'Lecture des colonnes indisponible.' });
-  const columns = result.rows.map((row: any) => ({
-    name: row.column_name,
-    type: row.data_type,
-    nullable: row.is_nullable === 'YES',
-  }));
-  if (!columns.length) return res.status(404).json({ success: false, error: 'Table introuvable.' });
-  res.json({ success: true, schema, table, columns });
-});
-
-// GET rows of one table: bounded SELECT, optional sort on a verified column,
-// separate total count.
-app.get('/api/projects/:id/db/rows', async (req: any, res: any) => {
-  const ctx = await resolveDbBrowserOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'view', ctx.project)) return;
-  const schema = String(req.query.schema || 'public');
-  const table = String(req.query.table || '');
-  if (!isExposableSchema(schema) || !isValidIdentifier(table)) {
-    return res.status(400).json({ success: false, error: 'Schéma ou table non autorisé.' });
-  }
-  const ref = await resolveProjectManagementRef(ctx.project.id);
-  if (!ref) return res.json({ success: true, provisioning_required: true, schema, table, columns: [], rows: [], pagination: { limit: 0, offset: 0, total: 0 } });
-
-  // Authoritative column allow-list = the table's real columns (verifies existence too).
-  const colsResult = await runProjectReadQuery(ref, buildColumnsQuery(schema, table));
-  if (!colsResult.ok) return res.status(502).json({ success: false, error: 'Lecture des colonnes indisponible.' });
-  const realColumns = colsResult.rows.map((row: any) => String(row.column_name)).filter(isValidIdentifier);
-  if (!realColumns.length) return res.status(404).json({ success: false, error: 'Table introuvable.' });
-
-  const requestedOrderBy = req.query.order_by ? String(req.query.order_by) : null;
-  const orderBy = requestedOrderBy && realColumns.includes(requestedOrderBy) ? requestedOrderBy : null;
-  const orderDir = sanitizeOrderDir(req.query.order_dir);
-  const limit = sanitizeLimit(req.query.limit);
-  const offset = sanitizeOffset(req.query.offset);
-
-  let rowsSql: string;
-  try {
-    rowsSql = buildRowsQuery({ schema, table, columns: realColumns, orderBy, orderDir, limit, offset });
-  } catch {
-    return res.status(400).json({ success: false, error: 'Requête invalide.' });
-  }
-  const rowsResult = await runProjectReadQuery(ref, rowsSql);
-  if (!rowsResult.ok) return res.status(502).json({ success: false, error: 'Lecture des lignes indisponible.' });
-
-  let total: number | null = null;
-  const countResult = await runProjectReadQuery(ref, buildCountQuery(schema, table));
-  if (countResult.ok && countResult.rows[0] && countResult.rows[0].count != null) {
-    total = Number(countResult.rows[0].count);
-  }
-
-  res.json({
-    success: true,
-    schema,
-    table,
-    columns: realColumns,
-    rows: rowsResult.rows,
-    pagination: { limit, offset, total },
-  });
-});
-
-// ── Cloud End-User Management (sous-système 3) ───────────────────────────────
-// Manage the END-USERS of a generated app's OWN Supabase Auth. The project's
-// service_role is fetched SERVER-SIDE via the Management API (/api-keys), used
-// only to build a per-project admin client, and NEVER returned to / cached by
-// the client, nor logged (redactSecrets/redactManagementToken). Every endpoint
-// re-checks PROJECT ownership (the 'secrets' capability = owner/admin), never
-// platform-admin. Responses only ever contain whitelisted, non-sensitive fields
-// (safeUserFields — never password hashes, tokens, sessions, service_role).
-// Mutations require explicit confirmation; deletion needs double confirmation;
-// all mutations are rate-limited and written to an audit log (ids only).
-
-const END_USER_ADMIN_RATE = { limit: 20, windowMs: 60_000 };
-
-async function resolveEndUserAdminOwner(req: any, res: any): Promise<{ project: GeneratedProject; userId: string } | null> {
-  const userId = getUserOrgId(req);
-  const project = await loadProject(req.params.id, userId, req);
-  if (!project) {
-    res.status(403).json({ success: false, error: 'Accès refusé à ce projet.' });
-    return null;
-  }
-  return { project, userId };
-}
-
-// Fetch the project's service_role via the Management API and build a per-project
-// admin client. The key is confined to this scope (inside the client); it is
-// never returned, cached, or logged.
-async function buildProjectAuthAdminClient(projectRef: string): Promise<{ ok: true; client: any } | { ok: false; code: string }> {
-  const token = resolveManagementToken();
-  if (!token) return { ok: false, code: 'missing_management_token' };
-  let response: Response;
-  try {
-    response = await fetch(`${MANAGEMENT_API_BASE}/projects/${projectRef}/api-keys`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-  } catch (error) {
-    console.warn('[huggy:enduser_apikeys_fetch_failed]', redactSecrets(redactManagementToken((error as Error)?.message || 'network_error'), '[redacted]'));
-    return { ok: false, code: 'apikeys_unavailable' };
-  }
-  if (!response.ok) {
-    console.warn('[huggy:enduser_apikeys_http]', response.status);
-    return { ok: false, code: 'apikeys_unavailable' };
-  }
-  let keys: any;
-  try {
-    keys = await response.json();
-  } catch {
-    return { ok: false, code: 'apikeys_parse_failed' };
-  }
-  const list = Array.isArray(keys) ? keys : [];
-  const entry = list.find((key: any) => key?.name === 'service_role' || key?.type === 'service_role' || key?.tags === 'service_role');
-  const serviceRoleKey = entry?.api_key || entry?.apiKey || entry?.secret;
-  if (!serviceRoleKey || typeof serviceRoleKey !== 'string') return { ok: false, code: 'service_role_unavailable' };
-  try {
-    const client = createClient(`https://${projectRef}.supabase.co`, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    return { ok: true, client };
-  } catch {
-    return { ok: false, code: 'admin_client_failed' };
-  }
-}
-
-// Append an audit entry (ids + action only — no sensitive data). Best-effort.
-async function writeEndUserAudit(project: GeneratedProject, actorId: string, action: string, targetUserId?: string | null) {
-  console.log('[huggy:enduser_admin_audit]', JSON.stringify({ project_id: project.id, actor: actorId, action, target: targetUserId || null, at: new Date().toISOString() }));
-  try {
-    const client = requireSupabase('End-user admin audit');
-    await client.from('agent_events').insert([{
-      project_id: project.id,
-      event_type: 'end_user_admin',
-      message: `${action} target=${targetUserId || '-'} actor=${actorId}`,
-      created_at: new Date().toISOString(),
-    }]);
-  } catch (error) {
-    console.warn('[huggy:enduser_audit_persist_skipped]', redactSecrets((error as Error)?.message || 'persist_failed', '[redacted]'));
-  }
-}
-
-function endUserRateLimited(req: any, res: any, action: string, userId: string, projectId: string): boolean {
-  if (!enforceRateLimit(`enduser:${action}:${userId}:${projectId}`, END_USER_ADMIN_RATE.limit, END_USER_ADMIN_RATE.windowMs)) {
-    res.status(429).json({ success: false, code: 'rate_limited', error: 'Trop d\'opérations. Réessayez dans une minute.' });
-    return true;
-  }
-  return false;
-}
-
-// Resolve the per-project auth admin client, or send the right honest response.
-async function acquireEndUserAdmin(
-  res: any,
-  project: GeneratedProject,
-  forMutation: boolean,
-): Promise<{ client: any } | null> {
-  const ref = await resolveProjectManagementRef(project.id);
-  if (!ref) {
-    if (forMutation) {
-      res.status(409).json({ success: false, auth_configured: false, error: 'Authentification non configurée pour ce projet. Provisionnez le backend pour gérer les utilisateurs.' });
-    } else {
-      res.json({ success: true, auth_configured: false, users: [], pagination: { page: 1, per_page: 0 } });
-    }
-    return null;
-  }
-  const admin = await buildProjectAuthAdminClient(ref);
-  if (!admin.ok) {
-    res.status(502).json({ success: false, error: 'Gestion des utilisateurs indisponible pour ce projet.' });
-    return null;
-  }
-  return { client: admin.client };
-}
-
-// GET list end-users (paginated, safe fields only).
-app.get('/api/projects/:id/users', async (req: any, res: any) => {
-  const ctx = await resolveEndUserAdminOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
-  const admin = await acquireEndUserAdmin(res, ctx.project, false);
-  if (!admin) return;
-  const page = sanitizeUsersPage(req.query.page);
-  const perPage = sanitizeUsersPerPage(req.query.per_page);
-  try {
-    const { data, error } = await admin.client.auth.admin.listUsers({ page, perPage });
-    if (error) return res.status(502).json({ success: false, error: 'Lecture des utilisateurs impossible.' });
-    const users = (Array.isArray(data?.users) ? data.users : []).map(safeUserFields);
-    res.json({ success: true, auth_configured: true, users, pagination: { page, per_page: perPage }, roles: ALLOWED_APP_USER_ROLES });
-  } catch {
-    res.status(502).json({ success: false, error: 'Lecture des utilisateurs impossible.' });
-  }
-});
-
-// POST create or invite an end-user (confirmation + rate-limit).
-app.post('/api/projects/:id/users', async (req: any, res: any) => {
-  const ctx = await resolveEndUserAdminOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
-  if (endUserRateLimited(req, res, 'create', ctx.userId, ctx.project.id)) return;
-  const confirm = requireConfirmation(req.body);
-  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
-  const email = String(req.body?.email || '').trim();
-  if (!isValidEmail(email)) return res.status(400).json({ success: false, error: 'Email invalide.' });
-  let role: string | undefined;
-  if (req.body?.role != null && req.body.role !== '') {
-    const valid = sanitizeAppRole(req.body.role);
-    if (!valid) return res.status(400).json({ success: false, error: 'Rôle non autorisé.' });
-    role = valid;
-  }
-  const mode = req.body?.action === 'invite' ? 'invite' : 'create';
-  const admin = await acquireEndUserAdmin(res, ctx.project, true);
-  if (!admin) return;
-  try {
-    let created: any = null;
-    if (mode === 'invite' && typeof admin.client.auth.admin.inviteUserByEmail === 'function') {
-      const { data, error } = await admin.client.auth.admin.inviteUserByEmail(email, role ? { data: { role } } : undefined);
-      if (error) return res.status(400).json({ success: false, error: 'Invitation impossible.' });
-      created = data?.user;
-    } else {
-      const password = typeof req.body?.password === 'string' && req.body.password.length >= 8 ? req.body.password : undefined;
-      const { data, error } = await admin.client.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: !password,
-        app_metadata: role ? { role } : undefined,
-      });
-      if (error) return res.status(400).json({ success: false, error: 'Création impossible.' });
-      created = data?.user;
-    }
-    await writeEndUserAudit(ctx.project, ctx.userId, mode, created?.id);
-    res.json({ success: true, user: created ? safeUserFields(created) : null });
-  } catch {
-    res.status(502).json({ success: false, error: 'Opération impossible.' });
-  }
-});
-
-// POST reset password / resend recovery (confirmation). Never returns the link.
-app.post('/api/projects/:id/users/:userId/reset-password', async (req: any, res: any) => {
-  const ctx = await resolveEndUserAdminOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
-  if (endUserRateLimited(req, res, 'reset', ctx.userId, ctx.project.id)) return;
-  const confirm = requireConfirmation(req.body);
-  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
-  const admin = await acquireEndUserAdmin(res, ctx.project, true);
-  if (!admin) return;
-  const userId = String(req.params.userId || '');
-  try {
-    const { data: got, error: getError } = await admin.client.auth.admin.getUserById(userId);
-    if (getError || !got?.user?.email) return res.status(404).json({ success: false, error: 'Utilisateur introuvable.' });
-    if (typeof admin.client.auth.admin.generateLink === 'function') {
-      const { error } = await admin.client.auth.admin.generateLink({ type: 'recovery', email: got.user.email });
-      if (error) return res.status(400).json({ success: false, error: 'Réinitialisation impossible.' });
-    }
-    await writeEndUserAudit(ctx.project, ctx.userId, 'reset_password', userId);
-    res.json({ success: true });
-  } catch {
-    res.status(502).json({ success: false, error: 'Opération impossible.' });
-  }
-});
-
-// POST ban / unban an end-user (confirmation).
-app.post('/api/projects/:id/users/:userId/ban', async (req: any, res: any) => {
-  const ctx = await resolveEndUserAdminOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
-  if (endUserRateLimited(req, res, 'ban', ctx.userId, ctx.project.id)) return;
-  const confirm = requireConfirmation(req.body);
-  if (!confirm.ok) return res.status(400).json({ success: false, code: confirm.code, error: confirm.error });
-  const ban = req.body?.banned === true || req.body?.banned === 'true';
-  const admin = await acquireEndUserAdmin(res, ctx.project, true);
-  if (!admin) return;
-  const userId = String(req.params.userId || '');
-  try {
-    const { data, error } = await admin.client.auth.admin.updateUserById(userId, { ban_duration: ban ? '876000h' : 'none' });
-    if (error) return res.status(400).json({ success: false, error: 'Action impossible.' });
-    await writeEndUserAudit(ctx.project, ctx.userId, ban ? 'ban' : 'unban', userId);
-    res.json({ success: true, user: data?.user ? safeUserFields(data.user) : null });
-  } catch {
-    res.status(502).json({ success: false, error: 'Opération impossible.' });
-  }
-});
-
-// DELETE an end-user (DOUBLE confirmation: confirm flag + echoed email).
-app.delete('/api/projects/:id/users/:userId', async (req: any, res: any) => {
-  const ctx = await resolveEndUserAdminOwner(req, res);
-  if (!ctx) return;
-  if (!requireProjectCapability(req, res, 'secrets', ctx.project)) return;
-  if (endUserRateLimited(req, res, 'delete', ctx.userId, ctx.project.id)) return;
-  const admin = await acquireEndUserAdmin(res, ctx.project, true);
-  if (!admin) return;
-  const userId = String(req.params.userId || '');
-  try {
-    const { data: got, error: getError } = await admin.client.auth.admin.getUserById(userId);
-    if (getError || !got?.user) return res.status(404).json({ success: false, error: 'Utilisateur introuvable.' });
-    const guard = requireDeleteConfirmation(req.body, got.user.email || null);
-    if (!guard.ok) return res.status(400).json({ success: false, code: guard.code, error: guard.error });
-    const { error } = await admin.client.auth.admin.deleteUser(userId);
-    if (error) return res.status(400).json({ success: false, error: 'Suppression impossible.' });
-    await writeEndUserAudit(ctx.project, ctx.userId, 'delete', userId);
-    res.json({ success: true });
-  } catch {
-    res.status(502).json({ success: false, error: 'Opération impossible.' });
-  }
 });
 
 app.get('/api/projects/:id/database/secrets', async (req: any, res: any) => {
