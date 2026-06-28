@@ -123,10 +123,10 @@
             </div>
             <span class="logo-text">Huggy</span>
         </a>
-        <div class="nav-links" aria-label="Main navigation">
-            <a href="#discover">Découvrir</a>
-            <a href="#pricing">Tarifs</a>
-            <a href="/showcase.html">Showcase</a>
+        <div class="nav-links" aria-label="Main navigation" translate="no">
+            <a href="#discover" data-i18n="nav.discover">Discover</a>
+            <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+            <a href="/showcase.html" data-i18n="nav.showcase">Showcase</a>
         </div>
         <div class="nav-actions">
             <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign In</button>
@@ -135,19 +135,19 @@
 
     <section class="hero">
         <div class="hero-halo" aria-hidden="true"></div>
-        <div class="hero-content">
+        <div class="hero-content" translate="no">
             <div class="badge">
                 <div class="badge-dot"></div>
                 <span class="badge-text">AI-POWERED APP BUILDER</span>
             </div>
             <h1>
-                <span class="line1">Build any <span id="rotating-word">SaaS</span></span>
-                <span class="line2 neon-highlight neon-glow">instantly.</span>
+                <span class="line1"><span data-i18n="hero.line1">Build any</span> <span id="rotating-word">SaaS</span></span>
+                <span class="line2 neon-highlight neon-glow" data-i18n="hero.line2">instantly.</span>
             </h1>
-            <p class="hero-subtitle">Create apps and websites by chatting with AI</p>
+            <p class="hero-subtitle" data-i18n="hero.subtitle">Create apps and websites by chatting with AI</p>
 
             <div class="input-wrapper">
-                <textarea id="ai-textarea" placeholder="Describe the app you want to build..."></textarea>
+                <textarea id="ai-textarea" placeholder="Describe the app you want to build..." data-i18n-placeholder="hero.placeholder"></textarea>
                 <div class="input-actions">
                     <div class="actions-left">
                         <button class="icon-btn" id="btn-upload" data-tooltip="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button">
@@ -220,7 +220,7 @@
             </div>
 
             <div class="import-row">
-                <span class="import-label">or import from</span>
+                <span class="import-label" data-i18n="hero.import">or import from</span>
                 <div class="import-btn-group">
                     <button class="import-btn" data-import-source="figma" data-conversion-event="import_click" data-conversion-source="figma" data-tooltip="Import Figma design">
                         <svg viewBox="0 0 38 57" fill="currentColor" width="12" height="12">
@@ -260,8 +260,8 @@
         </div>
     </section>
 
-    <section class="partners-section reveal" aria-label="Technologies and integrations">
-        <p class="partners-heading">Built on a modern stack. Integrates the tools you already use.</p>
+    <section class="partners-section reveal" aria-label="Technologies and integrations" translate="no">
+        <p class="partners-heading" data-i18n="partners.heading">Works with the tools you already use.</p>
         <div class="partners-viewport">
             <div class="partners-track">
                 <div class="partners-group">
@@ -336,115 +336,162 @@
         </div>
     </section>
 
-    <section class="vision-section landing-manifest reveal" aria-label="Huggy manifesto">
+    <section class="vision-section landing-manifest reveal" aria-label="Huggy manifesto" translate="no">
         <div class="vision-content">
-            <p class="manifest-kicker">Our belief</p>
-            <h2 class="vision-quote" data-scroll-text-reveal>"We believe the future of software isn't just about code&mdash;it's about making creation accessible to everyone who has a story to tell."</h2>
-            <p class="manifest-attrib">&mdash; The Huggy team</p>
+            <p class="manifest-kicker" data-i18n="manifest.kicker">Our belief</p>
+            <h2 class="vision-quote" data-scroll-text-reveal data-i18n="manifest.quote">"We believe the future of software isn't just about code—it's about making creation accessible to everyone who has a story to tell."</h2>
+            <p class="manifest-attrib" data-i18n="manifest.attrib">— The Huggy team</p>
         </div>
     </section>
 
-    <section class="workflow-section reveal" aria-label="How Huggy works">
+    <section class="workflow-section reveal" aria-label="How Huggy works" translate="no">
         <div class="section-header compact">
-            <h2>From idea to live app, in three moves.</h2>
-            <p>Huggy keeps the path simple: describe it, watch it come alive, then refine and ship.</p>
+            <h2 data-i18n="workflow.title">From idea to live app, in three moves.</h2>
+            <p data-i18n="workflow.subtitle">Huggy keeps the path simple: describe it, watch it come alive, then refine and ship.</p>
         </div>
         <div class="workflow-steps three stagger-grid">
             <div class="workflow-step reveal">
                 <div class="workflow-visual wv-idea" aria-hidden="true"><span></span><span></span><span></span></div>
                 <span class="step-number">01</span>
-                <h3>Start with an idea</h3>
-                <p>Describe the app you want in plain language &mdash; or drop in a screenshot, a repo or a URL.</p>
+                <h3 data-i18n="workflow.s1.title">Start with an idea</h3>
+                <p data-i18n="workflow.s1.text">Describe the app you want in plain language &mdash; or drop in a screenshot, a repo or a URL.</p>
             </div>
             <div class="workflow-step reveal">
                 <div class="workflow-visual wv-build" aria-hidden="true"><i></i><i></i><i></i></div>
                 <span class="step-number">02</span>
-                <h3>Watch it come alive</h3>
-                <p>Huggy generates a real React app and shows the working preview as it builds.</p>
+                <h3 data-i18n="workflow.s2.title">Watch it come alive</h3>
+                <p data-i18n="workflow.s2.text">Huggy generates a real React app and shows the working preview as it builds.</p>
             </div>
             <div class="workflow-step reveal">
                 <div class="workflow-visual wv-publish" aria-hidden="true"><b></b></div>
                 <span class="step-number">03</span>
-                <h3>Refine &amp; publish</h3>
-                <p>Ask for changes in chat &mdash; Huggy edits the project &mdash; then publish in one click.</p>
+                <h3 data-i18n="workflow.s3.title">Refine &amp; publish</h3>
+                <p data-i18n="workflow.s3.text">Ask for changes in chat &mdash; Huggy edits the project &mdash; then publish in one click.</p>
             </div>
         </div>
     </section>
 
-    <section id="discover" class="discover-section reveal" aria-label="Découvrir des apps créées avec Huggy">
+    <section id="discover" class="discover-section reveal" aria-label="Apps built with Huggy" translate="no">
         <div class="discover-head">
             <div>
-                <p class="section-kicker">Découvrir</p>
-                <h2>Des apps web créées avec Huggy.</h2>
-                <p>Des aperçus courts, lisibles et concrets pour voir le type de résultats que Huggy peut produire.</p>
+                <p class="section-kicker" data-i18n="discover.kicker">Discover</p>
+                <h2 data-i18n="discover.title">Web apps built with Huggy.</h2>
+                <p data-i18n="discover.desc">Short, readable, concrete previews of the kind of results Huggy can produce.</p>
             </div>
-            <button class="discover-all" type="button" data-product-proof-toggle data-conversion-event="discover_view_all_click" aria-expanded="false">Voir tout</button>
+            <button class="discover-all" type="button" data-product-proof-toggle data-conversion-event="discover_view_all_click" aria-expanded="false" data-i18n="discover.viewall">View all</button>
         </div>
         <div class="discover-grid stagger-grid">
             <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="task-app" data-build-prompt="Create a polished task app with add, complete, filters, empty state and local storage.">
                 <span class="discover-thumb dt-task" aria-hidden="true"></span>
-                <span class="discover-category">Productivity</span>
+                <span class="discover-category" data-i18n="discover.cat.productivity">Productivity</span>
                 <h3>TodoFlow</h3>
-                <p>Task app with add, complete, filters and local storage.</p>
+                <p data-i18n="discover.card.todo">Task app with add, complete, filters and local storage.</p>
             </button>
             <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">
                 <span class="discover-thumb dt-booking" aria-hidden="true"></span>
-                <span class="discover-category">Booking</span>
+                <span class="discover-category" data-i18n="discover.cat.booking">Booking</span>
                 <h3>Bookly</h3>
-                <p>Availability, customer form, confirmation and clear states.</p>
+                <p data-i18n="discover.card.bookly">Availability, customer form, confirmation and clear states.</p>
             </button>
             <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">
                 <span class="discover-thumb dt-saas" aria-hidden="true"></span>
-                <span class="discover-category">SaaS</span>
+                <span class="discover-category" data-i18n="discover.cat.saas">SaaS</span>
                 <h3>Metric OS</h3>
-                <p>Cards, charts, sidebar, onboarding and publishing flow.</p>
+                <p data-i18n="discover.card.metric">Cards, charts, sidebar, onboarding and publishing flow.</p>
             </button>
             <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="commerce" data-build-prompt="Create a commerce app with product grid, cart states, checkout feedback and responsive UI.">
                 <span class="discover-thumb dt-commerce" aria-hidden="true"></span>
-                <span class="discover-category">Commerce</span>
+                <span class="discover-category" data-i18n="discover.cat.commerce">Commerce</span>
                 <h3>Cartly</h3>
-                <p>Product grid, cart states, checkout feedback and responsive UI.</p>
+                <p data-i18n="discover.card.cartly">Product grid, cart states, checkout feedback and responsive UI.</p>
             </button>
             <button type="button" class="discover-card reveal proof-extra" hidden data-conversion-event="example_prompt_click" data-conversion-template="restaurant" data-build-prompt="Create a restaurant website with menu, specials, reservation CTA and mobile-first layout.">
                 <span class="discover-thumb dt-restaurant" aria-hidden="true"></span>
-                <span class="discover-category">Restaurant</span>
+                <span class="discover-category" data-i18n="discover.cat.restaurant">Restaurant</span>
                 <h3>MenuKit</h3>
-                <p>Menu, specials, reservation CTA and mobile-first layout.</p>
+                <p data-i18n="discover.card.menukit">Menu, specials, reservation CTA and mobile-first layout.</p>
             </button>
             <button type="button" class="discover-card reveal proof-extra" hidden data-conversion-event="example_prompt_click" data-conversion-template="education" data-build-prompt="Create an education dashboard with courses, progress cards and learner-friendly states.">
                 <span class="discover-thumb dt-learning" aria-hidden="true"></span>
-                <span class="discover-category">Education</span>
+                <span class="discover-category" data-i18n="discover.cat.education">Education</span>
                 <h3>ClassHub</h3>
-                <p>Course dashboard, progress cards and learner-friendly states.</p>
+                <p data-i18n="discover.card.classhub">Course dashboard, progress cards and learner-friendly states.</p>
             </button>
         </div>
     </section>
 
-    <section id="pricing" class="pricing-teaser reveal">
+    <section id="pricing" class="pricing-teaser reveal" translate="no">
         <div class="section-header compact">
-            <p class="section-kicker">Pricing</p>
-            <h2>Start free. Upgrade when you publish.</h2>
-            <p>Free validates the idea. Pro is the first serious plan for shipping real apps. Scale gives teams more.</p>
+            <p class="section-kicker" data-i18n="pricing.kicker">Pricing</p>
+            <h2 data-i18n="pricing.title">Start free. Upgrade when you publish.</h2>
+            <p data-i18n="pricing.subtitle">Free to validate the idea. Pro to ship real apps. Scale for teams.</p>
         </div>
         <div class="pricing-mini-grid stagger-grid">
             <div class="pricing-mini reveal">
-                <span class="pm-name">Free</span>
-                <span class="pm-price">$0<small>/mo</small></span>
-                <span class="pm-note">Validate the idea</span>
+                <span class="pm-name" data-i18n="pricing.free.name">Free</span>
+                <span class="pm-price">$0<small data-i18n="pricing.unit">/mo</small></span>
+                <span class="pm-note" data-i18n="pricing.free.benefit">Validate your idea</span>
+                <a class="pm-cta" href="/auth.html" data-conversion-event="pricing_plan_click" data-conversion-plan="free" data-i18n="pricing.free.cta">Get started</a>
             </div>
             <div class="pricing-mini featured reveal">
-                <span class="pm-badge">Most popular</span>
-                <span class="pm-name">Pro</span>
-                <span class="pm-price">$25<small>/mo</small></span>
-                <span class="pm-note">Publish real apps</span>
+                <span class="pm-badge" data-i18n="pricing.pro.badge">Most popular</span>
+                <span class="pm-name" data-i18n="pricing.pro.name">Pro</span>
+                <span class="pm-price">$25<small data-i18n="pricing.unit">/mo</small></span>
+                <span class="pm-note" data-i18n="pricing.pro.benefit">Publish real apps</span>
+                <a class="pm-cta pm-cta-primary" href="/auth.html" data-conversion-event="pricing_plan_click" data-conversion-plan="pro" data-i18n="pricing.pro.cta">Choose Pro</a>
             </div>
             <div class="pricing-mini reveal">
-                <span class="pm-name">Scale</span>
-                <span class="pm-price">$200<small>/mo</small></span>
-                <span class="pm-note">Teams &amp; more control</span>
+                <span class="pm-name" data-i18n="pricing.scale.name">Scale</span>
+                <span class="pm-price">$200<small data-i18n="pricing.unit">/mo</small></span>
+                <span class="pm-note" data-i18n="pricing.scale.benefit">More control for teams</span>
+                <a class="pm-cta" href="/pricing.html" data-conversion-event="pricing_plan_click" data-conversion-plan="scale" data-i18n="pricing.scale.cta">Choose Scale</a>
             </div>
         </div>
-        <a class="pricing-link" href="/pricing.html">See full pricing &rarr;</a>
+        <a class="pricing-link" href="/pricing.html" data-i18n="pricing.link">See full pricing &rarr;</a>
+    </section>
+
+    <section class="faq-section landing-faq reveal" aria-label="Frequently asked questions" translate="no">
+        <div class="section-header compact faq-head">
+            <p class="section-kicker" data-i18n="faq.kicker">FAQ</p>
+            <h2 data-i18n="faq.title">Questions before you build.</h2>
+        </div>
+        <div class="faq-list">
+            <div class="faq-item active">
+                <button class="faq-question" type="button" aria-expanded="true">
+                    <span data-i18n="faq.q1">What can Huggy build?</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="faq-answer"><p data-i18n="faq.a1">Web products: SaaS dashboards, portals, booking tools, e-commerce, internal tools and landing pages. Huggy opens a builder workspace and turns your idea into a working preview, then a publishable app.</p></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" type="button" aria-expanded="false">
+                    <span data-i18n="faq.q2">Real apps or just mockups?</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="faq-answer"><p data-i18n="faq.a2">Real apps. For app requests, Huggy builds structured React, TypeScript and Vite projects — with files, styles, interactions and a live preview — not static mockups.</p></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" type="button" aria-expanded="false">
+                    <span data-i18n="faq.q3">How do credits and plans work?</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="faq-answer"><p data-i18n="faq.a3">Credits power building and improving apps with AI. Paid plans include more credits and higher limits. Cloud, storage and deployed AI usage are tracked separately as your live apps grow.</p></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" type="button" aria-expanded="false">
+                    <span data-i18n="faq.q4">What's the difference between preview and publish?</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="faq-answer"><p data-i18n="faq.a4">Preview is where you inspect and iterate safely. Your live site changes only when you click Publish, so visitors never see unfinished work.</p></div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question" type="button" aria-expanded="false">
+                    <span data-i18n="faq.q5">Is my data secure?</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                <div class="faq-answer"><p data-i18n="faq.a5">Provider keys and private tokens never appear in generated frontend code. Server-side secrets stay in secure backend environments, and sensitive actions stay confirmed and server-safe.</p></div>
+            </div>
+        </div>
     </section>
 
     <a href="/auth.html" class="sticky-cta" id="sticky-cta" data-conversion-event="start_building_click" data-conversion-place="sticky">
@@ -455,7 +502,7 @@
         </svg>
     </a>
 
-    <footer class="footer">
+    <footer class="footer" translate="no">
         <div class="footer-grid">
             <div class="footer-brand">
                 <a href="/" class="logo">
@@ -469,52 +516,52 @@
                     </div>
                     <span class="logo-text">Huggy</span>
                 </a>
-                <p>The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
+                <p data-i18n="footer.tagline">The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
             </div>
             <div class="footer-col">
-                <h5>Company</h5>
+                <h5 data-i18n="footer.col.company">Company</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
+                    <li><a href="/about.html" data-i18n="footer.link.about">About</a></li>
+                    <li><a href="/careers.html" data-i18n="footer.link.careers">Careers</a></li>
+                    <li><a href="/enterprise.html" data-i18n="footer.link.enterprise">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Product</h5>
+                <h5 data-i18n="footer.col.product">Product</h5>
                 <ul class="footer-links">
-                    <li><a href="/features.html">Features</a></li>
-                    <li><a href="/showcase.html">Showcase</a></li>
-                    <li><a href="/pricing.html">Pricing</a></li>
+                    <li><a href="/features.html" data-i18n="footer.link.features">Features</a></li>
+                    <li><a href="/showcase.html" data-i18n="footer.link.showcase">Showcase</a></li>
+                    <li><a href="/pricing.html" data-i18n="footer.link.pricing">Pricing</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Resources</h5>
+                <h5 data-i18n="footer.col.resources">Resources</h5>
                 <ul class="footer-links">
-                    <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/api-reference.html">API Reference</a></li>
-                    <li><a href="/blog.html">Blog</a></li>
+                    <li><a href="/documentation.html" data-i18n="footer.link.documentation">Documentation</a></li>
+                    <li><a href="/api-reference.html" data-i18n="footer.link.api">API Reference</a></li>
+                    <li><a href="/blog.html" data-i18n="footer.link.blog">Blog</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Legal</h5>
+                <h5 data-i18n="footer.col.legal">Legal</h5>
                 <ul class="footer-links">
-                    <li><a href="/privacy.html">Privacy</a></li>
-                    <li><a href="/security.html">Security</a></li>
-                    <li><a href="/terms.html">Terms</a></li>
+                    <li><a href="/privacy.html" data-i18n="footer.link.privacy">Privacy</a></li>
+                    <li><a href="/security.html" data-i18n="footer.link.security">Security</a></li>
+                    <li><a href="/terms.html" data-i18n="footer.link.terms">Terms</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Community</h5>
+                <h5 data-i18n="footer.col.community">Community</h5>
                 <ul class="footer-links">
-                    <li><a href="/community.html">Community</a></li>
-                    <li><a href="/guides">Guides</a></li>
+                    <li><a href="/community.html" data-i18n="footer.link.community">Community</a></li>
+                    <li><a href="/guides" data-i18n="footer.link.guides">Guides</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
             <label class="lang-select-wrap">
-                <span class="visually-hidden">Language</span>
+                <span class="visually-hidden" data-i18n="footer.lang">Language</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20"></path></svg>
                 <select class="lang-select" id="lang-select" aria-label="Language">
                     <option value="en" selected>English</option>

@@ -7,14 +7,23 @@ import { initPromptInputActions, storePendingPromptAttachments, type PendingProm
 import { startCreateProjectFlow } from './services/create-project-flow';
 import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
 import { installPublicPageEnhancements } from './public-page-enhancements';
+import { initLandingI18n, getLandingLang } from './landing-i18n';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
     return document.getElementById(id) as T | null;
 }
 
+function isHomeLanding(): boolean {
+    const path = window.location.pathname;
+    return path === '/' || path === '/index.html';
+}
+
 function init() {
     initHuggyMotion();
+    // Manual French i18n for the landing. Runs before scroll-text-reveal so the
+    // manifesto is split from already-translated text.
+    initLandingI18n();
     normalizeAiChatInputs();
 
     const themeBtn = getElement<HTMLButtonElement>('theme-btn');
@@ -158,7 +167,7 @@ function init() {
                 if (trackedFocus) return;
                 trackedFocus = true;
                 trackConversionEvent('input_focus', {
-                    place: textarea.closest('.final-cta-prompt') ? 'final_cta' : 'hero',
+                    place: textarea.closest('.marketing-prompt-section') ? 'marketing_prompt' : 'hero',
                 });
             });
         });
@@ -173,7 +182,10 @@ function init() {
         toggle.addEventListener('click', () => {
             expanded = !expanded;
             toggle.setAttribute('aria-expanded', String(expanded));
-            toggle.textContent = expanded ? 'R\u00e9duire' : 'Voir tout';
+            const fr = getLandingLang() === 'fr';
+            toggle.textContent = expanded
+                ? (fr ? 'R\u00e9duire' : 'Show less')
+                : (fr ? 'Voir tout' : 'View all');
 
             extraCards.forEach((card, index) => {
                 if (expanded) {
@@ -317,8 +329,10 @@ function init() {
         }
 
         const footer = document.querySelector('.footer');
-        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section, .final-cta-prompt');
-        if (footer && !alreadyHasPrompt) {
+        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section');
+        // The landing has its own curated flow (hero prompt, pricing, FAQ); the
+        // generic marketing "final CTA" prompt is only injected on other pages.
+        if (footer && !alreadyHasPrompt && !isHomeLanding()) {
             const prompt = document.createElement('section');
             prompt.className = 'marketing-prompt-section reveal';
             prompt.innerHTML = `
@@ -376,7 +390,9 @@ function init() {
     }
 
     installMarketingEnhancements();
-    installPublicPageEnhancements();
+    // On the landing we ship a curated 5-item FAQ in the HTML, so skip the shared
+    // FAQ injection there (it stays available on the other marketing pages).
+    installPublicPageEnhancements(isHomeLanding() ? { faq: false } : {});
     installLandingConversionTracking();
     installProductProofToggle();
     initPromptInputActions({ persistForBuilder: true });
@@ -394,8 +410,12 @@ function init() {
 
     function setPublicAuthCtaState(state: PublicAuthState) {
         const signedIn = state === 'signed-in';
+        const fr = getLandingLang() === 'fr';
         document.querySelectorAll<HTMLElement>('.sign-in-btn').forEach(button => {
-            button.textContent = signedIn ? 'Dashboard' : 'Sign In';
+            button.setAttribute('translate', 'no');
+            button.textContent = signedIn
+                ? (fr ? 'Tableau de bord' : 'Dashboard')
+                : (fr ? 'Se connecter' : 'Sign In');
             button.dataset.authState = state;
             button.setAttribute('aria-label', signedIn ? 'Open your Huggy dashboard' : 'Sign in to Huggy');
             button.classList.toggle('is-authenticated', signedIn);
@@ -403,9 +423,14 @@ function init() {
 
         const stickyCta = document.getElementById('sticky-cta') as HTMLAnchorElement | null;
         if (stickyCta) {
+            stickyCta.setAttribute('translate', 'no');
             stickyCta.href = signedIn ? '/dashboard.html' : '/auth.html';
             const textNode = Array.from(stickyCta.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
-            if (textNode) textNode.textContent = signedIn ? 'Continue in Huggy ' : 'Build with Huggy ';
+            if (textNode) {
+                textNode.textContent = signedIn
+                    ? (fr ? 'Continuer dans Huggy ' : 'Continue in Huggy ')
+                    : (fr ? 'Créer avec Huggy ' : 'Build with Huggy ');
+            }
             stickyCta.setAttribute('aria-label', signedIn ? 'Continue in Huggy dashboard' : 'Build with Huggy');
         }
     }
@@ -553,7 +578,7 @@ function init() {
             const val = textarea.value.trim();
             if (!val) return;
 
-            const ctaPlace = wrapper.classList.contains('final-cta-prompt') ? 'final_cta' : wrapper.classList.contains('marketing-prompt-card') ? 'marketing_prompt' : 'hero';
+            const ctaPlace = wrapper.classList.contains('marketing-prompt-card') ? 'marketing_prompt' : 'hero';
             trackConversionEvent('start_building_click', {
                 place: ctaPlace,
                 prompt_length: val.length,
@@ -787,15 +812,19 @@ function init() {
         }, 600);
     });
 
-    // 7. FAQ Toggle
+    // 7. FAQ Toggle — single answer open at a time, with aria-expanded kept in sync.
     const faqItems = document.querySelectorAll('.faq-item');
     faqItems.forEach(item => {
         const question = item.querySelector('.faq-question');
         question?.addEventListener('click', () => {
-            const isActive = item.classList.contains('active');
-            faqItems.forEach(i => i.classList.remove('active'));
-            if (!isActive) {
+            const willOpen = !item.classList.contains('active');
+            faqItems.forEach(i => {
+                i.classList.remove('active');
+                i.querySelector('.faq-question')?.setAttribute('aria-expanded', 'false');
+            });
+            if (willOpen) {
                 item.classList.add('active');
+                question.setAttribute('aria-expanded', 'true');
             }
         });
     });
