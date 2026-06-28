@@ -10416,6 +10416,85 @@ app.post('/api/analytics/collect', async (req: any, res: any) => {
   }
 });
 
+function isShowcasePublished(row: any): boolean {
+  const s = `${row?.status || ''} ${row?.publish_status || ''}`.toLowerCase();
+  return s.includes('publish');
+}
+
+function showcaseCategoryLabel(template: string): string {
+  const t = String(template || '').toLowerCase();
+  if (t.includes('commerce') || t.includes('shop') || t.includes('store')) return 'Commerce';
+  if (t.includes('saas') || t.includes('dashboard')) return 'SaaS';
+  if (t.includes('book')) return 'Booking';
+  if (t.includes('restaurant') || t.includes('menu')) return 'Restaurant';
+  if (t.includes('edu') || t.includes('learn') || t.includes('class')) return 'Education';
+  if (t.includes('portfolio')) return 'Portfolio';
+  if (t.includes('blog')) return 'Blog';
+  if (t.includes('task') || t.includes('productiv')) return 'Productivity';
+  return 'Web app';
+}
+
+function toPublicShowcaseCard(row: any) {
+  // PUBLIC fields only — never owner identity, secrets or private preview content.
+  return {
+    id: String(row.id),
+    title: String(row.name || 'Untitled project'),
+    slug: row.slug ? String(row.slug) : null,
+    category: showcaseCategoryLabel(row.template),
+    updated_at: row.updated_at || null,
+  };
+}
+
+// Public showcase feed for the landing "Discover" section and /discover.html.
+// Privacy is fail-closed: a project is only ever returned when its owner has
+// explicitly opted in (showcase_consent = true, default false), the project is
+// published, AND the owner is on the FREE plan. Only public fields are returned;
+// any uncertainty (missing column, lookup error, no service client) yields zero
+// rows so private work can never leak.
+app.get('/api/discover', async (req: any, res: any) => {
+  const sendEmpty = () => res.json({ success: true, projects: [], total: 0 });
+  try {
+    const client = getSupabase();
+    if (!client) return sendEmpty();
+
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '8'), 10) || 8, 1), 24);
+    const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
+    const category = String(req.query.category || '').trim().toLowerCase();
+
+    let query = client
+      .from('projects')
+      .select('id, name, slug, template, theme, status, publish_status, organization_id, owner_id, updated_at')
+      .eq('showcase_consent', true)
+      .order('updated_at', { ascending: false })
+      .limit(80);
+    if (category) query = query.eq('template', category);
+
+    const { data, error } = await query;
+    if (error || !Array.isArray(data)) return sendEmpty();
+
+    const planCache = new Map<string, string>();
+    const eligible: any[] = [];
+    for (const row of data) {
+      if (!isShowcasePublished(row)) continue;
+      const orgId = String(row.organization_id || row.owner_id || '');
+      if (!orgId) continue;
+      let plan = planCache.get(orgId);
+      if (plan === undefined) {
+        plan = normalizePlanKey(await getOrganizationPlan(orgId).catch(() => 'free')) || 'free';
+        planCache.set(orgId, plan);
+      }
+      if (plan !== 'free') continue;
+      eligible.push(row);
+    }
+
+    const projects = eligible.slice(offset, offset + limit).map(toPublicShowcaseCard);
+    return res.json({ success: true, projects, total: eligible.length });
+  } catch (error: any) {
+    console.warn('[huggy:discover_feed_skipped]', { message: error?.message });
+    return sendEmpty();
+  }
+});
+
 app.get('/api/projects', async (req: any, res: any) => {
   const userId = getUserOrgId(req);
   const projects = await listProjectsForUser(userId);

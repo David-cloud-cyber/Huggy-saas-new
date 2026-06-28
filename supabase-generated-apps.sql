@@ -21,6 +21,11 @@ alter table public.projects add column if not exists status text default 'draft'
 alter table public.projects add column if not exists preview_status text default 'idle';
 alter table public.projects add column if not exists preview_html text;
 alter table public.projects add column if not exists updated_at timestamptz default now();
+-- Showcase opt-in: a project is only ever eligible for the public Discover feed
+-- when its owner has explicitly consented. Default false = never exposed.
+alter table public.projects add column if not exists showcase_consent boolean default false;
+update public.projects set showcase_consent = coalesce(showcase_consent, false) where showcase_consent is null;
+create index if not exists projects_showcase_consent_idx on public.projects (showcase_consent, status) where showcase_consent = true;
 
 update public.projects set owner_id = organization_id where owner_id is null and organization_id is not null;
 update public.projects set organization_id = owner_id where organization_id is null and owner_id is not null;

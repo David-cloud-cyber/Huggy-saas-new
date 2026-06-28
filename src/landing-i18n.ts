@@ -64,6 +64,16 @@ const FR: Record<string, string> = {
   'discover.card.cartly': 'Grille produits, états du panier, retours de paiement et UI responsive.',
   'discover.card.menukit': 'Menu, plats du jour, appel à réserver et mise en page mobile-first.',
   'discover.card.classhub': 'Tableau de cours, cartes de progression et états pensés pour l’apprenant.',
+  'discover.card.portal': 'Connexion, projets, factures et un tableau de bord épuré.',
+  'discover.card.storefront': 'Catalogue, pages produit, panier et un parcours prêt pour le paiement.',
+
+  // Discover page (/discover.html)
+  'discoverPage.title': 'Des applications créées avec Huggy.',
+  'discoverPage.subtitle': 'Parcourez par catégorie. Des modèles pour démarrer, et des projets de la communauté partagés par leurs auteurs.',
+  'discoverPage.all': 'Tout',
+  'discoverPage.community': 'Vitrine de la communauté',
+  'discoverPage.templates': 'Partez d’un modèle',
+  'discoverPage.cta': 'Créez la vôtre',
 
   // Pricing
   'pricing.kicker': 'Tarifs',

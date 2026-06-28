@@ -4114,3 +4114,70 @@ body::before {
     .landing-faq .faq-question { font-size: 15px; }
     .landing-faq .faq-item.active .faq-answer { max-height: 520px; }
 }
+
+/* ======================================================================
+   /discover.html — full showcase gallery (consistent with the landing)
+   ====================================================================== */
+.discover-page {
+    max-width: var(--landing-max-width);
+    margin: 0 auto;
+    padding: clamp(96px, 14vh, 140px) 24px clamp(60px, 9vw, 96px);
+}
+.discover-page-head { max-width: 720px; margin: 0 0 28px; }
+.discover-page-head h1 {
+    margin: 8px 0 0;
+    font-size: clamp(40px, 7vw, 72px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    color: var(--text);
+}
+.discover-page-sub {
+    margin: 14px 0 0;
+    max-width: 600px;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+.discover-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 28px;
+}
+.discover-chip {
+    height: 36px;
+    padding: 0 15px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-surface) 84%, transparent);
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+.discover-chip:hover { transform: translateY(-1px); color: var(--text); border-color: color-mix(in srgb, var(--accent-blue) 36%, var(--border)); }
+.discover-chip:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.discover-chip.active { background: var(--accent-blue); border-color: transparent; color: #fff; }
+.discover-block { margin-top: 36px; }
+.discover-block:first-of-type { margin-top: 0; }
+.discover-block-title {
+    margin: 0 0 18px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.discover-card[hidden] { display: none; }
+/* Honest placeholder thumbnail: project initial on the soft theme gradient. */
+.discover-thumb { position: relative; display: grid; place-items: center; }
+.discover-thumb-mark {
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 34px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+.discover-page-cta { margin-top: 44px; display: flex; justify-content: center; }
+.discover-page-cta .plan-cta { width: auto; min-width: 200px; }
+@media (max-width: 900px) { .discover-page { padding-top: 100px; } }
