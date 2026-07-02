@@ -29,8 +29,14 @@ import {
   HUGGY_UNIVERSAL_BUILDER_COMPLETION_RULES,
   HUGGY_UNIVERSAL_BUILDER_SYSTEM_PROMPT,
 } from '../lib/prompts/system-prompt.ts';
+import { HUGGY_DESIGN_SYSTEM_TOKENS_PROMPT } from '../lib/prompts/design-system.ts';
+import { HUGGY_USER_ROLES_CONTRACT } from '../lib/prompts/user-roles.ts';
+import { HUGGY_PUBLIC_SCHEMA_GRANTS_PROMPT } from '../lib/prompts/public-schema-grants.ts';
+import { HUGGY_BROWSER_VERIFICATION_PROMPT } from '../lib/prompts/browser-verification.ts';
+import { HUGGY_PROJECT_MEMORY_PROMPT } from '../lib/prompts/memory.ts';
+import { HUGGY_SEO_CONTRACT } from '../lib/prompts/seo.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v25';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v26';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -905,6 +911,10 @@ export function buildAgentTextSystemPrompt(input: {
     HUGGY_CLOUD_POLICY,
     HUGGY_AUTO_PROVISIONED_INFRASTRUCTURE_CONTRACT,
     HUGGY_INFRASTRUCTURE_PROVISIONING_STATES,
+    HUGGY_USER_ROLES_CONTRACT,
+    HUGGY_PUBLIC_SCHEMA_GRANTS_PROMPT,
+    HUGGY_BROWSER_VERIFICATION_PROMPT,
+    HUGGY_PROJECT_MEMORY_PROMPT,
     HUGGY_UNIVERSAL_BUILDER_COMPLETION_RULES,
     HUGGY_IMPORT_POLICY,
     HUGGY_SENIOR_AGENT_OS_POLICY,
@@ -980,6 +990,10 @@ export function buildGenerationSystemPrompt(input: {
     HUGGY_INFRASTRUCTURE_PROVISIONING_STATES,
     HUGGY_PRODUCTION_READINESS_POLICY,
     HUGGY_AI_CONNECTOR_POLICY,
+    HUGGY_DESIGN_SYSTEM_TOKENS_PROMPT,
+    HUGGY_USER_ROLES_CONTRACT,
+    HUGGY_PUBLIC_SCHEMA_GRANTS_PROMPT,
+    HUGGY_SEO_CONTRACT,
     universalProductContractPromptContext(universalProductContract),
     buildProductionBlueprintPromptContext(productionBlueprint),
     HUGGY_IMPORT_POLICY,
