@@ -1744,6 +1744,12 @@ h1 {
     gap: 48px;
 }
 
+/* Landing footer carries five link columns: keep everything on one row. */
+.footer-grid:has(> .footer-col + .footer-col + .footer-col + .footer-col + .footer-col) {
+    grid-template-columns: 1.9fr repeat(5, 1fr);
+    gap: 32px;
+}
+
 .footer-brand p {
     margin-top: 16px;
     font-size: 15px;
@@ -2904,36 +2910,90 @@ h1 {
 
 /* Content Pages Styling */
 .page-hero {
-    padding: 120px 24px 80px;
+    position: relative;
+    padding: 128px 24px 56px;
     text-align: center;
     max-width: 1000px;
     margin: 0 auto;
 }
 
+/* Soft halo behind content-page heroes, matching the landing surface. */
+.page-hero::before {
+    content: '';
+    position: absolute;
+    inset: -40px 0 0;
+    background: radial-gradient(58% 70% at 50% 0%, var(--accent-blue-soft), transparent 72%);
+    pointer-events: none;
+    z-index: -1;
+}
+
 .page-hero h1 {
     font-family: "Instrument Serif", serif;
-    font-size: clamp(40px, 8vw, 72px);
-    margin-bottom: 24px;
+    font-size: clamp(40px, 7vw, 68px);
+    letter-spacing: -0.015em;
+    line-height: 1.06;
+    margin-bottom: 20px;
+    text-wrap: balance;
+}
+
+.page-hero .hero-subtitle {
+    max-width: 620px;
+    margin: 0 auto;
+    font-size: 17px;
+    line-height: 1.65;
+    color: var(--text-muted);
+    text-wrap: pretty;
 }
 
 .page-content {
-    max-width: 900px;
+    max-width: 760px;
     margin: 0 auto;
-    padding: 0 24px 120px;
-    font-size: 17px;
-    line-height: 1.7;
+    padding: 24px 24px 96px;
+    font-size: 16px;
+    line-height: 1.75;
     color: var(--text-muted);
 }
 
 .page-content h2 {
     font-family: "Instrument Serif", serif;
-    font-size: 32px;
+    font-size: 30px;
+    letter-spacing: -0.01em;
     color: var(--text);
-    margin: 48px 0 24px;
+    margin: 56px 0 16px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+}
+
+.page-content h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
 }
 
 .page-content p {
-    margin-bottom: 24px;
+    margin-bottom: 22px;
+    text-wrap: pretty;
+}
+
+.page-content a {
+    color: var(--accent-blue-deep);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+    transition: border-color 160ms ease;
+}
+
+.page-content a:hover {
+    border-bottom-color: var(--accent-blue-deep);
+}
+
+.page-content ul,
+.page-content ol {
+    margin: 0 0 22px;
+    padding-left: 22px;
+}
+
+.page-content li {
+    margin-bottom: 10px;
 }
 
 /* Tooltips */
@@ -3847,18 +3907,47 @@ h1 {
     letter-spacing: 0.05em;
     text-transform: uppercase;
 }
+/* Discover thumbnails: calm product-window illustrations, tinted per category.
+   No loud gradients — a soft tinted surface, a miniature app window and a few
+   skeleton content rows read as "real product", not "AI template". */
 .discover-thumb {
+    position: relative;
     display: block; width: 100%; height: 132px; border-radius: 10px;
     border: 1px solid var(--border);
+    overflow: hidden;
+    --thumb-tint: #3b82f6;
+    background:
+        radial-gradient(130% 100% at 88% -12%, color-mix(in srgb, var(--thumb-tint) 14%, transparent), transparent 62%),
+        color-mix(in srgb, var(--thumb-tint) 4%, var(--bg-elevated));
 }
-.dt-task { background: linear-gradient(135deg, #0f172a, #2563eb 52%, #dbeafe); }
-.dt-saas { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
-.dt-market { background: linear-gradient(135deg, #0f766e, #22d3ee); }
-.dt-booking { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
-.dt-ai { background: linear-gradient(135deg, #b45309, #f59e0b); }
-.dt-commerce { background: linear-gradient(135deg, #312e81, #8b5cf6 55%, #f5f3ff); }
-.dt-restaurant { background: linear-gradient(135deg, #7f1d1d, #ef4444 56%, #fee2e2); }
-.dt-learning { background: linear-gradient(135deg, #164e63, #06b6d4 54%, #cffafe); }
+/* Miniature app window */
+.discover-thumb::before {
+    content: '';
+    position: absolute; left: 18px; right: 18px; top: 24px; bottom: -8px;
+    background: var(--bg-surface);
+    border: 1px solid color-mix(in srgb, var(--thumb-tint) 16%, var(--border));
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--thumb-tint) 10%, rgba(0, 0, 0, 0.10));
+}
+/* Abstract content rows: one tinted headline bar + muted skeleton rows */
+.discover-thumb::after {
+    content: '';
+    position: absolute; left: 32px; top: 40px; width: 38%; height: 9px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--thumb-tint) 52%, var(--bg-surface));
+    box-shadow:
+        0 19px 0 0 color-mix(in srgb, var(--thumb-tint) 14%, var(--border)),
+        0 36px 0 0 color-mix(in srgb, var(--thumb-tint) 9%, var(--border)),
+        96px 19px 0 0 color-mix(in srgb, var(--thumb-tint) 10%, var(--border));
+}
+.dt-task { --thumb-tint: #2563eb; }
+.dt-saas { --thumb-tint: #4f46e5; }
+.dt-market { --thumb-tint: #0891b2; }
+.dt-booking { --thumb-tint: #0d9488; }
+.dt-ai { --thumb-tint: #b45309; }
+.dt-commerce { --thumb-tint: #d97706; }
+.dt-restaurant { --thumb-tint: #c2410c; }
+.dt-learning { --thumb-tint: #059669; }
 @keyframes discoverCardReveal {
     from { opacity: 0; transform: translateY(14px) scale(.985); filter: blur(4px); }
     to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
@@ -4169,14 +4258,25 @@ body::before {
     color: var(--text-muted);
 }
 .discover-card[hidden] { display: none; }
-/* Honest placeholder thumbnail: project initial on the soft theme gradient. */
+/* Honest placeholder thumbnail: project initial as a small app mark on the
+   miniature product window. */
 .discover-thumb { position: relative; display: grid; place-items: center; }
+.discover-thumb:has(.discover-thumb-mark)::after { content: none; }
 .discover-thumb-mark {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-top: 12px;
+    border-radius: 12px;
     font-family: "Inter", system-ui, sans-serif;
-    font-size: 34px;
+    font-size: 20px;
     font-weight: 800;
-    color: rgba(255, 255, 255, 0.92);
-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+    color: #fff;
+    background: color-mix(in srgb, var(--thumb-tint) 82%, var(--text));
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--thumb-tint) 30%, rgba(0, 0, 0, 0.12));
 }
 .discover-page-cta { margin-top: 44px; display: flex; justify-content: center; }
 .discover-page-cta .plan-cta { width: auto; min-width: 200px; }
