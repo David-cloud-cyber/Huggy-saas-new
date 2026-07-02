@@ -27,11 +27,11 @@ const generationPrompt = buildGenerationSystemPrompt({
   hasExistingFiles: false,
 });
 
-assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v25');
+assert.equal(HUGGY_AGENT_PROMPT_VERSION, 'huggy-agent-prompt-stack-v27');
 assert.equal(HUGGY_SYSTEM_CONTRACT_VERSION, 'huggy-system-contract-v2');
 assert.equal(HUGGY_COMMUNICATION_PROTOCOL_VERSION, 'huggy-communication-protocol-v2');
 assert.equal(HUGGY_UNIVERSAL_BUILDER_PROMPT_VERSION, 'huggy-universal-builder-prompt-v1');
-assert.equal(HUGGY_MESSAGE_STREAMING_PROMPT_VERSION, 'huggy-message-streaming-prompt-v1');
+assert.equal(HUGGY_MESSAGE_STREAMING_PROMPT_VERSION, 'huggy-message-streaming-prompt-v2');
 assert.equal(HUGGY_AUTO_INFRASTRUCTURE_PROMPT_VERSION, 'huggy-auto-infrastructure-prompt-v1');
 
 for (const prompt of [routerPrompt, textPrompt, generationPrompt]) {

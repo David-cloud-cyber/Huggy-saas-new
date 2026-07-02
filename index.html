@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy - AI App Builder for Production-Ready Web Apps" />
@@ -101,7 +101,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'dark';
+            const theme = localStorage.getItem('huggy-theme') || 'light';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -129,7 +129,7 @@
             <a href="/showcase.html" data-i18n="nav.showcase">Showcase</a>
         </div>
         <div class="nav-actions">
-            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar" onclick="navigate('/auth.html')">Sign In</button>
+            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar">Sign In</button>
         </div>
     </nav>
 
@@ -189,7 +189,7 @@
                         <div class="prompt-mode" data-prompt-mode="auto">
                             <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
                                 <span class="prompt-mode-label">Auto</span>
-                                <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                                <svg class="prompt-mode-chevron" aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                             </button>
                             <div class="prompt-mode-menu" role="menu">
                                 <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active">
@@ -679,8 +679,12 @@
 
         // Intercept links for smooth exit
         document.addEventListener('click', (e) => {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             const link = e.target.closest('a');
             if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+                const href = link.getAttribute('href') || '';
+                // In-page anchors (#discover, #pricing…) must scroll, not drop the curtain.
+                if (href.startsWith('#') || (link.pathname === window.location.pathname && link.hash)) return;
                 e.preventDefault();
                 navigate(link.href);
             }

@@ -9,7 +9,7 @@
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://huggy.fun/discover.html" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Discover — Apps built with Huggy" />
@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'dark';
+            const theme = localStorage.getItem('huggy-theme') || 'light';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -190,8 +190,11 @@
             if (curtain) curtain.classList.add('rising');
         });
         document.addEventListener('click', (e) => {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             const link = e.target.closest('a');
             if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
+                const href = link.getAttribute('href') || '';
+                if (href.startsWith('#') || (link.pathname === window.location.pathname && link.hash)) return;
                 e.preventDefault();
                 navigate(link.href);
             }

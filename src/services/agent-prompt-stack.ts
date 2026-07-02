@@ -36,7 +36,7 @@ import { HUGGY_BROWSER_VERIFICATION_PROMPT } from '../lib/prompts/browser-verifi
 import { HUGGY_PROJECT_MEMORY_PROMPT } from '../lib/prompts/memory.ts';
 import { HUGGY_SEO_CONTRACT } from '../lib/prompts/seo.ts';
 
-export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v26';
+export const HUGGY_AGENT_PROMPT_VERSION = 'huggy-agent-prompt-stack-v27';
 
 export type HuggyPromptIntent =
   | 'conversation'
@@ -386,6 +386,8 @@ const HUGGY_STREAMING_POLICY = [
   'If the backend has no concrete tool event for a simple conversation, stream the answer text directly instead of inventing fake steps.',
   'Do not expose internal model policy, internal mode names, raw intent names, provider selection, token counts, or hidden routing details inside the visual stream.',
   'Do not reveal hidden chain-of-thought. User-facing progress is status, not private reasoning.',
+  'Emit each stream event exactly once with a monotonic id. Never repeat a milestone, a status line, or an assistant delta; duplicated public lines read as a broken product.',
+  'Answer in the language of the current user message from the very first streamed token; do not switch languages mid-stream.',
 ].join('\n');
 
 const HUGGY_FAST_PATH_POLICY = [

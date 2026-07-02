@@ -1,7 +1,7 @@
 import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
 import { openHuggyStream, type HuggyStreamHandle } from './lib/stream-client';
-import type { HuggyStreamEvent } from './lib/stream-protocol';
+import { isHuggyStreamEvent, type HuggyStreamEvent } from './lib/stream-protocol';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -2556,7 +2556,9 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
         }
       },
       onEvent(type, data) {
-        if (data && typeof data === 'object' && typeof data.v === 'number') return;
+        // Protocol-v2 events are already handled by onProtocolEvent above;
+        // re-processing them here would duplicate every streamed chunk.
+        if (isHuggyStreamEvent(data)) return;
         const eventType = String(data?.type || type || '');
         if (eventType === 'assistant_delta' || eventType === 'token') {
           const text = String(data?.text ?? data?.content ?? '');
@@ -5720,7 +5722,11 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           }
         },
         onEvent(type, data) {
-          if (data && typeof data === 'object' && typeof data.v === 'number') return;
+          // Protocol-v2 events are already handled by onProtocolEvent above.
+          if (isHuggyStreamEvent(data)) {
+            sawStreamEvent = true;
+            return;
+          }
           sawStreamEvent = true;
           const eventType = String(data?.type || type || '');
           if (eventType === 'done') {

@@ -364,7 +364,7 @@ function init() {
                             <div class="prompt-mode" data-prompt-mode="auto">
                                 <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
                                     <span class="prompt-mode-label">Auto</span>
-                                    <span class="prompt-mode-chevron" aria-hidden="true">v</span>
+                                    <svg class="prompt-mode-chevron" aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                                 </button>
                                 <div class="prompt-mode-menu" role="menu">
                                     <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active"><span>Auto</span><small>Let Huggy decide</small></button>
@@ -594,6 +594,7 @@ function init() {
 
             submitBtn.disabled = true;
             const btnSpan = submitBtn.querySelector('span');
+            const originalBtnHtml = btnSpan?.innerHTML || '';
             if (btnSpan) btnSpan.textContent = 'Preparing workspace...';
             textarea.disabled = true;
             textarea.style.opacity = '0.5';
@@ -614,7 +615,7 @@ function init() {
                 submitBtn.disabled = false;
                 textarea.disabled = false;
                 textarea.style.opacity = '1';
-                if (btnSpan) btnSpan.textContent = 'Start building';
+                if (btnSpan) btnSpan.innerHTML = originalBtnHtml;
                 showToast(error instanceof Error ? error.message : 'Unable to prepare your workspace.');
             }
         }
@@ -629,10 +630,10 @@ function init() {
                     <h3 style="margin-bottom: 20px;">Search Snippets</h3>
                     <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" id="modal-snippet-search" placeholder="Search templates..." style="background: transparent; border: none; outline: none; color: white; width: 100%; font-size: 14px;">
+                        <input type="text" id="modal-snippet-search" placeholder="Search templates..." style="background: transparent; border: none; outline: none; color: var(--text); width: 100%; font-size: 14px;">
                     </div>
                     <div style="display: grid; gap: 12px;">
-                        <div class="snippet-item" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; hover:bg-white/5 transition: background 0.2s;">
+                        <div class="snippet-item" style="padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: background 0.2s;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">SaaS Dashboard Template</div>
                             <div style="font-size: 11px; color: var(--text-muted);">Responsive sidebar, light theme, Recharts integration.</div>
                             <span class="snippet-val" style="display:none;">Create a light analytics dashboard for my SaaS with real-time charts.</span>

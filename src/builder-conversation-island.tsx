@@ -261,6 +261,57 @@ function createStore() {
 
   const find = (id: string) => messages.find((message) => message.id === id);
 
+  // ── Smooth streaming text reveal ─────────────────────────────────────────
+  // Network deltas arrive in bursts; revealing them character-by-character on
+  // animation frames keeps the assistant text flowing instead of jumping.
+  // The reveal speed adapts to the backlog so the UI never lags the model,
+  // and any authoritative full-content update flushes the buffer instantly.
+  const pendingDeltas = new Map<string, string>();
+  let drainRaf = 0;
+  const prefersReducedMotion = () =>
+    typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const drainPendingDeltas = () => {
+    drainRaf = 0;
+    if (!pendingDeltas.size) return;
+    const instant = prefersReducedMotion();
+    for (const [id, pending] of pendingDeltas) {
+      const message = find(id);
+      if (!message) {
+        pendingDeltas.delete(id);
+        continue;
+      }
+      const step = instant ? pending.length : Math.max(2, Math.min(24, Math.ceil(pending.length / 12)));
+      message.content += pending.slice(0, step);
+      const rest = pending.slice(step);
+      if (rest) pendingDeltas.set(id, rest);
+      else pendingDeltas.delete(id);
+    }
+    notify();
+    if (pendingDeltas.size) drainRaf = window.requestAnimationFrame(drainPendingDeltas);
+  };
+
+  const scheduleDrain = () => {
+    if (!drainRaf) drainRaf = window.requestAnimationFrame(drainPendingDeltas);
+  };
+
+  const enqueueAssistantDelta = (message: HuggyConversationMessage, text: string) => {
+    // First token after a "thinking" placeholder: drop the shimmer label so
+    // the streamed text takes over cleanly without flashing the label.
+    if (message.working && message.content && !pendingDeltas.has(message.id)) {
+      message.content = "";
+    }
+    message.working = false;
+    pendingDeltas.set(message.id, (pendingDeltas.get(message.id) || "") + text);
+    scheduleDrain();
+  };
+
+  // A full-content update (final commit, block, parts…) is authoritative:
+  // discard any not-yet-revealed streamed text for that message.
+  const flushPendingDeltas = (id: string) => {
+    pendingDeltas.delete(id);
+  };
+
   const ensureLiveRun = (message: HuggyConversationMessage, meta: { intent?: string; activeText?: string } = {}): LiveRunState => {
     if (!message.liveRun) {
       message.liveRun = {
@@ -320,6 +371,7 @@ function createStore() {
       mutate(() => {
         const message = find(id);
         if (!message) return;
+        flushPendingDeltas(id);
         message.content = content;
         if (content) message.working = false;
       });
@@ -329,6 +381,7 @@ function createStore() {
         const message = find(id);
         if (!message) return;
         const text = textFromParts(parts, content);
+        if (text) flushPendingDeltas(id);
         if (text) message.content = text;
         if (message.liveRun && text) {
           message.liveRun.summary = text;
@@ -357,7 +410,10 @@ function createStore() {
         const message = find(id);
         if (!message || !block) return;
         const text = textFromBlock(block);
-        if (text) message.content = text;
+        if (text) {
+          flushPendingDeltas(id);
+          message.content = text;
+        }
       });
     },
     setFlow(id, flow) {
@@ -436,13 +492,7 @@ function createStore() {
             break;
           case "assistant_delta":
             run.assistantText += event.text;
-            // First delta after a working placeholder: replace the shimmer label
-            // with the streamed text so the shimmer cleanly hands off to <Response>.
-            if (message.working && message.content && run.assistantText === event.text) {
-              message.content = event.text;
-            } else {
-              message.content += event.text;
-            }
+            enqueueAssistantDelta(message, event.text);
             break;
           case "file_start":
             run.activeText = `Je modifie ${event.path}.`;
@@ -539,15 +589,7 @@ function createStore() {
         const message = find(id);
         if (!message) return;
         if (message.liveRun) message.liveRun.assistantText += text;
-        // First token after a "thinking" placeholder: replace the shimmer
-        // label with the real content so we hand off cleanly to <Response>
-        // without flashing the label text.
-        if (message.working && message.content) {
-          message.content = text;
-        } else {
-          message.content += text;
-        }
-        message.working = false;
+        enqueueAssistantDelta(message, text);
       });
     },
     finishLiveRun(id, summary = "") {
@@ -558,11 +600,12 @@ function createStore() {
         run.status = run.status === "failed" ? "failed" : "done";
         run.summary = summary || run.summary;
         message.working = false;
-        if (!message.content && run.summary) message.content = run.summary;
+        if (!message.content && !pendingDeltas.has(id) && run.summary) message.content = run.summary;
       });
     },
     removeMessage(id) {
       mutate(() => {
+        flushPendingDeltas(id);
         messages = messages.filter((message) => message.id !== id);
       });
     },
@@ -576,6 +619,7 @@ function createStore() {
     },
     clear() {
       mutate(() => {
+        pendingDeltas.clear();
         messages = [];
       });
     },
