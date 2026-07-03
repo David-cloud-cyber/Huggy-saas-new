@@ -2493,82 +2493,6 @@ async function waitForVercelDeploymentReady(initialPayload: any, token: string, 
   );
 }
 
-async function assignCustomDomainToVercelDeployment(
-  project: GeneratedProject,
-  deploymentId: string,
-  customDomain: string,
-  token: string,
-) {
-  const domain = normalizeDomainHost(customDomain);
-  if (!domain) return null;
-
-  const projectName = getVercelProjectName(project);
-  const service = new VercelDomainService(token, process.env.VERCEL_TEAM_ID || undefined);
-
-  console.log('[huggy:vercel_domain_ensure_start]', {
-    project_id: project.id,
-    vercel_project: projectName,
-    domain,
-  });
-
-  try {
-    await service.ensureDomainOnProject(projectName, domain);
-    console.log('[huggy:vercel_domain_ensure_ok]', {
-      project_id: project.id,
-      vercel_project: projectName,
-      domain,
-    });
-  } catch (error: any) {
-    console.error('[huggy:vercel_domain_ensure_failed]', {
-      project_id: project.id,
-      vercel_project: projectName,
-      domain,
-      status: error?.statusCode || null,
-      message: redactSecrets(error?.message || String(error)),
-    });
-    throw createPublicError(
-      `Vercel created the deployment, but could not attach ${domain} to the generated app project. Check that VERCEL_TOKEN can manage domains for this Vercel team/project, then retry Publish.`,
-      502,
-      'VERCEL_DOMAIN_UNASSIGNED',
-      'verify_vercel_domain_scope',
-    );
-  }
-
-  console.log('[huggy:vercel_alias_start]', {
-    project_id: project.id,
-    deployment_id: deploymentId,
-    domain,
-  });
-
-  try {
-    const alias = await service.assignDeploymentAlias(deploymentId, domain);
-    console.log('[huggy:vercel_alias_ok]', {
-      project_id: project.id,
-      deployment_id: deploymentId,
-      domain,
-    });
-    return {
-      domain,
-      url: normalizeDomainUrl(alias.alias || domain),
-      raw: alias.raw,
-    };
-  } catch (error: any) {
-    console.error('[huggy:vercel_alias_failed]', {
-      project_id: project.id,
-      deployment_id: deploymentId,
-      domain,
-      status: error?.statusCode || null,
-      message: redactSecrets(error?.message || String(error)),
-    });
-    throw createPublicError(
-      `Vercel created the deployment, but could not assign ${domain} to it. The previous live app was kept unchanged; verify the domain and token scope, then retry Publish.`,
-      502,
-      'VERCEL_ALIAS_FAILED',
-      'verify_domain_and_retry_publish',
-    );
-  }
-}
-
 function injectHuggyPublishedBadge(html: string, project: GeneratedProject, publicOrigin = getHuggyPublicOrigin()) {
   if (!html || html.includes('data-huggy-published-badge="true"')) return html;
   const href = `${publicOrigin}/built-with-huggy/${encodeURIComponent(project.id)}`;
@@ -8598,7 +8522,7 @@ function createVercelDomainProxy() {
 async function deployFilesToVercel(
   project: GeneratedProject,
   files: GeneratedFile[],
-  options: { includeHuggyBadge?: boolean; publicOrigin?: string; customDomain?: string | null; requestId?: string } = {},
+  options: { includeHuggyBadge?: boolean; publicOrigin?: string } = {},
 ) {
   const token = getVercelToken();
   if (!token) {
@@ -8609,15 +8533,6 @@ async function deployFilesToVercel(
       'configure_vercel_token',
     );
   }
-
-  const customDomain = normalizeDomainHost(options.customDomain || '');
-  console.log('[huggy:vercel_deploy_start]', {
-    request_id: options.requestId || null,
-    project_id: project.id,
-    vercel_project: getVercelProjectName(project),
-    custom_domain: customDomain || null,
-    include_huggy_badge: Boolean(options.includeHuggyBadge),
-  });
 
   const prepareHtml = (html: string) => {
     const enhanced = injectAnalyticsSnippet(
@@ -8702,42 +8617,13 @@ async function deployFilesToVercel(
     throw error;
   }
 
-  console.log('[huggy:vercel_deploy_accepted]', {
-    request_id: options.requestId || null,
-    project_id: project.id,
-    deployment_id: payload?.id || payload?.uid || null,
-    state: getVercelDeploymentState(payload) || null,
-  });
-
   const readyPayload = await waitForVercelDeploymentReady(payload, token, params);
-  const deploymentId = String(readyPayload.id || readyPayload.uid || '').trim();
-  console.log('[huggy:vercel_deploy_ready]', {
-    request_id: options.requestId || null,
-    project_id: project.id,
-    deployment_id: deploymentId || null,
-    state: getVercelDeploymentState(readyPayload) || 'ready',
-  });
-
-  const alias = deploymentId && customDomain
-    ? await assignCustomDomainToVercelDeployment(project, deploymentId, customDomain, token)
-    : null;
-  const vercelUrl = getPublicVercelDeploymentUrl(project, readyPayload) || (readyPayload.url ? `https://${String(readyPayload.url).replace(/^https?:\/\//, '')}` : '');
-  const url = alias?.url || vercelUrl;
-
-  console.log('[huggy:vercel_publish_resolved]', {
-    request_id: options.requestId || null,
-    project_id: project.id,
-    deployment_id: deploymentId || null,
-    deployment_url: url,
-    custom_domain_assigned: Boolean(alias?.url),
-  });
-
+  const url = getPublicVercelDeploymentUrl(project, readyPayload) || (readyPayload.url ? `https://${String(readyPayload.url).replace(/^https?:\/\//, '')}` : '');
   return {
-    provider_deployment_id: deploymentId || null,
+    provider_deployment_id: readyPayload.id || readyPayload.uid || null,
     deployment_url: url,
-    custom_domain_url: alias?.url || null,
     status: getVercelDeploymentState(readyPayload) || 'ready',
-    raw: alias ? { deployment: readyPayload, alias: alias.raw } : readyPayload,
+    raw: readyPayload,
   };
 }
 
@@ -10413,85 +10299,6 @@ app.post('/api/analytics/collect', async (req: any, res: any) => {
       success: false,
       error: status === 503 ? 'Analytics storage is not configured.' : 'Analytics event could not be collected.',
     });
-  }
-});
-
-function isShowcasePublished(row: any): boolean {
-  const s = `${row?.status || ''} ${row?.publish_status || ''}`.toLowerCase();
-  return s.includes('publish');
-}
-
-function showcaseCategoryLabel(template: string): string {
-  const t = String(template || '').toLowerCase();
-  if (t.includes('commerce') || t.includes('shop') || t.includes('store')) return 'Commerce';
-  if (t.includes('saas') || t.includes('dashboard')) return 'SaaS';
-  if (t.includes('book')) return 'Booking';
-  if (t.includes('restaurant') || t.includes('menu')) return 'Restaurant';
-  if (t.includes('edu') || t.includes('learn') || t.includes('class')) return 'Education';
-  if (t.includes('portfolio')) return 'Portfolio';
-  if (t.includes('blog')) return 'Blog';
-  if (t.includes('task') || t.includes('productiv')) return 'Productivity';
-  return 'Web app';
-}
-
-function toPublicShowcaseCard(row: any) {
-  // PUBLIC fields only — never owner identity, secrets or private preview content.
-  return {
-    id: String(row.id),
-    title: String(row.name || 'Untitled project'),
-    slug: row.slug ? String(row.slug) : null,
-    category: showcaseCategoryLabel(row.template),
-    updated_at: row.updated_at || null,
-  };
-}
-
-// Public showcase feed for the landing "Discover" section and /discover.html.
-// Privacy is fail-closed: a project is only ever returned when its owner has
-// explicitly opted in (showcase_consent = true, default false), the project is
-// published, AND the owner is on the FREE plan. Only public fields are returned;
-// any uncertainty (missing column, lookup error, no service client) yields zero
-// rows so private work can never leak.
-app.get('/api/discover', async (req: any, res: any) => {
-  const sendEmpty = () => res.json({ success: true, projects: [], total: 0 });
-  try {
-    const client = getSupabase();
-    if (!client) return sendEmpty();
-
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '8'), 10) || 8, 1), 24);
-    const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
-    const category = String(req.query.category || '').trim().toLowerCase();
-
-    let query = client
-      .from('projects')
-      .select('id, name, slug, template, theme, status, publish_status, organization_id, owner_id, updated_at')
-      .eq('showcase_consent', true)
-      .order('updated_at', { ascending: false })
-      .limit(80);
-    if (category) query = query.eq('template', category);
-
-    const { data, error } = await query;
-    if (error || !Array.isArray(data)) return sendEmpty();
-
-    const planCache = new Map<string, string>();
-    const eligible: any[] = [];
-    for (const row of data) {
-      if (!isShowcasePublished(row)) continue;
-      const orgId = String(row.organization_id || row.owner_id || '');
-      if (!orgId) continue;
-      let plan = planCache.get(orgId);
-      if (plan === undefined) {
-        plan = normalizePlanKey(await getOrganizationPlan(orgId).catch(() => 'free')) || 'free';
-        planCache.set(orgId, plan);
-      }
-      if (plan !== 'free') continue;
-      eligible.push(row);
-    }
-
-    const projects = eligible.slice(offset, offset + limit).map(toPublicShowcaseCard);
-    return res.json({ success: true, projects, total: eligible.length });
-  } catch (error: any) {
-    console.warn('[huggy:discover_feed_skipped]', { message: error?.message });
-    return sendEmpty();
   }
 });
 
@@ -12745,8 +12552,6 @@ async function publishProjectSnapshot(req: any, res: any) {
     const result = await deployFilesToVercel(project, context.files, {
       includeHuggyBadge: badgeRequired,
       publicOrigin,
-      customDomain: context.customDomain,
-      requestId,
     });
     const createdAt = new Date().toISOString();
     const deploy = {
@@ -13191,6 +12996,126 @@ function pathExists(target: string): boolean {
     return false;
   }
 }
+
+// ============================================================
+// Cloudflare Pages publish routes (huggy.fun)
+// ============================================================
+import {
+  publishProjectToCloudflare,
+  attachUserCustomDomain,
+  getCustomDomainStatus,
+  removePublication,
+  projectSlugToCfName,
+  HUGGY_ROOT_DOMAIN,
+} from './src/services/publish-cloudflare.ts';
+import { buildStaticSource } from './src/services/build-runner.ts';
+
+async function loadProjectForPublish(projectId: string) {
+  const client = getSupabase();
+  if (!client) throw new Error('Database unavailable');
+  const { data, error } = await client.from('projects').select('*').eq('id', projectId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Project not found');
+  return data;
+}
+
+function extractStaticFiles(project: any): Record<string, { content: string; encoding?: 'utf8' | 'base64' }> {
+  const raw = project?.generated_files || project?.files || project?.dist_files || {};
+  const files: Record<string, { content: string; encoding?: 'utf8' | 'base64' }> = {};
+  for (const [key, val] of Object.entries(raw as Record<string, any>)) {
+    if (typeof val === 'string') files[key] = { content: val, encoding: 'utf8' };
+    else if (val && typeof val === 'object' && typeof val.content === 'string') {
+      files[key] = { content: val.content, encoding: val.encoding === 'base64' ? 'base64' : 'utf8' };
+    }
+  }
+  return files;
+}
+
+app.post('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: any) => {
+  try {
+    const project = await loadProjectForPublish(req.params.id);
+    const slug = String(project.slug || project.id).toLowerCase();
+    const files = extractStaticFiles(project);
+    if (!Object.keys(files).length) {
+      return res.status(400).json({ error: 'No generated files to publish.' });
+    }
+    const distDir = await buildStaticSource({ files }, { slug, runViteBuild: false });
+    const result = await publishProjectToCloudflare({ slug, distDir });
+
+    const client = getSupabase();
+    if (client) {
+      await client.from('publications').upsert([{
+        project_id: project.id,
+        slug,
+        cf_pages_project: result.cfName,
+        default_url: result.defaultUrl,
+        huggy_subdomain: `${slug}.${HUGGY_ROOT_DOMAIN}`,
+        last_deployment_id: result.deploymentId,
+        published_at: new Date().toISOString(),
+        status: 'ready',
+      }], { onConflict: 'project_id' });
+    }
+    res.json({ ok: true, ...result });
+  } catch (e: any) {
+    console.error('[huggy:publish-cf]', e);
+    res.status(500).json({ error: e?.message || 'Publish failed' });
+  }
+});
+
+app.post('/api/projects/:id/publish-cf/domain', requireAuth, async (req: any, res: any) => {
+  try {
+    const domain = String(req.body?.domain || '').trim().toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
+    const project = await loadProjectForPublish(req.params.id);
+    const cfName = projectSlugToCfName(String(project.slug || project.id));
+    const result = await attachUserCustomDomain(cfName, domain);
+    const client = getSupabase();
+    if (client) {
+      await client.from('publications').update({
+        custom_domain: domain,
+        custom_domain_status: 'pending',
+      }).eq('project_id', project.id);
+    }
+    res.json({ ok: true, ...result });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Domain attach failed' });
+  }
+});
+
+app.get('/api/projects/:id/publish-cf/domain/verify', requireAuth, async (req: any, res: any) => {
+  try {
+    const project = await loadProjectForPublish(req.params.id);
+    const cfName = projectSlugToCfName(String(project.slug || project.id));
+    const domain = String(req.query.domain || '');
+    if (!domain) return res.status(400).json({ error: 'domain query param required' });
+    const status = await getCustomDomainStatus(cfName, domain);
+    const client = getSupabase();
+    if (client) {
+      await client.from('publications').update({
+        custom_domain_status: status.status,
+      }).eq('project_id', project.id).eq('custom_domain', domain);
+    }
+    res.json(status);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Verify failed' });
+  }
+});
+
+app.delete('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: any) => {
+  try {
+    const project = await loadProjectForPublish(req.params.id);
+    const slug = String(project.slug || project.id).toLowerCase();
+    const cfName = projectSlugToCfName(slug);
+    await removePublication(cfName, slug);
+    const client = getSupabase();
+    if (client) {
+      await client.from('publications').delete().eq('project_id', project.id);
+    }
+    res.json({ ok: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'Unpublish failed' });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
