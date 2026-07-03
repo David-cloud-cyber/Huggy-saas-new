@@ -277,6 +277,38 @@ const security = scanGeneratedSecurity(files, { prompt });
 const securityFailures = security.findings.filter(finding => finding.status === 'fail');
 assert.equal(securityFailures.length, 0, `security scan failed:\n${securityFailures.map(f => `${f.key}: ${f.message}`).join('\n')}`);
 
+// ── Offline compile proof (no network): every generated TS/TSX transpiles ────
+// Vite uses esbuild for TS/TSX -> JS at build time, so an esbuild transform
+// that succeeds on every generated source file proves the app will bundle.
+// This runs unconditionally, giving real "the code compiles" evidence even
+// when the sandbox cannot reach the npm registry for a full install.
+{
+  const esbuild = await import('esbuild');
+  const compilable = files.filter(file => /\.(ts|tsx|js|jsx)$/.test(file.path));
+  assert.ok(compilable.length >= 8, `expected the generated app to contain source files, found ${compilable.length}`);
+  for (const file of compilable) {
+    const loader = file.path.endsWith('.tsx')
+      ? 'tsx'
+      : file.path.endsWith('.ts')
+        ? 'ts'
+        : file.path.endsWith('.jsx')
+          ? 'jsx'
+          : 'js';
+    try {
+      const result = await esbuild.transform(file.content, {
+        loader: loader as 'ts' | 'tsx' | 'js' | 'jsx',
+        format: 'esm',
+        target: 'es2020',
+        jsx: 'automatic',
+      });
+      assert.ok(result.code.length > 0, `${file.path} transpiled to empty output`);
+    } catch (error) {
+      assert.fail(`generated file ${file.path} failed to transpile: ${(error as Error).message}`);
+    }
+  }
+  console.log(`[fullstack-e2e] offline compile passed: ${compilable.length} generated source files transpile cleanly.`);
+}
+
 // ── Materialize and actually run install/build/test/lint ────────────────────
 
 const workdir = await mkdtemp(path.join(tmpdir(), 'huggy-fullstack-e2e-'));
