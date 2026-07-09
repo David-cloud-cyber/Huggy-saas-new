@@ -1,7 +1,5 @@
 import './styles/huggy-light-theme.css';
 import { apiFetch } from './lib/api';
-import { openHuggyStream, type HuggyStreamHandle } from './lib/stream-client';
-import { isHuggyStreamEvent, type HuggyStreamEvent } from './lib/stream-protocol';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -283,7 +281,6 @@ let lastBuildSessionId = '';
 let lastAgentRunId = '';
 let activeGenerationTouchesPreview = false;
 let activeAbort: AbortController | null = null;
-let activeStream: HuggyStreamHandle | null = null;
 let stopRequested = false;
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
@@ -1898,43 +1895,9 @@ function clearInlineBlocks() {
   if (host) host.innerHTML = '';
 }
 
-async function buildStreamJsonHeaders(): Promise<HeadersInit> {
-  let verified = await getVerifiedSession();
-  if (!verified?.session?.access_token) {
-    verified = await refreshVerifiedSession();
-  }
-  if (!verified?.session?.access_token) {
-    window.location.href = `/auth.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-    throw new Error('Authentication required');
-  }
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${verified.session.access_token}`,
-  };
-}
-
-function streamEndpoint(path: string) {
-  return `${API_BASE_URL}${path}`;
-}
-
-function appendAssistantDelta(card: HTMLElement | null, text: string) {
-  if (!card || !text) return;
-  const id = messageHandleId(card);
-  if (id && conversationApi?.appendAssistantDelta) {
-    conversationApi.appendAssistantDelta(id, repairTextEncoding(redactSecrets(text)));
-    return;
-  }
-  updateMessage(card, `${card.textContent || ''}${text}`);
-}
-
 function startLiveRun(card: HTMLElement | null, meta: { intent?: string; activeText?: string } = {}) {
   const id = messageHandleId(card);
   if (id && conversationApi?.startLiveRun) conversationApi.startLiveRun(id, meta);
-}
-
-function applyLiveRunEvent(card: HTMLElement | null, event: HuggyStreamEvent) {
-  const id = messageHandleId(card);
-  if (id && conversationApi?.applyStreamEvent) conversationApi.applyStreamEvent(id, event);
 }
 
 function finishLiveRun(card: HTMLElement | null, summary = '') {
@@ -2525,61 +2488,10 @@ function generationReadyText(speaksFrench: boolean) {
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
   const fallback = buildSimpleConversationReply(prompt, speaksFrench);
   setBusy(true);
-  let streamed = '';
-  let streamStarted = false;
-  let streamError: Error | null = null;
   try {
-    const headers = await buildStreamJsonHeaders();
-    const handle = openHuggyStream({
-      url: streamEndpoint('/api/assistant/chat/stream'),
-      init: {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          prompt,
-          modelId: selectedModel(),
-          projectId: currentProjectId || undefined,
-          messages: recentConversationForAssistant(prompt),
-        }),
-      },
-      maxRetries: 1,
-      onProtocolEvent(event) {
-        if (event.type === 'assistant_delta') {
-          streamStarted = true;
-          streamed += event.text;
-          appendAssistantDelta(card, event.text);
-        } else if (event.type === 'status' && !streamStarted) {
-          const id = messageHandleId(card);
-          if (id && conversationApi) conversationApi.setWorking(id, event.message);
-        } else if (event.type === 'error') {
-          streamError = new Error(event.message);
-        }
-      },
-      onEvent(type, data) {
-        // Protocol-v2 events are already handled by onProtocolEvent above;
-        // re-processing them here would duplicate every streamed chunk.
-        if (isHuggyStreamEvent(data)) return;
-        const eventType = String(data?.type || type || '');
-        if (eventType === 'assistant_delta' || eventType === 'token') {
-          const text = String(data?.text ?? data?.content ?? '');
-          if (text) {
-            streamStarted = true;
-            streamed += text;
-            appendAssistantDelta(card, text);
-          }
-        }
-      },
-    });
-    activeStream = handle;
-    await handle.done;
-    activeStream = null;
-    if (streamError) throw streamError;
-    if (streamed.trim()) {
-      updateMessage(card, safeAssistantDisplayText(streamed, speaksFrench, fallback));
-      clearMessageShimmer(card);
-      return;
-    }
-
+    // Non-streaming: request the full assistant reply and render it at once.
+    const id = messageHandleId(card);
+    if (id && conversationApi) conversationApi.setWorking(id, speaksFrench ? 'Je réfléchis…' : 'Thinking…');
     const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
       method: 'POST',
       body: JSON.stringify({
@@ -2608,7 +2520,6 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
     }
     await showAssistantBubble(card, fallback);
   } finally {
-    activeStream = null;
     setBusy(false);
     // Safety net: if the stream ended, was cancelled, or failed before any
     // assistant_delta arrived, ensure the thinking shimmer never sticks.
@@ -5695,79 +5606,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       ...effectiveExtra,
     };
 
-    const streamGenerationResponse = async () => {
-      let finalPayload: any = null;
-      let streamError: Error | null = null;
-      let sawStreamEvent = false;
-      startLiveRun(status, {
-        intent: say('Je prépare le travail demandé.', 'I am preparing the requested work.'),
-        activeText: say('Connexion au flux de génération...', 'Connecting to the generation stream...'),
-      });
-      const headers = await buildStreamJsonHeaders();
-      const handle = openHuggyStream({
-        url: streamEndpoint(`/api/projects/${encodeURIComponent(currentProjectId)}/generate?stream=true`),
-        init: {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestBody),
-        },
-        maxRetries: 1,
-        onProtocolEvent(event) {
-          sawStreamEvent = true;
-          applyLiveRunEvent(status, event);
-          if (event.type === 'done') {
-            finalPayload = event.payload;
-          } else if (event.type === 'error') {
-            streamError = new Error(event.message);
-          }
-        },
-        onEvent(type, data) {
-          // Protocol-v2 events are already handled by onProtocolEvent above.
-          if (isHuggyStreamEvent(data)) {
-            sawStreamEvent = true;
-            return;
-          }
-          sawStreamEvent = true;
-          const eventType = String(data?.type || type || '');
-          if (eventType === 'done') {
-            finalPayload = data?.payload || data;
-            return;
-          }
-          if (eventType === 'error') {
-            streamError = new Error(String(data?.message || data?.error || 'Generation failed.'));
-            startLiveRun(status, { activeText: streamError.message });
-            return;
-          }
-          if (eventType === 'token') {
-            const text = String(data?.text ?? data?.content ?? '');
-            if (text) appendAssistantDelta(status, text);
-            return;
-          }
-          if (eventType === 'agent_step') {
-            const message = String(data?.message || '').trim();
-            if (message) startLiveRun(status, { activeText: repairTextEncoding(redactSecrets(message)) });
-          }
-        },
-      });
-      activeStream = handle;
-      try {
-        await handle.done;
-      } finally {
-        if (activeStream === handle) activeStream = null;
-      }
-      if (streamError) throw streamError;
-      if (!finalPayload) {
-        const error = new Error('Generation stream ended without a final payload.');
-        (error as Error & { sawStreamEvent?: boolean }).sawStreamEvent = sawStreamEvent;
-        throw error;
-      }
-      const statusCode = Number(finalPayload.status_code || 200);
-      if (statusCode >= 400 || finalPayload.success === false) {
-        throw new Error(String(finalPayload.message || finalPayload.error || `Generation failed with ${statusCode}`));
-      }
-      return finalPayload;
-    };
-
     if (requestedMode === 'build' || requestedMode === 'auto') {
       generationTouchesPreview = true;
       activeGenerationTouchesPreview = true;
@@ -5775,17 +5613,21 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
     }
 
-    let payload: any;
-    try {
-      payload = await streamGenerationResponse();
-    } catch (streamError) {
-      const sawStreamEvent = Boolean((streamError as Error & { sawStreamEvent?: boolean }).sawStreamEvent);
-      if (sawStreamEvent) throw streamError;
-      console.warn('[huggy] generation stream fallback', streamError);
-      payload = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      });
+    // Non-streaming generation: request the full result and render it at once
+    // (no token-by-token stream, no live agent-run playback in the discussion).
+    startLiveRun(status, {
+      intent: say('Je prépare le travail demandé.', 'I am preparing the requested work.'),
+      activeText: say('Génération en cours…', 'Generating…'),
+    });
+    let payload: any = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    });
+    {
+      const statusCode = Number(payload?.status_code || 200);
+      if (statusCode >= 400 || payload?.success === false) {
+        throw new Error(String(payload?.message || payload?.error || `Generation failed with ${statusCode}`));
+      }
     }
 
     // [REMPLACEMENT STREAMING UI ICI]
@@ -5925,7 +5767,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (journalTimer !== null) window.clearInterval(journalTimer);
     if (journalFlushTimer !== null) window.clearTimeout(journalFlushTimer);
     if (journalFrame) window.cancelAnimationFrame(journalFrame);
-    activeStream = null;
     clearMessageShimmer(status);
     setBusy(false);
     activeAbort = null;
@@ -5937,8 +5778,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 async function cancelBuild() {
   if (!isGenerating) return;
   stopRequested = true;
-  activeStream?.cancel();
-  activeStream = null;
   activeAbort?.abort();
   if (currentProjectId) {
     await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {
