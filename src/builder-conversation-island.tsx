@@ -68,6 +68,8 @@ type LiveRunState = {
   sources: SourceEntry[];
   attachments: AttachmentEntry[];
   startedAt: number;
+  skillId?: string;
+  skillVersion?: string;
   lines: LiveRunLine[];
 };
 
@@ -577,6 +579,34 @@ function createStore() {
               size: event.size,
             });
             break;
+          case "skill_resolved":
+            run.skillId = event.skill_id;
+            run.skillVersion = event.skill_version;
+            run.activeText = `Skill ${event.skill_id} sélectionné.`;
+            addLine(run, run.activeText, "active");
+            break;
+          case "skill_started":
+            run.skillId = event.skill_id;
+            run.skillVersion = event.skill_version;
+            run.activeText = `Skill ${event.skill_id} actif.`;
+            addLine(run, run.activeText, "active");
+            break;
+          case "skill_budget_exhausted":
+            run.activeText = `Budget du skill ${event.skill_id} atteint.`;
+            addLine(run, run.activeText, "failed");
+            break;
+          case "approval_requested":
+            run.activeText = event.summary;
+            addLine(run, event.summary, "active");
+            break;
+          case "verification_started":
+            run.activeText = "Huggy vérifie le résultat réel.";
+            addLine(run, run.activeText, "active");
+            break;
+          case "verification_completed":
+            run.activeText = event.status === "pass" ? "Vérification terminée." : "Vérification incomplète.";
+            addLine(run, run.activeText, event.status === "pass" ? "done" : "failed");
+            break;
           default:
             break;
         }
@@ -771,6 +801,19 @@ function ensureConversationStyles() {
       color: var(--text);
       font-size: 12px;
       font-weight: 720;
+    }
+
+    .huggy-skill-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 0 7px;
+      border: 1px solid var(--border, rgba(148,163,184,.25));
+      border-radius: 999px;
+      color: var(--text-muted, #94a3b8);
+      font: 600 10px/1.2 "JetBrains Mono", monospace;
+      letter-spacing: .01em;
+      flex: 0 0 auto;
     }
 
     .huggy-live-dot {
@@ -1079,6 +1122,7 @@ function LiveRunView({ run }: { run: LiveRunState }) {
       <div className="huggy-live-head">
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <span className={`huggy-live-dot ${dotClass}`} />
+          {run.skillId ? <span className="huggy-skill-chip">{run.skillId}{run.skillVersion ? ` · ${run.skillVersion}` : ""}</span> : null}
           {run.status === "active" ? <ShimmeringText text={headline} /> : <span>{run.summary || headline}</span>}
         </span>
         <span className="huggy-live-time">{formatElapsed(run.startedAt)}</span>

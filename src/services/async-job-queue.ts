@@ -20,7 +20,7 @@ export type JobPriority = 'critical' | 'high' | 'normal' | 'low';
 
 export type HuggyJob = {
   id: string;
-  type: 'generate' | 'auto_fix' | 'security_scan' | 'publish' | 'media_gen' | 'research';
+  type: 'generate' | 'auto_fix' | 'security_scan' | 'publish' | 'media_gen' | 'research' | 'workflow_run';
   status: JobStatus;
   priority: JobPriority;
   project_id: string;

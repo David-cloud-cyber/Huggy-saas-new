@@ -130,6 +130,7 @@ const settingsTabMeta: Record<string, { title: string; description: string }> = 
   facturation: { title: 'Billing', description: 'Plan, credits and Huggy Cloud.' },
   ia: { title: 'Usage', description: 'AI credits, cloud allowance and recent activity.' },
   capacites: { title: 'Capabilities', description: 'Workshops and agent capabilities.' },
+  automatisations: { title: 'Agent autonomy', description: 'Budgets, approvals and workflow safety.' },
   connecteurs: { title: 'Connecteurs', description: 'Services et outils disponibles pour le workspace.' },
   api: { title: 'API', description: 'Webhooks and safe connector controls.' },
   apparence: { title: 'Appearance', description: 'Theme, density, motion and accent.' },
@@ -1333,6 +1334,7 @@ function settingsMarkup() {
           <button class="settings-tab" type="button" data-tab="facturation" data-search="billing plan credits invoices cloud balance">${settingsIcon('billing')}<span>Billing</span></button>
           <button class="settings-tab" type="button" data-tab="ia" data-search="usage ai credits cloud history models">${settingsIcon('usage')}<span>Usage</span></button>
           <button class="settings-tab" type="button" data-tab="capacites" data-search="capabilities models build design media decks">${settingsIcon('capabilities')}<span>Capabilities</span></button>
+          <button class="settings-tab" type="button" data-tab="automatisations" data-search="skills automations workflows budgets approvals autonomy schedules">${settingsIcon('capabilities')}<span>Agent autonomy</span></button>
           <button class="settings-tab" type="button" data-tab="connecteurs" data-search="connecteurs connectors github supabase vercel stripe">${settingsIcon('connectors')}<span>Connecteurs</span></button>
           <button class="settings-tab" type="button" data-tab="api" data-search="api webhook secrets endpoints">${settingsIcon('api')}<span>API</span></button>
           <button class="settings-tab" type="button" data-tab="apparence" data-search="appearance theme dark light density motion accent">${settingsIcon('appearance')}<span>Appearance</span></button>
@@ -1512,6 +1514,23 @@ function settingsMarkup() {
           <p>Huggy selects compatible reasoning, code, vision and tool workflows without exposing internal provider details.</p>
           <div class="settings-row"><div><strong>Automatic model routing</strong><span>Chooses a compatible workflow for the requested task.</span></div><span class="settings-mini-badge">Active</span></div>
           <div class="settings-row"><div><strong>Verification and recovery</strong><span>Checks generated work and keeps recoverable drafts when blocked.</span></div><span class="settings-mini-badge">Active</span></div>
+        </div>
+      </div>
+      <div class="tab-panel hidden" id="tab-automatisations" data-settings-heading="Agent autonomy">
+        <div class="settings-card">
+          <h3>Bounded autonomy</h3>
+          <p>Huggy can handle reversible work automatically. Publishing, deletion, migrations, secrets, domains, Git push and billing always require explicit confirmation.</p>
+          <div class="settings-row"><div><strong>Skills</strong><span>Build, debug, review, security, test, research and release policies.</span></div><span class="settings-mini-badge">Managed</span></div>
+          <div class="settings-row"><div><strong>Verification</strong><span>Runs keep their real checks and never report success without evidence.</span></div><span class="settings-mini-badge">Required</span></div>
+          <div class="settings-row"><div><strong>Scheduled workflows</strong><span>Schedules are paused after repeated failures and use an idempotency key.</span></div><span class="settings-mini-badge">Bounded</span></div>
+        </div>
+        <div class="settings-card">
+          <h3>Workspace limits</h3>
+          <div class="settings-field-grid">
+            <div class="settings-field"><label for="settings-agent-max-steps">Max tool steps</label><input id="settings-agent-max-steps" type="number" min="1" max="20" value="10" disabled></div>
+            <div class="settings-field"><label for="settings-agent-concurrency">Concurrent runs</label><input id="settings-agent-concurrency" type="number" min="1" max="3" value="3" disabled></div>
+          </div>
+          <p style="margin-top:12px;font-size:12px;color:var(--text-sub)">Limits are enforced server-side. Contact your workspace owner to change plan-level budgets.</p>
         </div>
       </div>
       <div class="tab-panel hidden" id="tab-connecteurs" data-settings-heading="Connectors">

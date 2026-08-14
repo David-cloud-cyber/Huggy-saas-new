@@ -24,6 +24,25 @@ import { OpenRouterService, buildVisionMessageContent, resolveOpenRouterApiKey, 
 import { AnthropicService, resolveAnthropicApiKey } from './src/services/anthropic-service.ts';
 import { ProviderGateway } from './src/services/provider-gateway.ts';
 import { runLlmToolLoop } from './src/services/llm-tool-loop.ts';
+import {
+  canHuggySkillUseTool,
+  capSubagentCount,
+  getHuggySkillBudget,
+  getHuggySkill,
+  isCriticalHuggyAction,
+  listHuggySkills,
+  readHuggySkillFeatureFlags,
+  resolveHuggySkill,
+  type HuggySkill,
+  type HuggySkillBudget,
+} from './src/services/huggy-skills.ts';
+import {
+  computeNextWorkflowRun,
+  validateWorkflowInput,
+  workflowIdempotencyKey,
+  workflowIsDue,
+  type HuggyWorkflowTrigger,
+} from './src/services/huggy-workflows.ts';
 import { parseOrRepairStructuredObject } from './src/services/structured-output.ts';
 import {
   createHuggyStreamEmitter,
@@ -176,7 +195,6 @@ import {
 import { guardDecision } from './src/services/decision-guard.ts';
 import { decisionToLegacyDecision } from './src/services/decision-bridge.ts';
 import {
-  buildRecoverableDraftMessage,
   sanitizeAssistantOutput,
   shouldDeliverRecoverableDraft,
   validateExecutionOutputContract,
@@ -241,6 +259,8 @@ import {
 } from './src/services/design-workshop.ts';
 
 dotenv.config();
+
+const HUGGY_SKILL_FLAGS = readHuggySkillFeatureFlags(process.env);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -5733,6 +5753,8 @@ async function generateFilesWithAi(input: {
   deepReasoningContract?: DeepReasoningContract;
   visionInputs?: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }>;
   recentHistory?: string[];  // last N user messages for conflict detection
+  skill?: HuggySkill;
+  skillBudget?: HuggySkillBudget;
   onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; appName: string; model: string; cost_usd: number }> {
   const hasLiveKey = hasLiveAiProvider();
@@ -5770,7 +5792,7 @@ async function generateFilesWithAi(input: {
       files: input.existingFiles,
       mode: 'generation',
       stream: false,
-      timeoutMs: 120_000,
+      timeoutMs: Math.min(120_000, input.skillBudget?.maxDurationMs || 120_000),
       maxTokens: 32_000,
       hasVisionInput: Boolean(input.visionInputs?.length),
     })
@@ -5807,7 +5829,7 @@ async function generateFilesWithAi(input: {
 
   // ✅ Parallel specialist agents — run concurrently before main generation
   let parallelAgentContext = '';
-  if (input.existingFiles.length >= 0 && ['build', 'edit'].includes(input.decision?.intent || '')) {
+  if (HUGGY_SKILL_FLAGS.subagents && input.existingFiles.length >= 0 && ['build', 'edit'].includes(input.decision?.intent || '')) {
     input.onEvent?.({ type: 'agent_step', step: 'parallel_agents', message: 'Je vérifie les angles importants en une seule passe pour éviter les oublis.' });
     try {
       const agentCtx: ParallelAgentContext = {
@@ -5832,7 +5854,8 @@ async function generateFilesWithAi(input: {
       };
       const agentRoles = selectAgentsForContext(agentCtx);
 
-      if (agentRoles.length > 0) {
+      const boundedAgentRoles = agentRoles.slice(0, capSubagentCount(agentRoles.length, HUGGY_SKILL_FLAGS));
+      if (boundedAgentRoles.length > 0) {
         // ✅ Agent executor: each agent receives the model resolved for its tier
         const agentExecutor = async (task: import('./src/services/parallel-agent-runner.ts').AgentTask, modelId: import('./src/config/ai-models.ts').AllowedModelId) => {
           const agentRuntime = createProviderRuntimeOptions({
@@ -5842,7 +5865,7 @@ async function generateFilesWithAi(input: {
             files: input.existingFiles,
             mode: 'text',
             stream: false,
-            timeoutMs: 15_000,
+            timeoutMs: Math.min(15_000, input.skillBudget?.maxDurationMs || 15_000),
             maxTokens: 4_000,
           });
           const filesByPath = new Map(input.existingFiles.map(file => [file.path, file]));
@@ -5856,9 +5879,10 @@ async function generateFilesWithAi(input: {
             runtimeConfig: agentRuntime.providerConfig,
             runtimeConfigForModel: agentRuntime.runtimeConfigForModel,
             timeoutMs: agentRuntime.runtime.timeoutMs,
-            maxSteps: 3,
+            maxSteps: Math.min(3, input.skillBudget?.maxToolSteps || 3),
             handlers: {
               inspect_project_files: ({ paths }) => {
+                if (input.skill && !canHuggySkillUseTool(input.skill, 'inspect_project_files')) throw new Error('Skill tool policy denied inspect_project_files.');
                 const requested = Array.isArray(paths) ? paths.map(String).slice(0, 12) : [];
                 const selected = requested.length
                   ? requested.map(path => filesByPath.get(path)).filter(Boolean)
@@ -5868,22 +5892,28 @@ async function generateFilesWithAi(input: {
                   content: String(file!.content || '').slice(0, 12_000),
                 }));
               },
-              summarize_change_plan: ({ goal, files }) => ({
-                goal: String(goal || input.prompt).slice(0, 500),
-                files: Array.isArray(files) ? files.map(String).slice(0, 20) : [],
-                constraint: 'Preserve working behavior and change only what the user requested.',
-              }),
-              interpret_check_failure: ({ diagnostic, likely_file }) => ({
-                diagnostic: String(diagnostic || '').slice(0, 1_000),
-                likely_file: String(likely_file || '').slice(0, 240),
-                instruction: 'Propose the smallest repair and a concrete retest.',
-              }),
+              summarize_change_plan: ({ goal, files }) => {
+                if (input.skill && !canHuggySkillUseTool(input.skill, 'summarize_change_plan')) throw new Error('Skill tool policy denied summarize_change_plan.');
+                return {
+                  goal: String(goal || input.prompt).slice(0, 500),
+                  files: Array.isArray(files) ? files.map(String).slice(0, 20) : [],
+                  constraint: 'Preserve working behavior and change only what the user requested.',
+                };
+              },
+              interpret_check_failure: ({ diagnostic, likely_file }) => {
+                if (input.skill && !canHuggySkillUseTool(input.skill, 'interpret_check_failure')) throw new Error('Skill tool policy denied interpret_check_failure.');
+                return {
+                  diagnostic: String(diagnostic || '').slice(0, 1_000),
+                  likely_file: String(likely_file || '').slice(0, 240),
+                  instruction: 'Propose the smallest repair and a concrete retest.',
+                };
+              },
             },
           });
           return loop.result.text;
         };
 
-        const agentResults = await runParallelAgents(agentCtx, agentExecutor, agentRoles, 15_000);
+        const agentResults = await runParallelAgents(agentCtx, agentExecutor, boundedAgentRoles, 15_000);
         parallelAgentContext = mergeAgentOutputs(agentResults);
         totalCostUsd += agentResults.length * 0.001; // nominal cost tracking
 
@@ -7223,7 +7253,7 @@ function redactPublicAgentPayload<T>(value: T): T {
   return output as T;
 }
 
-async function createAgentRun(project: GeneratedProject, userId: string, requestId: string, decision: IntentDecision, modelId: string, contextPack: Record<string, any>) {
+async function createAgentRun(project: GeneratedProject, userId: string, requestId: string, decision: IntentDecision, modelId: string, contextPack: Record<string, any>, skill?: HuggySkill, skillBudget?: HuggySkillBudget, workflowId?: string | null) {
   const row = {
     id: `run_${randomUUID()}`,
     request_id: requestId,
@@ -7233,6 +7263,11 @@ async function createAgentRun(project: GeneratedProject, userId: string, request
     intent: decision.intent,
     mode: decision.requestedMode,
     model_id: modelId === 'auto' ? null : modelId,
+    skill_id: skill?.id || null,
+    skill_version: skill?.version || null,
+    workflow_id: workflowId || null,
+    skill_budget: skillBudget || {},
+    skill_budget_used: {},
     status: 'running',
     context_summary: redactPublicAgentPayload(contextPack),
     public_payload: redactPublicAgentPayload({
@@ -11112,7 +11147,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     // and emit a first milestone so the UI reacts in <1s.
     res.flushHeaders?.();
     streamV2.emit('milestone', { milestone: 'understanding', state: 'active' });
-    res.write(`data: ${JSON.stringify({ type: 'agent_step', step: 'run_started', message: 'Je commence par cadrer le résultat attendu avant de toucher au projet.' })}\n\n`);
   }
 
   // Stream-aware terminal response. In SSE mode every final/early return MUST be
@@ -11162,6 +11196,40 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       reason: 'resume_recoverable_draft',
     }
     : initialDecision;
+  const skillResolution = resolveHuggySkill({
+    prompt: agentPrompt,
+    intent: decision.intent,
+    requestedMode: decision.requestedMode,
+    risk: decision.executionContract?.risk,
+    plan: String((project as any).plan || (project as any).plan_key || 'free'),
+  });
+  const skill = skillResolution.skill;
+  const skillBudget = getHuggySkillBudget(skill, String((project as any).plan || (project as any).plan_key || 'free'));
+  if (isStream && streamV2) {
+    streamV2.emit('skill_resolved', {
+      skill_id: skill.id,
+      skill_version: skill.version,
+      budget: skillBudget,
+      reason: skillResolution.reason,
+    });
+    streamV2.emit('skill_started', { skill_id: skill.id, skill_version: skill.version });
+  }
+  const explicitConfirmation = req.body?.confirmed === true || req.body?.approvalGranted === true || req.body?.confirmation === 'confirmed';
+  if (skillResolution.requiresConfirmation && isCriticalHuggyAction(agentPrompt) && !explicitConfirmation) {
+    if (isStream && streamV2) {
+      streamV2.emit('approval_requested', {
+        action: skill.id,
+        summary: 'This action can change publication, production data, secrets, billing or another irreversible surface. Confirm explicitly to continue.',
+      });
+    }
+    return respondJson(409, {
+      success: false,
+      error: 'Explicit confirmation is required before this action can run.',
+      diagnostic_code: 'AGENT_CONFIRMATION_REQUIRED',
+      skill_id: skill.id,
+      requires_confirmation: true,
+    });
+  }
   const reliability = buildReliabilityDecision(decision);
   const durableRunContract = buildDurableRunContract({
     contract: decision.executionContract || buildExecutionContract({
@@ -11231,8 +11299,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       senior_agent_os: seniorAgentContext,
       deep_reasoning_contract: deepReasoningContract,
       durable_run: durableRunContract ? buildDurableRunPayload({ contract: durableRunContract }).durable_run : null,
+      skill: { id: skill.id, version: skill.version, budget: skillBudget },
     };
-    agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack)).id;
+    agentRunId = (await createAgentRun(project, userId, requestId, decision, effectiveModelSelection, contextPack, skill, skillBudget, req.body?.workflowId || null)).id;
   }
   await saveProjectMessage({
     organization_id: project.organization_id,
@@ -11366,9 +11435,14 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       seniorAgentContext,
       deepReasoningContract,
       visionInputs,
+      skill,
+      skillBudget,
       // ✅ Pass recent history for conflict detection
       recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
     });
+    if (!generation.summary || !generation.summary.trim()) {
+      throw new Error('The selected model returned no final summary for this run.');
+    }
 
     const mergedByPath = new Map<string, GeneratedFile>();
     existingFiles.forEach(file => mergedByPath.set(file.path, file));
@@ -11387,7 +11461,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     let autoFix = null as any;
     if (pipeline.status === 'failed') {
       await Promise.all(pipeline.errors.map(error => saveBuildError(project, error)));
-      for (let attempt = 1; attempt <= 3 && pipeline.status === 'failed'; attempt += 1) {
+      for (let attempt = 1; attempt <= skillBudget.maxRetries && pipeline.status === 'failed'; attempt += 1) {
         const fix = applyAutoFix(projectForRun, finalFiles, pipeline.errors);
         autoFix = fix.patch;
         if (!fix.fixed) break;
@@ -11408,7 +11482,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       });
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
       let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
-      for (let attempt = 1; runnerBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
+      for (let attempt = 1; runnerBlocking.length && attempt <= skillBudget.maxRetries; attempt += 1) {
         const fix = applyAutoFix(projectForRun, finalFiles, runnerBlocking.map(check => ({
           file: check.file || 'index.html',
           message: check.message,
@@ -11437,7 +11511,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       previewHtml,
       platformType: uiPolicy.appType,
     }).filter(isBlockingVerificationFailure);
-    for (let attempt = 1; visualBlocking.length && attempt <= DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts; attempt += 1) {
+    for (let attempt = 1; visualBlocking.length && attempt <= skillBudget.maxRetries; attempt += 1) {
       const fix = applyAutoFix(projectForRun, finalFiles, visualBlocking.map(check => ({
         file: check.file || 'src/App.tsx',
         message: check.message,
@@ -11454,6 +11528,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         platformType: uiPolicy.appType,
       }).filter(isBlockingVerificationFailure);
     }
+    if (isStream && streamV2 && !streamAborted) streamV2.emit('verification_started', {});
     let finalGate = await finalReliabilityAutoFix({
       project: projectForRun,
       userId,
@@ -11465,7 +11540,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       uiPolicy,
       hasExistingFiles: existingFiles.length > 0,
       shouldRunRunner: Boolean(AGENT_V3_ENABLED && reliability.requires_runner),
-      maxAttempts: DEFAULT_AGENT_V3_BUDGET.maxAutoFixAttempts,
+      maxAttempts: skillBudget.maxRetries,
     });
     finalFiles = finalGate.files;
     pipeline = finalGate.pipeline;
@@ -11477,6 +11552,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const reliabilitySummary = finalGate.reliabilitySummary;
     const qualitySummary = finalGate.qualitySummary;
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
+    if (isStream && streamV2 && !streamAborted) streamV2.emit('verification_completed', {
+      status: reliabilitySummary.status === 'passed' ? 'pass' : reliabilitySummary.status === 'failed' ? 'fail' : 'incomplete',
+      checks: verificationChecks.length,
+    });
     if (shouldDeliverRecoverableDraft(reliabilitySummary)) {
       const generatedProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
         ? sanitizeSuggestedProjectName(generation.appName, prompt)
@@ -11509,7 +11588,22 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         console.warn('[huggy:needs_fix_patch_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
       });
       const blockingCount = Number(reliabilitySummary.blocking?.length || (reliabilitySummary as any).failed?.length || 1);
-      const summary = buildRecoverableDraftMessage({ prompt, reliabilitySummary, blockingCount });
+      let summary = generation.summary;
+      try {
+        const finalizerDecision = { ...decision, intent: 'conversation', requiresFileChanges: false, requiresPreviewRebuild: false, requiresCredits: false } as IntentDecision;
+        const finalizer = await createAgentTextResponse({
+          project: recoverableProject,
+          prompt: `${agentPromptForText}\n\nWrite the final user-facing response from these verified facts only. The preview is needs_fix, not ready. Blocking checks: ${JSON.stringify(reliabilitySummary.blocking || [])}`,
+          files: finalFiles,
+          decision: finalizerDecision,
+          modelId: effectiveModelSelection,
+          userCredits: walletForRouting,
+          allowLocalFallback: false,
+        });
+        if (finalizer.text?.trim()) summary = finalizer.text.trim();
+      } catch {
+        // Keep the model-generated generation summary if the finalizer is unavailable.
+      }
       const outputContract = validateExecutionOutputContract({
         contract: (decision as any).executionContract as ExecutionContract | undefined,
         hasFiles: finalFiles.length > 0,
@@ -11656,7 +11750,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       project_id: updatedProject.id,
       user_id: userId,
       role: 'assistant',
-      content: generation.summary || 'The application is ready in Preview.',
+      content: generation.summary,
       intent: decision.intent,
       requested_mode: decision.requestedMode,
     });
@@ -13075,8 +13169,187 @@ app.delete('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: an
   }
 });
 
+// ── Native Huggy skills and bounded workflows ──────────────────────────────
+app.get('/api/projects/:id/skills', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+  return res.json({ success: true, skills: listHuggySkills(), feature_flags: HUGGY_SKILL_FLAGS });
+});
+
+app.get('/api/projects/:id/agent/skills/:skillId', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+  const skill = getHuggySkill(req.params.skillId);
+  if (!skill) return res.status(404).json({ success: false, error: 'Skill not found.' });
+  return res.json({ success: true, skill });
+});
+
+app.post('/api/projects/:id/workflows', requireAuth, async (req: any, res: any) => {
+  if (!HUGGY_SKILL_FLAGS.workflows) return res.status(404).json({ success: false, error: 'Workflows are not enabled.' });
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const input = {
+    name: String(req.body?.name || '').trim(),
+    skill_id: String(req.body?.skill_id || req.body?.skillId || '').trim(),
+    trigger_type: String(req.body?.trigger_type || req.body?.triggerType || 'manual') as HuggyWorkflowTrigger,
+    cron: req.body?.cron ? String(req.body.cron).trim() : null,
+    budget: typeof req.body?.budget === 'object' && req.body.budget ? req.body.budget : {},
+  };
+  const validation = validateWorkflowInput(input);
+  if (validation.length || !getHuggySkill(input.skill_id)) {
+    return res.status(400).json({ success: false, error: validation.length ? 'Invalid workflow.' : 'Unknown skill.', validation: validation.length ? validation : ['skill_unknown'] });
+  }
+  const client = requireSupabase('Workflow persistence');
+  const nextRun = computeNextWorkflowRun(input, new Date());
+  const { data, error } = await client.from('agent_workflows').insert({
+    organization_id: project.organization_id,
+    project_id: project.id,
+    name: input.name,
+    skill_id: input.skill_id,
+    trigger_type: input.trigger_type,
+    cron: input.cron,
+    status: 'active',
+    budget: input.budget,
+    next_run_at: nextRun,
+    created_by: auth.userId,
+  }).select('*').single();
+  if (error) return res.status(500).json({ success: false, error: 'Workflow could not be saved.' });
+  return res.status(201).json({ success: true, workflow: data });
+});
+
+app.get('/api/projects/:id/workflows', requireAuth, async (req: any, res: any) => {
+  if (!HUGGY_SKILL_FLAGS.workflows) return res.json({ success: true, workflows: [] });
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+  const client = requireSupabase('Workflow listing');
+  const { data, error } = await client.from('agent_workflows').select('*').eq('project_id', project.id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ success: false, error: 'Workflows could not be loaded.' });
+  return res.json({ success: true, workflows: data || [] });
+});
+
+app.patch('/api/projects/:id/workflows/:workflowId', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const client = requireSupabase('Workflow update');
+  const { data: existing } = await client.from('agent_workflows').select('*').eq('id', req.params.workflowId).eq('project_id', project.id).maybeSingle();
+  if (!existing) return res.status(404).json({ success: false, error: 'Workflow not found.' });
+  const nextStatus = ['active', 'paused', 'disabled'].includes(req.body?.status) ? req.body.status : existing.status;
+  const nextCron = req.body?.cron === undefined ? existing.cron : (req.body.cron ? String(req.body.cron).trim() : null);
+  const nextSkill = req.body?.skill_id || req.body?.skillId || existing.skill_id;
+  const validation = validateWorkflowInput({ name: String(req.body?.name || existing.name), skill_id: String(nextSkill), trigger_type: String(req.body?.trigger_type || existing.trigger_type) as HuggyWorkflowTrigger, cron: nextCron, budget: req.body?.budget || existing.budget });
+  if (validation.length || !getHuggySkill(String(nextSkill))) return res.status(400).json({ success: false, validation: validation.length ? validation : ['skill_unknown'] });
+  const update = {
+    name: String(req.body?.name || existing.name).trim(), skill_id: String(nextSkill), trigger_type: String(req.body?.trigger_type || existing.trigger_type), cron: nextCron,
+    status: nextStatus, budget: req.body?.budget || existing.budget,
+    next_run_at: nextStatus === 'active' ? computeNextWorkflowRun({ trigger_type: String(req.body?.trigger_type || existing.trigger_type) as HuggyWorkflowTrigger, cron: nextCron }, new Date()) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await client.from('agent_workflows').update(update).eq('id', existing.id).select('*').single();
+  if (error) return res.status(500).json({ success: false, error: 'Workflow could not be updated.' });
+  return res.json({ success: true, workflow: data });
+});
+
+app.post('/api/projects/:id/workflows/:workflowId/run', requireAuth, async (req: any, res: any) => {
+  if (!HUGGY_SKILL_FLAGS.workflows) return res.status(404).json({ success: false, error: 'Workflows are not enabled.' });
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const client = requireSupabase('Workflow run');
+  const { data: workflow } = await client.from('agent_workflows').select('*').eq('id', req.params.workflowId).eq('project_id', project.id).maybeSingle();
+  if (!workflow) return res.status(404).json({ success: false, error: 'Workflow not found.' });
+  if (workflow.status !== 'active') return res.status(409).json({ success: false, error: 'Workflow is not active.' });
+  const idempotencyKey = String(req.headers['idempotency-key'] || req.body?.idempotency_key || workflowIdempotencyKey(workflow.id, 'manual', new Date().toISOString()));
+  const { data: existingRun } = await client.from('agent_workflow_runs').select('*').eq('idempotency_key', idempotencyKey).maybeSingle();
+  if (existingRun) return res.json({ success: true, idempotent: true, run: existingRun });
+  const { data: run, error } = await client.from('agent_workflow_runs').insert({ workflow_id: workflow.id, trigger_type: 'manual', status: 'queued', idempotency_key: idempotencyKey }).select('*').single();
+  if (error || !run) return res.status(500).json({ success: false, error: 'Workflow run could not be created.' });
+  const jobId = await enqueueJob({ type: 'workflow_run', project_id: project.id, user_id: auth.userId, organization_id: project.organization_id, payload: { workflow_id: workflow.id, workflow_run_id: run.id, skill_id: workflow.skill_id }, priority: 'normal', max_attempts: 1 });
+  await client.from('agent_workflow_runs').update({ result: { job_id: jobId } }).eq('id', run.id);
+  return res.status(202).json({ success: true, run: { ...run, job_id: jobId } });
+});
+
+app.post('/api/projects/:id/workflows/:workflowId/pause', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const client = requireSupabase('Workflow pause');
+  const { data, error } = await client.from('agent_workflows').update({ status: 'paused', next_run_at: null, updated_at: new Date().toISOString() }).eq('id', req.params.workflowId).eq('project_id', project.id).select('*').single();
+  if (error || !data) return res.status(404).json({ success: false, error: 'Workflow not found.' });
+  return res.json({ success: true, workflow: data });
+});
+
+app.post('/api/projects/:id/workflows/:workflowId/resume', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'build', project)) return;
+  const client = requireSupabase('Workflow resume');
+  const { data: existing } = await client.from('agent_workflows').select('*').eq('id', req.params.workflowId).eq('project_id', project.id).maybeSingle();
+  if (!existing) return res.status(404).json({ success: false, error: 'Workflow not found.' });
+  const next = computeNextWorkflowRun({ trigger_type: existing.trigger_type as HuggyWorkflowTrigger, cron: existing.cron }, new Date());
+  const { data, error } = await client.from('agent_workflows').update({ status: 'active', next_run_at: next, updated_at: new Date().toISOString() }).eq('id', existing.id).select('*').single();
+  if (error) return res.status(500).json({ success: false, error: 'Workflow could not be resumed.' });
+  return res.json({ success: true, workflow: data });
+});
+
+app.get('/api/projects/:id/workflows/:workflowId/runs', requireAuth, async (req: any, res: any) => {
+  const auth = getRequiredAuth(req);
+  const project = await loadProject(req.params.id, auth.userId);
+  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+  if (!requireProjectCapability(req, res, 'view', project)) return;
+  const client = requireSupabase('Workflow run history');
+  const { data, error } = await client.from('agent_workflow_runs').select('*').eq('workflow_id', req.params.workflowId).order('created_at', { ascending: false }).limit(50);
+  if (error) return res.status(500).json({ success: false, error: 'Workflow history could not be loaded.' });
+  return res.json({ success: true, runs: data || [] });
+});
+
 app.listen(port, () => {
   console.log(`Huggy SaaS backend listening at http://localhost:${port}`);
+
+  registerJobHandler('workflow_run', async (job, onProgress) => {
+    const client = getSupabase();
+    const workflowRunId = String(job.payload.workflow_run_id || '');
+    const workflowId = String(job.payload.workflow_id || '');
+    const skillId = String(job.payload.skill_id || 'test');
+    if (client && workflowRunId) await client.from('agent_workflow_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', workflowRunId);
+    onProgress?.('skill_started', `workflow:${skillId}`);
+    try {
+      const project = await loadProject(job.project_id, job.user_id);
+      if (!project) throw new Error('Project not found for workflow run.');
+      const files = await loadProjectFiles(project.id);
+      let result: Record<string, unknown> = { skill_id: skillId, files_checked: files.length };
+      if (skillId === 'security') result = { ...result, security: scanGeneratedSecurity(files) };
+      if (skillId === 'test' || skillId === 'review') {
+        const preview = runPreviewPipeline(project, files);
+        result = { ...result, preview_status: preview.status, preview_errors: preview.errors || [] };
+      }
+      if (client && workflowRunId) await client.from('agent_workflow_runs').update({ status: 'completed', completed_at: new Date().toISOString(), result }).eq('id', workflowRunId);
+      if (client && workflowId) await client.from('agent_workflows').update({ last_run_at: new Date().toISOString(), failure_count: 0, lease_owner: null, lease_until: null, updated_at: new Date().toISOString() }).eq('id', workflowId);
+      onProgress?.('skill_verification_completed', `workflow:${skillId}`);
+      return result;
+    } catch (error: any) {
+      const message = redactSecrets(error?.message || String(error), '[redacted]');
+      if (client && workflowRunId) await client.from('agent_workflow_runs').update({ status: 'failed', completed_at: new Date().toISOString(), error: message }).eq('id', workflowRunId);
+      if (client && workflowId) {
+        const { data: workflow } = await client.from('agent_workflows').select('failure_count,max_failures').eq('id', workflowId).maybeSingle();
+        const failureCount = Number(workflow?.failure_count || 0) + 1;
+        await client.from('agent_workflows').update({ failure_count: failureCount, status: failureCount >= Number(workflow?.max_failures || 3) ? 'disabled' : 'active', lease_owner: null, lease_until: null, updated_at: new Date().toISOString() }).eq('id', workflowId);
+      }
+      throw new Error(message);
+    }
+  });
 
   // ✅ Initialize async job queue worker — picks up long-running jobs from Supabase
   const supabaseClient = getSupabase();
@@ -13084,6 +13357,24 @@ app.listen(port, () => {
     initJobQueue(supabaseClient);
     startJobWorker();
     console.log('[huggy:job_queue] Worker initialized');
+    if (HUGGY_SKILL_FLAGS.scheduledRuns) {
+      const workerId = `workflow_scheduler_${randomUUID()}`;
+      setInterval(async () => {
+        try {
+          const { data: due = [] } = await supabaseClient.rpc('claim_due_huggy_workflows', { p_worker_id: workerId, p_limit: 10 });
+          for (const workflow of due as any[]) {
+            if (!workflowIsDue(workflow, new Date())) continue;
+            const scheduledAt = String(workflow.next_run_at || new Date().toISOString());
+            const idempotencyKey = workflowIdempotencyKey(workflow.id, 'schedule', scheduledAt);
+            const { data: run } = await supabaseClient.from('agent_workflow_runs').upsert({ workflow_id: workflow.id, trigger_type: 'schedule', status: 'queued', idempotency_key: idempotencyKey }, { onConflict: 'idempotency_key', ignoreDuplicates: true }).select('*').maybeSingle();
+            if (run) await enqueueJob({ type: 'workflow_run', project_id: workflow.project_id, user_id: workflow.created_by, organization_id: workflow.organization_id, payload: { workflow_id: workflow.id, workflow_run_id: run.id, skill_id: workflow.skill_id }, max_attempts: 1 });
+            await supabaseClient.from('agent_workflows').update({ next_run_at: computeNextWorkflowRun(workflow, new Date()), lease_owner: null, lease_until: null, updated_at: new Date().toISOString() }).eq('id', workflow.id);
+          }
+        } catch (error: any) {
+          console.warn('[huggy:workflow_scheduler]', { message: error?.message || String(error) });
+        }
+      }, 30_000);
+    }
   } else {
     console.warn('[huggy:job_queue] Skipped — Supabase not configured');
   }

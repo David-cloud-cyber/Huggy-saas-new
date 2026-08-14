@@ -16,6 +16,7 @@ import { understandUserIntent } from './services/intent-understanding';
 import { deriveProjectName } from './services/project-naming';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { demoBuilderUrl, demoDelay, getDemoAssistantReply, getDemoProjects, getDemoUsage, installDemoBanner, isDemoMode } from './demo-mode';
+import { initSkillsWorkflowsPanel } from './skills-workflows-ui';
 
 initThemeController();
 
@@ -1226,6 +1227,7 @@ function renderLiveProjects(projects: DashboardProject[]) {
   renderDashboardOverview(projects);
   renderProjectFilters(projects);
   renderRecentDashboardActivity(projects);
+  initSkillsWorkflowsPanel(projects[0]?.id || '');
 
   if (sidebarList) {
     sidebarList.innerHTML = projects.length

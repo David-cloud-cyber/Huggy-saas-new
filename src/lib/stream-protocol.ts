@@ -91,7 +91,13 @@ export type HuggyStreamEventType =
   | 'tool_result'
   | 'source'
   | 'citation'
-  | 'attachment';
+  | 'attachment'
+  | 'skill_resolved'
+  | 'skill_started'
+  | 'skill_budget_exhausted'
+  | 'approval_requested'
+  | 'verification_started'
+  | 'verification_completed';
 
 const EVENT_TYPES: readonly HuggyStreamEventType[] = [
   'status',
@@ -116,6 +122,12 @@ const EVENT_TYPES: readonly HuggyStreamEventType[] = [
   'source',
   'citation',
   'attachment',
+  'skill_resolved',
+  'skill_started',
+  'skill_budget_exhausted',
+  'approval_requested',
+  'verification_started',
+  'verification_completed',
 ];
 
 interface HuggyStreamEventBase {
@@ -300,6 +312,43 @@ export interface HuggyAttachmentEvent extends HuggyStreamEventBase {
   size?: number;
 }
 
+export interface HuggySkillResolvedEvent extends HuggyStreamEventBase {
+  type: 'skill_resolved';
+  skill_id: string;
+  skill_version?: string;
+  budget?: Record<string, number>;
+  reason?: string;
+}
+
+export interface HuggySkillStartedEvent extends HuggyStreamEventBase {
+  type: 'skill_started';
+  skill_id: string;
+  skill_version?: string;
+}
+
+export interface HuggySkillBudgetExhaustedEvent extends HuggyStreamEventBase {
+  type: 'skill_budget_exhausted';
+  skill_id: string;
+  skill_version?: string;
+  budget?: Record<string, number>;
+}
+
+export interface HuggyApprovalEvent extends HuggyStreamEventBase {
+  type: 'approval_requested';
+  action: string;
+  summary: string;
+}
+
+export interface HuggyVerificationStartedEvent extends HuggyStreamEventBase {
+  type: 'verification_started';
+}
+
+export interface HuggyVerificationCompletedEvent extends HuggyStreamEventBase {
+  type: 'verification_completed';
+  status?: 'pass' | 'fail' | 'incomplete';
+  checks?: number;
+}
+
 export type HuggyStreamEvent =
   | HuggyStatusEvent
   | HuggyMilestoneEvent
@@ -322,7 +371,13 @@ export type HuggyStreamEvent =
   | HuggyToolResultEvent
   | HuggySourceEvent
   | HuggyCitationEvent
-  | HuggyAttachmentEvent;
+  | HuggyAttachmentEvent
+  | HuggySkillResolvedEvent
+  | HuggySkillStartedEvent
+  | HuggySkillBudgetExhaustedEvent
+  | HuggyApprovalEvent
+  | HuggyVerificationStartedEvent
+  | HuggyVerificationCompletedEvent;
 
 export function isHuggyStreamEvent(value: unknown): value is HuggyStreamEvent {
   if (typeof value !== 'object' || value === null) return false;
