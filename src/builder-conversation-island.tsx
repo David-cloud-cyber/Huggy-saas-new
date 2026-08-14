@@ -14,7 +14,6 @@ import MarkdownIt from "markdown-it";
 import { nanoid } from "nanoid";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { AnimatePresence, motion } from "motion/react";
 import { Response } from "./components/ui/response";
 import type { HuggyStreamEvent } from "./lib/stream-protocol";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "./components/ai-elements/tool";
@@ -642,6 +641,7 @@ function ensureConversationStyles() {
       flex-direction: column;
       gap: 14px;
       padding: 0 0 8px;
+      min-width: 0;
     }
 
     .huggy-conversation-empty {
@@ -676,6 +676,7 @@ function ensureConversationStyles() {
     .huggy-chat-message.system { justify-content: flex-start; }
 
     .huggy-chat-bubble {
+      min-width: 0;
       max-width: min(92%, 640px);
       border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
       border-radius: 14px;
@@ -684,6 +685,7 @@ function ensureConversationStyles() {
       background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
       box-shadow: 0 1px 2px rgba(0,0,0,.04);
       overflow-wrap: anywhere;
+      word-break: break-word;
       font-size: 12.5px;
       line-height: 1.62;
     }
@@ -742,7 +744,14 @@ function ensureConversationStyles() {
     }
     .huggy-typing-dot:nth-child(2) { animation-delay: 0.15s; }
     .huggy-typing-dot:nth-child(3) { animation-delay: 0.3s; }
-    .huggy-typing-label { margin-left: 4px; }
+    .huggy-typing-label {
+      margin-left: 4px;
+      font-size: 0;
+    }
+    .huggy-typing-label::after {
+      content: "Huggy prépare ta réponse…";
+      font-size: 12px;
+    }
     @keyframes huggy-typing-bounce {
       0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
       40% { transform: translateY(-3px); opacity: 1; }
@@ -792,6 +801,13 @@ function ensureConversationStyles() {
       background-clip: text;
       -webkit-text-fill-color: transparent;
       animation: huggy-text-shimmer 2.25s ease-in-out infinite;
+    }
+
+    .huggy-shimmer-dots {
+      display: inline-block;
+      color: var(--text-muted);
+      letter-spacing: 4px;
+      animation: huggy-dots-pulse 1.2s ease-in-out infinite;
     }
 
     .huggy-live-lines {
@@ -937,6 +953,11 @@ function ensureConversationStyles() {
       100% { background-position: -80% 0; }
     }
 
+    @keyframes huggy-dots-pulse {
+      0%, 100% { opacity: .35; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-1px); }
+    }
+
     .huggy-tools-stack { display: grid; gap: 6px; margin: 8px 0; }
     .huggy-tool {
       border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -1005,7 +1026,8 @@ function ensureConversationStyles() {
       .huggy-live-dot,
       .huggy-live-line.is-active span:first-child,
       .huggy-chat-working::before,
-      .huggy-shimmer-text {
+      .huggy-shimmer-text,
+      .huggy-shimmer-dots {
         animation: none !important;
       }
       .huggy-shimmer-text {
@@ -1026,37 +1048,10 @@ function ShimmeringText({ text }: { text: string }) {
   return <span className="huggy-shimmer-text">{text}</span>;
 }
 
-import { CYCLING_PHRASES_FR, CYCLING_INTERVAL_MS } from "./lib/shimmer-config";
-
 function CyclingShimmer({ initialLabel }: { initialLabel?: string }) {
-  const phrases = useMemo(() => {
-    const base = [...CYCLING_PHRASES_FR];
-    const seed = (initialLabel || "").trim();
-    if (seed && !base.includes(seed)) base.unshift(seed);
-    return base;
-  }, [initialLabel]);
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setIndex((value) => (value + 1) % phrases.length);
-    }, CYCLING_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [phrases.length]);
   return (
-    <span className="huggy-cycling-shimmer" aria-live="polite">
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.span
-          key={phrases[index]}
-          className="huggy-shimmer-text"
-          initial={{ opacity: 0, y: 6, filter: "blur(4px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          exit={{ opacity: 0, y: -6, filter: "blur(4px)" }}
-          transition={{ duration: 0.42, ease: "easeOut" }}
-          style={{ display: "inline-block" }}
-        >
-          {phrases[index]}
-        </motion.span>
-      </AnimatePresence>
+    <span className="huggy-cycling-shimmer" aria-live="polite" aria-label={initialLabel || "Assistant response pending"}>
+      {initialLabel ? <ShimmeringText text={initialLabel} /> : <span className="huggy-shimmer-dots" aria-hidden="true">•••</span>}
     </span>
   );
 }
@@ -1107,18 +1102,36 @@ function MessageView({ message }: { message: HuggyConversationMessage }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   const hasStreamedText = isAssistant && message.content.trim().length > 0;
-  const showThinking = isAssistant && message.working && !message.liveRun && !hasStreamedText;
+  const showThinking = isAssistant && message.working;
   const run = message.liveRun;
   const reasoningText = run?.reasoningText || "";
   const tools = run?.tools || [];
   const sources = run?.sources || [];
   const attachments = run?.attachments || [];
 
+  if (isUser) {
+    return (
+      <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
+        <div className="huggy-chat-bubble">
+          {message.content}
+          {message.actions?.length ? (
+            <div className="huggy-chat-actions">
+              {message.actions.map((action) => (
+                <button key={action.id} type="button" onClick={action.onClick}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
       <div className="huggy-chat-bubble">
-        {message.liveRun ? <LiveRunView run={message.liveRun} /> : null}
-        {showThinking ? <CyclingShimmer initialLabel={message.content} /> : null}
+        {showThinking && !hasStreamedText ? <CyclingShimmer initialLabel={run?.activeText} /> : null}
         {isAssistant && reasoningText ? (
           <Reasoning isStreaming={message.working} defaultOpen={false}>
             <ReasoningTrigger label={message.working ? "Réflexion en cours…" : "Réflexion"} />
@@ -1145,13 +1158,7 @@ function MessageView({ message }: { message: HuggyConversationMessage }) {
             ))}
           </div>
         ) : null}
-        {isUser ? (
-          <>{message.content}</>
-        ) : hasStreamedText ? (
-          <Response>{message.content}</Response>
-        ) : !isAssistant && !message.liveRun && message.content ? (
-          <>{message.content}</>
-        ) : null}
+        {hasStreamedText ? <Response>{message.content}</Response> : null}
         {isAssistant && sources.length > 0 ? (
           <Sources>
             <SourcesTrigger count={sources.length} />
@@ -1190,6 +1197,7 @@ function ConversationApp({ store, host }: { store: ReturnType<typeof createStore
   const [version, setVersion] = useState(0);
   const messages = store.messages();
   const lastLengthRef = useRef(0);
+  const scrollFrameRef = useRef<number | null>(null);
   const isStreaming = messages.some((m) => m.role === "assistant" && m.working);
 
   useEffect(() => store.subscribe(() => setVersion((value) => value + 1)), [store]);
@@ -1197,11 +1205,30 @@ function ConversationApp({ store, host }: { store: ReturnType<typeof createStore
   useEffect(() => {
     void version;
     const distanceFromBottom = host.scrollHeight - host.clientHeight - host.scrollTop;
-    if (isStreaming || distanceFromBottom < 180 || messages.length !== lastLengthRef.current) {
-      host.scrollTo({ top: host.scrollHeight, behavior: "smooth" });
+    const shouldFollow = distanceFromBottom < 180 || (messages.length !== lastLengthRef.current && distanceFromBottom < 420);
+    if (shouldFollow && scrollFrameRef.current === null) {
+      const startTop = host.scrollTop;
+      const startedAt = performance.now();
+      const animate = (now: number) => {
+        const target = Math.max(0, host.scrollHeight - host.clientHeight);
+        const progress = Math.min(1, (now - startedAt) / 240);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        host.scrollTop = startTop + (target - startTop) * eased;
+        if (progress < 1 && Math.abs(target - host.scrollTop) > 0.5) {
+          scrollFrameRef.current = window.requestAnimationFrame(animate);
+        } else {
+          scrollFrameRef.current = null;
+        }
+      };
+      scrollFrameRef.current = window.requestAnimationFrame(animate);
     }
+
     lastLengthRef.current = messages.length;
   }, [host, messages.length, version, isStreaming]);
+
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
   return (
     <div className="huggy-conversation-react">

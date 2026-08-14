@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#0e1116" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy — Sign In" />
@@ -52,7 +52,7 @@
     </script>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'light';
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -910,7 +910,7 @@
     </button>
 
     <div class="auth-container">
-        <section class="auth-panel" aria-label="Sign in to Huggy">
+        <section class="auth-panel" aria-label="Se connecter à Huggy">
             <div class="logo-area">
                 <div class="auth-brand-row">
                     <div class="logo-mark">
@@ -927,8 +927,8 @@
 
         <div class="auth-card">
             <div class="auth-header">
-                <h1 class="auth-title" id="auth-title">Welcome back</h1>
-                <p class="auth-subtitle" id="auth-subtitle">Pick up your projects, keep your session, and publish when you are ready.</p>
+                <h1 class="auth-title" id="auth-title">Bon retour</h1>
+                <p class="auth-subtitle" id="auth-subtitle">Retrouvez vos projets et publiez votre application quand elle est prête.</p>
             </div>
 
             <div class="auth-progress" aria-hidden="true">
@@ -938,8 +938,8 @@
             </div>
 
             <div class="tabs">
-                <button class="tab-btn active" id="tab-login">Log In</button>
-                <button class="tab-btn" id="tab-signup">Sign Up</button>
+                <button class="tab-btn active" id="tab-login">Connexion</button>
+                <button class="tab-btn" id="tab-signup">Créer un compte</button>
             </div>
 
             <form id="auth-form">
@@ -972,14 +972,14 @@
                         <path fill="#FBBC05" d="M6.39 13.82A5.1 5.1 0 0 1 6.1 12c0-.63.11-1.25.28-1.82l-.01-.12-3.1-2.15-.1.05A8.45 8.45 0 0 0 2.4 12c0 1.45.35 2.82.96 4.04l3.03-2.22Z"/>
                         <path fill="#EA4335" d="M12 6.53c1.85 0 3.1.71 3.81 1.31l2.78-2.42C16.88 4 14.66 3 12 3 8.16 3 4.78 5.02 3.16 7.96l3.22 2.22C7.18 8.06 9.39 6.53 12 6.53Z"/>
                     </svg>
-                    Continue with Google
+                    Continuer avec Google
                 </button>
             </div>
 
             <div class="auth-footer" id="auth-footer-text">
-                New to Huggy? <button type="button" data-auth-switch="signup">Create an account</button>
+                Nouveau sur Huggy ? <button type="button" data-auth-switch="signup">Créer un compte</button>
             </div>
-            <p class="auth-trust-note">Your projects, credits and published apps stay connected to this account.</p>
+            <p class="auth-trust-note">Vos projets, crédits et applications publiées restent liés à ce compte.</p>
         </div>
         </section>
 
@@ -1007,51 +1007,6 @@
     <script>
         (function() {
             const curtain = document.getElementById('curtain');
-            const html = document.documentElement;
-            const themeBtn = document.getElementById('theme-btn');
-            const moonIcon = document.getElementById('moon-icon');
-            const sunIcon = document.getElementById('sun-icon');
-            let curtainBusy = false;
-
-            function updateIcons(theme) {
-                moonIcon?.classList.toggle('hidden', theme !== 'dark');
-                sunIcon?.classList.toggle('hidden', theme === 'dark');
-            }
-
-            themeBtn?.addEventListener('click', () => {
-                if (curtainBusy) return;
-                curtainBusy = true;
-
-                const current = html.getAttribute('data-theme');
-                const next = current === 'dark' ? 'light' : 'dark';
-                if (curtain) {
-                    curtain.style.background = next === 'dark' ? '#0f1014' : '#fafafa';
-                    curtain.style.transformOrigin = 'top';
-                    curtain.classList.add('falling');
-                }
-
-                setTimeout(() => {
-                    html.setAttribute('data-theme', next);
-                    localStorage.setItem('huggy-theme', next);
-                    updateIcons(next);
-
-                    if (!curtain) {
-                        curtainBusy = false;
-                        return;
-                    }
-                    curtain.classList.remove('falling');
-                    requestAnimationFrame(() => {
-                        curtain.style.transformOrigin = 'bottom';
-                        curtain.classList.add('rising');
-                        setTimeout(() => {
-                            curtain.classList.remove('rising');
-                            curtainBusy = false;
-                        }, 620);
-                    });
-                }, 600);
-            });
-
-            updateIcons(html.getAttribute('data-theme'));
             const liftCurtain = () => curtain?.classList.add('rising');
             if (document.readyState === 'complete' || document.readyState === 'interactive') {
                 liftCurtain();

@@ -1,5 +1,9 @@
 import './styles/huggy-light-theme.css';
+import './styles/huggy-shell.css';
+import { initThemeController } from './theme-controller';
+import './conversion-events';
 import { apiFetch } from './lib/api';
+import { HuggyStreamHttpError, HuggyStreamIncompleteError, openHuggyStream } from './lib/stream-client';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -17,7 +21,10 @@ import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
 import { deriveProjectName } from './services/project-naming';
+import { demoDelay, getDemoAssistantReply, getDemoBuilderPayload, installDemoBanner, isDemoMode } from './demo-mode';
 import { buildExecutionContract } from './services/execution-contract';
+
+initThemeController();
 import {
   DESIGN_WORKSHOP_OPTIONS,
   buildDesignStudioBrief,
@@ -281,6 +288,7 @@ let lastBuildSessionId = '';
 let lastAgentRunId = '';
 let activeGenerationTouchesPreview = false;
 let activeAbort: AbortController | null = null;
+let activeStreamHandle: { cancel: () => void } | null = null;
 let stopRequested = false;
 let selectedChatMode: ChatMode = 'auto';
 let activeWorkshop: StudioWorkshop = 'chat';
@@ -1737,6 +1745,7 @@ function bindPreviewDeviceToggle() {
 
 function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = false) {
   if (workspaceSaveTimer !== null) window.clearTimeout(workspaceSaveTimer);
+  if (isDemoMode()) return;
   const save = async () => {
     const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
     const body = {
@@ -1821,6 +1830,29 @@ function applyWorkspaceState(state?: WorkspaceState | null) {
 
 function chatScroll() {
   return document.getElementById('sidebar-scroll-area');
+}
+
+let chatScrollFrame: number | null = null;
+
+function scrollChatToBottom() {
+  const scroll = chatScroll();
+  if (!scroll || chatScrollFrame !== null) return;
+
+  const startTop = scroll.scrollTop;
+  const startedAt = performance.now();
+  const animate = (now: number) => {
+    const target = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
+    const progress = Math.min(1, (now - startedAt) / 240);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    scroll.scrollTop = startTop + (target - startTop) * eased;
+    if (progress < 1 && Math.abs(target - scroll.scrollTop) > 0.5) {
+      chatScrollFrame = window.requestAnimationFrame(animate);
+    } else {
+      chatScrollFrame = null;
+    }
+  };
+
+  chatScrollFrame = window.requestAnimationFrame(animate);
 }
 
 function ensureConversationApi() {
@@ -1969,7 +2001,7 @@ function appendMessage(kind: 'user' | 'assistant' | 'system', body: string, opti
   if (paragraph) paragraph.textContent = safeBody;
   if (options.working) card.setAttribute('aria-busy', 'true');
   scroll.appendChild(card);
-  scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
+  scrollChatToBottom();
   return card;
 }
 
@@ -1980,9 +2012,11 @@ function setMessageShimmer(card: HTMLElement | null, label = 'Huggy is writing',
   if (!card) return;
   void withTimer;
   const id = messageHandleId(card);
-  if (id && conversationApi) conversationApi.setWorking(id, label);
+  if (id && conversationApi) {
+    conversationApi.setWorking(id, label);
+  }
   card.setAttribute('aria-busy', 'true');
-  updateMessage(card, label);
+  if (!id || !conversationApi) updateMessage(card, label);
 }
 
 function clearMessageShimmer(card: HTMLElement | null) {
@@ -2021,7 +2055,7 @@ function updateMessage(card: HTMLElement | null, body: string) {
   }
 
   if (isAtBottom && scroll) {
-    scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' });
+    scrollChatToBottom();
   }
 }
 
@@ -2464,18 +2498,19 @@ function looksLikeInternalRecoveryText(value: string) {
 
 function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
   const text = repairTextEncoding(redactSecrets(String(value || '').trim()));
-  if (!text) return fallback;
+  if (!text) return '';
   const unfenced = text
     .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  if (looksLikeInternalRecoveryText(unfenced)) return fallback || cleanRecoveryText(speaksFrench);
+  if (looksLikeInternalRecoveryText(unfenced)) return '';
   if (/^[\[{]/.test(unfenced) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(unfenced)) {
+    if (!fallback) return '';
     return fallback || (speaksFrench
       ? 'J’ai préparé le travail dans le projet. La preview et les fichiers doivent rester la source de vérité.'
       : 'I prepared the work in the project. The preview and files should stay the source of truth.');
   }
-  if (looksLikeGeneratedSourceDump(text)) return fallback || generatedCodeBlockedText(speaksFrench);
+  if (looksLikeGeneratedSourceDump(text)) return '';
   return text.replace(/\n\s*[-*]\s*$/gm, '').trim();
 }
 
@@ -2485,12 +2520,109 @@ function generationReadyText(speaksFrench: boolean) {
     : 'Done. I updated the app and refreshed the preview.';
 }
 
+async function streamSimpleConversation(card: HTMLElement | null, prompt: string, speaksFrench: boolean): Promise<boolean> {
+  const session = await getVerifiedSession({ allowRefresh: true });
+  const accessToken = session?.session?.access_token;
+  if (!accessToken) return false;
+  const messageId = messageHandleId(card);
+  let streamedText = '';
+  let finalPayload: any = null;
+  const stream = openHuggyStream({
+    url: `${API_BASE_URL}/api/assistant/chat/stream`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        prompt,
+        modelId: selectedModel(),
+        projectId: currentProjectId || undefined,
+        messages: recentConversationForAssistant(prompt),
+        assistantMessageId: messageId || undefined,
+      }),
+    },
+    signal: activeAbort?.signal,
+    onEvent: (type, data) => {
+      if (type === 'assistant_delta') {
+        const delta = String(data?.text || data?.content || '');
+        if (!delta) return;
+        streamedText += delta;
+        if (messageId && conversationApi) conversationApi.appendAssistantDelta(messageId, delta);
+        else updateMessage(card, streamedText);
+      } else if (type === 'done') {
+        finalPayload = data?.payload || data;
+      }
+    },
+    maxRetries: 1,
+  });
+  activeStreamHandle = stream;
+  try {
+    await stream.done;
+  } finally {
+    if (activeStreamHandle === stream) activeStreamHandle = null;
+  }
+  if (finalPayload?.success === false) throw new Error(finalPayload.message || finalPayload.error || 'Assistant response failed.');
+  const content = String(finalPayload?.text || streamedText || '').trim();
+  if (!content) throw new Error('The selected AI model returned an empty response.');
+  const safeContent = safeAssistantDisplayText(content, speaksFrench);
+  if (messageId && conversationApi) conversationApi.updateMessage(messageId, safeContent);
+  else updateMessage(card, safeContent);
+  clearMessageShimmer(card);
+  return true;
+}
+
+async function streamProjectGeneration(
+  projectId: string,
+  requestBody: Record<string, unknown>,
+  onEvent: (type: string, data: any) => void,
+  signal?: AbortSignal,
+): Promise<any> {
+  // Compatibility fallback contract: /api/projects/${encodeURIComponent(currentProjectId)}/generate
+  const session = await getVerifiedSession({ allowRefresh: true });
+  const accessToken = session?.session?.access_token;
+  if (!accessToken) return apiFetch<any>(`/api/projects/${encodeURIComponent(projectId)}/generate`, { method: 'POST', body: JSON.stringify(requestBody) });
+
+  let finalPayload: any = null;
+  let streamObserved = false;
+  const stream = openHuggyStream({
+    url: `${API_BASE_URL}/api/projects/${encodeURIComponent(projectId)}/generate?stream=true`,
+    init: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(requestBody),
+    },
+    signal,
+    onConnected: () => { streamObserved = true; },
+    onEvent: (type, data) => {
+      streamObserved = true;
+      if (type === 'done') finalPayload = data?.payload || data;
+      onEvent(type, data);
+    },
+    maxRetries: 1,
+  });
+  activeStreamHandle = stream;
+  try {
+    await stream.done;
+  } catch (error) {
+    if (signal?.aborted || stream.isCancelled()) throw new DOMException('The generation was cancelled.', 'AbortError');
+    if (!finalPayload && !streamObserved && error instanceof HuggyStreamHttpError && [404, 405, 501].includes(error.status)) {
+      // Compatibility fallback is allowed only before the streaming endpoint
+      // accepted or emitted anything, so it cannot duplicate a live run.
+      return apiFetch<any>(`/api/projects/${encodeURIComponent(projectId)}/generate`, { method: 'POST', body: JSON.stringify(requestBody) });
+    }
+    throw error;
+  } finally {
+    if (activeStreamHandle === stream) activeStreamHandle = null;
+  }
+  if (!finalPayload) throw new HuggyStreamIncompleteError();
+  return finalPayload;
+}
+
 async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
-  const fallback = buildSimpleConversationReply(prompt, speaksFrench);
   setBusy(true);
   try {
     // Non-streaming: request the full assistant reply and render it at once.
     const id = messageHandleId(card);
+    if (await streamSimpleConversation(card, prompt, speaksFrench)) return;
     if (id && conversationApi) conversationApi.setWorking(id, speaksFrench ? 'Je réfléchis…' : 'Thinking…');
     const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
       method: 'POST',
@@ -2501,10 +2633,10 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
         messages: recentConversationForAssistant(prompt),
       }),
     });
-    if (payload?.success === false) throw new Error(payload.message || payload.error || fallback);
+    if (payload?.success === false) throw new Error(payload.message || payload.error || 'The selected AI model did not return a response.');
     const content = String(payload?.text || payload?.message || '').trim();
     if (!content.trim()) throw new Error('Assistant response was empty.');
-    updateMessage(card, safeAssistantDisplayText(content, speaksFrench, fallback));
+    updateMessage(card, safeAssistantDisplayText(content, speaksFrench));
     clearMessageShimmer(card);
   } catch (error) {
     console.warn('[huggy] simple provider chat fallback', error);
@@ -2518,7 +2650,9 @@ async function answerSimpleConversationFromProvider(card: HTMLElement | null, pr
       clearMessageShimmer(card);
       return;
     }
-    await showAssistantBubble(card, fallback);
+    updateMessage(card, error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : 'The selected AI model did not return a usable response.');
   } finally {
     setBusy(false);
     // Safety net: if the stream ended, was cancelled, or failed before any
@@ -2629,6 +2763,13 @@ function closeProjectMenu() {
 async function loadProjectMenuCredits() {
   const status = document.getElementById('project-menu-credit-status');
   const fill = document.getElementById('project-menu-credit-fill') as HTMLElement | null;
+  if (isDemoMode()) {
+    lastWalletBalance = 742;
+    syncBuilderPlanBadges('pro');
+    if (status) status.textContent = '742 credits · Pro plan';
+    if (fill) fill.style.width = '88%';
+    return;
+  }
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     const balance = Number(wallet.balance ?? 0);
@@ -3185,6 +3326,14 @@ async function openPublishPanel() {
   }
   publishPanelMode = 'main';
   renderPublishPanel(null);
+  if (isDemoMode()) {
+    renderPublishPanel({
+      success: true,
+      publish: { state: 'published', public_url: 'https://pulseboard.demo.huggy.local', custom_domain: null, latest_published_at: '2026-08-10T08:42:00.000Z', project_updated_at: '2026-08-10T08:42:00.000Z', badge_required: false, checks: [], can_publish: true, has_unpublished_changes: false },
+      deployment: { status: 'ready' },
+    } as unknown as PublishApiPayload);
+    return;
+  }
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
     renderPublishPanel(payload);
@@ -3216,6 +3365,12 @@ async function shareProjectLink(button: HTMLButtonElement) {
     return;
   }
 
+  if (isDemoMode()) {
+    await navigator.clipboard?.writeText('https://pulseboard.demo.huggy.local');
+    flash('Lien copié', true);
+    return;
+  }
+
   button.disabled = true;
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
@@ -3237,6 +3392,17 @@ async function publishCurrentProject(previousPayload: PublishApiPayload | null) 
   if (!currentProjectId) return;
   publishPanelMode = 'main';
   renderPublishPanel(previousPayload, true);
+  if (isDemoMode()) {
+    await demoDelay(700);
+    const payload = {
+      success: true,
+      publish: { state: 'published', public_url: 'https://pulseboard.demo.huggy.local', custom_domain: null, latest_published_at: new Date().toISOString(), project_updated_at: new Date().toISOString(), badge_required: false, checks: [], can_publish: true, has_unpublished_changes: false },
+      deployment: { status: 'ready' },
+    } as unknown as PublishApiPayload;
+    renderPublishPanel(payload);
+    appendMessage('assistant', 'Publication démo terminée. Ton app est disponible sur https://pulseboard.demo.huggy.local');
+    return;
+  }
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish`, {
       method: 'POST',
@@ -4061,6 +4227,7 @@ async function ensureModelSelector() {
     if (hydrateModelsPromise) return hydrateModelsPromise;
     hydrateModelsPromise = (async () => {
       try {
+        if (isDemoMode()) return;
         const payload = await apiFetch<{ models: AiModel[]; providers?: AiModelProviderGroup[] }>('/api/ai/models');
         const models = (payload.models || []).filter(model => model.id !== 'auto');
         providerGroups = (payload.providers && payload.providers.length)
@@ -4131,10 +4298,12 @@ async function ensureModelSelector() {
     if (label) label.textContent = target.dataset.modelName || 'Auto';
     setActiveOption();
     close();
-    await apiFetch('/api/users/me/ai-preferences', {
-      method: 'PATCH',
-      body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
-    }).catch(() => null);
+    if (!isDemoMode()) {
+      await apiFetch('/api/users/me/ai-preferences', {
+        method: 'PATCH',
+        body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
+      }).catch(() => null);
+    }
   });
   document.addEventListener('click', close);
 }
@@ -4476,6 +4645,21 @@ async function loadProject() {
   if (scroll) delete scroll.dataset.restored;
   const projectName = document.getElementById('project-name');
   const loading = showTransientNotice('Loading project files, timeline and preview...', 0);
+  if (isDemoMode()) {
+    const projectId = new URLSearchParams(window.location.search).get('project') || 'demo-pulseboard';
+    const payload = getDemoBuilderPayload(projectId);
+    currentProjectId = payload.project.id;
+    setCurrentBuilderProjectId(currentProjectId);
+    setProjectNameDisplay(payload.project.name);
+    renderFiles(payload.files);
+    applyWorkspaceState(payload.workspace_state as WorkspaceState);
+    setPreview(payload.preview.html, payload.preview.status);
+    restoreMessages(payload as ProjectPayload);
+    syncProjectReadinessClass();
+    syncWorkshopPreview();
+    removeMessage(loading);
+    return;
+  }
   try {
     const payload = await ensureProject();
     if (isRealProjectId(payload.project?.id || currentProjectId)) {
@@ -4541,11 +4725,7 @@ function restoreMessages(payload: ProjectPayload) {
       const role = message.role === 'user' ? 'user' : 'assistant';
       const rawContent = messageTextFromParts(message.parts, message.content || '');
       const content = role === 'assistant'
-        ? safeAssistantDisplayText(
-          rawContent,
-          isLikelyFrenchText(rawContent),
-          cleanRecoveryText(isLikelyFrenchText(rawContent)),
-        )
+        ? safeAssistantDisplayText(rawContent, isLikelyFrenchText(rawContent))
         : rawContent;
       const card = appendMessage(role, content);
       void card;
@@ -5165,6 +5345,35 @@ function applyInitialBuilderLayout() {
   body.dataset.layout = 'workspace';
 }
 
+async function runDemoConversation(prompt: string, requestedMode: ChatMode) {
+  const card = appendMessage('assistant', '', { working: true });
+  const stages = [
+    'Je lis ta demande…',
+    'Je prépare une réponse utile…',
+    'Je vérifie la cohérence avec ton projet…',
+    'Je finalise la réponse…',
+  ];
+  for (const stage of stages) {
+    setMessageShimmer(card, stage, false);
+    await demoDelay(520);
+  }
+  const shouldUpdatePreview = requestedMode === 'build' || /crée|creer|construis|build|ajoute|modifie|corrige|fix|preview|app|site|page/i.test(prompt);
+  if (shouldUpdatePreview) {
+    const demo = getDemoBuilderPayload(currentProjectId);
+    renderFiles(demo.files);
+    setPreview(demo.preview.html, 'ready');
+  }
+  const reply = getDemoAssistantReply(prompt);
+  const id = messageHandleId(card);
+  if (id && conversationApi) {
+    card?.removeAttribute('aria-busy');
+    conversationApi.appendAssistantDelta(id, reply);
+  } else {
+    clearMessageShimmer(card);
+    updateMessage(card, reply);
+  }
+}
+
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
   const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
@@ -5183,27 +5392,20 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   clearInlineBlocks();
   appendMessage('user', safeDisplayText);
 
-  if (promptUiContext === 'chat_simple') {
-    const card = appendMessage('assistant', speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', { working: true });
-    setMessageShimmer(card, speaksFrench ? 'Huggy ecrit...' : 'Huggy is writing...', false);
-    await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench);
+  if (isDemoMode()) {
+    await runDemoConversation(safePrompt, requestedMode);
     return;
   }
 
-  if (promptUiContext === 'clarification_only') {
-    const content = buildClarificationOnlyReply(safePrompt, speaksFrench);
-    const card = appendMessage('assistant', speaksFrench ? 'Je precise avant d agir...' : 'Clarifying before acting...', { working: true });
-    setMessageShimmer(card, speaksFrench ? 'Je precise avant d agir...' : 'Clarifying before acting...', false);
-    await showAssistantBubble(card, content);
-    return;
-  }
-
-  if (promptUiContext === 'planning_only') {
-    const content = buildPlanningOnlyReply(safePrompt, speaksFrench);
-    const card = appendMessage('assistant', speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', { working: true });
-    setMessageShimmer(card, speaksFrench ? 'Je prepare un plan court...' : 'Preparing a short plan...', false);
-    await showAssistantBubble(card, content);
-    lastPlan = content;
+  if (promptUiContext === 'chat_simple' || promptUiContext === 'clarification_only' || promptUiContext === 'planning_only') {
+    activeAbort = new AbortController();
+    const card = appendMessage('assistant', '', { working: true });
+    setMessageShimmer(card, '', false);
+    try {
+      await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench);
+    } finally {
+      activeAbort = null;
+    }
     return;
   }
 
@@ -5253,7 +5455,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   let lastWorkingTickAt = 0;
   let lastActiveTextAt = 0;
   let journalTimer: number | null = null;
-  const useAgentFlow = Boolean(conversationApi?.setFlow);
+  // One visible assistant message is the source of truth for an active run.
+  const useAgentFlow = false;
+  const renderTechnicalRun = false;
   let flowStatus: 'active' | 'done' | 'failed' | 'cancelled' = 'active';
   let flowChecklist: HuggyFlowChecklistItem[] = [];
   let flowStreamingText = '';
@@ -5279,7 +5483,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     });
     const scroll = document.getElementById('sidebar-scroll-area');
     if (scroll && Math.abs(scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop) < 120) {
-      scroll.scrollTop = scroll.scrollHeight;
+      scrollChatToBottom();
     }
   };
 
@@ -5310,6 +5514,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     journalFrame = 0;
     lastJournalFlushAt = Date.now();
     journal.elapsed = elapsedForStatus() || journal.elapsed;
+    if (!renderTechnicalRun) return;
     if (useAgentFlow) {
       flushFlow();
       return;
@@ -5518,9 +5723,10 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     assistantHasFinalContent = true;
     return responseCard;
   };
-  const commitAssistantText = (content: unknown, fallback = 'Done.', traceLabel = say('Terminé', 'Completed')) => {
+  const commitAssistantText = (content: unknown, fallback = '', traceLabel = say('Terminé', 'Completed')) => {
     void traceLabel;
     const text = String(content || '').trim() || fallback;
+    if (!text) throw new Error('The selected AI model did not return a usable final response.');
     const target = ensureResponseCard(traceLabel);
     streamedText = text;
     if (target === status) {
@@ -5540,20 +5746,25 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const startBuildStream = () => {
     journal.status = 'active';
-    journal.activeText = say('Je commence par cadrer le résultat attendu avant de toucher au projet.', 'I am framing the expected result before touching the project.');
-    setStreamMessageParts(status, journal);
-    if (useAgentFlow) {
-      initFlow();
-    }
-    journalTimer = window.setInterval(() => {
-      journal.elapsed = elapsedForStatus() || journal.elapsed;
-      scheduleJournal(true);
-    }, 1000);
-    scheduleJournal(true);
+    journal.activeText = '';
   };
   startBuildStream();
   try {
     await ensureProjectForPrompt(safePrompt);
+    if (isDemoMode()) {
+      const demo = getDemoBuilderPayload(currentProjectId);
+      const stages = ['Je comprends ton idée…', 'Je prépare la structure…', 'Je mets les fichiers en place…', 'Je vérifie la preview…'];
+      for (const stage of stages) {
+        setMessageShimmer(status, stage);
+        await demoDelay(430);
+      }
+      renderFiles(demo.files);
+      setPreview(demo.preview.html, 'ready');
+      const reply = getDemoAssistantReply(safePrompt);
+      clearMessageShimmer(status);
+      commitAssistantText(`${reply}\n\nPreview prête — ouvre l’onglet Code ou Database pour continuer à explorer.`, 'Preview prête.');
+      return;
+    }
     if (activeWorkshop === 'media') {
       generationTouchesPreview = true;
       activeGenerationTouchesPreview = true;
@@ -5578,7 +5789,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       if (mediaPayload.preview?.html) {
         setMediaPreviewHtml(mediaPayload.preview.html, `${mediaPayload.status}.media.huggy.local`);
       }
-      const target = commitAssistantText(mediaPayload.text || 'Media ready.', 'Media ready.', say('Media pret', 'Media ready'));
+      const mediaText = String(mediaPayload.text || '').trim();
+      if (!mediaText) throw new Error('The media model did not return a usable response.');
+      const target = commitAssistantText(mediaText, '', say('Media pret', 'Media ready'));
       if (mediaPayload.assets?.[0]?.url) {
         addInlineAction(target, 'Download', () => window.open(mediaPayload.assets[0].url, '_blank', 'noopener,noreferrer'));
       }
@@ -5613,16 +5826,17 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       setEmptyPreviewState('working', speaksFrench ? 'Generation en cours' : 'Generating');
     }
 
-    // Non-streaming generation: request the full result and render it at once
-    // (no token-by-token stream, no live agent-run playback in the discussion).
-    startLiveRun(status, {
-      intent: say('Je prépare le travail demandé.', 'I am preparing the requested work.'),
-      activeText: say('Génération en cours…', 'Generating…'),
-    });
-    let payload: any = await apiFetch<any>(`/api/projects/${encodeURIComponent(currentProjectId)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
+    // Stream generation events into the React Response surface, then use the
+    // authoritative done payload to refresh files and preview atomically.
+    startLiveRun(status);
+    let payload: any = await streamProjectGeneration(currentProjectId, requestBody, (type, data) => {
+      if (type === 'assistant_delta') {
+        const delta = String(data?.text || data?.content || '');
+        if (!delta) return;
+        const id = messageHandleId(status);
+        if (id && conversationApi) conversationApi.appendAssistantDelta(id, delta);
+      }
+    }, activeAbort?.signal);
     {
       const statusCode = Number(payload?.status_code || 200);
       if (statusCode >= 400 || payload?.success === false) {
@@ -5679,15 +5893,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const diffSummary = hasNeedsFix ? '' : String(responsePayload.diff?.summary || '').trim();
     const verificationMessage = hasNeedsFix ? '' : String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
     const rawText = String(responsePayload.summary || responsePayload.text || responsePayload.message || '').trim();
-    const finalText = safeAssistantDisplayText(
-      rawText,
-      speaksFrench,
-      previewHtml
-        ? generationReadyText(speaksFrench)
-        : hasNeedsFix
-          ? cleanRecoveryText(speaksFrench)
-          : (speaksFrench ? 'Termine.' : 'Done.'),
-    );
+    const finalText = safeAssistantDisplayText(rawText, speaksFrench);
+    if (!finalText) throw new Error('The selected AI model did not return a usable final summary.');
 
     clearMessageShimmer(status);
     const finalJoined = [
@@ -5705,7 +5912,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       flushFlow();
       updateMessage(status, finalJoined);
     }
-    const target = commitAssistantText(finalJoined, 'Done.', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
+    const target = commitAssistantText(finalJoined, '', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
     if (hasNeedsFix && target === status) {
       journal.status = 'failed';
       journal.activeText = '';
@@ -5770,6 +5977,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     clearMessageShimmer(status);
     setBusy(false);
     activeAbort = null;
+    activeStreamHandle = null;
     stopRequested = false;
     activeGenerationTouchesPreview = false;
   }
@@ -5779,6 +5987,7 @@ async function cancelBuild() {
   if (!isGenerating) return;
   stopRequested = true;
   activeAbort?.abort();
+  activeStreamHandle?.cancel();
   if (currentProjectId) {
     await apiFetch(`/api/projects/${encodeURIComponent(currentProjectId)}/build/cancel`, {
       method: 'POST',
@@ -5993,6 +6202,14 @@ function renderDatabaseSection3(db: any): string {
 async function loadDatabase() {
   const target = document.getElementById('database-content');
   if (!target) return;
+  if (isDemoMode()) {
+    target.innerHTML = `
+      <section class="db-card"><span class="db-card-label">Connexion cloud</span><div class="db-card-value">${dbBadge('success', 'Provisionné')}</div><p class="db-row-meta">Huggy Cloud · Europe West · synchronisé il y a 2 min</p></section>
+      <section class="db-card"><span class="db-card-label">Tables applicatives</span><div class="db-card-value">4 tables</div><div class="db-table-chips"><button class="db-table-chip active" type="button">profiles</button><button class="db-table-chip" type="button">projects</button><button class="db-table-chip" type="button">activity_events</button><button class="db-table-chip" type="button">subscriptions</button></div><div class="db-table-scroll"><table class="db-data-table"><thead><tr><th>id</th><th>email</th><th>role</th><th>status</th></tr></thead><tbody><tr><td>usr_1024</td><td>alex@demo.local</td><td>admin</td><td>active</td></tr><tr><td>usr_1025</td><td>sam@demo.local</td><td>editor</td><td>active</td></tr><tr><td>usr_1026</td><td>lea@demo.local</td><td>member</td><td>pending</td></tr></tbody></table></div></section>
+      <section class="db-card"><span class="db-card-label">Authentification</span><div class="db-card-value">3 utilisateurs fictifs</div><p class="db-row-meta">Email/password · rôles admin, editor et member · mode lecture démo</p></section>
+    `;
+    return;
+  }
   if (!currentProjectId) {
     target.innerHTML = `<div class="db-state">Ouvrez ou créez un projet pour consulter l'état réel de son backend cloud.</div>`;
     return;
@@ -6486,6 +6703,19 @@ async function loadAnalysis(silent = false) {
   if (!target) return;
   if (!currentProjectId) {
     target.innerHTML = '<div class="analysis-empty"><strong style="display:block;color:var(--text);font-size:14px;margin-bottom:6px;">No project selected</strong><span style="font-size:12px;">Open or create a project before viewing analysis.</span></div>';
+    return;
+  }
+  if (isDemoMode()) {
+    renderAnalysis({
+      current_visitors: 24,
+      metrics: { visitors: 1840, pageviews: 6420, views_per_visit: 3.49, visit_duration_seconds: 186, bounce_rate: 28 },
+      timeseries: Array.from({ length: 14 }, (_, index) => ({ time: `${index + 1}`, visitors: 80 + ((index * 17) % 90), pageviews: 150 + ((index * 31) % 120) })),
+      sources: [{ source: 'Direct', visitors: 720 }, { source: 'Google', visitors: 540 }, { source: 'Product Hunt', visitors: 310 }],
+      pages: [{ page: '/', visitors: 1160 }, { page: '/pricing', visitors: 420 }, { page: '/docs', visitors: 260 }],
+      countries: [{ country_code: 'FR', country_name: 'France', visitors: 620 }, { country_code: 'US', country_name: 'United States', visitors: 510 }, { country_code: 'DE', country_name: 'Germany', visitors: 240 }],
+      devices: [{ device: 'Desktop', visitors: 1180, percentage: 64 }, { device: 'Mobile', visitors: 560, percentage: 30 }, { device: 'Tablet', visitors: 100, percentage: 6 }],
+      seo: { score: 92, checks: [{ key: 'title', label: 'Title & description', status: 'pass', detail: 'Clear and descriptive' }, { key: 'schema', label: 'Structured data', status: 'pass', detail: 'Product schema detected' }, { key: 'alt', label: 'Image alt text', status: 'warn', detail: '1 image needs a label' }], recommendations: ['Add one more descriptive alt text'] },
+    });
     return;
   }
   if (!silent) {
@@ -6985,6 +7215,7 @@ function bindGlobalKeyboardShortcuts() {
 
 function init() {
   initHuggyMotion();
+  installDemoBanner();
   bindGlobalKeyboardShortcuts();
   void ensureSettingsPanelLazy();
   ensureConversationApi();

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -13,7 +13,7 @@
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#0e1116" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Huggy Pricing - Build, Preview and Deploy AI Apps" />
@@ -52,7 +52,7 @@
     </script>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'light';
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -84,6 +84,15 @@
             line-height: 1.5;
             animation: fadeUp 1s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
+
+        .pricing-explainer {
+            max-width: 640px !important;
+            margin: -40px auto 0 !important;
+            font-size: 13px !important;
+            color: var(--text-sub) !important;
+        }
+
+        .pricing-explainer strong { color: var(--text); font-weight: 700; }
 
         .billing-toggle {
             display: inline-flex;
@@ -163,6 +172,11 @@
             font-size: 16px;
             cursor: pointer;
             transition: background 200ms;
+            width: 100%;
+            border: 0;
+            color: inherit;
+            text-align: left;
+            font: inherit;
         }
 
         .faq-q:hover {
@@ -179,11 +193,48 @@
         }
 
         .faq-item.open .faq-a { display: block; }
+        .faq-a[hidden] { display: none; }
         .faq-item.open .plus-icon { transform: rotate(45deg); }
 
         .plus-icon {
             transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
             color: var(--text-sub);
+        }
+
+        .pricing-sticky-summary { display: none; }
+
+        @media (max-width: 640px) {
+            .pricing-sticky-summary {
+                position: fixed;
+                z-index: 40;
+                left: 12px;
+                right: 12px;
+                bottom: max(12px, env(safe-area-inset-bottom));
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 10px 10px 10px 14px;
+                border: 1px solid var(--border);
+                border-radius: 14px;
+                background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+                box-shadow: 0 16px 38px rgba(9, 9, 11, .16);
+                backdrop-filter: blur(16px);
+                font-size: 12px;
+                font-weight: 750;
+            }
+
+            .pricing-sticky-summary a {
+                min-height: 42px;
+                display: inline-flex;
+                align-items: center;
+                padding: 0 15px;
+                border-radius: 10px;
+                background: var(--accent);
+                color: var(--bg);
+                text-decoration: none;
+                white-space: nowrap;
+            }
         }
 
         @keyframes fadeUp {
@@ -242,95 +293,101 @@
     </nav>
 
     <header class="pricing-hero">
-        <h1>Start free.<br>Ship real apps.</h1>
-        <p>Start free, upgrade when you ship. No surprises, cancel anytime.</p>
+        <h1>Transformez votre idée.<br>Publiez une vraie application.</h1>
+        <p>Commencez gratuitement, améliorez votre produit avec l’IA et publiez-le quand il est prêt.</p>
 
         <div class="billing-toggle">
-            <button class="toggle-btn active" onclick="setBilling('monthly')">Monthly</button>
-            <button class="toggle-btn" onclick="setBilling('yearly')">Yearly -20%</button>
+            <button class="toggle-btn active" type="button" data-billing-toggle="monthly" aria-pressed="true">Mensuel</button>
+            <button class="toggle-btn" type="button" data-billing-toggle="annual" aria-pressed="false">Annuel · économisez 20 %</button>
         </div>
+        <p class="pricing-explainer"><strong>Construire</strong> avec les crédits IA. <strong>Héberger</strong> votre application publiée avec Huggy Cloud.</p>
     </header>
 
     <section class="pricing-grid">
         <div class="pricing-card">
-            <span class="card-name">Free</span>
-            <div class="card-price">$0 <span>/mo</span></div>
-            <p class="card-desc">Test an idea, learn the builder, ship a first draft.</p>
+            <span class="card-name">Gratuit</span>
+            <div class="card-price">$0 <span>/mois</span></div>
+            <p class="card-desc">Validez votre idée et créez votre premier prototype.</p>
             <ul class="feature-list">
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>50 starter credits</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 active project</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Live preview while you build</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$1 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Huggy subdomain</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>50 crédits pour commencer</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 projet actif</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Aperçu en direct pendant la création</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 $ d’hébergement inclus</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Sous-domaine Huggy</li>
             </ul>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=free')">Start free</button>
+            <a class="card-cta btn-outline" data-pricing-plan="free" href="/auth.html?plan=free&amp;billing=monthly">Créer mon prototype</a>
         </div>
 
         <div class="pricing-card featured">
-            <span class="featured-label">Best start</span>
+            <span class="featured-label">Le meilleur départ</span>
             <span class="card-name">Pro</span>
-            <div class="card-price" id="price-pro">$25 <span>/mo</span></div>
-            <p class="card-desc">For founders and freelancers shipping real apps.</p>
+            <div class="card-price" id="price-pro">$25 <span>/mois</span></div>
+            <p class="card-desc">Pour publier votre application et continuer à l’améliorer.</p>
             <ul class="feature-list">
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1,000 credits / month</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 active projects, 3 published</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$10 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Custom domain &amp; badge removal</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Deploy, export, versions, rollback</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Credit &amp; Cloud top-ups</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>1 000 crédits pour construire chaque mois</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 projets actifs, 3 applications publiées</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 $ d’hébergement inclus</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Domaine personnalisé et retrait du badge</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Publication, export, versions et restauration</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Crédits et hébergement rechargeables</li>
             </ul>
-            <p class="billing-note" id="note-pro">Monthly billing. Annual saves $60/year.</p>
-            <button class="card-cta btn-solid" onclick="navigate('/auth.html?plan=pro')">Start with Pro</button>
+            <p class="billing-note" id="note-pro">Facturation mensuelle · annulation à tout moment</p>
+            <a class="card-cta btn-solid" data-pricing-plan="pro" href="/auth.html?plan=pro&amp;billing=monthly">Publier mon application</a>
         </div>
 
         <div class="pricing-card">
             <span class="card-name">Scale</span>
-            <div class="card-price" id="price-scale">$200 <span>/mo</span></div>
-            <p class="card-desc">For teams shipping multiple projects and production apps.</p>
+            <div class="card-price" id="price-scale">$200 <span>/mois</span></div>
+            <p class="card-desc">Pour les équipes qui livrent plusieurs applications en production.</p>
             <ul class="feature-list">
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10,000 credits / month</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Unlimited drafts, 25 published</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>$75 Cloud balance included</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Multiple custom domains</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Team workspace &amp; roles</li>
-                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Priority support &amp; premium models</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>10 000 crédits pour construire chaque mois</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Brouillons illimités, 25 applications publiées</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>75 $ d’hébergement inclus</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Plusieurs domaines personnalisés</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Espace d’équipe et rôles</li>
+                <li class="feature-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>Support prioritaire et modèles premium</li>
             </ul>
-            <p class="billing-note" id="note-scale">Monthly billing. Annual saves $480/year.</p>
-            <button class="card-cta btn-outline" onclick="navigate('/auth.html?plan=scale')">Upgrade to Scale</button>
+            <p class="billing-note" id="note-scale">Facturation mensuelle · annulation à tout moment</p>
+            <a class="card-cta btn-outline" data-pricing-plan="scale" href="/auth.html?plan=scale&amp;billing=monthly">Construire avec mon équipe</a>
         </div>
     </section>
 
+    <div class="pricing-sticky-summary" id="pricing-sticky-summary" aria-live="polite">
+        <span id="pricing-sticky-label">Pro · $25/mois</span>
+        <a id="pricing-sticky-cta" data-pricing-plan="pro" href="/auth.html?plan=pro&amp;billing=monthly">Choisir Pro</a>
+    </div>
+
     <!-- FAQ -->
     <section class="faq-section">
-        <h2 class="faq-title">Questions before you choose</h2>
+        <h2 class="faq-title">Les questions avant de vous lancer</h2>
         <div class="faq-list">
             <div class="faq-item">
-                <div class="faq-q">
-                    <span>What is the difference between Credits and Cloud Balance?</span>
+                <button class="faq-q" type="button" aria-expanded="false" aria-controls="pricing-faq-credits">
+                    <span>Quelle différence entre les crédits et l’hébergement ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">Credits are for creating and improving apps with Huggy. Cloud Balance is for keeping published apps online: hosting, database, storage, bandwidth, realtime and deployed AI usage. You see simple usage numbers, not raw provider costs.</div>
+                </button>
+                <div class="faq-a" id="pricing-faq-credits" hidden>Les crédits servent à créer et améliorer votre application avec Huggy. L’hébergement sert à garder votre application publiée en ligne avec sa base de données, son stockage et sa bande passante.</div>
             </div>
             <div class="faq-item">
-                <div class="faq-q">
-                    <span>What happens if my app exceeds the included Cloud usage?</span>
+                <button class="faq-q" type="button" aria-expanded="false" aria-controls="pricing-faq-usage">
+                    <span>Que se passe-t-il si mon application dépasse l’usage inclus ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">Free stays capped so there are no surprises. Pro can add Cloud top-ups when a live app grows. Scale supports auto top-up so teams can keep production apps running smoothly.</div>
+                </button>
+                <div class="faq-a" id="pricing-faq-usage" hidden>Votre application reste protégée par les limites du forfait. Vous pouvez ajouter de l’hébergement lorsque votre produit grandit ; aucune dépense ne doit être engagée sans votre action.</div>
             </div>
             <div class="faq-item">
-                <div class="faq-q">
-                    <span>Can I cancel at any time?</span>
+                <button class="faq-q" type="button" aria-expanded="false" aria-controls="pricing-faq-cancel">
+                    <span>Puis-je annuler à tout moment ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">Yes. You can cancel Pro or Scale from settings and keep access until the end of the billing cycle. Your projects remain in your workspace.</div>
+                </button>
+                <div class="faq-a" id="pricing-faq-cancel" hidden>Oui. Vous pouvez annuler depuis les réglages et conserver votre accès jusqu’à la fin de la période facturée. Vos projets restent dans votre espace.</div>
             </div>
             <div class="faq-item">
-                <div class="faq-q">
-                    <span>Will I lose my projects if I downgrade or cancel?</span>
+                <button class="faq-q" type="button" aria-expanded="false" aria-controls="pricing-faq-projects">
+                    <span>Vais-je perdre mes projets si je change de forfait ?</span>
                     <svg class="plus-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                </div>
-                <div class="faq-a">No. Projects stay attached to your account. Plan limits may affect publishing, top-ups or premium features, but Huggy should not remove your saved work unless you delete it.</div>
+                </button>
+                <div class="faq-a" id="pricing-faq-projects" hidden>Non. Vos projets restent associés à votre compte. Les limites du nouveau forfait peuvent modifier l’accès à certaines fonctions, mais vos données ne sont pas supprimées automatiquement.</div>
             </div>
         </div>
     </section>
@@ -389,34 +446,14 @@
     </footer>
 
     <script>
-        // Toggle Billing for Pricing Plans Comparison
-        function setBilling(mode) {
-            const buttons = document.querySelectorAll('.toggle-btn');
-            const pricePro = document.getElementById('price-pro');
-            const priceScale = document.getElementById('price-scale');
-            const notePro = document.getElementById('note-pro');
-            const noteScale = document.getElementById('note-scale');
-
-            buttons.forEach(b => b.classList.remove('active'));
-            if (mode === 'monthly') {
-                buttons[0].classList.add('active');
-                if (pricePro) pricePro.innerHTML = '$25 <span>/mo</span>';
-                if (priceScale) priceScale.innerHTML = '$200 <span>/mo</span>';
-                if (notePro) notePro.textContent = 'Monthly billing. Annual saves $60/year.';
-                if (noteScale) noteScale.textContent = 'Monthly billing. Annual saves $480/year.';
-            } else {
-                buttons[1].classList.add('active');
-                if (pricePro) pricePro.innerHTML = '$20 <span>/mo</span>';
-                if (priceScale) priceScale.innerHTML = '$160 <span>/mo</span>';
-                if (notePro) notePro.textContent = 'Billed $240/year. You save $60/year.';
-                if (noteScale) noteScale.textContent = 'Billed $1,920/year. You save $480/year.';
-            }
-        }
-
-        // FAQ Collapse Toggle
+        // FAQ Collapse Toggle — keyboard and screen-reader friendly.
         document.querySelectorAll('.faq-q').forEach(q => {
             q.addEventListener('click', () => {
-                q.parentElement.classList.toggle('open');
+                const item = q.parentElement;
+                const answer = item?.querySelector('.faq-a');
+                const expanded = item?.classList.toggle('open') ?? false;
+                q.setAttribute('aria-expanded', String(expanded));
+                if (answer) answer.hidden = !expanded;
             });
         });
     </script>

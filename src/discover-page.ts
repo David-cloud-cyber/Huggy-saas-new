@@ -1,6 +1,7 @@
 // @ts-ignore
 import './index.css';
 import { initLandingI18n } from './landing-i18n';
+import { initThemeController } from './theme-controller';
 
 type ShowcaseCard = {
   id: string;
@@ -62,6 +63,7 @@ async function loadCommunityShowcase(): Promise<void> {
 }
 
 function init(): void {
+  initThemeController();
   initLandingI18n();
   // This page is static gallery content; reveal everything immediately.
   document.querySelectorAll('.reveal').forEach((el) => el.classList.add('active'));

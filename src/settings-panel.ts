@@ -1,5 +1,6 @@
 import { apiFetch } from './lib/api';
 import { refreshVerifiedSession, signOutCurrentDevice } from './lib/supabase-browser';
+import { trackFunnelEvent } from './conversion-events';
 
 type SettingsTab =
   | 'profile'
@@ -877,6 +878,7 @@ function installSettingsStyle() {
     }
 
     .settings-shell {
+      min-width: 0;
       min-height: 0;
       height: 100%;
       display: grid;
@@ -884,6 +886,7 @@ function installSettingsStyle() {
     }
 
     .settings-sidebar {
+      min-width: 0;
       min-height: 0;
       display: flex;
       flex-direction: column;
@@ -894,6 +897,8 @@ function installSettingsStyle() {
     }
 
     .settings-search {
+      min-width: 0;
+      max-width: 100%;
       height: 40px;
       display: flex;
       align-items: center;
@@ -944,6 +949,8 @@ function installSettingsStyle() {
     }
 
     .settings-tabs {
+      min-width: 0;
+      max-width: 100%;
       min-height: 0;
       display: flex;
       flex: 1;
@@ -1412,8 +1419,8 @@ function settingsMarkup() {
             <button type="button" class="settings-action-button" data-settings-action="refresh-session">Refresh</button>
           </div>
           <div class="settings-row">
-            <div><strong>Billing</strong><span>Upgrade, portal and invoices stay protected behind authenticated billing endpoints.</span></div>
-            <button type="button" class="settings-action-button" data-settings-action="open-pricing">Plans</button>
+            <div><strong>Facturation</strong><span>Comparez les forfaits et choisissez votre niveau de publication.</span></div>
+            <button type="button" class="settings-action-button" data-settings-action="open-pricing">Comparer</button>
           </div>
         </div>
       </div>
@@ -1441,19 +1448,19 @@ function settingsMarkup() {
       </div>
       <div class="tab-panel hidden" id="tab-facturation" data-settings-heading="Billing">
         <div class="settings-card">
-          <h3>Current plan</h3>
-          <p>Your plan controls included credits, cloud allowance and access to advanced workshops.</p>
+          <h3>Forfait actuel</h3>
+          <p>Votre forfait détermine les crédits inclus, l’hébergement et l’accès aux ateliers avancés.</p>
           <div class="settings-row">
-            <div><strong data-settings-billing-plan>Free plan</strong><span>Upgrade or review available plans without exposing internal provider costs.</span></div>
-            <button type="button" class="settings-action-button" data-settings-action="open-pricing">View plans</button>
+            <div><strong data-settings-billing-plan>Forfait gratuit</strong><span>Comparez les options avant de choisir votre prochain niveau.</span></div>
+            <button type="button" class="settings-action-button" data-settings-action="open-pricing">Voir les forfaits</button>
           </div>
         </div>
         <div class="settings-card">
-          <h3>Usage-based services</h3>
-          <p>Build credits and Huggy Cloud usage remain separate, so published apps can scale without hiding consumption.</p>
+          <h3>Services selon l’usage</h3>
+          <p>Les crédits de construction et l’hébergement Huggy Cloud restent séparés pour rendre votre consommation lisible.</p>
           <div class="settings-row">
-            <div><strong>Build credits</strong><span>Used when Huggy plans, builds, fixes or deploys.</span></div>
-            <button type="button" class="settings-action-button" data-settings-action="open-usage">Review usage</button>
+            <div><strong>Crédits de construction</strong><span>Utilisés quand Huggy planifie, construit, corrige ou déploie.</span></div>
+            <button type="button" class="settings-action-button" data-settings-action="open-usage">Voir l’usage</button>
           </div>
           <div class="settings-row">
             <div><strong>Huggy Cloud</strong><span>Hosting, database, storage, bandwidth and deployed AI usage.</span></div>
@@ -1772,7 +1779,8 @@ async function handleSettingsAction(action: string) {
     return;
   }
   if (action === 'open-pricing') {
-    window.location.href = '/pricing.html';
+    trackFunnelEvent('upgrade_pricing_clicked', { surface: 'settings', plan: 'pro', billing: 'monthly' });
+    window.location.href = '/pricing.html?plan=pro&billing=monthly';
     return;
   }
   if (action === 'open-integrations') {

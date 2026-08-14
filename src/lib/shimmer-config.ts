@@ -6,11 +6,11 @@
  */
 
 export const CYCLING_PHRASES_FR: readonly string[] = [
-  "Huggy reflechit...",
-  "J'analyse ta demande...",
-  "Je prepare une reponse...",
-  "J'organise les idees...",
-  "Encore un instant...",
+  "Je m'occupe de ça...",
+  "Je prépare ton idée...",
+  "Je mets tout en place...",
+  "Je vérifie que tout fonctionne...",
+  "Encore un petit instant...",
 ];
 
 /** Milliseconds between phrase rotations. */

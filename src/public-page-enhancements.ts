@@ -1,3 +1,5 @@
+import { initThemeController } from './theme-controller';
+
 type PublicEnhancementOptions = {
   faq?: boolean;
   back?: boolean;
@@ -44,6 +46,32 @@ function injectSharedPublicStyles() {
   const style = document.createElement('style');
   style.id = 'huggy-public-enhancements-style';
   style.textContent = `
+    .huggy-public-theme-toggle {
+      width: 36px;
+      height: 36px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--border, var(--seo-border, rgba(20, 20, 20, 0.14)));
+      border-radius: 8px;
+      color: var(--text-muted, var(--seo-muted, #777166));
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .huggy-public-theme-toggle:hover {
+      color: var(--text, var(--seo-text, #181613));
+      background: color-mix(in srgb, var(--bg-surface, var(--seo-surface, #fffefa)) 92%, transparent);
+      border-color: var(--border-focus, var(--seo-border, rgba(20, 20, 20, 0.24)));
+      transform: translateY(-1px);
+    }
+
+    .huggy-public-theme-toggle:focus-visible {
+      outline: 0;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #2563eb) 35%, transparent);
+    }
+
     .back-home-link {
       position: fixed;
       left: 22px;
@@ -388,6 +416,23 @@ export function installSharedFaq(options: PublicEnhancementOptions = {}) {
 }
 
 export function installPublicPageEnhancements(options: PublicEnhancementOptions = {}) {
+  const navbar = document.querySelector('.seo-nav, .navbar');
+  if (!document.querySelector('[data-theme-toggle], #theme-btn, #theme-btn-dashboard')) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'huggy-public-theme-toggle';
+    toggle.dataset.themeToggle = 'true';
+    toggle.textContent = '☼';
+    toggle.setAttribute('aria-label', 'Activer le thème clair');
+    toggle.title = 'Activer le thème clair';
+    if (navbar) {
+      const actions = navbar.querySelector('.nav-actions, .seo-nav-actions') || navbar;
+      actions.appendChild(toggle);
+    } else {
+      document.body.prepend(toggle);
+    }
+  }
+  initThemeController();
   installSmartBackNavigation(options);
   installSharedFaq(options);
 }

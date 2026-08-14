@@ -49,7 +49,16 @@ export function safeRedirectTarget(candidate?: string | null): string {
 
 export function getRedirectTarget(): string {
   const params = new URLSearchParams(window.location.search);
-  return safeRedirectTarget(params.get('redirect'));
+  const explicitRedirect = params.get('redirect');
+  if (explicitRedirect) return safeRedirectTarget(explicitRedirect);
+
+  const requestedPlan = params.get('plan');
+  const requestedBilling = params.get('billing') === 'annual' || params.get('billing') === 'yearly' ? 'annual' : 'monthly';
+  if (requestedPlan === 'pro' || requestedPlan === 'scale') {
+    return `/checkout.html?plan=${requestedPlan}&billing=${requestedBilling}`;
+  }
+
+  return safeRedirectTarget(null);
 }
 
 export function getAuthRedirectUrl(target = getRedirectTarget()): string {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -32,7 +32,7 @@
   "url": "https://huggy.fun/dashboard.html"
 }</script>
   <!-- HUGGY_SEO_END -->
-  <script>
+    <script>
     // Emergency fix for "Cannot set property fetch of #<Window> which has only a getter"
     (function() {
         try {
@@ -54,7 +54,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <script>
     (function() {
-      const theme = localStorage.getItem('huggy-theme') || 'light';
+      const theme = localStorage.getItem('huggy-theme') || 'dark';
       document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
@@ -2191,8 +2191,8 @@
 
         <div class="sidebar-promo">
           <div class="promo-badge">PRO</div>
-          <p class="promo-text" data-i18n="dash.promoText">Unlock full AI power with the Pro plan.</p>
-          <button class="btn-promo-upgrade" id="btn-upgrade-dashboard" data-i18n="dash.upgradePro">Upgrade to Pro</button>
+          <p class="promo-text" data-i18n="dash.promoText">Publiez votre application et continuez à l’améliorer avec Pro.</p>
+          <button class="btn-promo-upgrade" id="btn-upgrade-dashboard" data-i18n="dash.upgradePro" type="button">Découvrir Pro</button>
         </div>
 
         <span class="nav-label" data-i18n="dash.projects">Projects</span>
@@ -2259,6 +2259,9 @@
             <input type="text" class="search-input" placeholder="Search projects..." data-i18n-placeholder="dash.search">
           </div>
           <button class="btn-create-top" id="btn-create-top" data-i18n="dash.newProjectTop">New Project</button>
+          <button class="btn-theme-toggle" id="theme-btn-dashboard" data-theme-toggle type="button" aria-label="Activer le thème clair" title="Activer le thème clair">
+            <span aria-hidden="true">☼</span>
+          </button>
         </div>
       </header>
 
@@ -2401,55 +2404,9 @@
   </div>
 
   <script>
-    // 1. Theme Toggle Logic
+    // 1. Theme state and navigation. The shared theme controller is initialized by dashboard-live.ts.
     const html = document.documentElement;
     const curtain = document.getElementById('curtain');
-    const themeBtn = document.getElementById('theme-btn');
-    const moonIcon = document.getElementById('moon-icon');
-    const sunIcon = document.getElementById('sun-icon');
-    let curtainBusy = false;
-
-    function updateThemeIcons(theme) {
-      if (theme === 'dark') {
-        moonIcon?.classList.remove('hidden');
-        sunIcon?.classList.add('hidden');
-      } else {
-        moonIcon?.classList.add('hidden');
-        sunIcon?.classList.remove('hidden');
-      }
-    }
-
-    function toggleTheme() {
-      if (curtainBusy || !curtain) return;
-      curtainBusy = true;
-      
-      const current = html.getAttribute('data-theme');
-      const nextTheme = current === 'dark' ? 'light' : 'dark';
-      
-      curtain.style.background = nextTheme === 'light' ? '#fafafa' : '#0f1014';
-      curtain.style.transformOrigin = 'top';
-      curtain.classList.add('falling');
-
-      setTimeout(() => {
-        html.setAttribute('data-theme', nextTheme);
-        localStorage.setItem('huggy-theme', nextTheme);
-        updateThemeIcons(nextTheme);
-        
-        curtain.classList.remove('falling');
-        requestAnimationFrame(() => {
-          curtain.style.transformOrigin = 'bottom';
-          curtain.classList.add('rising');
-          setTimeout(() => {
-            curtain.classList.remove('rising');
-            curtainBusy = false;
-          }, 620);
-        });
-      }, 600);
-    }
-
-    themeBtn?.addEventListener('click', toggleTheme);
-    updateThemeIcons(html.getAttribute('data-theme'));
-
     // 2. Navigation Projets Dashboard
     document.querySelectorAll('.nav-project').forEach(item => {
       item.addEventListener('click', () => {
@@ -2976,6 +2933,7 @@
 
     function openUpgradeModal() {
       if (upgradeModal) upgradeModal.classList.add('open');
+      window.huggyTrackFunnelEvent?.('upgrade_modal_opened', { surface: 'dashboard', recommended_plan: 'pro' });
     }
 
     function closeUpgradeModal() {
@@ -2988,7 +2946,10 @@
     });
     btnUpgradeClose?.addEventListener('click', closeUpgradeModal);
     btnUpgradeLater?.addEventListener('click', closeUpgradeModal);
-    btnUpgradePricing?.addEventListener('click', () => navigate('/pricing.html'));
+    btnUpgradePricing?.addEventListener('click', () => {
+      window.huggyTrackFunnelEvent?.('upgrade_pricing_clicked', { surface: 'dashboard', plan: 'pro', billing: 'monthly' });
+      navigate('/pricing.html?plan=pro&billing=monthly');
+    });
     upgradeModal?.addEventListener('click', (e) => {
       if (e.target === upgradeModal) closeUpgradeModal();
     });
@@ -3457,21 +3418,21 @@
   <div class="modal-overlay" id="upgrade-modal">
     <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="upgrade-modal-title">
       <button id="btn-upgrade-close" aria-label="Close upgrade modal" style="position:absolute; top:14px; right:14px; width:28px; height:28px; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-sub);">x</button>
-      <h3 class="modal-title" id="upgrade-modal-title">Upgrade your Huggy plan</h3>
-      <p class="modal-desc">Credits power AI actions. Huggy also includes backend services, auth, database, preview, hosting and deploy workflows.</p>
+      <h3 class="modal-title" id="upgrade-modal-title">Choisissez le forfait adapté à votre projet</h3>
+      <p class="modal-desc">Les crédits servent à construire. L’hébergement sert à garder vos applications publiées en ligne.</p>
       <div style="display:grid; gap:10px; margin:16px 0 20px;">
         <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
           <span>Pro</span>
-          <strong>$25/mo · 1,000 credits · $10 Cloud balance</strong>
+          <strong>25 $/mois · 1 000 crédits · 10 $ d’hébergement</strong>
         </div>
         <div style="display:flex; justify-content:space-between; gap:16px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-elevated);">
           <span>Scale</span>
-          <strong>$200/mo · 10,000 credits · $75 Cloud balance + team controls</strong>
+          <strong>200 $/mois · 10 000 crédits · 75 $ d’hébergement + équipe</strong>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-modal btn-cancel" id="btn-upgrade-later">Later</button>
-        <button class="btn-modal" id="btn-upgrade-pricing" style="background: var(--accent); color: var(--bg); font-weight: 600;">View plans</button>
+        <button class="btn-modal btn-cancel" id="btn-upgrade-later" type="button">Plus tard</button>
+        <button class="btn-modal" id="btn-upgrade-pricing" type="button" style="background: var(--accent); color: var(--bg); font-weight: 600;">Comparer les forfaits</button>
       </div>
     </div>
   </div>
@@ -3549,9 +3510,9 @@
         document.getElementById('btn-upgrade-later')?.addEventListener('click', closeUpgradeModal);
         document.getElementById('btn-upgrade-pricing')?.addEventListener('click', () => {
           if (typeof navigate === 'function') {
-            navigate('/pricing.html');
+            navigate('/pricing.html?plan=pro&billing=monthly');
           } else {
-            window.location.href = '/pricing.html';
+            window.location.href = '/pricing.html?plan=pro&billing=monthly';
           }
         });
         upgradeModal?.addEventListener('click', (event) => {

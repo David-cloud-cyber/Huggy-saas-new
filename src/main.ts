@@ -8,6 +8,8 @@ import { startCreateProjectFlow } from './services/create-project-flow';
 import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
 import { installPublicPageEnhancements } from './public-page-enhancements';
 import { initLandingI18n, getLandingLang } from './landing-i18n';
+import { initPublicPricingFlow } from './public-pricing-flow';
+import { initThemeController } from './theme-controller';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -24,6 +26,8 @@ function init() {
     // Manual French i18n for the landing. Runs before scroll-text-reveal so the
     // manifesto is split from already-translated text.
     initLandingI18n();
+    initPublicPricingFlow();
+    initThemeController();
     normalizeAiChatInputs();
 
     const themeBtn = getElement<HTMLButtonElement>('theme-btn');
@@ -42,7 +46,7 @@ function init() {
         window.addEventListener('load', liftCurtain);
     }
 
-    const savedTheme = localStorage.getItem('huggy-theme') || 'light';
+    const savedTheme = localStorage.getItem('huggy-theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     if (moonIcon && sunIcon) {
         if (savedTheme === 'dark') {
@@ -390,9 +394,10 @@ function init() {
     }
 
     installMarketingEnhancements();
-    // On the landing we ship a curated 5-item FAQ in the HTML, so skip the shared
-    // FAQ injection there (it stays available on the other marketing pages).
-    installPublicPageEnhancements(isHomeLanding() ? { faq: false } : {});
+    // Landing and pricing ship curated French FAQs in their HTML. Keep the shared
+    // FAQ enhancement for the other marketing pages without duplicating these sections.
+    const hasCuratedFaq = isHomeLanding() || /\/pricing\.html$/.test(window.location.pathname);
+    installPublicPageEnhancements(hasCuratedFaq ? { faq: false } : {});
     installLandingConversionTracking();
     installProductProofToggle();
     initPromptInputActions({ persistForBuilder: true });
@@ -769,50 +774,6 @@ function init() {
     // 3. Keep the hero title stable for stronger landing-page recall.
     if (rotatingWord) rotatingWord.textContent = 'SaaS';
 
-    // 6. Theme toggle
-    themeBtn?.addEventListener('click', () => {
-        if (curtainBusy || !curtain) return;
-        curtainBusy = true;
-        
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        localStorage.setItem('huggy-theme', newTheme);
-        
-        // Set curtain color to the NEW theme background
-        curtain.style.background = newTheme === 'light' ? '#fcfbf8' : '#0f1014';
-        curtain.style.transformOrigin = 'top';
-        curtain.classList.add('falling');
-
-        setTimeout(() => {
-            document.documentElement.setAttribute('data-theme', newTheme);
-            
-            // Toggle icons
-            if (moonIcon && sunIcon) {
-                if (newTheme === 'dark') {
-                    moonIcon.style.display = 'block';
-                    sunIcon.style.display = 'none';
-                } else {
-                    moonIcon.style.display = 'none';
-                    sunIcon.style.display = 'block';
-                }
-            }
-
-            // Prepare for rising (wipe out from bottom)
-            curtain.classList.remove('falling');
-            
-            // Small raf to ensure transition reset if needed
-            requestAnimationFrame(() => {
-                curtain.style.transformOrigin = 'bottom';
-                curtain.classList.add('rising');
-
-                setTimeout(() => {
-                    curtain.classList.remove('rising');
-                    curtainBusy = false;
-                }, 620);
-            });
-        }, 600);
-    });
-
     // 7. FAQ Toggle — single answer open at a time, with aria-expanded kept in sync.
     const faqItems = document.querySelectorAll('.faq-item');
     faqItems.forEach(item => {
@@ -843,7 +804,8 @@ function init() {
         }
     };
 
-    // 9. Aggressive Scroll Reveal with safety limits and early unveil fallback
+    // 9. Scroll reveal with a throttled fallback for browsers where the
+    // IntersectionObserver callback is delayed.
     const checkReveals = () => {
         const reveals = document.querySelectorAll('.reveal:not(.active)');
         reveals.forEach(el => {
@@ -853,6 +815,15 @@ function init() {
             if (rect.top <= viewHeight * 1.05 && rect.bottom >= -150) {
                 el.classList.add('active');
             }
+        });
+    };
+
+    let revealFallbackFrame = 0;
+    const requestRevealCheck = () => {
+        if (revealFallbackFrame) return;
+        revealFallbackFrame = window.requestAnimationFrame(() => {
+            revealFallbackFrame = 0;
+            checkReveals();
         });
     };
 
@@ -869,8 +840,8 @@ function init() {
     });
 
     // Handle scroll/resize fallbacks for high security & frame compatibility
-    window.addEventListener('scroll', checkReveals, { passive: true });
-    window.addEventListener('resize', checkReveals, { passive: true });
+    window.addEventListener('scroll', requestRevealCheck, { passive: true });
+    window.addEventListener('resize', requestRevealCheck, { passive: true });
 
     // Initial check and timed safety triggers
     checkReveals();
@@ -1094,18 +1065,19 @@ function init() {
 
     // Sticky CTA Visibility
     const stickyCta = getElement<HTMLElement>('sticky-cta');
-    window.addEventListener('scroll', () => {
+    let stickyCtaFrame = 0;
+    const updateStickyCta = () => {
+        stickyCtaFrame = 0;
         if (!stickyCta) return;
         const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
         if (scrollHeight <= 0) return;
         const scrollPercentage = (window.scrollY / scrollHeight) * 100;
-        
-        if (scrollPercentage > 50) {
-            stickyCta.classList.add('visible');
-        } else {
-            stickyCta.classList.remove('visible');
-        }
-    });
+        stickyCta.classList.toggle('visible', scrollPercentage > 50);
+    };
+    window.addEventListener('scroll', () => {
+        if (!stickyCtaFrame) stickyCtaFrame = window.requestAnimationFrame(updateStickyCta);
+    }, { passive: true });
+    updateStickyCta();
 }
 
 // Start initialization

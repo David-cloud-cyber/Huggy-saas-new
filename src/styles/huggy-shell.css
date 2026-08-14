@@ -1,0 +1,171 @@
+@import "../design-system.css";
+
+/* Shared Huggy shell language. Values come from design-system.css; the Builder remains the visual reference. */
+:root {
+  --huggy-shell-bg: var(--huggy-bg);
+  --huggy-shell-panel: var(--huggy-panel);
+  --huggy-shell-surface: var(--huggy-surface);
+  --huggy-shell-raised: var(--huggy-surface-raised);
+  --huggy-shell-input: var(--huggy-input);
+  --huggy-shell-text: var(--huggy-text);
+  --huggy-shell-muted: var(--huggy-muted);
+  --huggy-shell-sub: var(--huggy-subtle);
+  --huggy-shell-border: var(--huggy-border);
+  --huggy-shell-border-strong: var(--huggy-border-strong);
+  --huggy-shell-blue: var(--huggy-blue);
+  --huggy-shell-blue-deep: var(--huggy-blue-deep);
+  --huggy-shell-blue-soft: var(--huggy-blue-soft);
+  --huggy-shell-focus: var(--huggy-focus);
+  --huggy-shell-success: #4ade80;
+  --huggy-shell-warning: #fbbf24;
+  --huggy-shell-error: #f87171;
+  --huggy-shell-radius-sm: var(--huggy-radius-sm, 8px);
+  --huggy-shell-radius-md: var(--huggy-radius-md, 12px);
+  --huggy-shell-radius-lg: var(--huggy-radius-lg, 16px);
+  --huggy-shell-shadow: var(--huggy-shadow-soft);
+  --huggy-shell-ease: var(--huggy-ease);
+  --huggy-shell-fast: var(--huggy-motion-fast);
+  --huggy-shell-normal: var(--huggy-motion-normal);
+  --huggy-shell-motion-panel: var(--huggy-motion-panel);
+}
+
+:root[data-theme="light"] {
+  --huggy-shell-shadow: var(--huggy-shadow-soft);
+}
+
+:where(body, button, input, textarea, select) {
+  font-family: "Instrument Sans", "Inter", system-ui, sans-serif;
+}
+
+:where(button, a, input, textarea, select, summary) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(button, a, input, textarea, select, summary):focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--huggy-shell-bg), 0 0 0 4px var(--huggy-shell-focus) !important;
+}
+
+:where(.pricing-card, .auth-card, .checkout-card, .project-card, .settings-block, .settings-section, .modal-content, .modal-container, .create-section) {
+  border-radius: var(--huggy-shell-radius-lg) !important;
+  border-color: var(--huggy-shell-border) !important;
+  background: var(--huggy-shell-surface) !important;
+  box-shadow: var(--huggy-shell-shadow);
+}
+
+:where(.pricing-card, .project-card, .feature-card, .settings-block, .settings-section, .modal-content, .modal-container) {
+  transition: transform var(--huggy-shell-normal) var(--huggy-shell-ease), border-color var(--huggy-shell-normal) var(--huggy-shell-ease), box-shadow var(--huggy-shell-normal) var(--huggy-shell-ease), background-color var(--huggy-shell-normal) var(--huggy-shell-ease);
+}
+
+:where(.pricing-card, .project-card, .feature-card):hover {
+  border-color: var(--huggy-shell-border-strong) !important;
+  box-shadow: var(--huggy-shell-shadow);
+  transform: translateY(-2px);
+}
+
+:where(.btn-primary, .btn-solid, .btn-create-top, .btn-promo-upgrade, .btn-deploy, .submit-btn.active, .pricing-btn.primary, .card-cta, .checkout-submit) {
+  min-height: 44px;
+  border-radius: var(--huggy-shell-radius-sm) !important;
+  background: var(--huggy-shell-blue) !important;
+  border-color: var(--huggy-shell-blue) !important;
+  color: #fff !important;
+  transition: transform var(--huggy-shell-fast) var(--huggy-shell-ease), background-color var(--huggy-shell-fast) var(--huggy-shell-ease), box-shadow var(--huggy-shell-fast) var(--huggy-shell-ease), opacity var(--huggy-shell-fast) var(--huggy-shell-ease);
+}
+
+:where(.btn-primary, .btn-solid, .btn-create-top, .btn-promo-upgrade, .btn-deploy, .submit-btn.active, .pricing-btn.primary, .card-cta, .checkout-submit):hover:not(:disabled) {
+  background: var(--huggy-shell-blue-deep) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, .22);
+}
+
+:where(.btn-secondary, .btn-outline, .btn-modal, .btn-footer, .theme-toggle, .icon-btn, .tab-btn, .toggle-btn, .checkout-billing-toggle button) {
+  border-radius: var(--huggy-shell-radius-sm) !important;
+  border-color: var(--huggy-shell-border) !important;
+  transition: transform var(--huggy-shell-fast) var(--huggy-shell-ease), background-color var(--huggy-shell-fast) var(--huggy-shell-ease), border-color var(--huggy-shell-fast) var(--huggy-shell-ease), color var(--huggy-shell-fast) var(--huggy-shell-ease);
+}
+
+:where(.btn-secondary, .btn-outline, .btn-modal, .btn-footer, .theme-toggle, .icon-btn, .tab-btn, .toggle-btn, .checkout-billing-toggle button):hover:not(:disabled) {
+  background: var(--huggy-shell-raised) !important;
+  border-color: var(--huggy-shell-border-strong) !important;
+}
+
+:where(input, textarea, select, .input-wrapper, .search-wrapper, .checkout-card) {
+  border-color: var(--huggy-shell-border);
+}
+
+:where(input, textarea, select):focus,
+:where(.input-wrapper, .search-wrapper):focus-within {
+  border-color: var(--huggy-shell-blue) !important;
+  box-shadow: 0 0 0 3px var(--huggy-shell-blue-soft) !important;
+}
+
+:where(.sidebar, .topbar, .brand-topbar, .navbar, .checkout-nav) {
+  background: var(--huggy-shell-panel) !important;
+  border-color: var(--huggy-shell-border) !important;
+}
+
+:where(.sidebar, .topbar, .brand-topbar, .navbar, .checkout-nav) :where(a, button) {
+  color: var(--huggy-shell-muted);
+}
+
+:where(.sidebar, .topbar, .brand-topbar, .navbar, .checkout-nav) :where(a, button):hover {
+  color: var(--huggy-shell-text);
+}
+
+:where(.theme-toggle, [data-theme-toggle]) {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  color: var(--huggy-shell-muted);
+}
+
+:where(.status-badge, .plan-badge, .workspace-plan-tag, .builder-plan-badge) {
+  border-radius: 999px !important;
+}
+
+/* Shared state vocabulary for every interactive surface. */
+:where(.huggy-empty-state, .huggy-error-state, .huggy-success-state, .huggy-info-state) {
+  border: 1px solid var(--huggy-shell-border);
+  border-radius: var(--huggy-shell-radius-md);
+  padding: 20px;
+  background: var(--huggy-shell-surface);
+  color: var(--huggy-shell-text);
+}
+
+:where(.huggy-empty-state, .huggy-info-state) { border-color: color-mix(in srgb, var(--huggy-shell-blue) 28%, var(--huggy-shell-border)); }
+:where(.huggy-success-state) { border-color: color-mix(in srgb, var(--huggy-shell-success) 34%, var(--huggy-shell-border)); }
+:where(.huggy-error-state) { border-color: color-mix(in srgb, var(--huggy-shell-error) 42%, var(--huggy-shell-border)); }
+
+:where(.huggy-loading-dots)::after {
+  content: '…';
+  display: inline-block;
+  width: 1.2em;
+  overflow: hidden;
+  vertical-align: bottom;
+  animation: huggy-loading-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes huggy-loading-dots {
+  0%, 20% { width: 0; }
+  40% { width: .4em; }
+  60% { width: .8em; }
+  80%, 100% { width: 1.2em; }
+}
+
+:where(input, textarea, select):disabled,
+:where(button, a)[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

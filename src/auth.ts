@@ -1,4 +1,6 @@
 import './styles/huggy-light-theme.css';
+import './styles/huggy-shell.css';
+import { initThemeController } from './theme-controller';
 import {
   getAuthRedirectUrl,
   getRedirectTarget,
@@ -7,6 +9,8 @@ import {
   supabase,
 } from './lib/supabase-browser';
 import { installSmartBackNavigation } from './public-page-enhancements';
+import { readPricingSelection } from './public-pricing-flow';
+import { trackFunnelEvent } from './conversion-events';
 
 type AuthMode = 'login' | 'signup';
 type StatusTone = 'info' | 'error' | 'success';
@@ -26,9 +30,17 @@ const footerText = document.getElementById('auth-footer-text') as HTMLElement | 
 const socialButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-provider]'));
 
 installSmartBackNavigation({ backFallback: '/' });
+initThemeController();
 
 let mode: AuthMode = new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'login';
 let redirecting = false;
+const pricingSelection = readPricingSelection();
+
+trackFunnelEvent('auth_viewed', {
+  mode,
+  plan: pricingSelection.plan,
+  billing: pricingSelection.billing,
+});
 
 function setStatus(message: string, tone: StatusTone = 'info') {
   if (!statusEl) return;
@@ -39,7 +51,7 @@ function setStatus(message: string, tone: StatusTone = 'info') {
 function setBusy(isBusy: boolean, label?: string) {
   if (submitButton) {
     submitButton.disabled = isBusy;
-    submitButton.textContent = isBusy ? label || 'Please wait...' : mode === 'signup' ? 'Create account' : 'Sign in';
+    submitButton.textContent = isBusy ? label || 'Patientez…' : mode === 'signup' ? 'Créer mon compte' : 'Se connecter';
   }
 
   socialButtons.forEach((button) => {
@@ -54,16 +66,16 @@ function setOAuthBusy(activeButton: HTMLButtonElement | null, isBusy: boolean) {
     button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
     const label = button.querySelector('[data-oauth-label]');
     if (label) {
-      label.textContent = isBusy && button === activeButton ? 'Opening Google...' : 'Continue with Google';
+      label.textContent = isBusy && button === activeButton ? 'Ouverture de Google…' : 'Continuer avec Google';
       return;
     }
 
     if (!button.dataset.defaultLabel) {
-      button.dataset.defaultLabel = button.textContent?.trim() || 'Continue with Google';
+      button.dataset.defaultLabel = button.textContent?.trim() || 'Continuer avec Google';
     }
     const textNode = Array.from(button.childNodes).reverse().find(node => node.nodeType === Node.TEXT_NODE);
     if (textNode) {
-      textNode.textContent = isBusy && button === activeButton ? ' Opening Google...' : ` ${button.dataset.defaultLabel}`;
+      textNode.textContent = isBusy && button === activeButton ? ' Ouverture de Google…' : ` ${button.dataset.defaultLabel}`;
     }
   });
 }
@@ -80,16 +92,16 @@ function setMode(nextMode: AuthMode) {
   if (passwordInput) {
     passwordInput.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
   }
-  if (modeTitle) modeTitle.textContent = mode === 'signup' ? 'Create your Huggy account' : 'Welcome back';
+  if (modeTitle) modeTitle.textContent = mode === 'signup' ? 'Créez votre compte Huggy' : 'Bon retour';
   if (modeSubtitle) {
     modeSubtitle.textContent = mode === 'signup'
-      ? 'Start building, keep every project saved, and publish only when you are ready.'
-      : 'Sign in once and return to your projects, previews, usage and publish controls.';
+      ? 'Commencez à construire, gardez vos projets et publiez quand vous êtes prêt.'
+      : 'Connectez-vous pour retrouver vos projets, aperçus, usages et publications.';
   }
   if (footerText) {
     footerText.innerHTML = mode === 'signup'
-      ? 'Already have an account? <button type="button" data-auth-switch="login">Sign in</button>'
-      : 'New to Huggy? <button type="button" data-auth-switch="signup">Create an account</button>';
+      ? 'Vous avez déjà un compte ? <button type="button" data-auth-switch="login">Se connecter</button>'
+      : 'Nouveau sur Huggy ? <button type="button" data-auth-switch="signup">Créer un compte</button>';
   }
   setBusy(false);
 }
@@ -97,7 +109,7 @@ function setMode(nextMode: AuthMode) {
 function redirectToApp() {
   if (redirecting) return;
   redirecting = true;
-  setStatus('Opening your workspace...', 'success');
+  setStatus('Ouverture de votre espace…', 'success');
   window.location.href = safeRedirectTarget(getRedirectTarget());
 }
 
@@ -114,13 +126,13 @@ function getReturnedAuthError(): string | null {
 
 function friendlyAuthError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error || '');
-  if (/invalid login credentials/i.test(message)) return 'Email or password is incorrect.';
-  if (/email not confirmed/i.test(message)) return 'Please confirm your email before signing in.';
+  if (/invalid login credentials/i.test(message)) return 'L’e-mail ou le mot de passe est incorrect.';
+  if (/email not confirmed/i.test(message)) return 'Confirmez votre e-mail avant de vous connecter.';
   if (/password/i.test(message) && /six|6|weak|short/i.test(message)) {
-    return 'Use a stronger password with at least 6 characters.';
+    return 'Utilisez un mot de passe plus robuste d’au moins 6 caractères.';
   }
-  if (/fetch|network|failed/i.test(message)) return 'Network issue. Please check your connection and try again.';
-  return message || 'Authentication failed. Please try again.';
+  if (/fetch|network|failed/i.test(message)) return 'Un problème réseau est survenu. Vérifiez votre connexion puis réessayez.';
+  return message || 'La connexion a échoué. Réessayez.';
 }
 
 async function handleEmailAuth(event: Event) {
@@ -130,16 +142,17 @@ async function handleEmailAuth(event: Event) {
   const fullName = nameInput?.value.trim() || '';
 
   if (!email || !password) {
-    setStatus('Enter your email and password to continue.', 'error');
+    setStatus('Saisissez votre e-mail et votre mot de passe pour continuer.', 'error');
     return;
   }
   if (mode === 'signup' && password.length < 6) {
-    setStatus('Use at least 6 characters for your password.', 'error');
+    setStatus('Utilisez au moins 6 caractères pour votre mot de passe.', 'error');
     return;
   }
 
-  setBusy(true, mode === 'signup' ? 'Creating account...' : 'Signing in...');
-  setStatus(mode === 'signup' ? 'Creating your account...' : 'Signing you in...', 'info');
+  setBusy(true, mode === 'signup' ? 'Création du compte…' : 'Connexion…');
+  setStatus(mode === 'signup' ? 'Création de votre compte…' : 'Connexion à votre espace…', 'info');
+  trackFunnelEvent('auth_started', { mode, plan: pricingSelection.plan, billing: pricingSelection.billing });
 
   try {
     if (mode === 'signup') {
@@ -153,15 +166,18 @@ async function handleEmailAuth(event: Event) {
       });
       if (error) throw error;
       if (data.session) {
+        trackFunnelEvent('auth_completed', { mode, plan: pricingSelection.plan, billing: pricingSelection.billing });
         redirectToApp();
         return;
       }
-      setStatus('Account created. Check your email to confirm it, then sign in.', 'success');
+      trackFunnelEvent('auth_completed', { mode, plan: pricingSelection.plan, billing: pricingSelection.billing });
+      setStatus('Compte créé. Vérifiez votre e-mail pour le confirmer.', 'success');
       return;
     }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    trackFunnelEvent('auth_completed', { mode, plan: pricingSelection.plan, billing: pricingSelection.billing });
     redirectToApp();
   } catch (error) {
     setStatus(friendlyAuthError(error), 'error');
@@ -172,7 +188,7 @@ async function handleEmailAuth(event: Event) {
 
 async function handleOAuth(button: HTMLButtonElement) {
   setOAuthBusy(button, true);
-  setStatus('Opening Google sign-in...', 'info');
+  setStatus('Ouverture de la connexion Google…', 'info');
   try {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -212,7 +228,7 @@ socialButtons.forEach((button) => {
 const returnedAuthError = getReturnedAuthError();
 setMode(mode);
 if (returnedAuthError) {
-  setStatus(`Google sign-in could not finish: ${returnedAuthError}`, 'error');
+  setStatus(`La connexion Google n’a pas abouti : ${returnedAuthError}`, 'error');
 }
 
 supabase.auth.onAuthStateChange((event, session) => {

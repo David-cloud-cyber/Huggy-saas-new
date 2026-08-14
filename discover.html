@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -9,7 +9,7 @@
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://huggy.fun/discover.html" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#0e1116" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="Discover — Apps built with Huggy" />
@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
     <script>
         (function() {
-            const theme = localStorage.getItem('huggy-theme') || 'light';
+            const theme = localStorage.getItem('huggy-theme') || 'dark';
             document.documentElement.setAttribute('data-theme', theme);
         })();
     </script>
@@ -48,6 +48,7 @@
             <a href="/showcase.html" data-i18n="nav.showcase">Showcase</a>
         </div>
         <div class="nav-actions">
+            <button class="theme-toggle" data-theme-toggle type="button" aria-label="Activer le thème clair" title="Activer le thème clair">☼</button>
             <button class="sign-in-btn" onclick="navigate('/auth.html')">Sign In</button>
         </div>
     </nav>

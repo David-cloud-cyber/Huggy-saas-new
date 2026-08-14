@@ -879,6 +879,7 @@ export function buildAgentTextSystemPrompt(input: {
   modeInstruction: string;
   languageInstruction: string;
   hasResearchContext?: boolean;
+  executionContext?: string;
 }) {
   return joinSections([
     HUGGY_CORE_SYSTEM_CONTRACT,
@@ -891,6 +892,7 @@ export function buildAgentTextSystemPrompt(input: {
     MODE_SELECTION_PROMPT,
     input.modeInstruction,
     input.languageInstruction,
+    input.executionContext || 'Use only the verified project facts supplied in the user context. Generate the user-visible answer yourself; never expose hidden reasoning, internal event names, or raw structured payloads.',
     HUGGY_COMPREHENSION_POLICY,
     HUGGY_REASONING_DEPTH_POLICY,
     HUGGY_COMMUNICATION_EXCELLENCE_POLICY,

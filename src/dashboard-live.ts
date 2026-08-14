@@ -1,6 +1,9 @@
 import './styles/dashboard-polish.css';
-import './styles/dashboard-kimi.css';
 import './styles/huggy-light-theme.css';
+import './styles/huggy-shell.css';
+import './styles/dashboard-huggy.css';
+import { initThemeController } from './theme-controller';
+import './conversion-events';
 import { apiFetch } from './lib/api';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
@@ -12,6 +15,9 @@ import { startCreateProjectFlow } from './services/create-project-flow';
 import { understandUserIntent } from './services/intent-understanding';
 import { deriveProjectName } from './services/project-naming';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
+import { demoBuilderUrl, demoDelay, getDemoAssistantReply, getDemoProjects, getDemoUsage, installDemoBanner, isDemoMode } from './demo-mode';
+
+initThemeController();
 
 type ProjectListResponse = {
   success: boolean;
@@ -172,6 +178,7 @@ function setDashboardMode(mode: DashboardMode) {
 
 function saveDashboardWorkspace(immediate = false) {
   if (dashboardWorkspaceTimer !== null) window.clearTimeout(dashboardWorkspaceTimer);
+  if (isDemoMode()) return;
   const save = async () => {
     const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
     try {
@@ -205,7 +212,7 @@ function installContinueLastProject(state: UserWorkspaceState | null) {
   button.textContent = 'Continue last project';
   button.style.cssText = 'margin:14px auto 18px;display:inline-flex;height:34px;align-items:center;justify-content:center;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);border-radius:999px;padding:0 14px;font-size:12px;font-weight:750;cursor:pointer;';
   button.addEventListener('click', () => {
-    window.location.href = `/builder.html?project=${encodeURIComponent(state.last_project_id || '')}`;
+    window.location.href = builderUrl(state.last_project_id || '');
   });
   subtitle.insertAdjacentElement('afterend', button);
 }
@@ -214,7 +221,16 @@ function projectNameFromPrompt(prompt: string) {
   return deriveProjectName(prompt);
 }
 
+function builderUrl(projectId: string) {
+  return isDemoMode() ? demoBuilderUrl(projectId) : `/builder.html?project=${encodeURIComponent(projectId)}`;
+}
+
 async function hydrateWorkspaceState() {
+  if (isDemoMode()) {
+    dashboardWorkspaceState = { last_project_id: 'demo-pulseboard', dashboard_draft_prompt: '', dashboard_selected_mode: 'auto' };
+    installContinueLastProject(dashboardWorkspaceState);
+    return;
+  }
   try {
     const response = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state');
     dashboardWorkspaceState = response.state || null;
@@ -368,6 +384,10 @@ function projectPreviewFrame(project: DashboardProject, state: ReturnType<typeof
 async function deleteProject(projectId: string, projectName: string) {
   const confirmed = window.confirm(`Delete "${projectName}"? This cannot be undone.`);
   if (!confirmed) return;
+  if (isDemoMode()) {
+    showProjectError(`En mode démo, le projet « ${projectName} » n'est pas supprimé.`);
+    return;
+  }
   await apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
   await loadLiveProjects();
 }
@@ -549,6 +569,21 @@ function installDashboardUxPolish() {
       vertical-align: -0.15em;
       opacity: 0.55;
       animation: dashboard-chat-cursor 900ms steps(2, start) infinite;
+    }
+
+    .dashboard-chat-bubble.is-thinking {
+      background: linear-gradient(110deg, var(--text-sub) 20%, var(--text) 42%, var(--text-sub) 64%);
+      background-size: 240% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent !important;
+      animation: dashboard-chat-shimmer 1.8s ease-in-out infinite;
+    }
+
+    @keyframes dashboard-chat-shimmer {
+      0% { background-position: 120% 0; opacity: .62; }
+      50% { opacity: 1; }
+      100% { background-position: -80% 0; opacity: .62; }
     }
 
     .create-section[data-chat-state="conversation"] .input-wrapper,
@@ -1178,7 +1213,7 @@ function renderRecentDashboardActivity(projects: DashboardProject[]) {
   list.querySelectorAll<HTMLButtonElement>('[data-id]').forEach(button => {
     button.addEventListener('click', () => {
       const id = button.dataset.id;
-      if (id) window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+      if (id) window.location.href = builderUrl(id);
     });
   });
 }
@@ -1204,7 +1239,7 @@ function renderLiveProjects(projects: DashboardProject[]) {
     sidebarList.querySelectorAll<HTMLElement>('.nav-project').forEach(button => {
       button.addEventListener('click', () => {
         const id = button.dataset.id;
-        if (id) window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+        if (id) window.location.href = builderUrl(id);
       });
     });
   }
@@ -1257,7 +1292,7 @@ function renderLiveProjects(projects: DashboardProject[]) {
     card.addEventListener('click', event => {
       if ((event.target as HTMLElement).closest('[data-project-action]')) return;
       const id = card.dataset.id;
-      if (id) window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+      if (id) window.location.href = builderUrl(id);
     });
   });
 
@@ -1270,7 +1305,7 @@ function renderLiveProjects(projects: DashboardProject[]) {
       if (!id) return;
       const action = button.dataset.projectAction;
       if (action === 'edit') {
-        window.location.href = `/builder.html?project=${encodeURIComponent(id)}`;
+        window.location.href = builderUrl(id);
         return;
       }
       if (action === 'live') {
@@ -1307,6 +1342,10 @@ function hydrateUserIdentity(detail?: any) {
 async function hydrateAdminConsoleAccess() {
   const adminLink = document.getElementById('btn-admin-console') as HTMLElement | null;
   if (!adminLink) return;
+  if (isDemoMode()) {
+    adminLink.style.display = 'none';
+    return;
+  }
   try {
     const response = await apiFetch<{ success: boolean; user?: { is_platform_admin?: boolean } }>('/api/auth/me');
     adminLink.style.display = response.user?.is_platform_admin ? 'flex' : 'none';
@@ -1316,6 +1355,10 @@ async function hydrateAdminConsoleAccess() {
 }
 
 async function loadLiveProjects() {
+  if (isDemoMode()) {
+    renderLiveProjects(getDemoProjects());
+    return;
+  }
   try {
     localStorage.removeItem('huggy-projects');
     localStorage.removeItem('huggy-current-project');
@@ -1337,6 +1380,12 @@ async function loadLiveProjects() {
 async function loadLiveWallet() {
   const count = document.querySelector('.credits-count');
   const total = document.querySelector('.credits-total');
+  if (isDemoMode()) {
+    syncDashboardPlanBadges('pro');
+    if (count) count.textContent = '742';
+    if (total) total.textContent = ' credits · Pro';
+    return;
+  }
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     syncDashboardPlanBadges(wallet.plan || 'free');
@@ -1489,6 +1538,17 @@ async function loadAiUsageSettings(force = false) {
   const rateList = document.getElementById('model-credit-rates');
   if (history) history.innerHTML = '<div class="usage-empty">Loading AI usage...</div>';
   if (rateList) rateList.innerHTML = '<div class="usage-empty">Loading model credit rates...</div>';
+  if (isDemoMode()) {
+    renderAiUsage(getDemoUsage(), {
+      success: true,
+      models: [
+        { id: 'auto', display_name: 'Huggy Auto', tier: 'balanced', availability: 'all', credits: { plan: '2', build: '18', fix: '10', deploy: '12' } },
+        { id: 'claude-sonnet', display_name: 'Claude Sonnet', tier: 'quality', availability: 'pro', credits: { plan: '4', build: '24', fix: '14', deploy: '16' } },
+      ],
+    });
+    aiUsageLoaded = true;
+    return;
+  }
   try {
     const [usage, rates] = await Promise.all([
       apiFetch<AiUsageResponse>('/api/users/me/ai-usage'),
@@ -1639,12 +1699,16 @@ function renderDashboardChat() {
   if (!thread) return;
   // No indentation/newlines inside the bubble: it has white-space: pre-wrap,
   // so any template whitespace would render as real space and inflate the bubble.
-  thread.innerHTML = dashboardChatMessages.map(message =>
+  thread.innerHTML = dashboardChatMessages.map(message => {
+    const thinking = message.role === 'assistant' && message.streaming;
+    const visibleContent = thinking && !message.content ? 'Huggy prépare ta réponse…' : message.content;
+    return (
     `<article class="dashboard-chat-message ${message.role}" data-message-id="${escapeHtml(message.id)}">` +
-    `<div class="dashboard-chat-bubble">${dashboardChatHtml(message.content)}` +
+    `<div class="dashboard-chat-bubble${thinking ? ' is-thinking' : ''}">${dashboardChatHtml(visibleContent)}` +
     `${message.streaming ? '<span class="dashboard-chat-cursor" aria-hidden="true"></span>' : ''}</div>` +
     `</article>`
-  ).join('');
+    );
+  }).join('');
   thread.scrollTop = thread.scrollHeight;
 }
 
@@ -1689,6 +1753,16 @@ function recentDashboardConversationForAssistant() {
 
 async function streamDashboardConversation(prompt: string, assistantMessageId: string) {
   dashboardAssistantBusy = true;
+  if (isDemoMode()) {
+    const stages = ['Je comprends ta demande…', 'Je prépare une piste…', 'Je vérifie la réponse…'];
+    for (const stage of stages) {
+      updateDashboardMessage(assistantMessageId, stage, true);
+      await demoDelay(520);
+    }
+    updateDashboardMessage(assistantMessageId, getDemoAssistantReply(prompt), false);
+    dashboardAssistantBusy = false;
+    return;
+  }
   let verified = await getVerifiedSession({ allowRefresh: true });
   if (!verified?.session?.access_token) verified = await refreshVerifiedSession();
   if (!verified?.session?.access_token) {
@@ -1742,6 +1816,12 @@ function bindDashboardPromptCreation() {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     dashboardSetChatState('conversation');
     appendDashboardMessage('user', prompt);
+
+    if (isDemoMode()) {
+      const assistantId = appendDashboardMessage('assistant', '', true);
+      void streamDashboardConversation(prompt, assistantId);
+      return;
+    }
 
     if (!wantsBuild) {
       const assistantId = appendDashboardMessage('assistant', '', true);
@@ -1822,6 +1902,7 @@ function bindDashboardMobileNav() {
 function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
+  installDemoBanner();
   initDashboardChrome();
   if (!dashboardChatMessages.length) dashboardSetChatState('idle');
   hydrateUserIdentity((window as any).huggyAuthReady);

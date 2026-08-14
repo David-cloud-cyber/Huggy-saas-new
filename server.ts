@@ -4342,8 +4342,9 @@ function buildAgentTextMessages(input: {
   files: GeneratedFile[];
   decision: IntentDecision;
   researchContext?: string;
+  executionContract?: ExecutionContract;
 }): ChatMessage[] {
-  const { project, prompt, files, decision, researchContext } = input;
+  const { project, prompt, files, decision, researchContext, executionContract } = input;
   const languageInstruction = isLikelyFrenchPrompt(prompt)
     ? 'Answer in natural French.'
     : 'Answer in the same language as the user.';
@@ -4364,6 +4365,13 @@ function buildAgentTextMessages(input: {
         modeInstruction,
         languageInstruction,
         hasResearchContext: Boolean(researchContext),
+        executionContext: executionContract
+          ? [
+              'This is the execution contract for the current run. Follow it exactly:',
+              JSON.stringify(executionContract),
+              'Generate concise user-visible text from the supplied facts. Ask at most one clarification question when required. Never claim a file, preview, check, publication, or payment changed unless the verified result says so.',
+            ].join('\n')
+          : undefined,
       }),
     },
     {
@@ -4374,6 +4382,7 @@ function buildAgentTextMessages(input: {
         intent: decision.intent,
         intent_category: decision.intentUnderstanding?.category || decision.understandingCategory,
         auto_plan_required: decision.autoPlanRequired,
+        execution_contract: executionContract || undefined,
         files: fileSummary,
         researchContext: researchContext || undefined,
       }),
@@ -4394,24 +4403,7 @@ async function createAgentTextResponse(input: {
 }): Promise<{ text: string; model: string; cost_usd: number }> {
   const { project, prompt, files, decision, researchContext } = input;
   const executionContract = (decision as any).executionContract as ExecutionContract | undefined;
-  if (decision.intent === 'clarification_required') {
-    return { text: sanitizeAssistantOutput({ text: createClarificationContent(decision), prompt, contract: executionContract, intent: decision.intent }), model: 'auto', cost_usd: 0 };
-  }
-  if (decision.intent === 'verify') {
-    const pipeline = runPreviewPipeline(project, files);
-    const checks = verifyGeneratedProject({ projectName: project.name, files, previewHtml: pipeline.html });
-    return { text: createVerificationResponse(project, files, checks), model: 'auto', cost_usd: 0 };
-  }
   if (!hasLiveAiProvider()) {
-    if (decision.intent === 'plan') {
-      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0 };
-    }
-    if (decision.intent === 'deploy_assist') {
-      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0 };
-    }
-    if (decision.intent === 'conversation') {
-      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0 };
-    }
     throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live AI responses.');
   }
 
@@ -4437,7 +4429,7 @@ async function createAgentTextResponse(input: {
   try {
     const result = await providerGateway.chat(
       selectedModel,
-      buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
+      buildAgentTextMessages({ project, prompt, files, decision, researchContext, executionContract }),
       {
         maxAttempts: decision.intent === 'conversation' ? 1 : 2,
         timeoutMs: runtimeOptions.runtime.timeoutMs,
@@ -4446,9 +4438,11 @@ async function createAgentTextResponse(input: {
       },
     );
 
+    const modelText = result.text.trim();
+    if (!modelText) throw new Error('The selected AI model returned an empty response.');
     return {
       text: sanitizeAssistantOutput({
-        text: result.text.trim() || (decision.intent === 'plan' ? createPlanResponse(project, prompt, files) : createConversationResponse(project, prompt)),
+        text: modelText,
         prompt,
         contract: executionContract,
         intent: decision.intent,
@@ -4457,16 +4451,6 @@ async function createAgentTextResponse(input: {
       cost_usd: result.cost_usd || 0,
     };
   } catch (error) {
-    if (decision.intent === 'plan') {
-      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0 };
-    }
-    if (decision.intent === 'conversation') {
-      if (input.allowLocalFallback === false && isExplicitProviderModelSelection(input.modelId)) throw error;
-      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0 };
-    }
-    if (decision.intent === 'deploy_assist') {
-      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0 };
-    }
     throw error;
   }
 }
@@ -4485,24 +4469,7 @@ async function streamAgentTextResponse(input: {
 }): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
   const { project, prompt, files, decision, researchContext, onToken } = input;
   const executionContract = (decision as any).executionContract as ExecutionContract | undefined;
-  if (decision.intent === 'clarification_required') {
-    return { text: sanitizeAssistantOutput({ text: createClarificationContent(decision), prompt, contract: executionContract, intent: decision.intent }), model: 'auto', cost_usd: 0, streamed: false };
-  }
-  if (decision.intent === 'verify') {
-    const pipeline = runPreviewPipeline(project, files);
-    const checks = verifyGeneratedProject({ projectName: project.name, files, previewHtml: pipeline.html });
-    return { text: createVerificationResponse(project, files, checks), model: 'auto', cost_usd: 0, streamed: false };
-  }
   if (!hasLiveAiProvider()) {
-    if (decision.intent === 'plan') {
-      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
-    }
-    if (decision.intent === 'deploy_assist') {
-      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0, streamed: false };
-    }
-    if (decision.intent === 'conversation') {
-      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
-    }
     throw new Error('No AI provider is configured. Add OPENROUTER_API_KEY or ANTHROPIC_API_KEY on Railway to enable live AI responses.');
   }
 
@@ -4539,7 +4506,7 @@ async function streamAgentTextResponse(input: {
   try {
     for await (const event of providerGateway.streamChat(
       selectedModel,
-      buildAgentTextMessages({ project, prompt, files, decision, researchContext }),
+      buildAgentTextMessages({ project, prompt, files, decision, researchContext, executionContract }),
       {
         timeoutMs: runtimeOptions.runtime.timeoutMs,
         runtimeConfig: runtimeOptions.providerConfig,
@@ -4562,27 +4529,15 @@ async function streamAgentTextResponse(input: {
       }
     }
 
-    const fallback = decision.intent === 'plan'
-      ? createPlanResponse(project, prompt, files)
-      : createConversationResponse(project, prompt);
+    if (!text.trim()) throw new Error('The selected AI model returned an empty response.');
     const sanitized = sanitizeAssistantOutput({
-      text: text.trim() || fallback,
+      text: text.trim(),
       prompt,
       contract: executionContract,
       intent: decision.intent,
     });
     return { text: sanitized, model, cost_usd, streamed };
   } catch (error) {
-    if (decision.intent === 'plan') {
-      return { text: createPlanResponse(project, prompt, files), model: 'auto', cost_usd: 0, streamed: false };
-    }
-    if (decision.intent === 'conversation') {
-      if (input.allowLocalFallback === false && isExplicitProviderModelSelection(input.modelId)) throw error;
-      return { text: createConversationResponse(project, prompt), model: 'auto', cost_usd: 0, streamed: false };
-    }
-    if (decision.intent === 'deploy_assist') {
-      return { text: createDeployAssistResponse(project), model: 'auto', cost_usd: 0, streamed: false };
-    }
     throw error;
   }
 }
@@ -8942,7 +8897,7 @@ app.get('/api/billing/ledger', async (req, res) => {
 // POST /billing/checkout/subscription
 app.post('/api/billing/checkout/subscription', async (req, res) => {
   const { planKey, email, successUrl, cancelUrl, billingInterval } = req.body;
-  const orgId = req.body.orgId || DEFAULT_ORG_ID;
+  const orgId = getUserOrgId(req);
 
   try {
     const billing = new StripeService(getSupabase());
@@ -9234,7 +9189,8 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
       allowLocalFallback: selectedModel === 'auto',
     });
 
-    const content = redactSecrets(agentText.text || '').trim() || createConversationResponse(project, prompt);
+    const content = redactSecrets(agentText.text || '').trim();
+    if (!content) throw new Error('The selected AI model returned an empty response.');
     if (canPersistConversation) {
       await saveProjectMessage({
         organization_id: project.organization_id,
@@ -9394,10 +9350,6 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
       }).catch(() => null);
     }
 
-    stream.emit('status', {
-      message: isLikelyFrenchPrompt(prompt) ? 'Huggy répond...' : 'Huggy is writing...',
-    });
-
     const agentText = await streamAgentTextResponse({
       project,
       prompt: promptWithHistory,
@@ -9412,7 +9364,8 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
     });
 
     if (streamAborted) return;
-    const content = redactSecrets(agentText.text || '').trim() || createConversationResponse(project, prompt);
+    const content = redactSecrets(agentText.text || '').trim();
+    if (!content) throw new Error('The selected AI model returned an empty response.');
     if (!agentText.streamed) {
       for (const chunk of chunkTextForPublicStream(content, 32)) {
         if (streamAborted) return;
@@ -11171,7 +11124,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       if (!res.writableEnded) {
         // Typed v2 terminal event + legacy done for backward compatibility.
         streamV2?.emit('done', { payload: { status_code: status, ...payload } });
-        res.write(`data: ${JSON.stringify({ type: 'done', payload: { status_code: status, ...payload } })}\n\n`);
         res.end();
       }
       return;
@@ -11308,13 +11260,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     let agentText: any;
     let content = '';
     try {
-      if (decision.intent === 'clarification_required') {
-        content = createClarificationContent(decision);
-        agentText = { text: content, model: 'router', cost_usd: 0 };
-      } else {
-        agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' });
-        content = agentText.text;
-      }
+      agentText = await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' });
+      content = agentText.text;
     } catch (error: any) {
       const message = normalizeProviderError(error);
       const diagnostic = diagnoseProviderError(error);
@@ -11383,8 +11330,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           nextAction: 'plan_only',
         };
         executionPlan = (await createAgentTextResponse({ project, prompt: agentPromptForText, files: existingFiles, decision: planDecision, modelId: requestedModelSelection, userCredits: walletForRouting, allowLocalFallback: requestedModelSelection === 'auto' })).text;
-      } catch {
-        executionPlan = createPlanResponse(project, prompt, existingFiles);
+      } catch (error) {
+        throw error;
       }
     }
     const basePrompt = req.body?.useLastPlan && lastPlan ? `${lastPlan}\n\nUser confirmed build: ${agentPrompt}` : agentPrompt;
@@ -11394,17 +11341,14 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const generation = await generateFilesWithAi({
       onEvent: (event) => {
         if (!isStream || streamAborted) return;
-        // Legacy event for current consumers.
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-        // Mirror onto the typed v2 protocol so the new client renders a
-        // fluid milestone timeline without changing every emitter below.
+        // The v2 stream is the only public transport. Legacy generation
+        // events stay internal and are normalized once here.
         if (streamV2 && event && typeof event === 'object') {
           const anyEvent = event as { type?: string; step?: string; message?: string; text?: string; content?: string };
           if (anyEvent.type === 'agent_step') {
             streamV2.emit('milestone', {
               milestone: mapLegacyStepToMilestone(anyEvent.step),
               state: 'active',
-              label: anyEvent.message,
             });
           } else if (anyEvent.type === 'token') {
             const text = String(anyEvent.text ?? anyEvent.content ?? '');
@@ -11642,7 +11586,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         },
       };
       if (isStream) {
-        res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
+        streamV2?.emit('done', { payload: finalPayload });
         return res.end();
       } else {
         return res.json(finalPayload);
@@ -11744,7 +11688,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       },
     };
     if (isStream) {
-      res.write(`data: ${JSON.stringify({ type: 'done', payload: finalPayload })}\n\n`);
+      streamV2?.emit('done', { payload: finalPayload });
       return res.end();
     } else {
       return res.json(finalPayload);
@@ -11766,7 +11710,21 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       suggested_action: diagnostic.suggested_action,
     });
     if (isStream) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: diagnostic.message, diagnostic_code: diagnostic.diagnostic_code })}\n\n`);
+      streamV2?.emit('error', {
+        message: diagnostic.message,
+        recoverable: diagnostic.status >= 500 || diagnostic.status === 429,
+        diagnostic_code: diagnostic.diagnostic_code,
+      });
+      streamV2?.emit('done', {
+        payload: {
+          success: false,
+          error: diagnostic.message,
+          message: diagnostic.message,
+          diagnostic_code: diagnostic.diagnostic_code,
+          request_id: requestId,
+          suggested_action: diagnostic.suggested_action,
+        },
+      });
       return res.end();
     } else {
       res.status(diagnostic.status).json({

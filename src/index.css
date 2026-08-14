@@ -2,6 +2,8 @@
 @import "./design-system.css";
 @import "./styles/huggy-ux-polish.css";
 @import "./styles/huggy-light-theme.css";
+@import "./styles/huggy-shell.css";
+@import "./styles/huggy-marketing.css";
 
 :root[data-theme="dark"] {
     --bg: #0a0a0a;
@@ -61,16 +63,19 @@
 
 html {
     scroll-behavior: smooth;
+    scroll-padding-top: 92px;
+    overflow-x: hidden;
 }
 
 body {
     background: var(--bg);
     color: var(--text);
-    font-family: "Inter", "Instrument Sans", sans-serif;
+    font-family: "Instrument Sans", "Inter", sans-serif;
     -webkit-font-smoothing: antialiased;
     font-feature-settings: "ss01", "cv01", "cv11";
     overflow-x: hidden;
     min-height: 100vh;
+    min-width: 320px;
 }
 
 /* Noise grain removed for a clean Kimi-style surface (matches builder + dashboard). */

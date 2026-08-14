@@ -6,8 +6,9 @@
  *   [DONE] sentinel, partial chunk recovery across TCP boundaries).
  * - fetch + ReadableStream transport with AbortController cancellation.
  * - Automatic reconnection with Last-Event-ID and exponential backoff.
- * - Smooth text renderer (requestAnimationFrame) for fluid, jank-free
- *   word-by-word streaming in the UI.
+ * - The transport owns ordering, cancellation and event de-duplication.
+ *   Rendering is handled by the conversation surface so the UI never has
+ *   two competing text reveal loops.
  */
 
 import { isHuggyStreamEvent, type HuggyStreamEvent } from './stream-protocol.ts';
@@ -118,6 +119,13 @@ export class HuggyStreamHttpError extends Error {
   }
 }
 
+export class HuggyStreamIncompleteError extends Error {
+  constructor(message = 'The AI stream ended before its final event.') {
+    super(message);
+    this.name = 'HuggyStreamIncompleteError';
+  }
+}
+
 export interface OpenHuggyStreamOptions {
   url: string;
   init?: RequestInit;
@@ -129,11 +137,17 @@ export interface OpenHuggyStreamOptions {
   onRetry?: (attempt: number, lastEventId: number | null) => void;
   /** Max automatic reconnections after a network drop. Default: 3. */
   maxRetries?: number;
+  /** External cancellation signal owned by the active Builder run. */
+  signal?: AbortSignal;
+  /** Called once the first HTTP stream connection is accepted. */
+  onConnected?: () => void;
 }
 
 export interface HuggyStreamHandle {
   /** Aborts the stream immediately. Safe to call multiple times. */
   cancel: () => void;
+  /** True after cancel() or an external signal aborted the stream. */
+  isCancelled: () => boolean;
   /** Resolves when the stream ends; rejects on a fatal error. */
   done: Promise<void>;
 }
@@ -143,12 +157,27 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
   const maxRetries = options.maxRetries ?? 3;
   let lastEventId: number | null = null;
   let cancelled = false;
+  let terminalEventReceived = false;
+  const seenEventIds = new Set<number>();
+  const externalSignal = options.signal;
+
+  const abortFromOutside = () => {
+    cancelled = true;
+    controller.abort();
+  };
+  if (externalSignal?.aborted) abortFromOutside();
+  externalSignal?.addEventListener('abort', abortFromOutside, { once: true });
 
   const handleEvent: JsonSseEventHandler = (type, data) => {
-    if (data && typeof data.id === 'number') lastEventId = data.id;
+    if (data && typeof data.id === 'number') {
+      if (seenEventIds.has(data.id)) return;
+      seenEventIds.add(data.id);
+      lastEventId = data.id;
+    }
     if (options.onProtocolEvent && isHuggyStreamEvent(data)) {
       options.onProtocolEvent(data);
     }
+    if (type === 'done' || type === 'final') terminalEventReceived = true;
     options.onEvent(type, data);
   };
 
@@ -168,6 +197,7 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
 
         if (!response.ok) throw new HuggyStreamHttpError(response.status);
         if (!response.body) throw new Error('Streaming responses are not supported in this environment.');
+        options.onConnected?.();
 
         // A successful connection resets the backoff window.
         attempt = 0;
@@ -183,6 +213,7 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
         }
         parser.push(decoder.decode());
         parser.flush();
+        if (!terminalEventReceived && !cancelled) throw new HuggyStreamIncompleteError();
         return;
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
@@ -204,6 +235,7 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
       cancelled = true;
       controller.abort();
     },
+    isCancelled: () => cancelled || controller.signal.aborted,
     done: run(),
   };
 }
