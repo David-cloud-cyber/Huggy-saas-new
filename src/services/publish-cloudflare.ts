@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages + DNS publishing service.
+ * Cloudflare Workers + Pages compatibility publishing service.
  *
  * Uses the Cloudflare REST API to:
  *   1. Create (idempotent) a Pages project per Huggy app.
@@ -13,6 +13,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {
+  attachWorkerCustomDomain,
+  getWorkerDomainStatus,
+  publishProjectToCloudflareWorkers,
+  removeCloudflareWorker,
+} from './publish-cloudflare-workers';
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
 
@@ -195,6 +201,9 @@ export async function publishProjectToCloudflare(params: {
   slug: string;
   distDir: string;
 }): Promise<PublishResult> {
+  if (process.env.HUGGY_CLOUDFLARE_WORKERS === 'true') {
+    return publishProjectToCloudflareWorkers(params);
+  }
   const cfName = projectSlugToCfName(params.slug);
   const { subdomain } = await ensurePagesProject(cfName);
   const dep = await deployDirectory(cfName, params.distDir);
@@ -213,6 +222,15 @@ export async function publishProjectToCloudflare(params: {
 }
 
 export async function attachUserCustomDomain(cfName: string, domain: string) {
+  if (process.env.HUGGY_CLOUDFLARE_WORKERS === 'true') {
+    await attachWorkerCustomDomain(cfName, domain);
+    return {
+      domain,
+      instructions: [
+        { type: 'CNAME', name: domain, value: `${cfName}.workers.dev` },
+      ],
+    };
+  }
   await attachCustomDomain(cfName, domain);
   return {
     domain,
@@ -223,6 +241,9 @@ export async function attachUserCustomDomain(cfName: string, domain: string) {
 }
 
 export async function getCustomDomainStatus(cfName: string, domain: string) {
+  if (process.env.HUGGY_CLOUDFLARE_WORKERS === 'true') {
+    return getWorkerDomainStatus(cfName, domain);
+  }
   const domains = await cf<any[]>(`/accounts/${accountId()}/pages/projects/${cfName}/domains`);
   const match = domains.find(d => d.name === domain);
   return {
@@ -234,6 +255,10 @@ export async function getCustomDomainStatus(cfName: string, domain: string) {
 }
 
 export async function removePublication(cfName: string, huggySub?: string) {
+  if (process.env.HUGGY_CLOUDFLARE_WORKERS === 'true') {
+    try { await removeCloudflareWorker(cfName); } catch { /* best-effort */ }
+    return;
+  }
   if (huggySub) {
     try {
       const existing = await cf<any[]>(`/zones/${huggyZoneId()}/dns_records?name=${encodeURIComponent(`${huggySub}.${HUGGY_ROOT_DOMAIN}`)}`);

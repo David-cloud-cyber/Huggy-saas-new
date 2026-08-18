@@ -8,6 +8,7 @@ import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-brows
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
 import {
   consumePendingPromptAttachments,
   initPromptInputActions,
@@ -2486,12 +2487,6 @@ function generatedCodeBlockedText(speaksFrench: boolean) {
     : 'I will not paste raw generated code into chat. A real generation must write project files, refresh the preview, then show a short summary.';
 }
 
-function cleanRecoveryText(speaksFrench: boolean) {
-  return speaksFrench
-    ? 'Je garde le travail en sécurité. La preview sera affichée seulement après une vérification propre.'
-    : 'I kept the work safe. The preview will only be shown after a clean verification.';
-}
-
 function looksLikeInternalRecoveryText(value: string) {
   return /\b(draft recuperable|draft récupérable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes:\s*0 created|verification:\s*huggy stopped)\b/i.test(value);
 }
@@ -2512,12 +2507,6 @@ function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallbac
   }
   if (looksLikeGeneratedSourceDump(text)) return '';
   return text.replace(/\n\s*[-*]\s*$/gm, '').trim();
-}
-
-function generationReadyText(speaksFrench: boolean) {
-  return speaksFrench
-    ? 'C’est prêt. J’ai mis à jour l’app et rafraîchi la preview.'
-    : 'Done. I updated the app and refreshed the preview.';
 }
 
 async function streamSimpleConversation(card: HTMLElement | null, prompt: string, speaksFrench: boolean): Promise<boolean> {
@@ -5089,18 +5078,18 @@ function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback 
   const professional = professionalStreamNarration(compact, speaksFrench);
   if (!professional) return '';
   if (professional !== compact) return professional;
-  if (looksLikeInternalRecoveryText(compact)) return cleanRecoveryText(speaksFrench);
+  if (looksLikeInternalRecoveryText(compact)) return '';
   if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
-    return cleanRecoveryText(speaksFrench);
+    return '';
   }
   if (/^i keep the work recoverable without claiming a false ready preview\.?$/i.test(compact)) {
-    return cleanRecoveryText(speaksFrench);
+    return '';
   }
   if (/preview contains a known forced runtime failure marker/i.test(compact)) {
-    return cleanRecoveryText(speaksFrench);
+    return '';
   }
   if (/huggy stopped before saving because the generated app still has/i.test(compact)) {
-    return cleanRecoveryText(speaksFrench);
+    return '';
   }
   if (/task app must support adding, completing, and deleting tasks/i.test(compact)) {
     return '';
@@ -7214,7 +7203,8 @@ function bindGlobalKeyboardShortcuts() {
 }
 
 function init() {
-  initHuggyMotion();
+initHuggyMotion();
+initHuggyNavigationTransitions();
   installDemoBanner();
   bindGlobalKeyboardShortcuts();
   void ensureSettingsPanelLazy();

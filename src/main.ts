@@ -10,6 +10,7 @@ import { installPublicPageEnhancements } from './public-page-enhancements';
 import { initLandingI18n, getLandingLang } from './landing-i18n';
 import { initPublicPricingFlow } from './public-pricing-flow';
 import { initThemeController } from './theme-controller';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -23,6 +24,7 @@ function isHomeLanding(): boolean {
 
 function init() {
     initHuggyMotion();
+    initHuggyNavigationTransitions();
     // Manual French i18n for the landing. Runs before scroll-text-reveal so the
     // manifesto is split from already-translated text.
     initLandingI18n();

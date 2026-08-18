@@ -222,6 +222,12 @@ import {
   applyHuggyFullstackKit,
   shouldApplyHuggyFullstackKit,
 } from './src/services/fullstack-generation.ts';
+import {
+  createGeneratedAppManifest,
+  manifestFile,
+  resolveGeneratedAppProfile,
+  validateGeneratedAppManifest,
+} from './src/services/generated-app-runtime.ts';
 import { containsSecret, redactSecretPayload, redactSecrets } from './src/services/secret-redaction.ts';
 import {
   MEDIA_MODEL_REGISTRY,
@@ -1783,6 +1789,9 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
   const existingHtml = fileByPath(files, 'index.html')?.content || '';
   const hasApp = Boolean(fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx'));
   const hasMain = Boolean(fileByPath(files, 'src/main.tsx') || fileByPath(files, 'src/main.jsx'));
+  const packageSource = fileByPath(files, 'package.json')?.content || '';
+  const hasTanStackScaffold = /@tanstack\/react-start|@tanstack\/react-router|createFileRoute|createServerFn/i.test(packageSource + '\n' + files.map(file => file.content).join('\n'))
+    && (files.some(file => /^src\/routes\//.test(file.path.replace(/\\/g, '/'))) || Boolean(fileByPath(files, 'src/server.ts')));
 
   addIfMissing('package.json', JSON.stringify({
     scripts: {
@@ -1824,14 +1833,16 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '</html>',
     '',
   ].join('\n');
-  byPath.set('index.html', {
-    path: 'index.html',
-    content: viteIndex,
-    language: 'html',
-    updated_at: byPath.get('index.html')?.updated_at || now,
-  });
+  if (!byPath.has('index.html') || (!hasApp && !hasMain && !hasTanStackScaffold)) {
+    byPath.set('index.html', {
+      path: 'index.html',
+      content: viteIndex,
+      language: 'html',
+      updated_at: byPath.get('index.html')?.updated_at || now,
+    });
+  }
 
-  if (!hasMain) {
+  if (!hasMain && !hasTanStackScaffold) {
     addIfMissing('src/main.tsx', [
       "import React from 'react';",
       "import { createRoot } from 'react-dom/client';",
@@ -1847,7 +1858,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     ].join('\n'), 'tsx');
   }
 
-  if (!hasApp) {
+  if (!hasApp && !hasTanStackScaffold) {
     addIfMissing(
       'src/App.tsx',
       createGeneratedRescueAppTsx({ projectName, prompt: promptOrDescription || existingHtml || projectName }),
@@ -1961,6 +1972,16 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
       requirement: fullstackRequirement,
     }).slice(0, 90);
   }
+
+  const runtimeManifest = manifestFile({
+    prompt: promptOrDescription,
+    files: outputFiles,
+    requirement: fullstackRequirement,
+  });
+  outputFiles = [
+    ...outputFiles.filter(file => file.path !== runtimeManifest.path),
+    runtimeManifest,
+  ].slice(0, 100);
 
   return outputFiles;
 }
@@ -4003,109 +4024,6 @@ async function resolveAgentDecision(input: AgentDecisionInput) {
     console.warn('[huggy:agent_router_fallback]', { message: normalizeProviderError(error) });
     return finalize({ ...fallback, routingSource: fallback.routingSource === 'ai' ? 'fallback' : fallback.routingSource || 'fallback' });
   }
-}
-
-function createPlanResponse(project: GeneratedProject, prompt: string, files: GeneratedFile[]) {
-  const isFrench = isLikelyFrenchPrompt(prompt);
-  const fileHints = files.slice(0, 8).map((file, index) => `${index + 1}. ${file.path}`).join('\n') || (isFrench ? 'Aucun fichier généré pour le moment.' : 'No generated files yet.');
-  if (isFrench) {
-    return [
-      `Plan pour ${project.name}`,
-      '',
-      `Objectif: ${prompt}`,
-      '',
-      '1. Clarifier le résultat visible attendu et protéger la version actuelle.',
-      '2. Identifier les zones exactes à modifier au lieu de remplacer toute l’app.',
-      '3. Appliquer le changement avec le minimum de fichiers touchés.',
-      '4. Vérifier la preview, les erreurs évidentes, les chemins, le SEO de base et le contraste.',
-      '5. Corriger une fois si un contrôle échoue, puis résumer ce qui a changé.',
-      '',
-      'Fichiers à considérer:',
-      fileHints,
-    ].join('\n');
-  }
-  return [
-    `Plan for ${project.name}`,
-    '',
-    `Goal: ${prompt}`,
-    '',
-    '1. Clarify the visible outcome and protect the current working version.',
-    '2. Identify the exact areas to change instead of replacing the whole app.',
-    '3. Apply the change with the smallest useful file set.',
-    '4. Verify preview, obvious runtime errors, safe paths, basic SEO, and contrast.',
-    '5. Fix once if a check fails, then summarize what changed.',
-    '',
-    'Files to consider:',
-    fileHints,
-  ].join('\n');
-}
-
-function createConversationResponse(project: GeneratedProject, prompt: string) {
-  if (isGreetingPrompt(prompt)) {
-    return isLikelyFrenchPrompt(prompt)
-      ? `Bonjour ! Je suis là. Dis-moi simplement ce que tu veux faire dans ${project.name} : je peux répondre, expliquer, modifier l’interface, corriger un bug ou construire la suite sans te demander de choisir un mode technique.`
-      : `Hi! I’m here. Tell me what you want to do in ${project.name}: I can answer, explain, edit the UI, fix a bug, or build the next step without making you choose a technical mode.`;
-  }
-  if (isSimpleLocalConversationPrompt(prompt)) {
-    const normalized = normalizePromptIntentText(prompt);
-    if (/que peux|que sais|qu est ce que tu sais|tu peux faire quoi|what can you do|what are you able to do|help me|aide moi|comment tu peux/i.test(normalized)) {
-      return isLikelyFrenchPrompt(prompt)
-        ? `Je peux répondre simplement, expliquer ton projet, proposer un plan, modifier l’interface, corriger un bug ou lancer un build quand c’est nécessaire. Tu n’as pas besoin de choisir le bon mode : décris le résultat voulu, je décide du chemin le plus sûr.`
-        : `I can answer questions, explain the project, suggest a plan, edit the UI, fix bugs, or build when needed. You do not need to pick the right mode: describe the outcome and I’ll choose the safest path.`;
-    }
-    if (/merci|thanks|thank you|ok|okay|d accord|daccord/i.test(normalized)) {
-      return isLikelyFrenchPrompt(prompt)
-        ? `Avec plaisir. Quand tu veux, envoie-moi la prochaine idée ou le prochain changement.`
-        : `Anytime. Send the next idea or change whenever you are ready.`;
-    }
-    return isLikelyFrenchPrompt(prompt)
-      ? `Oui, je suis là. Écris ton objectif comme tu le dirais à une personne : je traduis ça en action concrète.`
-      : `Yes, I’m here. Describe the goal like you would to a person, and I’ll turn it into a concrete next action.`;
-  }
-  if (isLikelyFrenchPrompt(prompt)) {
-    return [
-      `Je peux t’aider sur ${project.name}. Je n’ai rien modifié.`,
-      '',
-      'Dis-moi le résultat attendu avec tes mots. Si c’est une question, je réponds. Si c’est une modification, je prépare le changement et je vérifie la preview.',
-    ].join('\n');
-  }
-  return [
-    `I can help with ${project.name}. I did not change files.`,
-    '',
-    'Tell me the outcome in plain language. If it is a question, I will answer. If it is a change, I will prepare it and verify the preview.',
-  ].join('\n');
-}
-
-function createVerificationResponse(project: GeneratedProject, files: GeneratedFile[], checks: AgentVerificationCheck[]) {
-  const summary = summarizeVerificationChecks(checks);
-  const visibleIssues = checks
-    .filter(check => check.status !== 'pass')
-    .slice(0, 6)
-    .map(check => `- ${check.severity.toUpperCase()}: ${check.message}${check.file ? ` (${check.file})` : ''}`)
-    .join('\n');
-  return [
-    `Verification for ${project.name}`,
-    '',
-    `Status: ${summary.status}. Files inspected: ${files.length}.`,
-    visibleIssues || '- No blocking issue found in the current preview checks.',
-    '',
-    summary.status === 'failed'
-      ? 'I did not change files. Send “fix this” if you want Huggy to patch the issues.'
-      : 'I did not change files. The current preview passes the basic checks Huggy can run locally.',
-  ].join('\n');
-}
-
-function createDeployAssistResponse(project: GeneratedProject) {
-  return [
-    `Deploy checklist for ${project.name}`,
-    '',
-    '1. Make sure the preview is ready and the latest build has no blocking verification errors.',
-    '2. Publish through your connected deploy target, then connect the custom domain in that provider first.',
-    '3. Point DNS from Hostinger or Cloudflare to the value given by the deploy provider.',
-    '4. Wait for DNS and SSL propagation, then test the live URL and social preview.',
-    '',
-    'I did not change files for this message.',
-  ].join('\n');
 }
 
 function isLikelyFrenchPrompt(prompt: string) {
@@ -6202,38 +6120,26 @@ async function generateFilesWithAi(input: {
         message: repairError?.message || 'model repair failed',
       });
     }
-    // Robust recovery before falling back to a hardcoded template.
+    // Recovery stays model-backed: repair first, then salvage only files that
+    // were actually returned by the model. Never fabricate an application.
     // 1) Detect a plan envelope { plan, message } so we don't dump JSON in the
     //    preview — surface the message instead and stop trying to "build".
     // 2) Best-effort salvage of any files[] anywhere in the raw output.
-    // 3) Only if both fail, use the deterministic rescue scaffold.
+    // 3) If both fail, stop honestly and preserve the existing project.
     const { classifyModelOutput, extractPlanEnvelope, salvageFiles } = await import('./src/services/generated-output-recovery.ts');
     const kind = classifyModelOutput(result.text || '');
     if (!repairedByModel && kind === 'plan_envelope') {
       const envelope = extractPlanEnvelope(result.text || '');
-      const safeMessage = (envelope?.message || 'Huggy a préparé un plan. Confirme pour lancer la génération.').slice(0, 800);
-      input.onEvent?.({ type: 'agent_step', step: 'plan_detected', message: safeMessage });
-      const planFallback = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
-      parsed = parseGeneratedOutput(input.projectName, JSON.stringify({ ...planFallback, summary: safeMessage }), input.prompt, {
-        hasExistingFiles: input.existingFiles.length > 0,
-      });
+      const safeMessage = String(envelope?.message || '').slice(0, 800);
+      throw new GeneratedOutputParseError(safeMessage || 'The model returned a plan instead of project files.');
     } else if (!repairedByModel) {
       const salvaged = salvageFiles(result.text || '');
       if (salvaged && salvaged.files.length > 0) {
-        input.onEvent?.({ type: 'agent_step', step: 'parse_salvage', message: 'Huggy a récupéré les fichiers depuis une sortie partielle du modèle.' });
         parsed = parseGeneratedOutput(input.projectName, JSON.stringify(salvaged), input.prompt, {
           hasExistingFiles: input.existingFiles.length > 0,
         });
       } else {
-        input.onEvent?.({
-          type: 'agent_step',
-          step: 'parse_repair',
-          message: 'La sortie du modèle était incomplète. Huggy reconstruit un projet React/Vite valide avant l\'aperçu.',
-        });
-        const fallbackOutput = buildDeterministicFallbackGeneratedOutput(input.projectName, input.prompt);
-        parsed = parseGeneratedOutput(input.projectName, JSON.stringify(fallbackOutput), input.prompt, {
-          hasExistingFiles: input.existingFiles.length > 0,
-        });
+        throw new GeneratedOutputParseError('The model did not return complete project files after one repair attempt.');
       }
     }
   }
@@ -6355,18 +6261,6 @@ function buildGenerationMessages(input: {
   ];
 }
 
-function buildDeterministicFallbackGeneratedOutput(projectName: string, promptOrDescription = '') {
-  const actionablePrompt = extractActionablePromptText(promptOrDescription || projectName || '');
-  return {
-    appName: deriveProjectName(actionablePrompt || projectName),
-    summary: 'Generated a recoverable React/Vite application because the model output did not contain valid project files.',
-    files: [
-      { path: 'src/App.tsx', content: createGeneratedRescueAppTsx({ projectName: projectName || 'Huggy App', prompt: actionablePrompt }), language: 'tsx' },
-      { path: 'src/index.css', content: ['@tailwind base;', '@tailwind components;', '@tailwind utilities;', ''].join('\n'), language: 'css' },
-    ],
-  };
-}
-
 function parseGeneratedOutput(
   projectName: string,
   rawText: string,
@@ -6377,7 +6271,7 @@ function parseGeneratedOutput(
   const parsed = extractGeneratedJson(rawText) || extractGeneratedMarkdownFiles(rawText) || (
     isStandaloneHtml
       ? {
-          summary: 'Generated a standalone HTML response and upgraded it into a modern React project structure.',
+          summary: '',
           files: [{ path: 'index.html', content: rawText.trim(), language: 'html' }],
         }
       : null
@@ -6403,11 +6297,21 @@ function parseGeneratedOutput(
   if (!files.length) {
     throw new GeneratedOutputParseError('Huggy could not find any safe generated files, so the existing app was kept unchanged.');
   }
+  const runtimeRequirement = detectHuggyCloudRequirements(promptOrDescription || projectName);
+  if (!options.hasExistingFiles && hasHuggyCloudRequirement(runtimeRequirement)) {
+    const profile = resolveGeneratedAppProfile({ prompt: promptOrDescription, files, requirement: runtimeRequirement });
+    if (profile !== 'tanstack-fullstack') {
+      throw new GeneratedOutputParseError('The model did not return the required TanStack fullstack project contract.');
+    }
+  }
   if (parsed.backendSchema && !files.some(file => file.path === 'supabase/schema.sql')) {
     files.push({ path: 'supabase/schema.sql', content: String(parsed.backendSchema), language: 'sql', updated_at: new Date().toISOString() });
   }
 
-  const summary = String(parsed.summary || 'Modern React application files generated.');
+  const summary = String(parsed.summary || '').trim();
+  if (!summary) {
+    throw new GeneratedOutputParseError('The model output is missing a final summary.');
+  }
   return {
     files,
     appName: sanitizeSuggestedProjectName(parsed.appName, promptOrDescription || projectName),
@@ -13062,16 +12966,155 @@ import {
 } from './src/services/publish-cloudflare.ts';
 import { buildStaticSource } from './src/services/build-runner.ts';
 
-async function loadProjectForPublish(projectId: string) {
-  const client = getSupabase();
-  if (!client) throw new Error('Database unavailable');
-  const { data, error } = await client.from('projects').select('*').eq('id', projectId).maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error('Project not found');
-  return data;
+async function readGeneratedRuntimeContract(project: GeneratedProject) {
+  const files = await loadProjectFiles(project.id);
+  const manifestEntry = files.find(file => file.path.replace(/\\/g, '/') === 'huggy/app-manifest.json');
+  let manifest: any = null;
+  if (manifestEntry) {
+    try { manifest = JSON.parse(manifestEntry.content); } catch { manifest = null; }
+  }
+  if (!manifest) {
+    manifest = createGeneratedAppManifest({ prompt: project.prompt || project.name, files });
+  }
+  const validation = validateGeneratedAppManifest(manifest);
+  return { files, manifest, validation };
 }
 
-function extractStaticFiles(project: any): Record<string, { content: string; encoding?: 'utf8' | 'base64' }> {
+async function persistGeneratedRuntimeContract(project: GeneratedProject, manifest: any, sourceRunId?: string) {
+  const client = getSupabase();
+  if (!client) return;
+  await client.from('project_runtime_profiles').upsert({
+    project_id: project.id,
+    organization_id: project.organization_id,
+    profile: manifest.profile,
+    framework: manifest.framework,
+    runtime: manifest.runtime,
+    backend: manifest.backend,
+    manifest,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'project_id' }).catch((error: any) => {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:runtime_profile_persist_skipped]', { message: error?.message });
+  });
+  await client.from('generated_app_manifests').insert({
+    project_id: project.id,
+    organization_id: project.organization_id,
+    profile: manifest.profile,
+    framework: manifest.framework,
+    runtime: manifest.runtime,
+    backend: manifest.backend,
+    manifest,
+    source_run_id: sourceRunId || null,
+  }).catch((error: any) => {
+    if (!isSchemaShapeError(error)) console.warn('[huggy:generated_manifest_persist_skipped]', { message: error?.message });
+  });
+}
+
+app.get('/api/projects/:id/runtime-profile', requireAuth, async (req: any, res: any) => {
+  try {
+    const auth = getRequiredAuth(req);
+    const project = await loadProject(req.params.id, auth.userId, req);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const contract = await readGeneratedRuntimeContract(project);
+    if (contract.validation.length) return res.status(422).json({ success: false, manifest: contract.manifest, validation: contract.validation });
+    await persistGeneratedRuntimeContract(project, contract.manifest);
+    return res.json({ success: true, manifest: contract.manifest });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Runtime profile could not be loaded.' });
+  }
+});
+
+app.post('/api/projects/:id/preview/start', requireAuth, async (req: any, res: any) => {
+  try {
+    const auth = getRequiredAuth(req);
+    const project = await loadProject(req.params.id, auth.userId, req);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const contract = await readGeneratedRuntimeContract(project);
+    if (contract.validation.length) return res.status(422).json({ success: false, validation: contract.validation, manifest: contract.manifest });
+    const preview = runPreviewPipeline(project, contract.files);
+    return res.json({
+      success: preview.status !== 'failed',
+      status: preview.status,
+      manifest: contract.manifest,
+      checks: preview.errors || [],
+      errors: preview.errors || [],
+      has_html: Boolean(preview.html),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Preview could not be started.' });
+  }
+});
+
+app.post('/api/projects/:id/build', requireAuth, async (req: any, res: any) => {
+  const buildId = String(req.headers['idempotency-key'] || req.body?.build_id || `build_${randomUUID()}`).slice(0, 140);
+  try {
+    const auth = getRequiredAuth(req);
+    const project = await loadProject(req.params.id, auth.userId, req);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'build', project)) return;
+    const contract = await readGeneratedRuntimeContract(project);
+    if (contract.validation.length) return res.status(422).json({ success: false, validation: contract.validation, manifest: contract.manifest });
+    const client = getSupabase();
+    if (client) {
+      const { data: existingBuild } = await client.from('deployment_builds').select('*').eq('project_id', project.id).eq('build_id', buildId).maybeSingle();
+      if (existingBuild && ['running', 'passed'].includes(String(existingBuild.status))) {
+        return res.json({ success: existingBuild.status === 'passed', idempotent: true, build: existingBuild });
+      }
+    }
+    const buildRow = {
+      project_id: project.id,
+      organization_id: project.organization_id,
+      build_id: buildId,
+      profile: contract.manifest.profile,
+      status: 'running',
+      output_directory: contract.manifest.outputDirectory,
+      started_at: new Date().toISOString(),
+    };
+    if (client) await client.from('deployment_builds').upsert(buildRow, { onConflict: 'project_id,build_id' }).catch(() => null);
+    await persistGeneratedRuntimeContract(project, contract.manifest);
+    const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
+      slug: String(project.slug || project.id),
+      runViteBuild: true,
+      outputDirectory: contract.manifest.outputDirectory,
+    });
+    if (client) await client.from('deployment_builds').update({ status: 'passed', completed_at: new Date().toISOString() }).eq('project_id', project.id).eq('build_id', buildId).catch(() => null);
+    return res.json({ success: true, build_id: buildId, status: 'passed', profile: contract.manifest.profile, output_directory: contract.manifest.outputDirectory, dist_ready: fs.existsSync(distDir) });
+  } catch (error: any) {
+    const client = getSupabase();
+    if (client) await client.from('deployment_builds').update({ status: 'failed', error: String(error?.message || 'Build failed').slice(0, 1000), completed_at: new Date().toISOString() }).eq('build_id', buildId).catch(() => null);
+    return res.status(500).json({ success: false, build_id: buildId, status: 'failed', error: error?.message || 'Build failed.' });
+  }
+});
+
+app.get('/api/projects/:id/builds/:buildId', requireAuth, async (req: any, res: any) => {
+  try {
+    const auth = getRequiredAuth(req);
+    const project = await loadProject(req.params.id, auth.userId, req);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const client = requireSupabase('Build lookup');
+    const { data, error } = await client.from('deployment_builds').select('*').eq('project_id', project.id).eq('build_id', req.params.buildId).maybeSingle();
+    if (error || !data) return res.status(404).json({ success: false, error: 'Build not found.' });
+    return res.json({ success: true, build: data });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Build could not be loaded.' });
+  }
+});
+
+async function loadProjectForPublish(projectId: string, userId: string, req?: any) {
+  const project = await loadProject(projectId, userId, req);
+  if (!project) throw new Error('Project not found');
+  return project;
+}
+
+function extractStaticFiles(project: any, storedFiles: GeneratedFile[] = []): Record<string, { content: string; encoding?: 'utf8' | 'base64' }> {
+  if (storedFiles.length) {
+    return Object.fromEntries(storedFiles.map(file => [
+      String(file.path || '').replace(/^\/+/, ''),
+      { content: String(file.content || ''), encoding: 'utf8' as const },
+    ]).filter(([path]) => Boolean(path)));
+  }
   const raw = project?.generated_files || project?.files || project?.dist_files || {};
   const files: Record<string, { content: string; encoding?: 'utf8' | 'base64' }> = {};
   for (const [key, val] of Object.entries(raw as Record<string, any>)) {
@@ -13083,15 +13126,27 @@ function extractStaticFiles(project: any): Record<string, { content: string; enc
   return files;
 }
 
-app.post('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: any) => {
+async function publishCloudflareProjectForRequest(req: any, res: any) {
   try {
-    const project = await loadProjectForPublish(req.params.id);
+    const auth = getRequiredAuth(req);
+    const project = await loadProjectForPublish(req.params.id, auth.userId, req);
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const slug = String(project.slug || project.id).toLowerCase();
-    const files = extractStaticFiles(project);
+    const storedFiles = await loadProjectFiles(project.id);
+    const files = extractStaticFiles(project, storedFiles);
     if (!Object.keys(files).length) {
       return res.status(400).json({ error: 'No generated files to publish.' });
     }
-    const distDir = await buildStaticSource({ files }, { slug, runViteBuild: false });
+    const contract = await readGeneratedRuntimeContract(project);
+    if (contract.validation.length) {
+      return res.status(422).json({ error: 'Generated app manifest is invalid.', validation: contract.validation, manifest: contract.manifest });
+    }
+    const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
+      slug,
+      runViteBuild: true,
+      outputDirectory: contract.manifest.outputDirectory,
+    });
+    await persistGeneratedRuntimeContract(project, contract.manifest);
     const result = await publishProjectToCloudflare({ slug, distDir });
 
     const client = getSupabase();
@@ -13112,13 +13167,18 @@ app.post('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: any)
     console.error('[huggy:publish-cf]', e);
     res.status(500).json({ error: e?.message || 'Publish failed' });
   }
-});
+}
+
+app.post('/api/projects/:id/publish-cf', requireAuth, publishCloudflareProjectForRequest);
+app.post('/api/projects/:id/deploy', requireAuth, publishCloudflareProjectForRequest);
 
 app.post('/api/projects/:id/publish-cf/domain', requireAuth, async (req: any, res: any) => {
   try {
     const domain = String(req.body?.domain || '').trim().toLowerCase();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return res.status(400).json({ error: 'Invalid domain' });
-    const project = await loadProjectForPublish(req.params.id);
+    const auth = getRequiredAuth(req);
+    const project = await loadProjectForPublish(req.params.id, auth.userId, req);
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const cfName = projectSlugToCfName(String(project.slug || project.id));
     const result = await attachUserCustomDomain(cfName, domain);
     const client = getSupabase();
@@ -13127,6 +13187,17 @@ app.post('/api/projects/:id/publish-cf/domain', requireAuth, async (req: any, re
         custom_domain: domain,
         custom_domain_status: 'pending',
       }).eq('project_id', project.id);
+      await client.from('deployment_domains').upsert({
+        project_id: project.id,
+        organization_id: project.organization_id,
+        provider: process.env.HUGGY_CLOUDFLARE_WORKERS === 'true' ? 'cloudflare-workers' : 'cloudflare-pages',
+        hostname: domain,
+        domain_type: 'custom',
+        status: 'pending',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'project_id,hostname' }).catch((error: any) => {
+        if (!isSchemaShapeError(error)) console.warn('[huggy:deployment_domain_persist_skipped]', { message: error?.message });
+      });
     }
     res.json({ ok: true, ...result });
   } catch (e: any) {
@@ -13136,7 +13207,9 @@ app.post('/api/projects/:id/publish-cf/domain', requireAuth, async (req: any, re
 
 app.get('/api/projects/:id/publish-cf/domain/verify', requireAuth, async (req: any, res: any) => {
   try {
-    const project = await loadProjectForPublish(req.params.id);
+    const auth = getRequiredAuth(req);
+    const project = await loadProjectForPublish(req.params.id, auth.userId, req);
+    if (!requireProjectCapability(req, res, 'view', project)) return;
     const cfName = projectSlugToCfName(String(project.slug || project.id));
     const domain = String(req.query.domain || '');
     if (!domain) return res.status(400).json({ error: 'domain query param required' });
@@ -13146,6 +13219,13 @@ app.get('/api/projects/:id/publish-cf/domain/verify', requireAuth, async (req: a
       await client.from('publications').update({
         custom_domain_status: status.status,
       }).eq('project_id', project.id).eq('custom_domain', domain);
+      await client.from('deployment_domains').update({
+        status: status.status,
+        certificate_status: status.certificate_status || null,
+        updated_at: new Date().toISOString(),
+      }).eq('project_id', project.id).eq('hostname', domain).catch((error: any) => {
+        if (!isSchemaShapeError(error)) console.warn('[huggy:deployment_domain_status_skipped]', { message: error?.message });
+      });
     }
     res.json(status);
   } catch (e: any) {
@@ -13155,13 +13235,16 @@ app.get('/api/projects/:id/publish-cf/domain/verify', requireAuth, async (req: a
 
 app.delete('/api/projects/:id/publish-cf', requireAuth, async (req: any, res: any) => {
   try {
-    const project = await loadProjectForPublish(req.params.id);
+    const auth = getRequiredAuth(req);
+    const project = await loadProjectForPublish(req.params.id, auth.userId, req);
+    if (!requireProjectCapability(req, res, 'deploy', project)) return;
     const slug = String(project.slug || project.id).toLowerCase();
     const cfName = projectSlugToCfName(slug);
     await removePublication(cfName, slug);
     const client = getSupabase();
     if (client) {
       await client.from('publications').delete().eq('project_id', project.id);
+      await client.from('deployment_domains').update({ status: 'removed', updated_at: new Date().toISOString() }).eq('project_id', project.id).catch(() => null);
     }
     res.json({ ok: true });
   } catch (e: any) {

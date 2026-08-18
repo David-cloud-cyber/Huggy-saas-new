@@ -11,6 +11,9 @@ import {
 import { installSmartBackNavigation } from './public-page-enhancements';
 import { readPricingSelection } from './public-pricing-flow';
 import { trackFunnelEvent } from './conversion-events';
+import { initHuggyMotion } from './huggy-motion';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
+import './styles/auth-premium.css';
 
 type AuthMode = 'login' | 'signup';
 type StatusTone = 'info' | 'error' | 'success';
@@ -27,10 +30,14 @@ const statusEl = document.getElementById('auth-status') as HTMLElement | null;
 const modeTitle = document.getElementById('auth-title') as HTMLElement | null;
 const modeSubtitle = document.getElementById('auth-subtitle') as HTMLElement | null;
 const footerText = document.getElementById('auth-footer-text') as HTMLElement | null;
+const authCard = document.querySelector<HTMLElement>('.auth-card');
 const socialButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-provider]'));
 
 installSmartBackNavigation({ backFallback: '/' });
+initHuggyMotion();
+initHuggyNavigationTransitions();
 initThemeController();
+document.body.classList.add('auth-premium-ready');
 
 let mode: AuthMode = new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'login';
 let redirecting = false;
@@ -81,6 +88,7 @@ function setOAuthBusy(activeButton: HTMLButtonElement | null, isBusy: boolean) {
 }
 
 function setMode(nextMode: AuthMode) {
+  authCard?.classList.add('is-mode-switching');
   mode = nextMode;
   document.documentElement.dataset.authMode = mode;
   tabLogin?.classList.toggle('active', mode === 'login');
@@ -104,6 +112,7 @@ function setMode(nextMode: AuthMode) {
       : 'Nouveau sur Huggy ? <button type="button" data-auth-switch="signup">Créer un compte</button>';
   }
   setBusy(false);
+  window.setTimeout(() => authCard?.classList.remove('is-mode-switching'), 220);
 }
 
 function redirectToApp() {

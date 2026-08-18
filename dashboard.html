@@ -2078,7 +2078,7 @@
 
   <div class="dashboard">
 
-    <aside class="sidebar">
+    <aside class="sidebar" aria-label="Huggy workspace navigation">
       <div class="sidebar-logo" style="display: flex; align-items: center; width: 100%;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
@@ -2089,7 +2089,7 @@
           </svg>
           <span class="logo-text">Huggy</span>
         </div>
-        <button id="btn-collapse-sidebar" class="btn-sidebar-toggle" title="Collapse sidebar" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; justify-content: center; border-radius: 6px; margin-left: auto; transition: background 120ms, color 120ms;">
+        <button id="btn-collapse-sidebar" class="btn-sidebar-toggle" type="button" title="Collapse sidebar" aria-label="Collapse navigation" aria-expanded="true" data-i18n-aria-label="dash.closeNavigation" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: flex; align-items: center; justify-content: center; border-radius: 6px; margin-left: auto; transition: background 120ms, color 120ms;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
@@ -2124,9 +2124,10 @@
         </div>
       </div>
 
-      <nav class="sidebar-nav">
-        <span class="nav-label" data-i18n="dash.workspace">Workspace</span>
-        <button class="btn-new-project-sidebar" id="btn-new-project">
+      <nav class="sidebar-nav" aria-label="Workspace navigation">
+        <section class="sidebar-section sidebar-section-create" aria-labelledby="sidebar-create-label">
+          <span class="sidebar-section-label" id="sidebar-create-label" data-i18n="dash.create">Create</span>
+          <button class="btn-new-project-sidebar" id="btn-new-project" type="button" aria-label="Create a new project" data-i18n-aria-label="dash.newProject">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -2134,8 +2135,8 @@
           <span data-i18n="dash.newProject">New project</span>
         </button>
 
-        <!-- Studio (expandable menu) -->
-        <div class="nav-studio" id="nav-studio">
+          <!-- Studio (expandable menu) -->
+          <div class="nav-studio" id="nav-studio">
           <button class="nav-studio-toggle" id="btn-studio-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="studio-submenu">
             <svg class="nav-studio-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 3l1.4 4.3L17.7 8.7l-4.3 1.4L12 14.4l-1.4-4.3L6.3 8.7l4.3-1.4L12 3z"></path>
@@ -2185,23 +2186,25 @@
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </section>
 
-        <div class="nav-divider"></div>
+        <section class="sidebar-section sidebar-section-projects" aria-labelledby="sidebar-projects-label">
 
-        <div class="sidebar-promo">
-          <div class="promo-badge">PRO</div>
-          <p class="promo-text" data-i18n="dash.promoText">Publiez votre application et continuez à l’améliorer avec Pro.</p>
-          <button class="btn-promo-upgrade" id="btn-upgrade-dashboard" data-i18n="dash.upgradePro" type="button">Découvrir Pro</button>
-        </div>
-
-        <span class="nav-label" data-i18n="dash.projects">Projects</span>
+        <span class="nav-label sidebar-section-label" id="sidebar-projects-label" data-i18n="dash.projects">Projects</span>
         <div id="sidebar-projects-list" style="display: flex; flex-direction: column; width: 100%;">
           <div class="empty-nav-state" style="padding: 10px; font-size: 11px; color: var(--text-sub); font-style: italic;" data-i18n="dash.noProjects">
             No projects yet
           </div>
         </div>
+        </section>
       </nav>
+
+      <div class="sidebar-promo" aria-label="Pro plan">
+        <div class="promo-badge">PRO</div>
+        <p class="promo-text" data-i18n="dash.promoText">Unlock the full power of AI with Pro.</p>
+        <button class="btn-promo-upgrade" id="btn-upgrade-dashboard" data-i18n="dash.upgradePro" type="button">Upgrade to Pro</button>
+      </div>
 
       <div class="sidebar-footer">
         <label class="sidebar-lang" title="Language">
@@ -2236,12 +2239,13 @@
         </div>
       </div>
     </aside>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden aria-hidden="true"></div>
 
     <div class="main-area">
       <header class="topbar">
         <div style="display: flex; align-items: center; gap: 12px;">
           <!-- Expand Sidebar trigger -->
-          <button id="btn-expand-sidebar" title="Expand Sidebar" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: none; align-items: center; justify-content: center; border-radius: 6px; transition: background 120ms, color 120ms;">
+          <button id="btn-expand-sidebar" type="button" title="Open navigation" aria-label="Open navigation" aria-expanded="false" data-i18n-aria-label="dash.openNavigation" style="background: none; border: none; padding: 6px; cursor: pointer; color: var(--text-sub); display: none; align-items: center; justify-content: center; border-radius: 6px; transition: background 120ms, color 120ms;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="3" y1="12" x2="21" y2="12"></line>
               <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -2730,7 +2734,7 @@
           `;
         } else {
           sidebarList.innerHTML = projects.map(proj => `
-            <button class="nav-project" data-id="${proj.id}" onclick="openProjectWorkspace('${proj.id}')">
+            <button class="nav-project" data-id="${proj.id}" title="${escapeHtml(proj.name)}" aria-label="${escapeHtml(proj.name)}" onclick="openProjectWorkspace('${proj.id}')">
               <div class="project-dot" style="background: ${getThemeColor(proj.theme)}"></div>
               <span class="project-nav-name">${escapeHtml(proj.name)}</span>
               <span class="badge-builds">${escapeHtml(proj.status || proj.preview_status || 'ready')}</span>
@@ -3092,7 +3096,8 @@
       const creditsHeader = creditsBlock?.querySelector('.credits-header');
       bindCollapseControl('sidebar:credits', creditsHeader, creditsBlock, { label: 'Toggle plan and credits' });
 
-      const projectsLabel = Array.from(document.querySelectorAll('.nav-label')).find(label => label.textContent?.trim().toLowerCase() === 'projects');
+      const projectsLabel = document.querySelector('.nav-label[data-i18n="dash.projects"]')
+        || Array.from(document.querySelectorAll('.nav-label')).find(label => ['projects', 'projets'].includes(label.textContent?.trim().toLowerCase()));
       const projectsList = document.getElementById('sidebar-projects-list');
       if (projectsLabel) projectsLabel.classList.add('dashboard-collapse-label');
       bindCollapseControl('sidebar:projects', projectsLabel, projectsList, { label: 'Toggle projects list' });
@@ -3108,38 +3113,108 @@
 
     enhanceDashboardCollapses();
 
-    // Left panel collapse and expand logic
+    // Left panel collapse, compact rail and mobile drawer logic
     const sidebar = document.querySelector('.sidebar');
     const btnCollapseSidebar = document.getElementById('btn-collapse-sidebar');
     const btnExpandSidebar = document.getElementById('btn-expand-sidebar');
+    const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+    const dashboardRoot = document.querySelector('.dashboard');
+    const sidebarMedia = window.matchMedia('(max-width: 899px)');
+    let sidebarMobileOpen = false;
+    let sidebarWasCollapsed = false;
 
-    function setSidebarCollapsed(collapsed) {
+    const isMobileSidebar = () => sidebarMedia.matches;
+
+    function setMobileSidebarOpen(open, restoreFocus = true) {
+      if (!isMobileSidebar()) return;
+      sidebarMobileOpen = open;
+      if (open) {
+        sidebarWasCollapsed = sidebar?.classList.contains('collapsed') ?? false;
+        sidebar?.classList.remove('collapsed');
+      }
+      dashboardRoot?.classList.toggle('sidebar-mobile-open', open);
+      document.body.classList.toggle('huggy-sidebar-lock', open);
+      if (sidebarBackdrop) {
+        sidebarBackdrop.hidden = !open;
+        sidebarBackdrop.setAttribute('aria-hidden', String(!open));
+      }
+      btnExpandSidebar?.setAttribute('aria-expanded', String(open));
+      btnCollapseSidebar?.setAttribute('aria-expanded', String(open));
+      if (open) {
+        window.requestAnimationFrame(() => btnCollapseSidebar?.focus());
+      } else if (restoreFocus) {
+        window.requestAnimationFrame(() => btnExpandSidebar?.focus());
+      }
+    }
+
+    function setSidebarCollapsed(collapsed, persist = true) {
+      if (isMobileSidebar()) {
+        sidebarWasCollapsed = collapsed;
+        sidebar?.classList.remove('collapsed');
+        if (btnExpandSidebar) btnExpandSidebar.style.display = 'flex';
+        btnExpandSidebar?.setAttribute('aria-expanded', String(sidebarMobileOpen));
+        btnCollapseSidebar?.setAttribute('aria-expanded', String(sidebarMobileOpen));
+        return;
+      }
       sidebar?.classList.toggle('collapsed', collapsed);
       if (btnExpandSidebar) btnExpandSidebar.style.display = collapsed ? 'flex' : 'none';
       btnCollapseSidebar?.setAttribute('aria-expanded', String(!collapsed));
-      try {
-        localStorage.setItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
-      } catch {
-        // Non-critical preference.
+      btnExpandSidebar?.setAttribute('aria-expanded', String(collapsed));
+      if (persist) {
+        try {
+          localStorage.setItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+        } catch {
+          // Non-critical preference.
+        }
       }
     }
 
     function collapseSidebar() {
-      setSidebarCollapsed(true);
+      if (isMobileSidebar()) setMobileSidebarOpen(false);
+      else setSidebarCollapsed(true);
     }
 
     function expandSidebar() {
-      setSidebarCollapsed(false);
+      if (isMobileSidebar()) setMobileSidebarOpen(true);
+      else setSidebarCollapsed(false);
     }
 
     btnCollapseSidebar?.addEventListener('click', collapseSidebar);
     btnExpandSidebar?.addEventListener('click', expandSidebar);
+    sidebarBackdrop?.addEventListener('click', () => setMobileSidebarOpen(false));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && sidebarMobileOpen) setMobileSidebarOpen(false);
+    });
+    sidebar?.addEventListener('click', event => {
+      if (!isMobileSidebar()) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('#sidebar-projects-list, #btn-new-project, #btn-upgrade-dashboard, .sidebar-footer a, [data-auth-logout]')) {
+        setMobileSidebarOpen(false, false);
+      }
+    });
 
     try {
-      setSidebarCollapsed(localStorage.getItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY) === '1');
+      const savedCollapsed = localStorage.getItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY) === '1';
+      sidebarWasCollapsed = savedCollapsed;
+      setSidebarCollapsed(savedCollapsed, false);
     } catch {
-      setSidebarCollapsed(false);
+      setSidebarCollapsed(false, false);
     }
+
+    const syncSidebarMode = () => {
+      if (isMobileSidebar()) {
+        setMobileSidebarOpen(false, false);
+        return;
+      }
+      setMobileSidebarOpen(false, false);
+      try {
+        setSidebarCollapsed(localStorage.getItem(DASHBOARD_SIDEBAR_COLLAPSED_KEY) === '1', false);
+      } catch {
+        setSidebarCollapsed(false, false);
+      }
+    };
+    sidebarMedia.addEventListener?.('change', syncSidebarMode);
 
     // Studio expandable menu (sidebar). Submenu items stay disabled for now.
     const navStudio = document.getElementById('nav-studio');

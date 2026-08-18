@@ -9,6 +9,7 @@ import {
   type ProductionBlueprintTable,
 } from './production-blueprints.ts';
 import { containsSecret } from './secret-redaction.ts';
+import { manifestFile } from './generated-app-runtime.ts';
 
 export type FullstackGeneratedFile = {
   path: string;
@@ -122,9 +123,16 @@ function mergePackageJson(content: string) {
     pkg = {};
   }
 
+  const tanstackStart = Boolean(
+    pkg.dependencies?.['@tanstack/react-start'] ||
+    pkg.devDependencies?.['@tanstack/react-start'] ||
+    pkg.dependencies?.['@tanstack/react-router'] ||
+    pkg.devDependencies?.['@tanstack/react-router'],
+  );
+
   pkg.scripts = {
     dev: 'vite',
-    build: 'vite build',
+    build: tanstackStart ? 'vite build && tsc --noEmit' : 'vite build',
     test: 'node --experimental-strip-types src/app.test.ts && node --experimental-strip-types src/fullstack.test.ts',
     lint: 'tsc --noEmit',
     ...(pkg.scripts || {}),
@@ -138,6 +146,9 @@ function mergePackageJson(content: string) {
     '@supabase/supabase-js': pkg.dependencies?.['@supabase/supabase-js'] || '^2.106.0',
     zod: pkg.dependencies?.zod || '^4.2.1',
   };
+  if (tanstackStart) {
+    pkg.dependencies['@tanstack/react-query'] = pkg.dependencies['@tanstack/react-query'] || '^5.90.0';
+  }
   pkg.devDependencies = {
     ...(pkg.devDependencies || {}),
   };
@@ -1366,6 +1377,12 @@ export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGener
   );
   upsertFile(byPath, 'FULLSTACK.md', buildFullstackReadme(input.requirement, blueprint), 'markdown');
   upsertFile(byPath, 'src/fullstack.test.ts', buildFullstackTest(), 'ts');
+  const runtimeManifest = manifestFile({
+    prompt: input.prompt,
+    files: Array.from(byPath.values()),
+    requirement: input.requirement,
+  });
+  upsertFile(byPath, runtimeManifest.path, runtimeManifest.content, 'json');
 
   return Array.from(byPath.values());
 }
@@ -1373,6 +1390,21 @@ export function applyHuggyFullstackKit(input: FullstackKitInput): FullstackGener
 export function validateHuggyFullstackFiles(files: FullstackGeneratedFile[], requirement: HuggyCloudRequirement): FullstackValidationCheck[] {
   if (!hasHuggyCloudRequirement(requirement) && !hasSupabaseUsage(files)) return [];
   const checks: FullstackValidationCheck[] = [];
+  const runtimeManifest = fileByPath(files, 'huggy/app-manifest.json');
+  if (!runtimeManifest) {
+    checks.push(fail('generated_runtime_manifest_present', 'Generated app must include huggy/app-manifest.json.', 'huggy/app-manifest.json'));
+  } else {
+    try {
+      const parsed = JSON.parse(runtimeManifest.content || '{}');
+      checks.push(
+        parsed?.schemaVersion === 1 && parsed?.profile && parsed?.framework && parsed?.runtime
+          ? pass('generated_runtime_manifest_valid', 'Generated app runtime manifest is valid.', runtimeManifest.path)
+          : fail('generated_runtime_manifest_valid', 'Generated app runtime manifest is incomplete.', runtimeManifest.path),
+      );
+    } catch {
+      checks.push(fail('generated_runtime_manifest_valid', 'Generated app runtime manifest is not valid JSON.', runtimeManifest.path));
+    }
+  }
   const client = fileByPath(files, 'src/lib/huggyCloud.ts');
   const data = fileByPath(files, 'src/lib/appData.ts');
   const validation = fileByPath(files, 'src/lib/validation.ts');

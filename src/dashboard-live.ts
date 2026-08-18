@@ -1,7 +1,7 @@
 import './styles/dashboard-polish.css';
+import './styles/dashboard-kimi.css';
+import './styles/dashboard-kimi-sidebar.css';
 import './styles/huggy-light-theme.css';
-import './styles/huggy-shell.css';
-import './styles/dashboard-huggy.css';
 import { initThemeController } from './theme-controller';
 import './conversion-events';
 import { apiFetch } from './lib/api';

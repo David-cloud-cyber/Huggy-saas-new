@@ -19,10 +19,14 @@ const FR: Record<string, string> = {
   'dash.title': 'Tableau de bord',
   'dash.search': 'Rechercher des projets…',
   'dash.newProjectTop': 'Nouveau projet',
+  'dash.create': 'Créer',
   'dash.workspace': 'Espace de travail',
   'dash.newProject': 'Nouveau projet',
   'dash.studio': 'Studio',
   'dash.projects': 'Projets',
+  'dash.account': 'Compte',
+  'dash.openNavigation': 'Ouvrir la navigation',
+  'dash.closeNavigation': 'Fermer la navigation',
   'dash.noProjects': 'Aucun projet pour l’instant',
   'dash.promoText': 'Débloquez toute la puissance de l’IA avec le forfait Pro.',
   'dash.upgradePro': 'Passer à Pro',
@@ -72,6 +76,13 @@ export function initDashboardI18n(): Lang {
     if (key) placeholderSource.set(key, node.placeholder);
   });
 
+  const ariaLabelNodes = Array.from(document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]'));
+  const ariaLabelSource = new Map<string, string>();
+  ariaLabelNodes.forEach((node) => {
+    const key = node.dataset.i18nAriaLabel;
+    if (key) ariaLabelSource.set(key, node.getAttribute('aria-label') ?? '');
+  });
+
   const apply = (lang: Lang) => {
     nodes.forEach((node) => {
       const key = node.dataset.i18n;
@@ -85,6 +96,12 @@ export function initDashboardI18n(): Lang {
       if (!key) return;
       const en = placeholderSource.get(key) ?? '';
       node.placeholder = lang === 'fr' ? FR[key] ?? en : en;
+    });
+    ariaLabelNodes.forEach((node) => {
+      const key = node.dataset.i18nAriaLabel;
+      if (!key) return;
+      const en = ariaLabelSource.get(key) ?? '';
+      node.setAttribute('aria-label', lang === 'fr' ? FR[key] ?? en : en);
     });
     document.documentElement.lang = lang;
     document.documentElement.dataset.lang = lang;

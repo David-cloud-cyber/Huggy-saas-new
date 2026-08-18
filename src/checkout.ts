@@ -4,7 +4,11 @@ import { initThemeController } from './theme-controller';
 import { getAuthRedirectUrl, getVerifiedSession } from './lib/supabase-browser';
 import { buildAuthUrl, readPricingSelection, type BillingInterval, type PublicPlanKey } from './public-pricing-flow';
 import { trackFunnelEvent } from './conversion-events';
+import { initHuggyMotion } from './huggy-motion';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
 
+initHuggyMotion();
+initHuggyNavigationTransitions();
 initThemeController();
 
 type PlanDetails = { name: string; monthly: number; annual: number; annualTotal: number; annualSaving: number; credits: string; cloud: string; bestFor: string };
