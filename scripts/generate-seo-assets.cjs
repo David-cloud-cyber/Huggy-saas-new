@@ -19,6 +19,7 @@ const existingPages = [
   { file: 'community.html', path: '/community.html', title: 'Huggy Community — AI Builders and Product Teams', description: 'Join builders using Huggy to create apps, landing pages, dashboards and internal tools with AI.' },
   { file: 'careers.html', path: '/careers.html', title: 'Huggy Careers — Build the Future of AI App Creation', description: 'Work on Huggy, an AI-native app builder for production-ready web applications.' },
   { file: 'api-reference.html', path: '/api-reference.html', title: 'Huggy API Reference — Projects, Builds, Analytics and Deployments', description: 'Reference for Huggy project, generation, analytics, database and deployment APIs.' },
+  { file: 'discover.html', path: '/discover.html', title: 'Discover Apps Built With Huggy', description: 'Explore app ideas, templates and public examples built with Huggy across SaaS, productivity, commerce, booking and education.' },
   { file: 'terms.html', path: '/terms.html', title: 'Huggy Terms - Product Terms and Usage Rules', description: 'Terms for using Huggy to generate, preview, iterate and publish web apps.' },
 ];
 
@@ -26,6 +27,8 @@ const noindexPages = [
   { file: 'auth.html', path: '/auth.html', title: 'Huggy — Sign In', description: 'Sign in to Huggy.' },
   { file: 'dashboard.html', path: '/dashboard.html', title: 'Huggy — Workspace Dashboard', description: 'Your private Huggy workspace.' },
   { file: 'builder.html', path: '/builder.html', title: 'Huggy — Builder Workspace', description: 'Your private Huggy builder workspace.' },
+  { file: 'checkout.html', path: '/checkout.html', title: 'Huggy — Secure Checkout', description: 'Review your Huggy plan before secure payment.' },
+  { file: 'admin.html', path: '/admin.html', title: 'Huggy — Admin Console', description: 'Private Huggy administration console.' },
 ];
 
 const existingPageCopy = {
@@ -285,7 +288,7 @@ function faviconHead() {
   <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="/site.webmanifest" />
-  <meta name="theme-color" content="#ffffff" />`;
+  <meta name="theme-color" content="#0e1116" />`;
 }
 
 function baseHead(page, url, breadcrumbs = []) {
@@ -299,6 +302,13 @@ function baseHead(page, url, breadcrumbs = []) {
       description: page.description,
       url,
       isPartOf: { '@type': 'WebSite', name: 'Huggy', url: siteUrl },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'Huggy',
+      url: siteUrl,
+      logo: `${siteUrl}/favicon.svg`,
     },
     {
       '@context': 'https://schema.org',
@@ -329,16 +339,22 @@ function baseHead(page, url, breadcrumbs = []) {
   <meta name="description" content="${esc(page.description)}" />
   <link rel="canonical" href="${url}" />
 ${faviconHead()}
+  <meta name="robots" content="index, follow" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
   <meta property="og:title" content="${esc(page.title)}" />
   <meta property="og:description" content="${esc(page.description)}" />
   <meta property="og:url" content="${url}" />
   <meta property="og:image" content="${siteUrl}/og-huggy.svg" />
+  <meta property="og:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
+  <meta property="og:image:type" content="image/svg+xml" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(page.title)}" />
   <meta name="twitter:description" content="${esc(page.description)}" />
   <meta name="twitter:image" content="${siteUrl}/og-huggy.svg" />
+  <meta name="twitter:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
 ${schema.map(jsonLd).join('\n')}`;
 }
 
@@ -594,10 +610,15 @@ ${faviconHead()}
   <meta property="og:description" content="${esc(page.description)}" />
   <meta property="og:url" content="${url}" />
   <meta property="og:image" content="${siteUrl}/og-huggy.svg" />
+  <meta property="og:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
+  <meta property="og:image:type" content="image/svg+xml" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(page.title)}" />
   <meta name="twitter:description" content="${esc(page.description)}" />
   <meta name="twitter:image" content="${siteUrl}/og-huggy.svg" />
+  <meta name="twitter:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
   ${schema.map(jsonLd).join('\n  ')}
   ${markerEnd}`;
   html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(page.title)}</title>`);
@@ -639,7 +660,7 @@ ${copy.sections.map(([title, body]) => `        <h2>${esc(title)}</h2>
 }
 
 function generatePublicAssets(urls) {
-  write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
+  write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nDisallow: /checkout.html\nDisallow: /admin.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
   write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Guides: ${siteUrl}/guides/\n- Showcase: ${siteUrl}/built-with-huggy/\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
   write('public/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${url === siteUrl + '/' ? '1.0' : '0.8'}</priority></url>`).join('\n')}\n</urlset>\n`);
   write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#09090b}.icon-fill{fill:#ffffff}@media (prefers-color-scheme:dark){.icon-bg{fill:#ffffff}.icon-fill{fill:#09090b}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);

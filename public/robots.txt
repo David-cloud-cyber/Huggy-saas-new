@@ -3,4 +3,6 @@ Allow: /
 Disallow: /auth.html
 Disallow: /dashboard.html
 Disallow: /builder.html
+Disallow: /checkout.html
+Disallow: /admin.html
 Sitemap: https://huggy.fun/sitemap.xml

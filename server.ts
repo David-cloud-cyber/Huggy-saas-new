@@ -12942,7 +12942,23 @@ app.use((error: any, req: any, res: any, next: any) => {
   return res.status(500).send(escapeHtml(publicMessage));
 });
 
-// Static files (frontend)
+// Static files (frontend). Keep authenticated/action-only documents out of
+// search indexes even when a crawler ignores page-level meta tags.
+const privateDocumentPaths = new Set([
+  '/auth.html',
+  '/dashboard.html',
+  '/builder.html',
+  '/checkout.html',
+  '/admin.html',
+]);
+
+app.use((req, res, next) => {
+  if (privateDocumentPaths.has(req.path)) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  }
+  next();
+});
+
 app.use(express.static(pathExists(staticRoot) ? staticRoot : __dirname));
 
 function pathExists(target: string): boolean {

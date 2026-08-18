@@ -7,6 +7,9 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "prebuild": "node scripts/generate-seo-assets.cjs",
+    "seo:generate": "node scripts/generate-seo-assets.cjs",
+    "seo:check": "node scripts/seo-check.cjs",
     "test:huggy": "node --experimental-strip-types test-huggy-skills.ts && node --experimental-strip-types test-huggy-workflows.ts",
     "test:runtime-contract": "node --experimental-strip-types test-generated-app-runtime.ts",
     "dev": "vite --port=3000 --host=0.0.0.0",
