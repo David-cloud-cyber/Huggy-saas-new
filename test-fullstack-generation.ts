@@ -88,7 +88,7 @@ assert.match(byPath.get('supabase/schema.sql') || '', /alter table public\.app_c
 assert.match(byPath.get('supabase/schema.sql') || '', /create policy "Members can read app_contacts"/i);
 assert.match(byPath.get('supabase/schema.sql') || '', /storage\.buckets/i);
 assert.match(byPath.get('supabase/schema.sql') || '', /storage\.objects/i);
-assert.match(byPath.get('src/lib/appData.ts') || '', /isPreviewRuntime/);
+assert.match(byPath.get('src/lib/appData.ts') || '', /requireHuggyCloud|HUGGY_CLOUD_NOT_CONFIGURED/);
 assert.match(byPath.get('src/lib/validation.ts') || '', /z\.object/);
 assert.match(byPath.get('src/lib/authGuard.ts') || '', /requireAppUser/);
 assert.match(byPath.get('huggy/backend-plan.json') || '', /"migrations_require_confirmation": true/);

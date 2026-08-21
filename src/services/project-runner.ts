@@ -45,6 +45,7 @@ export interface RunnerAdapter {
     previewHtml?: string;
     prompt?: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<RunnerResult>;
 }
 
@@ -66,12 +67,14 @@ export class HybridProjectRunner implements RunnerAdapter {
     previewHtml?: string;
     prompt?: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<RunnerResult> {
     const startedAt = Date.now();
     const checks: RunnerCheck[] = [];
     const workdir = path.join(tmpdir(), `huggy-runner-${sanitizePathPart(input.projectId)}-${randomUUID()}`);
 
     try {
+      throwIfAborted(input.signal);
       await mkdir(workdir, { recursive: true });
       checks.push(...this.staticChecks(input.files, input.previewHtml || ''));
 
@@ -79,6 +82,7 @@ export class HybridProjectRunner implements RunnerAdapter {
         await this.writeSafeFiles(workdir, input.files, checks);
       }
 
+      throwIfAborted(input.signal);
       const packageFile = input.files.find(file => normalizePath(file.path) === 'package.json');
       checks.push(...this.projectTopologyChecks(input.files, input.previewHtml || '', Boolean(packageFile), input.prompt || ''));
       checks.push(...verificationChecksToRunnerChecks(await runBrowserInteractionAudit({
@@ -86,8 +90,9 @@ export class HybridProjectRunner implements RunnerAdapter {
         previewHtml: input.previewHtml,
         timeoutMs: Math.min(input.timeoutMs || 120_000, 20_000),
       })));
+      throwIfAborted(input.signal);
       if (packageFile) {
-        checks.push(...await this.packageChecks(workdir, packageFile, input.timeoutMs || 120_000));
+        checks.push(...await this.packageChecks(workdir, packageFile, input.timeoutMs || 120_000, input.signal));
       } else {
         checks.push({
           check_type: 'package_scripts',
@@ -415,7 +420,7 @@ export class HybridProjectRunner implements RunnerAdapter {
     }
   }
 
-  private async packageChecks(workdir: string, packageFile: RunnerFile, timeoutMs: number): Promise<RunnerCheck[]> {
+  private async packageChecks(workdir: string, packageFile: RunnerFile, timeoutMs: number, signal?: AbortSignal): Promise<RunnerCheck[]> {
     const checks: RunnerCheck[] = [];
     let pkg: any;
     try {
@@ -440,12 +445,12 @@ export class HybridProjectRunner implements RunnerAdapter {
         checks.push({ check_type: `script_${scriptName}_exec`, status: 'skipped', severity: 'info', message: `${scriptName} execution skipped by runner policy.` });
         continue;
       }
-      checks.push(await this.runNpmScript(workdir, scriptName, Math.min(timeoutMs, 120_000)));
+      checks.push(await this.runNpmScript(workdir, scriptName, Math.min(timeoutMs, 120_000), signal));
     }
     return checks;
   }
 
-  private runNpmScript(workdir: string, scriptName: string, timeoutMs: number): Promise<RunnerCheck> {
+  private runNpmScript(workdir: string, scriptName: string, timeoutMs: number, signal?: AbortSignal): Promise<RunnerCheck> {
     return new Promise(resolve => {
       const startedAt = Date.now();
       const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', scriptName, '--if-present', '--silent'], {
@@ -455,23 +460,38 @@ export class HybridProjectRunner implements RunnerAdapter {
         windowsHide: true,
       });
       let output = '';
+      let settled = false;
+      const finish = (check: RunnerCheck) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve(check);
+      };
+      const onAbort = () => {
+        child.kill('SIGTERM');
+        finish(fail(`script_${scriptName}_exec`, 'medium', 'Runner cancelled by the active request.', 'package.json', Date.now() - startedAt, redactOutput(output)));
+      };
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
-        resolve(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} timed out after ${timeoutMs}ms.`, 'package.json', Date.now() - startedAt, redactOutput(output)));
+        finish(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} timed out after ${timeoutMs}ms.`, 'package.json', Date.now() - startedAt, redactOutput(output)));
       }, timeoutMs);
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      signal?.addEventListener('abort', onAbort, { once: true });
       child.stdout.on('data', chunk => { output += String(chunk); });
       child.stderr.on('data', chunk => { output += String(chunk); });
       child.on('error', error => {
-        clearTimeout(timer);
-        resolve(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} could not start: ${error.message}`, 'package.json', Date.now() - startedAt));
+        finish(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} could not start: ${error.message}`, 'package.json', Date.now() - startedAt));
       });
       child.on('close', code => {
-        clearTimeout(timer);
         const duration = Date.now() - startedAt;
         if (code === 0) {
-          resolve({ check_type: `script_${scriptName}_exec`, status: 'passed', severity: 'info', message: `${scriptName} completed.`, command: `npm run ${scriptName}`, duration_ms: duration, public_payload: { output: redactOutput(output) } });
+          finish({ check_type: `script_${scriptName}_exec`, status: 'passed', severity: 'info', message: `${scriptName} completed.`, command: `npm run ${scriptName}`, duration_ms: duration, public_payload: { output: redactOutput(output) } });
         } else {
-          resolve(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} exited with code ${code}.`, 'package.json', duration, redactOutput(output)));
+          finish(fail(`script_${scriptName}_exec`, 'medium', `${scriptName} exited with code ${code}.`, 'package.json', duration, redactOutput(output)));
         }
       });
     });
@@ -544,6 +564,14 @@ function safeRunnerEnv() {
 
 function redactOutput(value: string) {
   return redactSecrets(value, '[redacted]').slice(-4000);
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    const error = new Error('Project runner cancelled by the active request.');
+    error.name = 'AbortError';
+    throw error;
+  }
 }
 
 function readinessPass(check_type: string, score: number, message: string): RunnerCheck {

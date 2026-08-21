@@ -1,7 +1,6 @@
-import { isDemoMode } from './demo-mode';
-
 type SkillRecord = { id: string; description: string; version: string; approvalPolicy: string; requiresVerification: boolean };
 type WorkflowRecord = { id: string; name: string; skill_id: string; status: string; trigger_type: string; next_run_at?: string | null; last_run_at?: string | null };
+import { isLocalPreviewEnabled } from './local-preview';
 
 let activeProjectId = '';
 let initialized = false;
@@ -21,8 +20,12 @@ function panel(): HTMLElement | null { return document.querySelector<HTMLElement
 async function loadSkillsAndWorkflows(): Promise<void> {
   const root = panel();
   if (!root || !activeProjectId) return;
-  if (isDemoMode()) {
-    root.hidden = true;
+  if (isLocalPreviewEnabled()) {
+    root.hidden = false;
+    const skillsList = root.querySelector<HTMLElement>('[data-skills-list]');
+    const workflowsList = root.querySelector<HTMLElement>('[data-workflows-list]');
+    if (skillsList) skillsList.innerHTML = '<p class="skills-empty">Skills disponibles après connexion à un projet réel.</p>';
+    if (workflowsList) workflowsList.innerHTML = '<p class="skills-empty">Les workflows sont désactivés dans l’aperçu local.</p>';
     return;
   }
   const [skillsResponse, workflowsResponse] = await Promise.all([

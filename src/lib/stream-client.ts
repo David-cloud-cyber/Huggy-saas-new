@@ -135,8 +135,14 @@ export interface OpenHuggyStreamOptions {
   onProtocolEvent?: (event: HuggyStreamEvent) => void;
   /** Called before each reconnection attempt. */
   onRetry?: (attempt: number, lastEventId: number | null) => void;
-  /** Max automatic reconnections after a network drop. Default: 3. */
+  /** Max automatic reconnections after a network drop. Default: 0. */
   maxRetries?: number;
+  /**
+   * Maximum time without any bytes from the server. Heartbeats count as
+   * activity. Zero disables the guard; the default protects the UI from a
+   * permanently open but silent connection.
+   */
+  idleTimeoutMs?: number;
   /** External cancellation signal owned by the active Builder run. */
   signal?: AbortSignal;
   /** Called once the first HTTP stream connection is accepted. */
@@ -154,11 +160,18 @@ export interface HuggyStreamHandle {
 
 export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHandle {
   const controller = new AbortController();
-  const maxRetries = options.maxRetries ?? 3;
+  // A resumed request would otherwise start a second model run because the
+  // server does not replay a persisted event log yet. Manual Retry creates a
+  // new explicit run; the transport never duplicates one implicitly.
+  const maxRetries = Math.max(0, options.maxRetries ?? 0);
+  const idleTimeoutMs = Math.max(0, options.idleTimeoutMs ?? 45_000);
   let lastEventId: number | null = null;
   let cancelled = false;
+  let idleTimedOut = false;
   let terminalEventReceived = false;
-  const seenEventIds = new Set<number>();
+  let assistantContentReceived = false;
+  let highestAcceptedSequence = -1;
+  const seenEventKeys = new Set<string>();
   const externalSignal = options.signal;
 
   const abortFromOutside = () => {
@@ -169,15 +182,26 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
   externalSignal?.addEventListener('abort', abortFromOutside, { once: true });
 
   const handleEvent: JsonSseEventHandler = (type, data) => {
-    if (data && typeof data.id === 'number') {
-      if (seenEventIds.has(data.id)) return;
-      seenEventIds.add(data.id);
-      lastEventId = data.id;
+    if (data && (typeof data.sequence === 'number' || typeof data.id === 'number')) {
+      const sequence = typeof data.sequence === 'number' ? data.sequence : data.id;
+      const eventKey = `${typeof data.runId === 'string' ? data.runId : ''}:${sequence}`;
+      if (seenEventKeys.has(eventKey)) return;
+      // A resumed or misbehaving transport must never make the UI move
+      // backwards. Missing sequences are allowed (the server may not persist
+      // a replay log yet), but older events are ignored rather than rendered
+      // out of order.
+      if (sequence < highestAcceptedSequence) return;
+      seenEventKeys.add(eventKey);
+      highestAcceptedSequence = sequence;
+      lastEventId = sequence;
     }
     if (options.onProtocolEvent && isHuggyStreamEvent(data)) {
       options.onProtocolEvent(data);
     }
     if (type === 'done' || type === 'final') terminalEventReceived = true;
+    if (type === 'assistant_delta' && String(data?.text || data?.content || '').length > 0) {
+      assistantContentReceived = true;
+    }
     options.onEvent(type, data);
   };
 
@@ -205,18 +229,35 @@ export function openHuggyStream(options: OpenHuggyStreamOptions): HuggyStreamHan
         const parser = createJsonSseParser(handleEvent);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let idleTimer: ReturnType<typeof setTimeout> | null = null;
+        const armIdleTimer = () => {
+          if (!idleTimeoutMs) return;
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            idleTimedOut = true;
+            controller.abort();
+          }, idleTimeoutMs);
+        };
+        armIdleTimer();
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          parser.push(decoder.decode(value, { stream: true }));
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            armIdleTimer();
+            parser.push(decoder.decode(value, { stream: true }));
+          }
+          parser.push(decoder.decode());
+          parser.flush();
+        } finally {
+          if (idleTimer) clearTimeout(idleTimer);
         }
-        parser.push(decoder.decode());
-        parser.flush();
         if (!terminalEventReceived && !cancelled) throw new HuggyStreamIncompleteError();
         return;
       } catch (error) {
+        if (idleTimedOut) throw new HuggyStreamIncompleteError('The AI stream was silent for too long and was stopped.');
         if (cancelled || controller.signal.aborted) return;
+        if (assistantContentReceived) throw error;
         // Client errors are not retryable; surface them immediately.
         if (error instanceof HuggyStreamHttpError && error.status >= 400 && error.status < 500) {
           throw error;
@@ -287,11 +328,12 @@ export function createSmoothTextRenderer(
     rafId = 0;
     if (stopped) return;
     if (pending) {
-      const step = reduceMotion
-        ? pending.length
-        : Math.max(minStep, Math.min(maxStep, Math.ceil(pending.length / 12)));
-      visible += pending.slice(0, step);
-      pending = pending.slice(step);
+      // Batch provider deltas in one paint. Do not simulate a typewriter effect.
+      void minStep;
+      void maxStep;
+      void reduceMotion;
+      visible += pending;
+      pending = '';
       render(visible);
     }
     if (pending) {

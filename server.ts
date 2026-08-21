@@ -146,6 +146,16 @@ import {
   type RunnerResult,
 } from './src/services/project-runner.ts';
 import { runBrowserInteractionAuditDetailed, type BrowserTestResult } from './src/services/browser-interaction-runner.ts';
+import {
+  appendVerifiedFact,
+  assertAgentModelCapabilities,
+  createFactLedger,
+  finalizeFactLedger,
+  responseContradictions,
+  validateModelDecision,
+  type AgentObjective,
+  type VerifiedFactLedger,
+} from './src/services/agent-runtime-v2.ts';
 import { inspectVisualPreview } from './src/services/visual-preview-inspector.ts';
 import { scanGeneratedSecurity } from './src/services/generated-security-scanner.ts';
 import {
@@ -168,32 +178,20 @@ import {
   extractGeneratedMarkdownFiles,
   looksLikeStandaloneHtml,
 } from './src/services/generated-output-parser.ts';
-import {
-  PREVIEW_FALLBACK_CSS,
-  buildPreviewFallbackHtml,
-} from './src/services/preview-fallback.ts';
-import { createGeneratedRescueAppTsx, extractActionablePromptText } from './src/services/generated-app-rescue.ts';
+import { buildPreviewErrorHtml } from './src/services/preview-fallback.ts';
 import {
   understandUserIntent,
   type IntentUnderstanding,
   type UserIntentCategory,
 } from './src/services/intent-understanding.ts';
 import {
-  applyTypedIntentGate,
   buildTypedIntentDecision,
   type TypedIntentDecision,
 } from './src/services/typed-intent-router.ts';
 import {
-  applyExecutionContractToDecision,
   buildExecutionContract,
   type ExecutionContract,
 } from './src/services/execution-contract.ts';
-import {
-  decideHuggyAction,
-  describeDecisionForStream,
-} from './src/services/decision-core.ts';
-import { guardDecision } from './src/services/decision-guard.ts';
-import { decisionToLegacyDecision } from './src/services/decision-bridge.ts';
 import {
   sanitizeAssistantOutput,
   shouldDeliverRecoverableDraft,
@@ -206,7 +204,6 @@ import {
   decideDurableRunContinuation,
   durablePhaseForEvent,
   nextDurablePhase,
-  shouldResumeRecoverableDraft,
   type DurableRunCheckpoint,
   type DurableRunPhase,
 } from './src/services/durable-agent-run.ts';
@@ -693,6 +690,8 @@ const anthropicDirect = new AnthropicService({ apiKey: getAnthropicApiKey() });
 const providerGateway = new ProviderGateway(openRouter, { anthropic: anthropicDirect });
 const AGENT_V3_ENABLED = isAgentV3Enabled(process.env);
 const AGENT_V2_ENABLED = isAgentV2Enabled(process.env) || AGENT_V3_ENABLED;
+const AGENT_RUNTIME_V2_ENABLED = process.env.HUGGY_AGENT_RUNTIME_V2 !== '0';
+const STRICT_VERIFICATION_ENABLED = process.env.HUGGY_STRICT_VERIFICATION !== '0';
 const projectRunner = new HybridProjectRunner({ executeScripts: process.env.AGENT_RUNNER_EXECUTE_SCRIPTS === '1' });
 const webResearchGateway = new WebResearchGateway(process.env);
 const falMediaGateway = new FalMediaGateway(process.env);
@@ -905,26 +904,26 @@ function diagnosePublishError(error: any) {
       status: statusCode,
     };
   }
-  if (/VERCEL_TOKEN|not configured/i.test(message)) {
+  if (/CLOUDFLARE_(ACCOUNT_ID|API_TOKEN|ZONE_ID_HUGGY_FUN)|Missing environment variable/i.test(message)) {
     return {
-      message: 'Publishing is not configured on the server. Add VERCEL_TOKEN on Railway, redeploy, then retry.',
-      diagnostic_code: 'VERCEL_NOT_CONFIGURED',
-      suggested_action: 'configure_vercel_token',
+      message: 'Publishing is not configured on the server. Configure the required Cloudflare credentials, redeploy, then retry.',
+      diagnostic_code: 'CLOUDFLARE_NOT_CONFIGURED',
+      suggested_action: 'configure_cloudflare',
       status: 503,
     };
   }
   if (/401|403|unauthorized|forbidden|invalid token/i.test(message)) {
     return {
-      message: 'Vercel rejected the publish token. Update VERCEL_TOKEN on Railway and redeploy.',
-      diagnostic_code: 'VERCEL_TOKEN_INVALID',
-      suggested_action: 'update_vercel_token',
+      message: 'Cloudflare rejected the publish credentials. Update the Cloudflare API token and redeploy.',
+      diagnostic_code: 'CLOUDFLARE_TOKEN_INVALID',
+      suggested_action: 'update_cloudflare_token',
       status: 503,
     };
   }
   if (/rate limit|too many requests|429/i.test(message)) {
     return {
-      message: 'Vercel rate limited the publish request. Wait a moment, then click Update again.',
-      diagnostic_code: 'VERCEL_RATE_LIMITED',
+      message: 'Cloudflare rate limited the publish request. Wait a moment, then click Update again.',
+      diagnostic_code: 'CLOUDFLARE_RATE_LIMITED',
       suggested_action: 'retry_later',
       status: 429,
     };
@@ -939,16 +938,16 @@ function diagnosePublishError(error: any) {
   }
   if (/bad request|invalid|400|files/i.test(message)) {
     return {
-      message: 'Vercel rejected the deployment payload. Huggy kept the live app unchanged; rebuild the preview and try Publish again.',
-      diagnostic_code: 'VERCEL_BAD_REQUEST',
+      message: 'Cloudflare rejected the deployment payload. Huggy kept the live app unchanged; rebuild the preview and try Publish again.',
+      diagnostic_code: 'CLOUDFLARE_BAD_REQUEST',
       suggested_action: 'rebuild_then_publish',
       status: 502,
     };
   }
   if (/fetch failed|network|timeout|ENOTFOUND|ECONNRESET|5\d\d|unavailable/i.test(message)) {
     return {
-      message: 'Vercel is temporarily unavailable or unreachable. The live app was not changed; retry in a moment.',
-      diagnostic_code: 'VERCEL_UNAVAILABLE',
+      message: 'Cloudflare is temporarily unavailable or unreachable. The live app was not changed; retry in a moment.',
+      diagnostic_code: 'CLOUDFLARE_UNAVAILABLE',
       suggested_action: 'retry',
       status: 502,
     };
@@ -1151,6 +1150,8 @@ type IntentDecision = {
   autoPlanRequired?: boolean;
   selectedModelPolicy?: 'auto' | 'economy' | 'balanced' | 'premium';
   routingSource?: 'heuristic' | 'ai' | 'fallback';
+  modelObjective?: AgentObjective;
+  requiredCapabilities?: string[];
   typedDecision?: TypedIntentDecision;
   executionContract?: ExecutionContract;
   clarification?: {
@@ -1710,15 +1711,6 @@ function normalizeGeneratedFiles(rawFiles: any, options: { ensureIndex?: boolean
     })
     .filter((file: GeneratedFile) => isSafeProjectFilePath(file.path) && file.content.trim().length > 0);
 
-  if (ensureIndex && !files.some(file => file.path === 'index.html')) {
-    files.unshift({
-      path: 'index.html',
-      content: buildFallbackAppHtml('Generated Huggy app', 'Your app was generated, but no index.html was returned.'),
-      language: 'html',
-      updated_at: new Date().toISOString(),
-    });
-  }
-
   return files.slice(0, 80);
 }
 
@@ -1786,7 +1778,6 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     }
   };
 
-  const existingHtml = fileByPath(files, 'index.html')?.content || '';
   const hasApp = Boolean(fileByPath(files, 'src/App.tsx') || fileByPath(files, 'src/App.jsx'));
   const hasMain = Boolean(fileByPath(files, 'src/main.tsx') || fileByPath(files, 'src/main.jsx'));
   const packageSource = fileByPath(files, 'package.json')?.content || '';
@@ -1824,7 +1815,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '    <meta charset="UTF-8" />',
     '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     `    <title>${escapeHtml(projectName || 'Huggy App')}</title>`,
-    `    <meta name="description" content="${escapeHtml(summarizeForMeta(promptOrDescription || projectName, 'A production-ready React app generated with Huggy.'))}" />`,
+    `    <meta name="description" content="${escapeHtml(summarizeForMeta(promptOrDescription || projectName, 'React application generated from the project request.'))}" />`,
     '  </head>',
     '  <body>',
     '    <div id="root"></div>',
@@ -1833,7 +1824,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     '</html>',
     '',
   ].join('\n');
-  if (!byPath.has('index.html') || (!hasApp && !hasMain && !hasTanStackScaffold)) {
+  if (!byPath.has('index.html') && (hasApp || hasMain || hasTanStackScaffold)) {
     byPath.set('index.html', {
       path: 'index.html',
       content: viteIndex,
@@ -1842,7 +1833,7 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
     });
   }
 
-  if (!hasMain && !hasTanStackScaffold) {
+  if (!hasMain && !hasTanStackScaffold && hasApp) {
     addIfMissing('src/main.tsx', [
       "import React from 'react';",
       "import { createRoot } from 'react-dom/client';",
@@ -1856,14 +1847,6 @@ function ensureModernFrontendProject(files: GeneratedFile[], projectName: string
       ');',
       '',
     ].join('\n'), 'tsx');
-  }
-
-  if (!hasApp && !hasTanStackScaffold) {
-    addIfMissing(
-      'src/App.tsx',
-      createGeneratedRescueAppTsx({ projectName, prompt: promptOrDescription || existingHtml || projectName }),
-      'tsx',
-    );
   }
 
   addIfMissing('src/index.css', [
@@ -2203,7 +2186,7 @@ function auditHtmlSeo(html: string, files: GeneratedFile[]): SeoAudit {
 function buildProjectSeoAudit(project: GeneratedProject, files: GeneratedFile[]): SeoAudit {
   const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
   const html = enhanceHtmlSeo(
-    indexFile?.content || buildFallbackAppHtml(project.name, project.prompt || 'Generated with Huggy.'),
+    indexFile?.content || buildPreviewErrorHtml({ projectName: project.name, error: 'No generated HTML file was returned.' }),
     project.name,
     project.prompt || project.name,
     project.slug || project.id,
@@ -2266,39 +2249,6 @@ function withProjectSeoSupport(
   }
 
   return output;
-}
-
-function buildFallbackAppHtml(title: string, prompt: string): string {
-  const safeTitle = escapeHtml(title);
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${safeTitle}</title>
-  <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; color: #1c1c1c; background: #fcfbf8; }
-    main { min-height: 100vh; display: grid; place-items: center; padding: 40px 18px; background:
-      radial-gradient(circle at top left, rgba(191,219,254,.34), transparent 32%),
-      linear-gradient(135deg, #fffdf8, #fcfbf8 52%, #f7f4ed); }
-    section { width: min(620px, 100%); border: 1px solid #eceae4; background: rgba(255,253,248,.92); border-radius: 22px; padding: clamp(24px, 5vw, 42px); box-shadow: 0 30px 90px rgba(28,28,28,.08); text-align: center; }
-    .status { width: 12px; height: 12px; border-radius: 999px; background: #315fdc; box-shadow: 0 0 0 8px rgba(49,95,220,.12); margin: 0 auto 22px; }
-    h1 { margin: 0 0 10px; font-size: clamp(28px, 5vw, 48px); line-height: 1; letter-spacing: 0; }
-    p { margin: 0 auto; max-width: 440px; color: #5f5f5d; font-size: clamp(15px, 2vw, 18px); line-height: 1.65; }
-  </style>
-</head>
-<body>
-  <main>
-    <section aria-label="Preview waiting for generated app">
-      <div class="status" aria-hidden="true"></div>
-      <h1>${safeTitle}</h1>
-      <p>Preview is waiting for a real generated application. Ask Huggy to build or modify the app to render working files here.</p>
-    </section>
-  </main>
-</body>
-</html>`;
 }
 
 function injectAnalyticsSnippet(html: string, projectId?: string, environment: 'preview' | 'production' = 'preview') {
@@ -2389,7 +2339,13 @@ function getPublishedProjectPath(project: Pick<GeneratedProject, 'id' | 'slug'>)
 }
 
 function getDefaultPublishedUrl(project: Pick<GeneratedProject, 'id' | 'slug'>): string {
-  return `${getHuggyPublicOrigin()}${getPublishedProjectPath(project)}`;
+  const slug = String(project.slug || project.id || 'app')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'app';
+  const rootDomain = String(process.env.HUGGY_ROOT_DOMAIN || 'huggy.fun').replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  return `https://${slug}.${rootDomain}`;
 }
 
 function isFreePlanKey(plan: string | null | undefined): boolean {
@@ -2653,7 +2609,7 @@ function buildPublishStatus(context: PublishContext): PublishStatus {
     projectUpdatedAt &&
     Date.parse(projectUpdatedAt) > Date.parse(latestPublishedAt),
   );
-  const previewReady = project.preview_status === 'ready' && Boolean(project.preview_html);
+  const previewReady = project.preview_status === 'verified' && Boolean(project.preview_html);
   const hasFiles = files.length > 0;
   const securityScan = scanGeneratedSecurity(files);
   const securityBlocking = securityScan.findings.filter(item => item.status === 'fail');
@@ -2732,10 +2688,6 @@ function stripReactImportsForPreview(source: string): string {
     .replace(/export\s+default\s+\(\s*\)\s*=>/g, 'const App = () =>')
     .replace(/export\s+default\s+/g, 'const App = ');
 
-  if (!/\bfunction\s+App\s*\(|\bconst\s+App\s*=|\blet\s+App\s*=|\bvar\s+App\s*=/.test(output)) {
-    output += '\nfunction App() { return <main><h1>Preview ready</h1><p>Huggy generated source files for this app.</p></main>; }\n';
-  }
-
   return output;
 }
 
@@ -2756,12 +2708,10 @@ function buildReactVitePreviewHtml(
   ].filter(Boolean).join('\n\n');
 
   const title = projectName || 'Huggy app';
-  const description = summarizeForMeta(promptOrDescription || title, 'Production-ready React app generated with Huggy.');
+  const description = summarizeForMeta(promptOrDescription || title, 'React application preview.');
   const slug = slugify(slugOrId || projectId || title) || 'huggy-app';
   const canonical = `https://huggy.fun/generated/${slug}`;
   const robots = environment === 'production' ? 'index, follow' : 'noindex, nofollow';
-  const fallbackHtml = buildPreviewFallbackHtml({ projectName: title, prompt: promptOrDescription || title, files });
-  const fallbackScriptValue = JSON.stringify(fallbackHtml);
 
   // Extract all TS/JS/JSON files for our dynamic module loader
   const modulesObject: Record<string, { code: string }> = {};
@@ -2794,7 +2744,6 @@ function buildReactVitePreviewHtml(
     '  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>',
     '  <style>',
     css || '',
-    PREVIEW_FALLBACK_CSS,
     '  </style>',
     '</head>',
     '<body>',
@@ -2803,25 +2752,10 @@ function buildReactVitePreviewHtml(
     '    JavaScript is required to display this application.',
     '  </noscript>',
     '  <script type="text/javascript">',
-    `    const __HUGGY_PREVIEW_FALLBACK__ = ${fallbackScriptValue};`,
-    '    function __huggyRestorePreview(error) {',
-    '      try {',
-    "        if (error) console.error('[huggy preview render failed]', error);",
-    "        const rootNode = document.getElementById('root');",
-    "        if (rootNode && rootNode.dataset.huggyMounted !== 'true') {",
-    '          rootNode.innerHTML = __HUGGY_PREVIEW_FALLBACK__;',
-    '          const errDiv = document.createElement("div");',
-    '          errDiv.style = "background:#fee2e2;color:#991b1b;padding:12px;margin-top:24px;border-radius:12px;font-family:monospace;font-size:12px;white-space:pre-wrap;border:1px solid #fca5a5;max-height:200px;overflow:auto;";',
-    '          errDiv.textContent = "Runtime Error: " + (error && error.message ? error.message : String(error));',
-    '          const panel = rootNode.querySelector(".huggy-preview-fallback-panel");',
-    '          if (panel) panel.appendChild(errDiv);',
-    '        }',
-    '      } catch (restoreError) {',
-    "        console.error('[huggy preview fallback failed]', restoreError);",
-    '      }',
-    '    }',
-    "    window.addEventListener('error', (event) => __huggyRestorePreview(event.error || event.message));",
-    "    window.addEventListener('unhandledrejection', (event) => __huggyRestorePreview(event.reason));",
+    '    // Runtime errors are surfaced to the real preview runner. Huggy does not',
+    '    // replace a failed application with a simulated UI.',
+    "    window.addEventListener('error', (event) => console.error('[huggy preview runtime error]', event.error || event.message));",
+    "    window.addEventListener('unhandledrejection', (event) => console.error('[huggy preview runtime rejection]', event.reason));",
     '    // React is loaded as an ES module in the async bootstrap below so that',
     '    // CDN-loaded libraries (esm.sh) share the exact same React instance.',
     '',
@@ -2994,7 +2928,7 @@ function buildReactVitePreviewHtml(
     '      if (!mod) {',
     '        const cdnMod = window.__cdn_modules__ && (window.__cdn_modules__[importPath] || window.__cdn_modules__[resolved]);',
     '        if (cdnMod) return cdnMod;',
-    '        console.warn("Module not found: " + importPath + " (resolved to: " + resolved + "). Creating a dummy mock.");',
+    '        throw new Error("Module not found: " + importPath + " (resolved to: " + resolved + ").");',
     '        const reactElementSymbol = window.React.createElement("div").$$typeof;',
     '        const createDummyObject = function() {',
     '          return new Proxy({}, {',
@@ -3116,7 +3050,7 @@ function buildReactVitePreviewHtml(
     '          rootNode.dataset.huggyMounted = "true";',
     '        }',
     '      } catch (error) {',
-    '        __huggyRestorePreview(error);',
+    "        console.error('[huggy preview runtime error]', error);",
     '      }',
     '    })();',
     '',
@@ -3314,7 +3248,7 @@ function buildReactVitePreviewHtml(
     '        }',
     '      }',
     '    }',
-    '    __huggySetupFallbackInteractions();',
+    '',
     '  </script>',
     '</body>',
     '</html>',
@@ -3333,17 +3267,22 @@ function renderPreviewHtml(
   const reactPreview = buildReactVitePreviewHtml(files, projectName, projectId, environment, promptOrDescription, slugOrId);
   if (reactPreview) return reactPreview;
   const indexFile = files.find(file => file.path === 'index.html') || files.find(file => file.path.endsWith('.html'));
-  const html = indexFile?.content || buildFallbackAppHtml(projectName, 'Preview ready. Generate or edit this project to replace the placeholder.');
+  const html = indexFile?.content || buildPreviewErrorHtml({ projectName, error: 'No generated HTML file was returned.' });
   const seoHtml = enhanceHtmlSeo(html, projectName, promptOrDescription || projectName, slugOrId || projectId || projectName, environment);
   return injectAnalyticsSnippet(seoHtml, projectId, environment);
 }
 
 function getProjectPreviewHtml(project: GeneratedProject, files: GeneratedFile[], environment: 'preview' | 'production' = 'preview'): string {
-  if (project.preview_html) {
+  if (project.preview_status === 'verified' && project.preview_html) {
     const seoHtml = enhanceHtmlSeo(project.preview_html, project.name, project.prompt || project.name, project.slug || project.id, environment);
     return injectAnalyticsSnippet(seoHtml, project.id, environment);
   }
-  return renderPreviewHtml(files, project.name, project.id, environment, project.prompt || project.name, project.slug || project.id);
+  return buildPreviewErrorHtml({
+    projectName: project.name,
+    error: project.preview_status === 'needs_fix'
+      ? 'The generated runtime needs fixes before this preview can be shown.'
+      : 'The generated runtime has not been verified yet.',
+  });
 }
 
 function createTemplateFiles(projectName: string, prompt: string): GeneratedFile[] {
@@ -3351,7 +3290,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
     {
       path: 'index.html',
       language: 'html',
-      content: buildFallbackAppHtml(projectName, prompt || 'A polished generated web application.'),
+      content: buildPreviewErrorHtml({ projectName, error: 'No generated application files were available for export.' }),
     },
     {
       path: 'supabase/schema.sql',
@@ -3361,7 +3300,7 @@ function createTemplateFiles(projectName: string, prompt: string): GeneratedFile
     {
       path: 'README.md',
       language: 'markdown',
-      content: `# ${projectName}\n\nGenerated from this prompt:\n\n${prompt || 'No prompt provided.'}\n\nThis MVP is static-preview ready and includes Supabase schema notes for the backend layer.\n`,
+      content: `# ${projectName}\n\nGenerated from this prompt:\n\n${prompt || 'No prompt provided.'}\n\nThe export contains the project notes and backend schema currently available. The application runtime must be generated and verified before publication.\n`,
     },
   ], projectName, prompt);
   return ensureModernFrontendProject(files, projectName, prompt);
@@ -3797,6 +3736,24 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
   const allowedIntents: AgentIntent[] = ['conversation', 'clarification_required', 'plan', 'build', 'edit', 'debug_fix', 'verify', 'deploy_assist', 'external_keys_required', 'credits_required'];
   const intent = allowedIntents.includes(raw?.intent) ? raw.intent as AgentIntent : null;
   if (!intent) return null;
+  if (typeof raw?.confidence !== 'number' || !Number.isFinite(raw.confidence) || raw.confidence < 0 || raw.confidence > 1) return null;
+  if (typeof raw?.reason !== 'string' || !raw.reason.trim()) return null;
+  if (typeof raw?.user_visible_reason !== 'string' || !raw.user_visible_reason.trim()) return null;
+  if (typeof raw?.normalized_prompt !== 'string' || !raw.normalized_prompt.trim()) return null;
+  if (intent === 'clarification_required' && (!raw?.clarification || typeof raw.clarification.question !== 'string' || !raw.clarification.question.trim())) return null;
+  const runtimeAction = runtimeActionForIntent(intent);
+  let validatedModelDecision;
+  try {
+    validatedModelDecision = validateModelDecision({
+      action: runtimeAction,
+      confidence: raw.confidence,
+      objective: raw.objective,
+      requiredCapabilities: raw.required_capabilities || raw.requiredCapabilities,
+      clarification: raw.clarification,
+    });
+  } catch {
+    return null;
+  }
   const requiresFileChanges = intent === 'build' || intent === 'edit' || intent === 'debug_fix';
   const nextActionByIntent: Record<AgentIntent, AgentNextAction> = {
     conversation: 'answer',
@@ -3820,7 +3777,7 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
   return {
     ...fallback,
     intent,
-    confidence: Math.max(0.5, Math.min(0.99, Number(raw?.confidence || fallback.confidence))),
+    confidence: raw.confidence,
     requiresFileChanges,
     requiresPreviewRebuild: requiresFileChanges,
     requiresCredits: intent === 'plan' || requiresFileChanges || (intent === 'conversation' && !isGreetingPrompt(String(raw?.normalized_prompt || ''))),
@@ -3828,22 +3785,58 @@ function buildDecisionFromAi(raw: any, fallback: IntentDecision): IntentDecision
     nextAction: nextActionByIntent[intent],
     selectedModelPolicy: policy,
     routingSource: 'ai',
-    reason: String(raw?.reason || fallback.reason || fallback.userVisibleReason).slice(0, 240),
-    userVisibleReason: String(raw?.user_visible_reason || raw?.reason || fallback.userVisibleReason).slice(0, 240),
+    modelObjective: validatedModelDecision.objective,
+    requiredCapabilities: validatedModelDecision.requiredCapabilities,
+    reason: raw.reason.trim().slice(0, 240),
+    userVisibleReason: raw.user_visible_reason.trim().slice(0, 240),
     clarification: intent === 'clarification_required'
       ? {
-          question: String(raw?.clarification?.question || fallback.clarification?.question || 'What should Huggy do next?').slice(0, 180),
+          question: raw.clarification.question.trim().slice(0, 180),
           choices,
-          recommendation: String(raw?.clarification?.recommendation || fallback.clarification?.recommendation || 'Choose the option closest to your goal.').slice(0, 180),
+          recommendation: typeof raw?.clarification?.recommendation === 'string' ? raw.clarification.recommendation.trim().slice(0, 180) : undefined,
         }
       : undefined,
   };
 }
 
+function runtimeActionForIntent(intent: AgentIntent) {
+  return intent === 'clarification_required' ? 'clarify' : intent === 'debug_fix' ? 'debug' : intent === 'deploy_assist' ? 'confirm' : intent === 'credits_required' || intent === 'external_keys_required' ? 'clarify' : intent;
+}
+
 function isIntentRouterStructuredOutput(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const allowedIntents: AgentIntent[] = ['conversation', 'clarification_required', 'plan', 'build', 'edit', 'debug_fix', 'verify', 'deploy_assist', 'external_keys_required', 'credits_required'];
-  return allowedIntents.includes((value as any).intent);
+  const raw = value as any;
+  if (!allowedIntents.includes(raw.intent)) return false;
+  const clarificationValid = raw.intent !== 'clarification_required'
+    || (raw.clarification && typeof raw.clarification.question === 'string' && Boolean(raw.clarification.question.trim()));
+  if (!clarificationValid) return false;
+  try {
+    validateModelDecision({
+      action: runtimeActionForIntent(raw.intent),
+      confidence: raw.confidence,
+      objective: raw.objective,
+      requiredCapabilities: raw.required_capabilities || raw.requiredCapabilities,
+      clarification: raw.clarification,
+    });
+  } catch {
+    return false;
+  }
+  return true
+    && typeof raw.confidence === 'number'
+    && Number.isFinite(raw.confidence)
+    && raw.confidence >= 0
+    && raw.confidence <= 1
+    && typeof raw.reason === 'string'
+    && Boolean(raw.reason.trim())
+    && typeof raw.user_visible_reason === 'string'
+    && Boolean(raw.user_visible_reason.trim())
+    && typeof raw.normalized_prompt === 'string'
+    && Boolean(raw.normalized_prompt.trim())
+    && Array.isArray(raw.required_capabilities || raw.requiredCapabilities)
+    && raw.objective
+    && typeof raw.objective === 'object'
+    && clarificationValid;
 }
 
 function guardAiDecisionWithUnderstanding(
@@ -3864,45 +3857,11 @@ function guardAiDecisionWithUnderstanding(
     intentUnderstanding: understanding,
   });
 
-  if (!aiDecision.requiresFileChanges || understanding.allowsFileAction) {
-    return withUnderstanding(aiDecision);
-  }
-
-  if (requestedMode === 'build' || understanding.needsClarification) {
-    return withUnderstanding({
-      ...fallback,
-      intent: 'clarification_required',
-      confidence: Math.max(fallback.confidence, understanding.confidence, 0.8),
-      requiresFileChanges: false,
-      requiresPreviewRebuild: false,
-      requiresCredits: false,
-      nextAction: 'ask_clarification',
-      routingSource: 'heuristic',
-      userVisibleReason: 'Huggy paused because the message does not clearly request a safe file change.',
-      clarification: {
-        question: isLikelyFrenchPrompt(input.prompt)
-          ? 'Quelle app, écran, composant ou bug dois-je traiter ?'
-          : 'What exact result should Huggy produce or change?',
-        choices: [],
-        recommendation: isLikelyFrenchPrompt(input.prompt)
-          ? 'Une phrase suffit.'
-          : 'For project changes, name the exact screen, component, API, database, or bug.',
-      },
-    });
-  }
-
-  return withUnderstanding({
-    ...fallback,
-    intent: 'conversation',
-    confidence: Math.max(fallback.confidence, understanding.confidence, 0.84),
-    requiresFileChanges: false,
-    requiresPreviewRebuild: false,
-    requiresCredits: !isSimpleLocalConversationPrompt(input.prompt),
-    nextAction: 'answer',
-    selectedModelPolicy: 'auto',
-    routingSource: 'heuristic',
-    userVisibleReason: 'Huggy treated this as a response task instead of generating files.',
-  });
+  // Understanding is context for the model and for observability only. It is
+  // deliberately not allowed to replace the model's action with a local
+  // regex/heuristic decision. Server-side validators still enforce safety,
+  // permissions, budgets and confirmation requirements later in the flow.
+  return withUnderstanding(aiDecision);
 }
 
 async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentDecision): Promise<IntentDecision | null> {
@@ -3945,6 +3904,7 @@ async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentD
     timeoutMs: routerRuntime.timeoutMs,
     runtimeConfig,
     runtimeConfigForModel,
+    allowFallback: false,
   });
   const rawDecision = await parseOrRepairStructuredObject(
     result.text,
@@ -3961,6 +3921,7 @@ async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentD
         timeoutMs: routerRuntime.timeoutMs,
         runtimeConfig,
         runtimeConfigForModel,
+        allowFallback: false,
       });
       return repaired.text;
     },
@@ -3970,59 +3931,42 @@ async function classifyIntentWithAi(input: AgentDecisionInput, fallback: IntentD
 }
 
 function applyTypedIntentLifecycle(input: AgentDecisionInput, decision: IntentDecision): IntentDecision {
-  const typedDecision = buildTypedIntentDecision({
-    prompt: input.prompt,
-    hasFiles: input.hasFiles,
-    requestedMode: input.requestedMode,
-    decision,
-  });
-  const gatedDecision = applyTypedIntentGate(decision, typedDecision) as IntentDecision;
-  // Unified DecisionCore runs in the hot path as a self-monitored, deterministic
-  // layer. It enriches the contract input (filling gaps only — gatedDecision
-  // keeps priority so existing routing is unchanged) and is attached to the
-  // decision so the MIX activity stream can render the decision + rationale.
-  const huggyDecision = guardDecision(
-    decideHuggyAction({
-      prompt: input.prompt,
-      requestedMode: input.requestedMode,
-      project: { hasFiles: input.hasFiles, hasLastPlan: Boolean(input.lastPlan) },
-    }),
-    { hasFiles: input.hasFiles },
-  ).decision;
-  // When DecisionCore is highly confident (≥0.85), it PILOTS the routing —
-  // otherwise it just enriches. This fixes the "Huggy tries to code a greeting
-  // or a knowledge question" bug, and routes plan envelopes / clarify / critical
-  // actions correctly instead of falling back to a build-by-default heuristic.
-  const huggyOverrides = huggyDecision.confidence >= 0.85
-    ? decisionToLegacyDecision(huggyDecision)
-    : null;
-  const legacyForContract: any = huggyOverrides
-    ? { ...gatedDecision, ...huggyOverrides, typedDecision }
-    : { ...decisionToLegacyDecision(huggyDecision), ...gatedDecision, typedDecision };
-  const executionContract = buildExecutionContract({
+  // The model owns intent selection. Local code may attach a contract for
+  // permission, budget and confirmation validation, but it cannot override
+  // the model with regex/heuristic routing.
+  const strictExecutionContract = buildExecutionContract({
     prompt: input.prompt,
     requestedMode: input.requestedMode,
     hasFiles: input.hasFiles,
     hasLastPlan: Boolean(input.lastPlan),
-    legacyDecision: legacyForContract,
+    legacyDecision: decision,
   });
-  const contractedDecision = applyExecutionContractToDecision({
-    ...gatedDecision,
-    typedDecision,
-  }, executionContract) as IntentDecision;
-  (contractedDecision as any).huggyDecision = huggyDecision;
-  (contractedDecision as any).huggyDecisionLine = describeDecisionForStream(huggyDecision);
-  return contractedDecision;
+  return {
+    ...decision,
+    typedDecision: buildTypedIntentDecision({
+      prompt: input.prompt,
+      hasFiles: input.hasFiles,
+      requestedMode: input.requestedMode,
+      decision,
+    }),
+    executionContract: strictExecutionContract,
+  } as IntentDecision;
+
 }
 
 async function resolveAgentDecision(input: AgentDecisionInput) {
   const fallback = intentRouter.decide(input);
   const finalize = (decision: IntentDecision): IntentDecision => applyTypedIntentLifecycle(input, decision);
+  if (!hasLiveAiProvider()) {
+    throw new Error('A live AI provider is required for agent decisions. No local intent fallback is available.');
+  }
   try {
-    return finalize(await classifyIntentWithAi(input, fallback) || fallback);
+    const modelDecision = await classifyIntentWithAi(input, fallback);
+    if (!modelDecision) throw new Error('The selected AI model returned no valid intent decision.');
+    return finalize(modelDecision);
   } catch (error) {
-    console.warn('[huggy:agent_router_fallback]', { message: normalizeProviderError(error) });
-    return finalize({ ...fallback, routingSource: fallback.routingSource === 'ai' ? 'fallback' : fallback.routingSource || 'fallback' });
+    console.warn('[huggy:agent_router_failed]', { message: normalizeProviderError(error) });
+    throw error;
   }
 }
 
@@ -4338,6 +4282,7 @@ async function createAgentTextResponse(input: {
   plan?: string;
   researchContext?: string;
   allowLocalFallback?: boolean;
+  signal?: AbortSignal;
 }): Promise<{ text: string; model: string; cost_usd: number }> {
   const { project, prompt, files, decision, researchContext } = input;
   const executionContract = (decision as any).executionContract as ExecutionContract | undefined;
@@ -4355,6 +4300,7 @@ async function createAgentTextResponse(input: {
     plan: input.plan,
   })).model;
   validateAllowedModel(selectedModel);
+  assertAgentModelCapabilities(selectedModel, { structuredOutput: true, toolCalling: decision.intent !== 'conversation' });
   const runtimeOptions = createProviderRuntimeOptions({
     model: selectedModel,
     prompt,
@@ -4373,6 +4319,8 @@ async function createAgentTextResponse(input: {
         timeoutMs: runtimeOptions.runtime.timeoutMs,
         runtimeConfig: runtimeOptions.providerConfig,
         runtimeConfigForModel: runtimeOptions.runtimeConfigForModel,
+        allowFallback: false,
+        signal: input.signal,
       },
     );
 
@@ -4403,6 +4351,7 @@ async function streamAgentTextResponse(input: {
   plan?: string;
   researchContext?: string;
   allowLocalFallback?: boolean;
+  signal?: AbortSignal;
   onToken?: (chunk: string, meta: { index: number; model: string }) => Promise<void> | void;
 }): Promise<{ text: string; model: string; cost_usd: number; streamed: boolean }> {
   const { project, prompt, files, decision, researchContext, onToken } = input;
@@ -4421,6 +4370,7 @@ async function streamAgentTextResponse(input: {
     plan: input.plan,
   })).model;
   validateAllowedModel(selectedModel);
+  assertAgentModelCapabilities(selectedModel, { streaming: true, structuredOutput: true, toolCalling: Boolean((decision as any).executionContract?.can_mutate_files) });
   const textResponseTimeoutMs = decision.intent === 'plan'
     ? 30_000
     : decision.intent === 'deploy_assist'
@@ -4449,6 +4399,8 @@ async function streamAgentTextResponse(input: {
         timeoutMs: runtimeOptions.runtime.timeoutMs,
         runtimeConfig: runtimeOptions.providerConfig,
         runtimeConfigForModel: runtimeOptions.runtimeConfigForModel,
+        allowFallback: false,
+        signal: input.signal,
       },
     )) {
       if (event.type === 'token') {
@@ -4495,28 +4447,6 @@ function chunkTextForPublicStream(text: string, targetSize = 28) {
   }
   if (buffer) chunks.push(buffer);
   return chunks;
-}
-
-function createClarificationContent(decision: IntentDecision) {
-  if (decision.clarification) {
-    const raw = `${decision.clarification.question || ''} ${decision.clarification.recommendation || ''}`;
-    const isFrenchRaw = isLikelyFrenchPrompt(raw);
-    if (/answer|respond|r[eÃ©]pond|modifier vraiment|change the project|build or plan|possible directions|r[eÃ©]pondre sans|cr[eÃ©]er une app|faire un plan/i.test(raw)) {
-      decision.clarification.question = isFrenchRaw
-        ? 'Quelle app, ecran ou bug dois-je traiter ?'
-        : 'Which app, screen, or bug should I work on?';
-      decision.clarification.choices = [];
-      decision.clarification.recommendation = isFrenchRaw ? 'Une phrase suffit.' : 'One sentence is enough.';
-      return isFrenchRaw
-        ? `Precise la cible : ${decision.clarification.question}`
-        : `I need one detail: ${decision.clarification.question}`;
-    }
-  }
-  const question = decision.clarification?.question || 'I need one more detail before I can safely build this.';
-  const isFrench = isLikelyFrenchPrompt(`${question} ${decision.clarification?.recommendation || ''}`);
-  return isFrench
-    ? `J’ai besoin d’une précision : ${question}`
-    : `I need one detail: ${question}`;
 }
 
 function detectExternalApiRequirements(prompt: string): ExternalApiRequirement[] {
@@ -4645,7 +4575,7 @@ function buildPublicRuntimeCapabilities(modelId: AllowedModelId) {
     },
     speed: profile.speed,
     reliability: profile.reliability,
-    fallback_available: Boolean(profile.fallbackPrimary),
+    fallback_available: false,
   };
 }
 
@@ -4673,7 +4603,7 @@ function buildPublicModelList() {
           vision: true,
           long_context: true,
         },
-        fallback_available: true,
+        fallback_available: false,
       },
       description: AI_AUTO_MODEL_OPTION.description,
       locked: false,
@@ -4908,7 +4838,7 @@ function generatedSupabaseClientFile(): GeneratedFile {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_HUGGY_CLOUD_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_HUGGY_CLOUD_SUPABASE_ANON_KEY || '';
 
-const missingAuthMessage = 'Huggy Cloud Auth is not configured for this preview yet. The app is running in safe demo mode.';
+const missingAuthMessage = 'Huggy Cloud Auth is not configured for this preview yet. The real backend is unavailable until it is connected.';
 
 function missingAuthResult() {
   return { data: { user: null, session: null }, error: new Error(missingAuthMessage) };
@@ -5062,7 +4992,7 @@ function runPreviewPipeline(project: GeneratedProject, files: GeneratedFile[]): 
 
   return {
     status: errors.length ? 'failed' : 'ready',
-    html: errors.length ? buildFallbackAppHtml('Preview needs attention', errors[0].message) : html,
+    html: errors.length ? buildPreviewErrorHtml({ projectName: project.name, error: errors[0].message }) : html,
     errors,
     summary: errors.length ? errors[0].message : 'Preview build completed successfully.',
   };
@@ -5125,7 +5055,7 @@ function createAutoFixViteIndexHtml(projectName = 'Huggy App', prompt = '') {
     '    <meta charset="UTF-8" />',
     '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     `    <title>${escapeHtml(projectName || 'Huggy App')}</title>`,
-    `    <meta name="description" content="${escapeHtml(summarizeForMeta(prompt || projectName, 'A production-ready React app generated with Huggy.'))}" />`,
+    `    <meta name="description" content="${escapeHtml(summarizeForMeta(prompt || projectName, 'React application generated from the project request.'))}" />`,
     '  </head>',
     '  <body>',
     '    <div id="root"></div>',
@@ -5153,6 +5083,8 @@ function createAutoFixMainTsx() {
 }
 
 function createPomodoroAppTsx(projectName = 'Pomodoro Focus', prompt = '') {
+  throw new Error('Local application rescue is disabled; the model must provide the application source.');
+
   return [
     "import { useEffect, useMemo, useState } from 'react';",
     "import './index.css';",
@@ -5265,7 +5197,7 @@ function createPomodoroAppTsx(projectName = 'Pomodoro Focus', prompt = '') {
 }
 
 function createAutoFixAppTsx(projectName = 'Huggy App', prompt = '') {
-  return createGeneratedRescueAppTsx({ projectName, prompt });
+  throw new Error('Local application rescue is disabled; the model must provide the application source.');
 
   const isPomodoro = /\b(pomodoro|pomodero|minuteur|timer|countdown|chrono|chronometre|chronomètre|pause courte|pause longue|session de travail)\b/i.test(`${projectName} ${prompt}`);
   if (isPomodoro) return createPomodoroAppTsx(projectName, prompt);
@@ -5474,14 +5406,6 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
     setGeneratedFile(byPath, 'index.html', createAutoFixViteIndexHtml(project.name, project.prompt || project.name), 'html', summaries);
   }
 
-  if (!byPath.has('src/main.tsx') && !byPath.has('src/main.jsx')) {
-    setGeneratedFile(byPath, 'src/main.tsx', createAutoFixMainTsx(), 'tsx', summaries);
-  }
-
-  if (!byPath.has('src/App.tsx') && !byPath.has('src/App.jsx')) {
-    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, promptForFix), 'tsx', summaries);
-  }
-
   const appPath = byPath.has('src/App.tsx') ? 'src/App.tsx' : byPath.has('src/App.jsx') ? 'src/App.jsx' : 'src/App.tsx';
   const appContent = byPath.get(appPath)?.content || '';
   const shouldReplaceUnreliableApp = shouldForceModernVite
@@ -5492,9 +5416,9 @@ function runAutoFixEngine(project: GeneratedProject, files: GeneratedFile[], err
       || !/\bexport\s+default\s+function\s+App\b|\bconst\s+App\s*[:=]|\bfunction\s+App\s*\(/i.test(appContent)
       || !/\b(onClick|onSubmit|onChange|useState|useReducer|localStorage|set[A-Z])\b/i.test(appContent)
     );
-  if (shouldReplaceUnreliableApp) {
-    setGeneratedFile(byPath, 'src/App.tsx', createAutoFixAppTsx(project.name, promptForFix), 'tsx', summaries);
-  }
+  // Auto-fix may sanitize or repair an existing model file, but it must never
+  // invent a replacement application when the model did not provide one.
+  if (shouldReplaceUnreliableApp) summaries.push('Existing app source remains unchanged because no model-generated replacement is available.');
 
   if (!byPath.has('src/index.css')) {
     setGeneratedFile(byPath, 'src/index.css', createAutoFixIndexCss(), 'css', summaries);
@@ -5673,6 +5597,7 @@ async function generateFilesWithAi(input: {
   recentHistory?: string[];  // last N user messages for conflict detection
   skill?: HuggySkill;
   skillBudget?: HuggySkillBudget;
+  signal?: AbortSignal;
   onEvent?: (event: any) => void;
 }): Promise<{ files: GeneratedFile[]; summary: string; appName: string; model: string; cost_usd: number }> {
   const hasLiveKey = hasLiveAiProvider();
@@ -5694,6 +5619,7 @@ async function generateFilesWithAi(input: {
       ? normalizeProviderModelForBackend(input.modelId)
       : DEFAULT_PROVIDER_MODEL_ID;
   validateAllowedModel(selectedModel);
+  assertAgentModelCapabilities(selectedModel, { streaming: true, structuredOutput: true, toolCalling: true });
 
   const fileManifest = input.existingFiles
     .map(file => `${file.path} (${file.content.length} chars)`)
@@ -5718,7 +5644,6 @@ async function generateFilesWithAi(input: {
 
   let totalCostUsd = 0;
   // --- AGENTIC AI V3 LOOP ---
-  input.onEvent?.({ type: 'agent_step', step: 'ast', message: 'Je repère les parties du projet qui peuvent influencer ce changement.' });
   const depGraph = buildDependencyGraph(input.existingFiles);
   const appType = input.deepReasoningContract?.app_type || 'custom_web_app';
 
@@ -5748,7 +5673,6 @@ async function generateFilesWithAi(input: {
   // ✅ Parallel specialist agents — run concurrently before main generation
   let parallelAgentContext = '';
   if (HUGGY_SKILL_FLAGS.subagents && input.existingFiles.length >= 0 && ['build', 'edit'].includes(input.decision?.intent || '')) {
-    input.onEvent?.({ type: 'agent_step', step: 'parallel_agents', message: 'Je vérifie les angles importants en une seule passe pour éviter les oublis.' });
     try {
       const agentCtx: ParallelAgentContext = {
         projectName: input.projectName,
@@ -5835,12 +5759,6 @@ async function generateFilesWithAi(input: {
         parallelAgentContext = mergeAgentOutputs(agentResults);
         totalCostUsd += agentResults.length * 0.001; // nominal cost tracking
 
-        const successCount = agentResults.filter(r => r.success).length;
-        input.onEvent?.({
-          type: 'agent_step',
-          step: 'parallel_agents_done',
-          message: 'Les points de vigilance sont clairs, je passe à la génération.',
-        });
       }
     } catch (parallelErr: any) {
       // Never block generation if parallel agents fail
@@ -5849,7 +5767,6 @@ async function generateFilesWithAi(input: {
   }
 
   // Extract memory (ADRs) from last actions and build RAG context
-  input.onEvent?.({ type: 'agent_step', step: 'rag', message: 'Je récupère le contexte utile pour rester cohérent avec le projet.' });
   const persistenceClient = getSupabase();
 
   // Load persisted project memory from Supabase (ADRs, preferences, blockers)
@@ -5885,7 +5802,6 @@ async function generateFilesWithAi(input: {
   }
 
   // ✅ Load persisted design tokens for visual consistency across sessions
-  input.onEvent?.({ type: 'agent_step', step: 'design_tokens', message: 'J’aligne les couleurs, l’espacement et la typographie avec l’existant.' });
   let designTokenContext = '';
   try {
     if (input.project?.id && persistenceClient) {
@@ -5920,7 +5836,6 @@ async function generateFilesWithAi(input: {
   })();
 
   // Meta-prompting: enrich the user's prompt
-  input.onEvent?.({ type: 'agent_step', step: 'meta_prompt', message: 'Je précise le brief pour construire quelque chose de concret.' });
   const enrichedPrompt = buildMetaPrompt(input.prompt, appType, input.deepReasoningContract?.recovery_diagnostics?.known_failure_modes || []);
 
   // Compose final prompt with all context layers
@@ -5949,13 +5864,6 @@ async function generateFilesWithAi(input: {
   let currentPrompt = composedPrompt;
   
   while (attempt < 2) {
-    input.onEvent?.({
-      type: 'agent_step',
-      step: 'generation',
-      message: attempt === 0
-        ? 'Je produis une première version complète de l’application.'
-        : 'J’intègre la correction et je régénère la partie concernée.',
-    });
 
     // Stream tokens live so the client sees progress in real time
     let fullText = '';
@@ -5994,6 +5902,8 @@ async function generateFilesWithAi(input: {
         timeoutMs: runtimeOptions?.runtime.timeoutMs || 120_000,
         runtimeConfig: runtimeOptions?.providerConfig,
         runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
+        allowFallback: false,
+        signal: input.signal,
       })) {
         if (event.type === 'token') {
           fullText += event.text;
@@ -6006,59 +5916,22 @@ async function generateFilesWithAi(input: {
         }
       }
     } catch (streamErr: any) {
-      // If streaming fails (model doesn't support it), fall back to non-streaming
-      console.warn('[huggy:generate_stream_fallback]', { message: streamErr?.message });
-      const fallbackResult = await providerGateway.chat(selectedModel, [
-        {
-          role: 'system',
-          content: buildGenerationSystemPrompt({
-            prompt: input.prompt,
-            uiPolicySystemPrompt: uiPolicy.systemPrompt,
-            hasExistingFiles: input.existingFiles.length > 0,
-          }),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            projectName: input.projectName,
-            prompt: currentPrompt,
-            memoryRagContext: memoryContext,
-            existingFiles: fileManifest || 'No existing files yet.',
-            // ✅ Semantic RAG on fallback path too
-            existingFilesContent: semanticContext || existingFilesContent,
-            uiGenerationPolicy: uiPolicy.userContext,
-            seniorAgentOS: input.seniorAgentContext || undefined,
-            deepReasoning: input.deepReasoningContract ? deepReasoningPromptContext(input.deepReasoningContract) : undefined,
-          }),
-        },
-        ...(input.visionInputs?.length ? [{
-          role: 'user' as const,
-          content: buildGenerationUserContent('Use these visual references as real multimodal input for this generation.'),
-        }] : []),
-      ], {
-        maxAttempts: 2,
-        timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
-        runtimeConfig: runtimeOptions?.providerConfig,
-        runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
-      });
-      fullText = fallbackResult.text;
-      streamedModel = fallbackResult.model;
-      streamedCost = fallbackResult.cost_usd;
+      // A failed stream is terminal for this run. Starting a second model
+      // request here would duplicate work and could produce contradictory files.
+      console.warn('[huggy:generate_stream_failed]', { message: streamErr?.message });
+      throw streamErr;
     }
 
     result = { text: fullText, model: streamedModel, cost_usd: streamedCost };
     totalCostUsd += streamedCost;
-    input.onEvent?.({ type: 'agent_step', step: 'eval', message: 'Je vérifie maintenant que la version peut vraiment s’afficher.' });
     const architectReqs = input.seniorAgentContext?.architect_blueprint?.quality_gates || [];
     const judgeEval = evaluateAgentOutput(input.prompt, result.text, appType, architectReqs);
 
     if (judgeEval.passed || attempt >= 1) {
-      input.onEvent?.({ type: 'agent_step', step: 'eval_ok', message: 'La structure passe les contrôles principaux, je prépare la preview.' });
       break;
     }
 
     console.log('[AGENT_JUDGE] Generation failed quality gate. Retrying...', judgeEval.failures);
-    input.onEvent?.({ type: 'agent_step', step: 'eval_fail', message: 'La première version risquait d’afficher un écran vide, je la renforce avant de continuer.' });
 
     // Use a different model for the judge retry to avoid self-agreement bias
     const judgeModelId = modelRouter.selectJudgeModel(
@@ -6107,6 +5980,8 @@ async function generateFilesWithAi(input: {
         timeoutMs: runtimeOptions?.runtime.timeoutMs || 90_000,
         runtimeConfig: runtimeOptions?.providerConfig,
         runtimeConfigForModel: runtimeOptions?.runtimeConfigForModel,
+        allowFallback: false,
+        signal: input.signal,
       });
       parsed = parseGeneratedOutput(input.projectName, repairResult.text, input.prompt, {
         hasExistingFiles: input.existingFiles.length > 0,
@@ -6212,7 +6087,7 @@ async function generateFilesWithAi(input: {
 
   return {
     files,
-    summary: String(parsed.summary || 'Application files generated.'),
+    summary: String(parsed.summary || '').trim(),
     appName: sanitizeSuggestedProjectName(parsed.appName, input.prompt),
     model: result.model,
     cost_usd: totalCostUsd,
@@ -6315,9 +6190,7 @@ function parseGeneratedOutput(
   return {
     files,
     appName: sanitizeSuggestedProjectName(parsed.appName, promptOrDescription || projectName),
-    summary: /html\s+preview|standalone\s+html|complete\s+html/i.test(summary)
-      ? 'Generated a modern React/Vite application with project files and preview.'
-      : summary,
+    summary,
     backendSchema: parsed.backendSchema ? String(parsed.backendSchema) : '',
   };
 }
@@ -6366,7 +6239,7 @@ function projectRowCandidates(projectRow: Record<string, any>) {
   const activeStatus = withoutUndefinedValues({
     ...compact,
     status: 'active',
-    preview_status: 'ready',
+    preview_status: 'unknown',
   });
   const minimal = withoutUndefinedValues({
     id: base.id,
@@ -6407,8 +6280,8 @@ async function upsertProjectWithSchemaFallback(client: any, projectRow: Record<s
           row.status = 'active';
           continue;
         }
-        if (row.preview_status === invalidValue && row.preview_status !== 'ready') {
-          row.preview_status = 'ready';
+        if (row.preview_status === invalidValue && row.preview_status !== 'verified') {
+          row.preview_status = 'unknown';
           continue;
         }
         if ('status' in row) {
@@ -6666,7 +6539,7 @@ async function enrichProjectsForDashboard(projects: GeneratedProject[]) {
       model_id: project.model_id || 'auto',
       status: project.status || 'draft',
       preview_status: project.preview_status || 'idle',
-      preview_html: project.preview_status === 'ready' ? project.preview_html || '' : '',
+      preview_html: project.preview_status === 'verified' ? project.preview_html || '' : '',
       publish_status: publishStatus,
       live_url: liveUrl,
       created_at: project.created_at,
@@ -6989,9 +6862,9 @@ async function saveDeploymentRecord(record: any) {
   }
 
   throw createPublicError(
-    `Vercel created the deployment, but Huggy could not save it in Supabase: ${lastError?.message || 'unknown persistence error'}`,
+    `The hosting provider created the deployment, but Huggy could not save it in Supabase: ${lastError?.message || 'unknown persistence error'}`,
     500,
-    'DEPLOYMENT_PERSISTENCE_FAILED_AFTER_VERCEL_SUCCESS',
+    'DEPLOYMENT_PERSISTENCE_FAILED_AFTER_PROVIDER_SUCCESS',
     'apply_deployments_migration',
   );
 }
@@ -7630,6 +7503,7 @@ async function finalReliabilityAutoFix(input: {
   hasExistingFiles: boolean;
   shouldRunRunner: boolean;
   maxAttempts: number;
+  signal?: AbortSignal;
 }) {
   let files = input.files;
   let pipeline = input.pipeline;
@@ -7640,6 +7514,7 @@ async function finalReliabilityAutoFix(input: {
     previewHtml,
     timeoutMs: Math.min(DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs, 20_000),
   });
+  if (input.signal?.aborted) throw new Error('Agent run cancelled before reliability verification.');
   const previewPipelineChecks = () => pipeline.errors.map(error => ({
     key: 'preview_pipeline',
     status: 'fail' as const,
@@ -7683,6 +7558,7 @@ async function finalReliabilityAutoFix(input: {
         previewHtml,
         prompt: input.project.prompt || input.project.name,
         timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+        signal: input.signal,
       });
       await saveAgentRunnerResults(input.project, input.userId, input.agentRunId, runnerResult);
     }
@@ -9012,6 +8888,91 @@ app.post('/api/ai/route', async (req, res) => {
   }
 });
 
+// POST /assistant/decision
+// The Dashboard asks the server to resolve Auto/Build/Plan before choosing a
+// surface. The browser must not infer “this needs the Builder” from keywords.
+app.post('/api/assistant/decision', async (req: any, res: any) => {
+  const requestId = `decision_${randomUUID()}`;
+  const authUser = requireAuthenticatedUser(req, res, requestId);
+  if (!authUser) return;
+  const prompt = sanitizeWorkspaceText(req.body?.prompt || '').trim();
+  if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required.', request_id: requestId });
+
+  const requestedMode = normalizeRequestedMode(req.body?.requestedMode || req.body?.mode);
+  const userId = String(authUser.id);
+  const requestedProjectId = String(req.body?.projectId || '').trim();
+  let hasFiles = false;
+  let lastPlan: string | undefined;
+  if (isUuid(requestedProjectId)) {
+    const project = await loadProject(requestedProjectId, userId).catch(() => null);
+    if (project && hasProjectCapability(req, 'view', project)) {
+      const files = await loadProjectFiles(project.id).catch(() => []);
+      hasFiles = files.length > 0;
+      lastPlan = await getLastProjectPlan(project.id).catch(() => undefined);
+    }
+  }
+
+  const recentHistory: RecentHistoryMessage[] = Array.isArray(req.body?.messages)
+    ? req.body.messages
+      .filter((message: any) => (message?.role === 'user' || message?.role === 'assistant') && String(message?.content || '').trim())
+      .slice(-10)
+      .map((message: any) => ({ role: message.role, content: redactSecrets(String(message.content || '')).slice(0, 1200) }))
+    : [];
+
+  try {
+    const decision = await resolveAgentDecision({ prompt, requestedMode, hasFiles, lastPlan, recentHistory });
+    const resolvedAction = decision.intent === 'clarification_required'
+      ? 'clarify'
+      : decision.intent === 'debug_fix'
+        ? 'debug'
+        : decision.intent === 'deploy_assist'
+          ? 'confirm'
+          : decision.intent === 'credits_required' || decision.intent === 'external_keys_required'
+            ? 'blocked'
+            : decision.intent;
+    const objective = decision.modelObjective
+      ? {
+          summary: decision.modelObjective.goal,
+          requirements: [
+            ...decision.modelObjective.scope.included,
+            ...decision.modelObjective.acceptanceCriteria,
+          ].slice(0, 12),
+          included: decision.modelObjective.scope.included,
+          excluded: decision.modelObjective.scope.excluded,
+          constraints: decision.modelObjective.constraints,
+          assumptions: decision.modelObjective.assumptions,
+          confidence: decision.confidence,
+        }
+      : undefined;
+    return res.json({
+      success: true,
+      request_id: requestId,
+      requested_mode: decision.requestedMode,
+      resolved_action: resolvedAction,
+      requires_project: decision.requiresFileChanges || decision.requiresPreviewRebuild,
+      requires_confirmation: decision.executionContract?.mode === 'critical_action' || decision.intent === 'deploy_assist',
+      objective,
+      clarification: decision.clarification
+        ? { question: decision.clarification.question, options: decision.clarification.choices }
+        : undefined,
+      model_decision: {
+        confidence: decision.confidence,
+        intent: decision.intent,
+        next_action: decision.nextAction,
+      },
+    });
+  } catch (error: any) {
+    return res.status(503).json({
+      success: false,
+      error: 'The selected AI model could not resolve this request.',
+      message: diagnoseProviderError(error).message,
+      diagnostic_code: 'AGENT_DECISION_UNAVAILABLE',
+      request_id: requestId,
+      suggested_action: 'retry_or_change_model',
+    });
+  }
+});
+
 // POST /assistant/chat
 // Lightweight conversational response: no SSE, no project creation, no preview
 // mutation. The selected model is still honored through the provider gateway.
@@ -9043,6 +9004,7 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
   }
 
   const selectedModel = normalizeModelSelectionId(req.body?.modelId || 'auto');
+  const requestedMode = normalizeRequestedMode(req.body?.requestedMode || req.body?.mode);
   const requestedProjectId = String(req.body?.projectId || '').trim();
   const now = new Date().toISOString();
   let project: GeneratedProject = {
@@ -9079,21 +9041,23 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
   const promptWithHistory = history
     ? `${prompt}\n\nRecent conversation context, for continuity only:\n${history}`
     : prompt;
-  const decision: IntentDecision = {
-    intent: 'conversation',
-    confidence: 0.96,
-    requestedMode: 'auto',
-    understandingCategory: 'explanation',
-    requiresFileChanges: false,
-    requiresPreviewRebuild: false,
-    requiresCredits: true,
-    userVisibleReason: 'Conversation only. Huggy will not touch files or preview.',
-    reason: 'lightweight_conversation_response',
-    nextAction: 'answer',
-    autoPlanRequired: false,
-    selectedModelPolicy: 'balanced',
-    routingSource: 'heuristic',
-  };
+  let decision: IntentDecision;
+  try {
+    decision = await resolveAgentDecision({
+      prompt,
+      requestedMode,
+      hasFiles: files.length > 0,
+      lastPlan: undefined,
+      recentHistory: Array.isArray(req.body?.messages)
+        ? req.body.messages.filter((message: any) => message?.role === 'user' || message?.role === 'assistant').slice(-10)
+        : [],
+    });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: 'The selected AI model could not resolve this request.', message: diagnoseProviderError(error).message, diagnostic_code: 'AGENT_DECISION_UNAVAILABLE', request_id: requestId });
+  }
+  if (decision.requiresFileChanges || decision.requiresPreviewRebuild) {
+    return res.status(409).json({ success: false, error: 'This request requires a project run in the Builder.', message: 'This request requires a project run in the Builder.', diagnostic_code: 'PROJECT_RUN_REQUIRED', requires_project: true, requested_mode: requestedMode, resolved_action: decision.intent, request_id: requestId });
+  }
 
   const helpers = getOptionalDbHelpers('assistant_chat');
   const wallet = await getWalletWithFallback(helpers, userId);
@@ -9114,7 +9078,7 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
         role: 'user',
         content: prompt,
         intent: 'conversation',
-        requested_mode: 'auto',
+        requested_mode: requestedMode,
       }).catch(() => null);
     }
 
@@ -9138,7 +9102,7 @@ app.post('/api/assistant/chat', async (req: any, res: any) => {
         role: 'assistant',
         content,
         intent: 'conversation',
-        requested_mode: 'auto',
+        requested_mode: requestedMode,
       }).catch(() => null);
     }
     const chargedCredits = agentText.model === 'auto' && agentText.cost_usd === 0 ? 0 : estimate.finalCredits;
@@ -9193,6 +9157,7 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   }
 
   const selectedModel = normalizeModelSelectionId(req.body?.modelId || 'auto');
+  const requestedMode = normalizeRequestedMode(req.body?.requestedMode || req.body?.mode);
   const requestedProjectId = String(req.body?.projectId || '').trim();
   const now = new Date().toISOString();
   let project: GeneratedProject = {
@@ -9229,21 +9194,23 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   const promptWithHistory = history
     ? `${prompt}\n\nRecent conversation context, for continuity only:\n${history}`
     : prompt;
-  const decision: IntentDecision = {
-    intent: 'conversation',
-    confidence: 0.96,
-    requestedMode: 'auto',
-    understandingCategory: 'explanation',
-    requiresFileChanges: false,
-    requiresPreviewRebuild: false,
-    requiresCredits: true,
-    userVisibleReason: 'Conversation only. Huggy will not touch files or preview.',
-    reason: 'lightweight_streamed_conversation_response',
-    nextAction: 'answer',
-    autoPlanRequired: false,
-    selectedModelPolicy: 'balanced',
-    routingSource: 'heuristic',
-  };
+  let decision: IntentDecision;
+  try {
+    decision = await resolveAgentDecision({
+      prompt,
+      requestedMode,
+      hasFiles: files.length > 0,
+      lastPlan: undefined,
+      recentHistory: Array.isArray(req.body?.messages)
+        ? req.body.messages.filter((message: any) => message?.role === 'user' || message?.role === 'assistant').slice(-10)
+        : [],
+    });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: 'The selected AI model could not resolve this request.', message: diagnoseProviderError(error).message, diagnostic_code: 'AGENT_DECISION_UNAVAILABLE', request_id: requestId });
+  }
+  if (decision.requiresFileChanges || decision.requiresPreviewRebuild) {
+    return res.status(409).json({ success: false, error: 'This request requires a project run in the Builder.', message: 'This request requires a project run in the Builder.', diagnostic_code: 'PROJECT_RUN_REQUIRED', requires_project: true, requested_mode: requestedMode, resolved_action: decision.intent, request_id: requestId });
+  }
 
   const helpers = getOptionalDbHelpers('assistant_chat_stream');
   const wallet = await getWalletWithFallback(helpers, userId);
@@ -9259,13 +9226,55 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
   res.flushHeaders?.();
 
   let streamAborted = false;
+  const chatAbortController = new AbortController();
   req.on('close', () => {
     streamAborted = true;
+    chatAbortController.abort();
   });
 
   const stream = createHuggyStreamEmitter((chunk: string) => {
     if (!streamAborted && !res.writableEnded) res.write(chunk);
-  });
+  }, 0, requestId);
+  const resolvedAction = decision.intent === 'clarification_required'
+    ? 'clarify'
+    : decision.intent === 'debug_fix'
+      ? 'debug'
+      : decision.intent === 'deploy_assist'
+        ? 'confirm'
+        : decision.intent === 'credits_required' || decision.intent === 'external_keys_required'
+          ? 'blocked'
+          : decision.intent;
+  stream.emit('mode_requested', { mode: requestedMode });
+  stream.emit('mode_resolved', { mode: decision.requestedMode, action: resolvedAction, confidence: decision.confidence });
+  if (decision.modelObjective) {
+    stream.emit('understanding', {
+      summary: decision.modelObjective.goal,
+      requirements: [...decision.modelObjective.scope.included, ...decision.modelObjective.acceptanceCriteria].slice(0, 12),
+      confidence: decision.confidence,
+    });
+    if (decision.intent === 'plan' || requestedMode === 'plan') {
+      const planItems = [
+        ...decision.modelObjective.scope.included,
+        ...decision.modelObjective.acceptanceCriteria,
+      ].filter(Boolean).slice(0, 12);
+      stream.emit('plan', {
+        planId: `plan_${requestId}`,
+        title: decision.modelObjective.goal,
+        objective: decision.modelObjective.goal,
+        steps: (planItems.length ? planItems : ['Clarifier les étapes avec le contexte disponible.']).map((title, index) => ({
+          id: `step_${index + 1}`,
+          title,
+          kind: 'task' as const,
+        })),
+        files: [],
+        risks: decision.modelObjective.scope.excluded,
+        acceptanceCriteria: decision.modelObjective.acceptanceCriteria,
+      });
+    }
+  }
+  if (decision.clarification) {
+    stream.emit('clarification', { question: decision.clarification.question, options: decision.clarification.choices });
+  }
   const heartbeat = setInterval(() => {
     if (!streamAborted && !res.writableEnded) stream.heartbeat();
   }, HUGGY_SSE_HEARTBEAT_INTERVAL_MS);
@@ -9284,7 +9293,7 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
         content: prompt,
         parts: messagePartsFromContent(prompt),
         intent: 'conversation',
-        requested_mode: 'auto',
+        requested_mode: requestedMode,
         metadata: { request_id: requestId, source: 'assistant_chat_stream' },
       }).catch(() => null);
     }
@@ -9297,6 +9306,7 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
       modelId: selectedModel,
       userCredits: wallet,
       allowLocalFallback: selectedModel === 'auto',
+      signal: chatAbortController.signal,
       onToken: (chunk) => {
         if (!streamAborted) stream.emit('assistant_delta', { text: chunk });
       },
@@ -9322,7 +9332,7 @@ app.post('/api/assistant/chat/stream', async (req: any, res: any) => {
         content,
         parts: messagePartsFromContent(content),
         intent: 'conversation',
-        requested_mode: 'auto',
+        requested_mode: requestedMode,
         metadata: {
           request_id: requestId,
           model: agentText.model,
@@ -9586,7 +9596,7 @@ app.get('/api/admin/overview', async (req: any, res) => {
       runs: runs.length,
       failed_runs: failedRuns.length,
       success_rate: runs.length ? Math.round(((runs.length - failedRuns.length) / runs.length) * 100) : 100,
-      previews_ready: projects.filter((project: any) => project.preview_status === 'ready').length,
+      previews_ready: projects.filter((project: any) => project.preview_status === 'verified').length,
       publish_success: successfulDeployments.length,
       ai_requests: aiRequestsResult.rows.length,
       wallet_credits: Math.round(totalCredits * 10) / 10,
@@ -10102,7 +10112,7 @@ app.post('/api/projects/:id/messages', async (req: any, res: any) => {
 
     // 4. Call OpenRouter
     try {
-      const completionResult = await providerGateway.chat(targetModel, messages);
+      const completionResult = await providerGateway.chat(targetModel, messages, { allowFallback: false });
 
       // Re-estimate final cost from real OpenRouter token outputs
       const finalCostComp = {
@@ -11029,28 +11039,28 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     return res.status(400).json({ success: false, error: 'This request cannot be generated safely.' });
   }
 
-  // Huggy Stream v2 typed emitter (sequenced id: for Last-Event-ID resume).
-  // Emitted alongside the legacy event shape so the v2 client understands
-  // both while the server migrates its internal emitters incrementally.
+  // Huggy Stream v2 typed emitter. A single emitter owns ordering and the
+  // terminal event; no legacy token stream is emitted from this endpoint.
   let streamV2: HuggyStreamEmitter | null = null;
   let streamAborted = false;
+  const generationAbortController = new AbortController();
   if (isStream) {
     Object.entries(HUGGY_SSE_HEADERS).forEach(([key, value]) => res.setHeader(key, value));
     streamV2 = createHuggyStreamEmitter((chunk: string) => {
+      if (streamAborted || res.writableEnded) return;
       try { res.write(chunk); } catch { /* client closed */ }
-    });
+    }, 0, requestId);
     // Heartbeat every 15s to prevent proxy timeouts (Railway, nginx, Vercel all close idle SSE after ~30s)
     const heartbeat = setInterval(() => {
       try { streamV2?.heartbeat(); } catch { clearInterval(heartbeat); }
     }, HUGGY_SSE_HEARTBEAT_INTERVAL_MS);
     res.on('close', () => {
       streamAborted = true;
+      generationAbortController.abort();
       clearInterval(heartbeat);
     });
-    // Flush headers right away so the client starts reading the stream immediately,
-    // and emit a first milestone so the UI reacts in <1s.
+    // Flush headers right away so the client starts reading the stream immediately.
     res.flushHeaders?.();
-    streamV2.emit('milestone', { milestone: 'understanding', state: 'active' });
   }
 
   // Stream-aware terminal response. In SSE mode every final/early return MUST be
@@ -11060,7 +11070,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const respondJson = (status: number, payload: any) => {
     if (isStream) {
       if (!res.writableEnded) {
-        // Typed v2 terminal event + legacy done for backward compatibility.
+        // Exactly one typed v2 terminal event for this request.
         streamV2?.emit('done', { payload: { status_code: status, ...payload } });
         res.end();
       }
@@ -11075,10 +11085,6 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   const existingFiles = await loadProjectFiles(project.id);
   const lastPlan = await getLastProjectPlan(project.id);
   const recentHistory = await getRecentDecisionHistory(project.id, 6);
-  const resumeRecoverableDraftRequested = shouldResumeRecoverableDraft({
-    prompt,
-    previewStatus: project.preview_status,
-  });
   const initialDecision = await resolveAgentDecision({
     prompt: agentPrompt,
     requestedMode,
@@ -11086,20 +11092,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     lastPlan,
     recentHistory,
   });
-  const decision: IntentDecision = resumeRecoverableDraftRequested && !initialDecision.requiresFileChanges
-    ? {
-      ...initialDecision,
-      intent: 'debug_fix',
-      confidence: Math.max(initialDecision.confidence || 0, 0.96),
-      requiresFileChanges: true,
-      requiresPreviewRebuild: true,
-      requiresCredits: true,
-      nextAction: 'debug_fix',
-      autoPlanRequired: false,
-      userVisibleReason: 'Continuing directly from the recoverable draft.',
-      reason: 'resume_recoverable_draft',
-    }
-    : initialDecision;
+  const decision: IntentDecision = initialDecision;
   const skillResolution = resolveHuggySkill({
     prompt: agentPrompt,
     intent: decision.intent,
@@ -11268,7 +11261,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       reliability,
       files: reliability.should_mutate_files ? existingFiles : undefined,
       preview: reliability.should_touch_preview
-        ? { status: project.preview_status || 'idle', html: getProjectPreviewHtml(project, existingFiles, 'preview') }
+        ? { status: project.preview_status || 'unknown', html: getProjectPreviewHtml(project, existingFiles, 'preview') }
         : undefined,
     });
   }
@@ -11318,12 +11311,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         // events stay internal and are normalized once here.
         if (streamV2 && event && typeof event === 'object') {
           const anyEvent = event as { type?: string; step?: string; message?: string; text?: string; content?: string };
-          if (anyEvent.type === 'agent_step') {
-            streamV2.emit('milestone', {
-              milestone: mapLegacyStepToMilestone(anyEvent.step),
-              state: 'active',
-            });
-          } else if (anyEvent.type === 'token') {
+          if (anyEvent.type === 'token') {
             const text = String(anyEvent.text ?? anyEvent.content ?? '');
             if (text) streamV2.emit('assistant_delta', { text });
           }
@@ -11341,6 +11329,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       visionInputs,
       skill,
       skillBudget,
+      signal: generationAbortController.signal,
       // ✅ Pass recent history for conflict detection
       recentHistory: recentHistory.map(item => `${item.role}: ${item.content}`),
     });
@@ -11375,7 +11364,8 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     }
     let previewHtml = pipeline.html;
     let runnerResult: RunnerResult | null = null;
-    if (AGENT_V3_ENABLED && reliability.requires_runner) {
+    const strictRunnerRequired = STRICT_VERIFICATION_ENABLED && Boolean(decision.requiresFileChanges);
+    if ((AGENT_V3_ENABLED || AGENT_RUNTIME_V2_ENABLED) && (reliability.requires_runner || strictRunnerRequired)) {
       runnerResult = await projectRunner.run({
         runId: agentRunId || requestId,
         projectId: project.id,
@@ -11383,6 +11373,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         previewHtml,
         prompt,
         timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+        signal: generationAbortController.signal,
       });
       await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
       let runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
@@ -11404,6 +11395,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           previewHtml,
           prompt,
           timeoutMs: DEFAULT_AGENT_V3_BUDGET.runnerTimeoutMs,
+          signal: generationAbortController.signal,
         });
         await saveAgentRunnerResults(project, userId, agentRunId, runnerResult);
         runnerBlocking = runnerChecksToVerificationChecks(runnerResult.checks).filter(isBlockingVerificationFailure);
@@ -11443,8 +11435,9 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       runnerResult,
       uiPolicy,
       hasExistingFiles: existingFiles.length > 0,
-      shouldRunRunner: Boolean(AGENT_V3_ENABLED && reliability.requires_runner),
+      shouldRunRunner: Boolean((AGENT_V3_ENABLED || AGENT_RUNTIME_V2_ENABLED) && (reliability.requires_runner || strictRunnerRequired)),
       maxAttempts: skillBudget.maxRetries,
+      signal: generationAbortController.signal,
     });
     finalFiles = finalGate.files;
     pipeline = finalGate.pipeline;
@@ -11453,14 +11446,88 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     if (finalGate.autoFixPatch) autoFix = finalGate.autoFixPatch;
     const verificationChecks = finalGate.verificationChecks;
     const verificationSummary = finalGate.verificationSummary;
-    const reliabilitySummary = finalGate.reliabilitySummary;
+    let reliabilitySummary = finalGate.reliabilitySummary;
     const qualitySummary = finalGate.qualitySummary;
+    const runnerSkipped = Boolean(
+      strictRunnerRequired &&
+      (!runnerResult || runnerResult.status !== 'passed' || runnerResult.checks.some(check => (
+        check.status === 'skipped' || /browser_runner_disabled|browser_runner_unavailable/i.test(check.message)
+      ))),
+    );
+    if (runnerSkipped) {
+      verificationChecks.push({
+        key: 'strict_runtime_verification',
+        status: 'fail',
+        severity: 'high',
+        message: 'Strict verification requires a real build and browser runner result before the project can be marked verified.',
+      });
+      reliabilitySummary = {
+        ...reliabilitySummary,
+        status: 'failed',
+        blocking: [
+          ...(reliabilitySummary.blocking || []),
+          { key: 'strict_runtime_verification', severity: 'high', message: 'A real runtime verification result is required before ready.', file: null },
+        ],
+      };
+    }
+    const strictRuntimeVerified = pipeline.status === 'ready'
+      && reliabilitySummary.status === 'passed'
+      && !runnerSkipped;
+    const factLedger = createFactLedger(agentRunId || requestId);
+    if (finalFiles.length) {
+      finalFiles.forEach(file => appendVerifiedFact(factLedger, {
+        type: 'file_modified',
+        value: { path: file.path, bytes: file.content.length },
+        source: 'filesystem',
+        evidence: 'File was present in the final server-side project snapshot.',
+      }));
+    }
+    if (pipeline.status === 'ready') {
+      appendVerifiedFact(factLedger, {
+        type: 'build_passed',
+        value: { staticPipeline: true },
+        source: 'build',
+        evidence: 'Static preview pipeline completed without blocking errors.',
+      });
+    }
+    if (runnerResult?.checks.some(check => check.check_type === 'script_test_exec' && check.status === 'passed')) {
+      appendVerifiedFact(factLedger, {
+        type: 'test_passed',
+        value: { check: 'script_test_exec' },
+        source: 'build',
+        evidence: 'The project runner reported a passing test script.',
+      });
+    }
+    if (runnerResult?.status === 'passed' && !runnerSkipped) {
+      appendVerifiedFact(factLedger, {
+        type: 'browser_check_passed',
+        value: { checks: runnerResult.checks.length },
+        source: 'browser',
+        evidence: 'The configured project runner returned passed without skipped browser checks.',
+      });
+    }
+    if (strictRuntimeVerified) {
+      appendVerifiedFact(factLedger, {
+        type: 'preview_verified',
+        value: { status: 'verified' },
+        source: 'preview',
+        evidence: 'Preview passed the strict verification gate.',
+      });
+    } else {
+      appendVerifiedFact(factLedger, {
+        type: 'error_detected',
+        value: { status: 'needs_fix', blocking: reliabilitySummary.blocking || [] },
+        source: 'preview',
+        evidence: 'The runtime did not satisfy the strict verification gate.',
+      });
+    }
+    finalizeFactLedger(factLedger, strictRuntimeVerified ? 'complete' : 'failed');
     await saveAgentVerifications(project, userId, agentRunId, verificationChecks);
     if (isStream && streamV2 && !streamAborted) streamV2.emit('verification_completed', {
       status: reliabilitySummary.status === 'passed' ? 'pass' : reliabilitySummary.status === 'failed' ? 'fail' : 'incomplete',
       checks: verificationChecks.length,
     });
-    if (shouldDeliverRecoverableDraft(reliabilitySummary)) {
+    if (runnerSkipped || shouldDeliverRecoverableDraft(reliabilitySummary)) {
       const generatedProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
         ? sanitizeSuggestedProjectName(generation.appName, prompt)
         : project.name;
@@ -11492,21 +11559,22 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         console.warn('[huggy:needs_fix_patch_save_failed]', { project_id: project.id, message: redactSecrets(error?.message || String(error), '[redacted]') });
       });
       const blockingCount = Number(reliabilitySummary.blocking?.length || (reliabilitySummary as any).failed?.length || 1);
-      let summary = generation.summary;
-      try {
-        const finalizerDecision = { ...decision, intent: 'conversation', requiresFileChanges: false, requiresPreviewRebuild: false, requiresCredits: false } as IntentDecision;
-        const finalizer = await createAgentTextResponse({
-          project: recoverableProject,
-          prompt: `${agentPromptForText}\n\nWrite the final user-facing response from these verified facts only. The preview is needs_fix, not ready. Blocking checks: ${JSON.stringify(reliabilitySummary.blocking || [])}`,
-          files: finalFiles,
-          decision: finalizerDecision,
-          modelId: effectiveModelSelection,
-          userCredits: walletForRouting,
-          allowLocalFallback: false,
-        });
-        if (finalizer.text?.trim()) summary = finalizer.text.trim();
-      } catch {
-        // Keep the model-generated generation summary if the finalizer is unavailable.
+      const finalizerDecision = { ...decision, intent: 'conversation', requiresFileChanges: false, requiresPreviewRebuild: false, requiresCredits: false } as IntentDecision;
+      const finalizer = await createAgentTextResponse({
+        project: recoverableProject,
+        prompt: `${agentPromptForText}\n\nWrite the final user-facing response from these verified facts only. The preview is needs_fix, not ready. Never claim readiness. Facts: ${JSON.stringify(factLedger.facts)}`,
+        files: finalFiles,
+        decision: finalizerDecision,
+        modelId: effectiveModelSelection,
+        userCredits: walletForRouting,
+        allowLocalFallback: false,
+        signal: generationAbortController.signal,
+      });
+      const summary = finalizer.text.trim();
+      if (!summary) throw new Error('The selected AI model returned no fact-grounded recovery response.');
+      const recoveryContradictions = responseContradictions(summary, factLedger);
+      if (recoveryContradictions.length) {
+        throw new Error(`The model response contradicted verified facts: ${recoveryContradictions.join(', ')}`);
       }
       const outputContract = validateExecutionOutputContract({
         contract: (decision as any).executionContract as ExecutionContract | undefined,
@@ -11555,10 +11623,11 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
             continuation: durableContinuation,
           }).durable_run,
           browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
+          fact_ledger: factLedger,
         },
       }).catch(() => null);
       const finalPayload = {
-        success: true,
+        success: false,
         needs_fix: true,
         intent: decision,
         project: recoverableProject,
@@ -11582,6 +11651,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
           status: 'needs_fix',
           html: previewHtml,
         },
+        fact_ledger: factLedger,
       };
       if (isStream) {
         streamV2?.emit('done', { payload: finalPayload });
@@ -11593,6 +11663,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
     const generatedProjectName = isAutomaticallyDerivedProjectName(project.name, project.prompt || prompt)
       ? sanitizeSuggestedProjectName(generation.appName, prompt)
       : project.name;
+    const verificationPassed = strictRuntimeVerified;
     const updatedProject: GeneratedProject = {
       ...project,
       name: generatedProjectName,
@@ -11600,10 +11671,39 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       prompt,
       model_id: generation.model,
       status: project.status || 'draft',
-      preview_status: pipeline.status,
-      preview_html: previewHtml,
+      preview_status: verificationPassed ? 'verified' : 'needs_fix',
+      preview_html: verificationPassed ? previewHtml : buildPreviewErrorHtml({ projectName: generatedProjectName, error: 'The generated runtime has not passed strict verification.' }),
       updated_at: new Date().toISOString(),
     };
+
+    const finalizerDecision = {
+      ...decision,
+      intent: 'conversation',
+      requiresFileChanges: false,
+      requiresPreviewRebuild: false,
+      requiresCredits: false,
+    } as IntentDecision;
+    const finalizer = await createAgentTextResponse({
+      project: updatedProject,
+      prompt: [
+        'Write the final user-facing response using only the verified facts below.',
+        'Do not claim readiness, publication, connected backend, successful tests, or bug resolution unless an explicit verified fact supports it.',
+        'Mention unresolved verification issues clearly and propose only actions supported by the facts.',
+        JSON.stringify({ objective: decision.executionContract || decision.userVisibleReason, facts: factLedger.facts, ledger_status: factLedger.status }),
+      ].join('\n\n'),
+      files: finalFiles,
+      decision: finalizerDecision,
+      modelId: generation.model,
+      userCredits: walletForRouting,
+      allowLocalFallback: false,
+      signal: generationAbortController.signal,
+    });
+    const finalSummary = finalizer.text.trim();
+    if (!finalSummary) throw new Error('The selected AI model returned no fact-grounded final response.');
+    const finalContradictions = responseContradictions(finalSummary, factLedger);
+    if (finalContradictions.length) {
+      throw new Error(`The model response contradicted verified facts: ${finalContradictions.join(', ')}`);
+    }
 
     await saveProject(updatedProject, finalFiles);
     const diff = diffFiles(existingFiles, finalFiles);
@@ -11613,7 +11713,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       projectName: updatedProject.name,
       files: finalFiles,
       latestDecision: decision.userVisibleReason,
-      latestOutcome: generation.summary,
+      latestOutcome: finalSummary,
     }), {
       recent_decisions: [{ intent: decision.intent, summary: decision.userVisibleReason, created_at: new Date().toISOString() }],
       known_errors: verificationChecks.filter(check => check.status === 'fail'),
@@ -11647,6 +11747,7 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         reliability: reliabilitySummary,
         quality: qualitySummary,
         browser: finalGate.browserResult ? { status: finalGate.browserResult.status, finding_count: finalGate.browserResult.findings.length } : null,
+        fact_ledger: factLedger,
       },
     });
     await saveProjectMessage({
@@ -11654,18 +11755,19 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
       project_id: updatedProject.id,
       user_id: userId,
       role: 'assistant',
-      content: generation.summary,
+      content: finalSummary,
       intent: decision.intent,
       requested_mode: decision.requestedMode,
     });
     await refreshDurableProjectSnapshot(updatedProject, finalFiles);
 
     const finalPayload = {
-      success: true,
+      success: verificationPassed,
+      needs_fix: !verificationPassed,
       intent: decision,
       project: updatedProject,
       files: finalFiles,
-      summary: generation.summary,
+      summary: finalSummary,
       model: generation.model,
       diff,
       auto_fix: autoFix,
@@ -11681,9 +11783,10 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
         : undefined,
       runner: runnerResult ? { status: runnerResult.status, checks: runnerResult.checks } : null,
       preview: {
-        status: pipeline.status,
-        html: previewHtml,
+        status: verificationPassed ? 'verified' : 'needs_fix',
+        html: verificationPassed ? previewHtml : updatedProject.preview_html,
       },
+      fact_ledger: factLedger,
     };
     if (isStream) {
       streamV2?.emit('done', { payload: finalPayload });
@@ -11737,29 +11840,41 @@ app.post('/api/projects/:id/generate', async (req: any, res: any) => {
   }
 });
 
-app.post('/api/projects/:id/preview', async (req: any, res: any) => {
-  const userId = getUserOrgId(req);
-  const project = await loadProject(req.params.id, userId);
-  if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
-
-  const files = await loadProjectFiles(project.id);
-  const html = renderPreviewHtml(files, project.name, project.id, 'preview', project.prompt || project.name, project.slug || project.id);
-  const updatedProject = {
-    ...project,
-    preview_status: 'ready',
-    preview_html: html,
-    updated_at: new Date().toISOString(),
-  };
-  await saveProject(updatedProject, files);
-
-  res.json({
-    success: true,
-    preview: {
-      status: 'ready',
-      html,
-    },
-    files,
-  });
+app.post('/api/projects/:id/preview', requireAuth, async (req: any, res: any) => {
+  try {
+    const auth = getRequiredAuth(req);
+    const project = await loadProject(req.params.id, auth.userId, req);
+    if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
+    if (!requireProjectCapability(req, res, 'view', project)) return;
+    const contract = await readGeneratedRuntimeContract(project);
+    if (contract.validation.length) {
+      return res.status(422).json({ success: false, needs_fix: true, validation: contract.validation, manifest: contract.manifest });
+    }
+    const verification = await verifyProjectPreviewWithRealBuild(project, contract.files, contract.manifest);
+    const html = verification.verified
+      ? verification.preview.html
+      : buildPreviewErrorHtml({ projectName: project.name, error: verification.error });
+    const updatedProject = {
+      ...project,
+      preview_status: verification.status,
+      preview_html: html,
+      updated_at: new Date().toISOString(),
+    };
+    await saveProject(updatedProject, contract.files);
+    return res.status(verification.verified ? 200 : 422).json({
+      success: verification.verified,
+      needs_fix: !verification.verified,
+      preview: {
+        status: verification.status,
+        html,
+        build: verification.build,
+        browser: verification.browser,
+      },
+      files: contract.files,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, needs_fix: true, preview: { status: 'failed' }, error: error?.message || 'Preview verification failed.' });
+  }
 });
 
 app.post('/api/projects/:id/build/cancel', async (req: any, res: any) => {
@@ -11918,15 +12033,27 @@ app.post('/api/projects/:id/versions/:versionId/rollback', async (req: any, res:
   const project = await loadProject(req.params.id, userId);
   if (!project) return res.status(404).json({ success: false, error: 'Project not found.' });
   if (!requireProjectCapability(req, res, 'build', project)) return;
+  if (req.body?.confirmed !== true && req.body?.approvalGranted !== true) {
+    return res.status(409).json({ success: false, requires_confirmation: true, error: 'Explicit confirmation is required before rolling back this project.' });
+  }
   const versions = await listProjectVersions(project.id);
   const version = versions.find((item: any) => item.id === req.params.versionId);
   if (!version) return res.status(404).json({ success: false, error: 'Version not found.' });
   const files = normalizeGeneratedFiles(version.files_snapshot || []);
   const pipeline = runPreviewPipeline(project, files);
-  const updatedProject = { ...project, preview_status: pipeline.status, preview_html: pipeline.html, updated_at: new Date().toISOString() };
+  const browser = pipeline.status === 'ready'
+    ? await runBrowserInteractionAuditDetailed({ files, previewHtml: pipeline.html, timeoutMs: 20_000 })
+    : null;
+  const verified = pipeline.status === 'ready' && browser?.status === 'passed' && !browser.findings.some((finding: any) => finding.severity === 'high');
+  const updatedProject = {
+    ...project,
+    preview_status: verified ? 'verified' : 'needs_fix',
+    preview_html: verified ? pipeline.html : buildPreviewErrorHtml({ projectName: project.name, error: 'The rolled-back runtime could not be verified.' }),
+    updated_at: new Date().toISOString(),
+  };
   await saveProject(updatedProject, files);
   await createProjectVersion(updatedProject, files, `Rollback to v${version.version_number}`, { rollback_to: version.id });
-  res.json({ success: true, project: updatedProject, files, preview: { status: pipeline.status, html: pipeline.html } });
+  res.json({ success: verified, needs_fix: !verified, project: updatedProject, files, preview: { status: verified ? 'verified' : 'needs_fix', html: updatedProject.preview_html }, browser });
 });
 
 app.get('/api/projects/:id/diff', async (req: any, res: any) => {
@@ -12593,11 +12720,9 @@ app.get('/api/projects/:id/publish/status', async (req: any, res: any) => {
   });
 });
 
-// POST /projects/:id/publish
-app.post('/api/projects/:id/publish', publishProjectSnapshot);
-
-// POST /projects/:id/deploy
-app.post('/api/projects/:id/deploy', publishProjectSnapshot);
+// The public publish/deploy routes are registered once with the Cloudflare
+// implementation below. Keeping the legacy Vercel handler unregistered avoids
+// Express selecting it before the canonical hosting pipeline.
 
 // GET /projects/:id/deployments
 app.get('/api/projects/:id/deployments', async (req: any, res) => {
@@ -12944,6 +13069,24 @@ app.use((error: any, req: any, res: any, next: any) => {
 
 // Static files (frontend). Keep authenticated/action-only documents out of
 // search indexes even when a crawler ignores page-level meta tags.
+const publicRouteRedirects: Record<string, string> = (() => {
+  try {
+    const policyPath = path.join(__dirname, 'config', 'public-route-policy.json');
+    const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8')) as { redirects?: Record<string, string> };
+    return policy.redirects || {};
+  } catch {
+    return {};
+  }
+})();
+
+app.use((req, res, next) => {
+  const pathname = String(req.path || '/');
+  const target = publicRouteRedirects[pathname]
+    || publicRouteRedirects[pathname.endsWith('/') ? pathname.slice(0, -1) : `${pathname}/`];
+  if (!target) return next();
+  return res.redirect(301, target);
+});
+
 const privateDocumentPaths = new Set([
   '/auth.html',
   '/dashboard.html',
@@ -13048,14 +13191,29 @@ app.post('/api/projects/:id/preview/start', requireAuth, async (req: any, res: a
     if (!requireProjectCapability(req, res, 'view', project)) return;
     const contract = await readGeneratedRuntimeContract(project);
     if (contract.validation.length) return res.status(422).json({ success: false, validation: contract.validation, manifest: contract.manifest });
-    const preview = runPreviewPipeline(project, contract.files);
-    return res.json({
-      success: preview.status !== 'failed',
-      status: preview.status,
+    const verification = await verifyProjectPreviewWithRealBuild(project, contract.files, contract.manifest);
+    const html = verification.verified
+      ? verification.preview.html
+      : buildPreviewErrorHtml({ projectName: project.name, error: verification.error });
+    await saveProject({
+      ...project,
+      preview_status: verification.status,
+      preview_html: html,
+      updated_at: new Date().toISOString(),
+    }, contract.files);
+    return res.status(verification.verified ? 200 : 422).json({
+      success: verification.verified,
+      needs_fix: !verification.verified,
+      status: verification.status,
       manifest: contract.manifest,
-      checks: preview.errors || [],
-      errors: preview.errors || [],
-      has_html: Boolean(preview.html),
+      checks: [
+        { key: 'build', status: verification.build.status, detail: verification.build.error || verification.build.output_directory },
+        ...(verification.browser?.checks || []),
+      ],
+      errors: verification.verified ? [] : [{ message: verification.error }],
+      build: verification.build,
+      browser: verification.browser,
+      has_html: Boolean(verification.preview.html),
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error?.message || 'Preview could not be started.' });
@@ -13089,13 +13247,22 @@ app.post('/api/projects/:id/build', requireAuth, async (req: any, res: any) => {
     };
     if (client) await client.from('deployment_builds').upsert(buildRow, { onConflict: 'project_id,build_id' }).catch(() => null);
     await persistGeneratedRuntimeContract(project, contract.manifest);
-    const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
-      slug: String(project.slug || project.id),
-      runViteBuild: true,
-      outputDirectory: contract.manifest.outputDirectory,
-    });
+    const workDir = path.join('/tmp', 'huggy-builds', `${String(project.slug || project.id).replace(/[^a-z0-9-]/gi, '-')}-${randomUUID()}`);
+    let distReady = false;
+    try {
+      const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
+        slug: String(project.slug || project.id),
+        workDir,
+        runViteBuild: true,
+        outputDirectory: contract.manifest.outputDirectory,
+      });
+      distReady = fs.existsSync(distDir) && fs.readdirSync(distDir, { withFileTypes: true }).length > 0;
+      if (!distReady) throw new Error('Build output is empty.');
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
     if (client) await client.from('deployment_builds').update({ status: 'passed', completed_at: new Date().toISOString() }).eq('project_id', project.id).eq('build_id', buildId).catch(() => null);
-    return res.json({ success: true, build_id: buildId, status: 'passed', profile: contract.manifest.profile, output_directory: contract.manifest.outputDirectory, dist_ready: fs.existsSync(distDir) });
+    return res.json({ success: true, build_id: buildId, status: 'passed', profile: contract.manifest.profile, output_directory: contract.manifest.outputDirectory, dist_ready: distReady });
   } catch (error: any) {
     const client = getSupabase();
     if (client) await client.from('deployment_builds').update({ status: 'failed', error: String(error?.message || 'Build failed').slice(0, 1000), completed_at: new Date().toISOString() }).eq('build_id', buildId).catch(() => null);
@@ -13142,28 +13309,148 @@ function extractStaticFiles(project: any, storedFiles: GeneratedFile[] = []): Re
   return files;
 }
 
+async function verifyProjectPreviewWithRealBuild(project: GeneratedProject, files: GeneratedFile[], manifest: any) {
+  const preview = runPreviewPipeline(project, files);
+  if (preview.status !== 'ready') {
+    const error = preview.errors?.[0]?.message || 'The preview source could not be prepared.';
+    return {
+      verified: false,
+      status: 'needs_fix' as const,
+      error,
+      preview,
+      build: { status: 'skipped' as const, output_directory: String(manifest.outputDirectory || ''), error },
+      browser: null,
+    };
+  }
+
+  const buildId = `preview_${randomUUID()}`;
+  const workDir = path.join('/tmp', 'huggy-preview-builds', buildId);
+  let build: { id: string; status: 'passed' | 'failed'; output_directory: string; error?: string };
+  try {
+    const distDir = await buildStaticSource({ files: extractStaticFiles(project, files) }, {
+      slug: String(project.slug || project.id),
+      workDir,
+      runViteBuild: true,
+      outputDirectory: manifest.outputDirectory,
+    });
+    const outputEntries = fs.readdirSync(distDir, { withFileTypes: true });
+    if (!outputEntries.length) throw new Error(`Build output ${manifest.outputDirectory} is empty.`);
+    build = { id: buildId, status: 'passed', output_directory: manifest.outputDirectory };
+  } catch (error: any) {
+    const message = String(error?.message || 'The generated project build failed.');
+    build = { id: buildId, status: 'failed', output_directory: manifest.outputDirectory, error: message };
+    return {
+      verified: false,
+      status: 'needs_fix' as const,
+      error: message,
+      preview,
+      build,
+      browser: null,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+
+  const browser = await runBrowserInteractionAuditDetailed({ files, previewHtml: preview.html, timeoutMs: 20_000 });
+  const verified = browser.status === 'passed' && !browser.findings.some((finding: any) => finding.severity === 'high');
+  const error = verified
+    ? ''
+    : browser.findings.find((finding: any) => finding.severity === 'high')?.message
+      || browser.findings[0]?.message
+      || 'The browser runtime did not pass strict verification.';
+  return {
+    verified,
+    status: verified ? 'verified' as const : 'needs_fix' as const,
+    error,
+    preview,
+    build,
+    browser: { status: browser.status, findings: browser.findings, checks: browser.checks },
+  };
+}
+
 async function publishCloudflareProjectForRequest(req: any, res: any) {
+  const requestId = `pub_${randomUUID()}`;
+  const projectId = String(req.params.id || '');
   try {
     const auth = getRequiredAuth(req);
-    const project = await loadProjectForPublish(req.params.id, auth.userId, req);
+    if (!enforceRateLimit(`publish:${auth.userId}`, 6, 60_000)) {
+      return res.status(429).json({
+        success: false,
+        error: 'Too many publish requests. Please wait a moment.',
+        message: 'Too many publish requests. Please wait a moment.',
+        diagnostic_code: 'PUBLISH_RATE_LIMITED',
+        request_id: requestId,
+        suggested_action: 'retry_later',
+      });
+    }
+
+    const project = await loadProjectForPublish(projectId, auth.userId, req);
     if (!requireProjectCapability(req, res, 'deploy', project)) return;
+    const context = await createPublishContext(project);
+    const publishStatus = buildPublishStatus(context);
+    if (!publishStatus.can_publish) {
+      const failedCheck = publishStatus.checks.find((check: any) => check.status === 'fail');
+      return res.status(409).json({
+        success: false,
+        error: failedCheck?.detail || 'A verified preview is required before publishing.',
+        message: failedCheck?.detail || 'A verified preview is required before publishing.',
+        diagnostic_code: failedCheck?.key === 'security' ? 'PUBLISH_SECURITY_CHECK_FAILED' : 'PREVIEW_NOT_VERIFIED',
+        request_id: requestId,
+        suggested_action: failedCheck?.key === 'security' ? 'fix_security_then_publish' : 'verify_preview_first',
+        publish: publishStatus,
+      });
+    }
+    if (req.body?.confirmed !== true && req.body?.approvalGranted !== true) {
+      return res.status(409).json({
+        success: false,
+        requires_confirmation: true,
+        error: 'Explicit confirmation is required before publishing this project.',
+        message: 'Explicit confirmation is required before publishing this project.',
+        diagnostic_code: 'PUBLISH_CONFIRMATION_REQUIRED',
+        request_id: requestId,
+        suggested_action: 'confirm_publish',
+        publish: publishStatus,
+      });
+    }
     const slug = String(project.slug || project.id).toLowerCase();
-    const storedFiles = await loadProjectFiles(project.id);
-    const files = extractStaticFiles(project, storedFiles);
+    const files = extractStaticFiles(project, context.files);
     if (!Object.keys(files).length) {
-      return res.status(400).json({ error: 'No generated files to publish.' });
+      return res.status(400).json({ success: false, error: 'No generated files to publish.', request_id: requestId });
     }
     const contract = await readGeneratedRuntimeContract(project);
     if (contract.validation.length) {
-      return res.status(422).json({ error: 'Generated app manifest is invalid.', validation: contract.validation, manifest: contract.manifest });
+      return res.status(422).json({ success: false, error: 'Generated app manifest is invalid.', validation: contract.validation, manifest: contract.manifest, request_id: requestId });
     }
-    const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
-      slug,
-      runViteBuild: true,
-      outputDirectory: contract.manifest.outputDirectory,
-    });
-    await persistGeneratedRuntimeContract(project, contract.manifest);
-    const result = await publishProjectToCloudflare({ slug, distDir });
+    const workDir = path.join('/tmp', 'huggy-publish-builds', `${slug}-${requestId}`);
+    let result: Awaited<ReturnType<typeof publishProjectToCloudflare>>;
+    try {
+      const distDir = await buildStaticSource({ files: extractStaticFiles(project, contract.files) }, {
+        slug,
+        workDir,
+        runViteBuild: true,
+        outputDirectory: contract.manifest.outputDirectory,
+      });
+      await persistGeneratedRuntimeContract(project, contract.manifest);
+      result = await publishProjectToCloudflare({ slug, distDir });
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+    const createdAt = new Date().toISOString();
+    const deploy = {
+      id: randomUUID(),
+      organization_id: project.organization_id,
+      project_id: project.id,
+      provider: contract.manifest.runtime === 'cloudflare-workers' ? 'cloudflare-workers' : 'cloudflare-pages',
+      provider_deployment_id: result.deploymentId,
+      deployment_url: result.deploymentUrl || result.defaultUrl,
+      public_url: result.huggyUrl || publishStatus.public_url,
+      custom_domain: publishStatus.custom_domain,
+      badge_required: publishStatus.badge_required,
+      status: 'ready',
+      commit_hash: req.body?.commitHash || null,
+      branch: req.body?.branch || 'main',
+      created_at: createdAt,
+    };
 
     const client = getSupabase();
     if (client) {
@@ -13174,17 +13461,32 @@ async function publishCloudflareProjectForRequest(req: any, res: any) {
         default_url: result.defaultUrl,
         huggy_subdomain: `${slug}.${HUGGY_ROOT_DOMAIN}`,
         last_deployment_id: result.deploymentId,
-        published_at: new Date().toISOString(),
+        published_at: createdAt,
         status: 'ready',
       }], { onConflict: 'project_id' });
     }
-    res.json({ ok: true, ...result });
+    await saveDeploymentRecord(deploy);
+    const nextStatus = buildPublishStatus({ ...context, latestDeployment: deploy });
+    return res.json({
+      success: true,
+      deployment: sanitizeDeploymentForUser(deploy, result.huggyUrl || nextStatus.public_url, nextStatus.custom_domain),
+      publish: { ...nextStatus, public_url: result.huggyUrl || nextStatus.public_url },
+    });
   } catch (e: any) {
-    console.error('[huggy:publish-cf]', e);
-    res.status(500).json({ error: e?.message || 'Publish failed' });
+    const diagnostic = diagnosePublishError(e);
+    console.error('[huggy:publish-cf]', { request_id: requestId, project_id: projectId, diagnostic_code: diagnostic.diagnostic_code, message: e?.message || String(e) });
+    return res.status(diagnostic.status).json({
+      success: false,
+      error: diagnostic.message,
+      message: diagnostic.message,
+      diagnostic_code: diagnostic.diagnostic_code,
+      request_id: requestId,
+      suggested_action: diagnostic.suggested_action,
+    });
   }
 }
 
+app.post('/api/projects/:id/publish', requireAuth, publishCloudflareProjectForRequest);
 app.post('/api/projects/:id/publish-cf', requireAuth, publishCloudflareProjectForRequest);
 app.post('/api/projects/:id/deploy', requireAuth, publishCloudflareProjectForRequest);
 

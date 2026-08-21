@@ -2,7 +2,14 @@ import './styles/dashboard-polish.css';
 import './styles/dashboard-kimi.css';
 import './styles/dashboard-kimi-sidebar.css';
 import './styles/huggy-light-theme.css';
+import './styles/motion-tokens.css';
+import './styles/legacy-bridge.css';
+import './components/ui/motion.css';
+import './styles/agent-surface.css';
+import './styles/modern-shell.css';
+import './styles/coherence.css';
 import { initThemeController } from './theme-controller';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
 import './conversion-events';
 import { apiFetch } from './lib/api';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -11,14 +18,22 @@ import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions } from './prompt-input-actions';
 import { ensureSettingsPanel, openSettings } from './settings-panel';
 import { openConnectorsPanel } from './connectors-panel';
-import { startCreateProjectFlow } from './services/create-project-flow';
-import { understandUserIntent } from './services/intent-understanding';
+import { formatCreateProjectFlowStatus, startCreateProjectFlow } from './services/create-project-flow';
 import { deriveProjectName } from './services/project-naming';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
-import { demoBuilderUrl, demoDelay, getDemoAssistantReply, getDemoProjects, getDemoUsage, installDemoBanner, isDemoMode } from './demo-mode';
 import { initSkillsWorkflowsPanel } from './skills-workflows-ui';
+import { localPreviewUrl } from './local-preview';
+import { mountAgentModeComposer } from './components/agent/agent-mode-composer';
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { AgentRunPanel } from './components/agent/agent-run-panel';
+import { applyAgentStreamEvent, createAgentRunViewModel, type AgentRunViewModel } from './services/agent-run-store';
+import { openHuggyStream } from './lib/stream-client';
+import { isHuggyStreamEvent, type HuggyStreamEvent } from './lib/stream-protocol';
+import type { AgentMode } from './services/agent-run-contract';
 
 initThemeController();
+initHuggyNavigationTransitions();
 
 type ProjectListResponse = {
   success: boolean;
@@ -121,9 +136,14 @@ type DashboardChatMessage = {
   role: DashboardChatRole;
   content: string;
   streaming?: boolean;
+  view?: AgentRunViewModel;
 };
 
 const dashboardChatMessages: DashboardChatMessage[] = [];
+const dashboardAgentRoots = new Map<string, Root>();
+const dashboardAgentRenderQueue = new Set<string>();
+let dashboardAgentRenderFrame: number | null = null;
+const dashboardStreamHandles = new Map<string, { cancel: () => void }>();
 
 function getTemplateDescription(template: string): string {
   const labels: Record<string, string> = {
@@ -175,11 +195,27 @@ function setDashboardMode(mode: DashboardMode) {
   document.querySelectorAll('[data-prompt-mode-option]').forEach(option => {
     option.classList.toggle('active', (option as HTMLElement).dataset.promptModeOption === selected);
   });
+  window.dispatchEvent(new CustomEvent('huggy-agent-mode-sync', { detail: { mode: selected } }));
+}
+
+function mountDashboardAgentModeComposer() {
+  const root = document.querySelector('.prompt-mode') as HTMLElement | null;
+  if (!root || root.dataset.huggyAgentModeMounted === 'true') return;
+  root.dataset.huggyAgentModeMounted = 'true';
+  const current = selectedDashboardMode();
+  root.innerHTML = '';
+  mountAgentModeComposer(root, {
+    mode: current,
+    locale: (document.documentElement.lang || '').toLowerCase().startsWith('fr') ? 'fr' : 'en',
+    onModeChange: (mode) => {
+      root.dataset.promptMode = mode;
+      saveDashboardWorkspace(true);
+    },
+  });
 }
 
 function saveDashboardWorkspace(immediate = false) {
   if (dashboardWorkspaceTimer !== null) window.clearTimeout(dashboardWorkspaceTimer);
-  if (isDemoMode()) return;
   const save = async () => {
     const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
     try {
@@ -223,15 +259,11 @@ function projectNameFromPrompt(prompt: string) {
 }
 
 function builderUrl(projectId: string) {
-  return isDemoMode() ? demoBuilderUrl(projectId) : `/builder.html?project=${encodeURIComponent(projectId)}`;
+  const path = `/builder.html?project=${encodeURIComponent(projectId)}`;
+  return window.location.search.includes('localPreview=1') ? localPreviewUrl(path) : path;
 }
 
 async function hydrateWorkspaceState() {
-  if (isDemoMode()) {
-    dashboardWorkspaceState = { last_project_id: 'demo-pulseboard', dashboard_draft_prompt: '', dashboard_selected_mode: 'auto' };
-    installContinueLastProject(dashboardWorkspaceState);
-    return;
-  }
   try {
     const response = await apiFetch<{ success: boolean; state: UserWorkspaceState | null }>('/api/users/me/workspace-state');
     dashboardWorkspaceState = response.state || null;
@@ -296,14 +328,14 @@ function projectState(project: DashboardProject): 'draft' | 'ready' | 'published
   if (raw.includes('publish') || raw.includes('deploy') || raw.includes('live')) return 'published';
   if (raw.includes('error') || raw.includes('fail') || raw.includes('blocked') || raw.includes('needs')) return 'needs-fix';
   if (raw.includes('build') || raw.includes('generat') || raw.includes('running') || raw.includes('pending')) return 'building';
-  if (raw.includes('ready') || raw.includes('preview') || raw.includes('ok')) return 'ready';
+  if (raw.includes('verified')) return 'ready';
   return 'draft';
 }
 
 function projectStateLabel(state: ReturnType<typeof projectState>) {
   const labels: Record<ReturnType<typeof projectState>, string> = {
     draft: 'Draft',
-    ready: 'Preview ready',
+    ready: 'Preview verified',
     published: 'Published',
     building: 'Building',
     'needs-fix': 'Needs attention',
@@ -385,10 +417,6 @@ function projectPreviewFrame(project: DashboardProject, state: ReturnType<typeof
 async function deleteProject(projectId: string, projectName: string) {
   const confirmed = window.confirm(`Delete "${projectName}"? This cannot be undone.`);
   if (!confirmed) return;
-  if (isDemoMode()) {
-    showProjectError(`En mode démo, le projet « ${projectName} » n'est pas supprimé.`);
-    return;
-  }
   await apiFetch(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
   await loadLiveProjects();
 }
@@ -573,18 +601,31 @@ function installDashboardUxPolish() {
     }
 
     .dashboard-chat-bubble.is-thinking {
-      background: linear-gradient(110deg, var(--text-sub) 20%, var(--text) 42%, var(--text-sub) 64%);
-      background-size: 240% 100%;
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent !important;
-      animation: dashboard-chat-shimmer 1.8s ease-in-out infinite;
+      color: var(--text) !important;
     }
 
-    @keyframes dashboard-chat-shimmer {
-      0% { background-position: 120% 0; opacity: .62; }
-      50% { opacity: 1; }
-      100% { background-position: -80% 0; opacity: .62; }
+    .dashboard-chat-pending {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 22px;
+      vertical-align: middle;
+    }
+
+    .dashboard-chat-pending i {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--accent-blue, #4f8cff);
+      animation: dashboard-chat-pending 1s ease-in-out infinite;
+    }
+
+    .dashboard-chat-pending i:nth-child(2) { animation-delay: .15s; }
+    .dashboard-chat-pending i:nth-child(3) { animation-delay: .3s; }
+
+    @keyframes dashboard-chat-pending {
+      0%, 80%, 100% { transform: translateY(0); opacity: .42; }
+      40% { transform: translateY(-3px); opacity: 1; }
     }
 
     .create-section[data-chat-state="conversation"] .input-wrapper,
@@ -1106,6 +1147,7 @@ function installDashboardUxPolish() {
         transition: none !important;
         animation: none !important;
       }
+      .dashboard-chat-pending i { animation: none !important; opacity: .7; }
     }
   `;
   document.head.appendChild(style);
@@ -1344,10 +1386,6 @@ function hydrateUserIdentity(detail?: any) {
 async function hydrateAdminConsoleAccess() {
   const adminLink = document.getElementById('btn-admin-console') as HTMLElement | null;
   if (!adminLink) return;
-  if (isDemoMode()) {
-    adminLink.style.display = 'none';
-    return;
-  }
   try {
     const response = await apiFetch<{ success: boolean; user?: { is_platform_admin?: boolean } }>('/api/auth/me');
     adminLink.style.display = response.user?.is_platform_admin ? 'flex' : 'none';
@@ -1357,10 +1395,6 @@ async function hydrateAdminConsoleAccess() {
 }
 
 async function loadLiveProjects() {
-  if (isDemoMode()) {
-    renderLiveProjects(getDemoProjects());
-    return;
-  }
   try {
     localStorage.removeItem('huggy-projects');
     localStorage.removeItem('huggy-current-project');
@@ -1382,17 +1416,11 @@ async function loadLiveProjects() {
 async function loadLiveWallet() {
   const count = document.querySelector('.credits-count');
   const total = document.querySelector('.credits-total');
-  if (isDemoMode()) {
-    syncDashboardPlanBadges('pro');
-    if (count) count.textContent = '742';
-    if (total) total.textContent = ' credits · Pro';
-    return;
-  }
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     syncDashboardPlanBadges(wallet.plan || 'free');
     if (count) count.textContent = String(wallet.balance ?? 0);
-    if (total) total.textContent = ` credits Â· ${planLabel(normalizePlanKey(wallet.plan))}`;
+    if (total) total.textContent = ` crédits · ${planLabel(normalizePlanKey(wallet.plan))}`;
   } catch {
     syncDashboardPlanBadges('free');
     if (count) count.textContent = '--';
@@ -1505,7 +1533,7 @@ function renderAiUsage(data: AiUsageResponse, rates: ModelRateResponse) {
           <span class="usage-credit-pill">${escapeHtml(formatCredits(item.credits_charged))} credits</span>
         </div>
         <div class="usage-row-meta">
-          ${escapeHtml(item.model_name || 'Auto')} Â· ${escapeHtml(item.project_name || 'Project')} Â· ${escapeHtml(item.status || 'completed')} Â· ${escapeHtml(formatDate(item.created_at))}
+          ${escapeHtml(item.model_name || 'Auto')} · ${escapeHtml(item.project_name || 'Projet')} · ${escapeHtml(item.status || 'completed')} · ${escapeHtml(formatDate(item.created_at))}
         </div>
       </div>
     `).join('') : '<div class="usage-empty">AI usage history will appear here after your first Plan, Build, Fix or Deploy action.</div>';
@@ -1540,17 +1568,6 @@ async function loadAiUsageSettings(force = false) {
   const rateList = document.getElementById('model-credit-rates');
   if (history) history.innerHTML = '<div class="usage-empty">Loading AI usage...</div>';
   if (rateList) rateList.innerHTML = '<div class="usage-empty">Loading model credit rates...</div>';
-  if (isDemoMode()) {
-    renderAiUsage(getDemoUsage(), {
-      success: true,
-      models: [
-        { id: 'auto', display_name: 'Huggy Auto', tier: 'balanced', availability: 'all', credits: { plan: '2', build: '18', fix: '10', deploy: '12' } },
-        { id: 'claude-sonnet', display_name: 'Claude Sonnet', tier: 'quality', availability: 'pro', credits: { plan: '4', build: '24', fix: '14', deploy: '16' } },
-      ],
-    });
-    aiUsageLoaded = true;
-    return;
-  }
   try {
     const [usage, rates] = await Promise.all([
       apiFetch<AiUsageResponse>('/api/users/me/ai-usage'),
@@ -1651,7 +1668,8 @@ function bindLiveProjectCreation() {
       }, {
         createProject: true,
         onStatus: status => {
-          button.textContent = status;
+          const locale = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+          button.textContent = formatCreateProjectFlowStatus(status, locale);
         },
       });
     } catch (error) {
@@ -1699,19 +1717,72 @@ function dashboardChatHtml(text: string) {
 function renderDashboardChat() {
   const thread = ensureDashboardChatThread();
   if (!thread) return;
+  dashboardAgentRoots.forEach(root => root.unmount());
+  dashboardAgentRoots.clear();
   // No indentation/newlines inside the bubble: it has white-space: pre-wrap,
   // so any template whitespace would render as real space and inflate the bubble.
   thread.innerHTML = dashboardChatMessages.map(message => {
+    if (message.role === 'assistant' && message.view) {
+      return `<article class="dashboard-chat-message assistant dashboard-chat-agent-message" data-message-id="${escapeHtml(message.id)}"><div class="dashboard-agent-run-host" data-dashboard-agent-host="${escapeHtml(message.id)}"></div></article>`;
+    }
     const thinking = message.role === 'assistant' && message.streaming;
-    const visibleContent = thinking && !message.content ? 'Huggy prépare ta réponse…' : message.content;
+    const pendingIndicator = thinking && !message.content
+      ? '<span class="dashboard-chat-pending" aria-hidden="true"><i></i><i></i><i></i></span>'
+      : '';
     return (
     `<article class="dashboard-chat-message ${message.role}" data-message-id="${escapeHtml(message.id)}">` +
-    `<div class="dashboard-chat-bubble${thinking ? ' is-thinking' : ''}">${dashboardChatHtml(visibleContent)}` +
+    `<div class="dashboard-chat-bubble${thinking ? ' is-thinking' : ''}">${dashboardChatHtml(message.content)}${pendingIndicator}` +
     `${message.streaming ? '<span class="dashboard-chat-cursor" aria-hidden="true"></span>' : ''}</div>` +
     `</article>`
     );
   }).join('');
+  dashboardChatMessages.forEach(message => {
+    if (message.role !== 'assistant' || !message.view) return;
+    const host = thread.querySelector(`[data-dashboard-agent-host="${CSS.escape(message.id)}"]`) as HTMLElement | null;
+    if (!host) return;
+    const root = createRoot(host);
+    dashboardAgentRoots.set(message.id, root);
+    root.render(createElement(AgentRunPanel, {
+      view: message.view,
+      streamText: message.content,
+      locale: (document.documentElement.lang || '').toLowerCase().startsWith('fr') ? 'fr' : 'en',
+      onCancel: () => dashboardStreamHandles.get(message.id)?.cancel(),
+      onRetry: () => void streamDashboardConversation(message.view?.prompt || message.content, message.id, message.view?.requestedMode || 'auto'),
+      onBuildPlan: () => void promoteDashboardPromptToBuilder(message.view?.prompt || message.content, 'build'),
+    }));
+  });
   thread.scrollTop = thread.scrollHeight;
+}
+
+function renderDashboardAgentMessage(message: DashboardChatMessage) {
+  if (!message.view) return;
+  const root = dashboardAgentRoots.get(message.id);
+  if (!root) {
+    renderDashboardChat();
+    return;
+  }
+  root.render(createElement(AgentRunPanel, {
+    view: message.view,
+    streamText: message.content,
+    locale: (document.documentElement.lang || '').toLowerCase().startsWith('fr') ? 'fr' : 'en',
+    onCancel: () => dashboardStreamHandles.get(message.id)?.cancel(),
+    onRetry: () => void streamDashboardConversation(message.view?.prompt || message.content, message.id, message.view?.requestedMode || 'auto'),
+    onBuildPlan: () => void promoteDashboardPromptToBuilder(message.view?.prompt || message.content, 'build'),
+  }));
+}
+
+function scheduleDashboardAgentRender(messageId: string) {
+  dashboardAgentRenderQueue.add(messageId);
+  if (dashboardAgentRenderFrame !== null) return;
+  dashboardAgentRenderFrame = window.requestAnimationFrame(() => {
+    dashboardAgentRenderFrame = null;
+    const ids = [...dashboardAgentRenderQueue];
+    dashboardAgentRenderQueue.clear();
+    ids.forEach(id => {
+      const message = dashboardChatMessages.find(item => item.id === id);
+      if (message) renderDashboardAgentMessage(message);
+    });
+  });
 }
 
 function appendDashboardMessage(role: DashboardChatRole, content: string, streaming = false) {
@@ -1726,24 +1797,37 @@ function appendDashboardMessage(role: DashboardChatRole, content: string, stream
   return message.id;
 }
 
+function appendDashboardRunMessage(prompt: string, mode: AgentMode) {
+  const message: DashboardChatMessage = {
+    id: dashboardMessageId('assistant'),
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    view: createAgentRunViewModel({
+      runId: `dashboard_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      prompt,
+      requestedMode: mode,
+      model: dashboardSelectedModel(),
+      status: 'submitting',
+      language: (document.documentElement.lang || '').toLowerCase().startsWith('fr') ? 'fr' : 'en',
+    }),
+  };
+  dashboardChatMessages.push(message);
+  renderDashboardChat();
+  return message.id;
+}
+
 function updateDashboardMessage(id: string, content: string, streaming = false) {
   const message = dashboardChatMessages.find(item => item.id === id);
   if (!message) return;
   message.content = content;
   message.streaming = streaming;
+  if (message.view) {
+    message.view.assistantText = content;
+    scheduleDashboardAgentRender(id);
+    return;
+  }
   renderDashboardChat();
-}
-
-function dashboardPromptRequiresBuilder(prompt: string, mode: DashboardMode) {
-  if (mode === 'build') return true;
-  if (mode === 'plan') return false;
-  const normalized = prompt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const questionOnly = /^(comment|pourquoi|c'est quoi|explique|dis-moi|donne-moi|que pense|compare|what|why|how|tell me|explain)\b/.test(normalized);
-  const actionSignal = /\b(cree|creer|genere|generer|construis|build|create|make|developpe|implemente|ajoute|modifie|change|corrige|fix|refais|publie|deploie)\b/.test(normalized);
-  const appTargetSignal = /\b(app|application|site|web\s*app|dashboard|crm|marketplace|portfolio|landing|e-?commerce|interface|page|composant|component|auth|database|supabase|stripe|preview|bug|publication|publish|deploiement)\b/.test(normalized);
-  const featureListSignal = normalized.length > 140 && /\b(fonctionnalites?|features?|avec|doit|doivent|bouton|formulaire|tableau|utilisateur|admin|paiement|stockage)\b/.test(normalized);
-  if (questionOnly && !/\b(cree|genere|build|implemente|corrige|publie|deploie)\b/.test(normalized)) return false;
-  return actionSignal && (appTargetSignal || featureListSignal);
 }
 
 function recentDashboardConversationForAssistant() {
@@ -1753,88 +1837,116 @@ function recentDashboardConversationForAssistant() {
     .map(message => ({ role: message.role, content: message.content }));
 }
 
-async function streamDashboardConversation(prompt: string, assistantMessageId: string) {
+async function streamDashboardConversation(prompt: string, assistantMessageId: string, requestedMode: AgentMode = 'auto') {
   dashboardAssistantBusy = true;
-  if (isDemoMode()) {
-    const stages = ['Je comprends ta demande…', 'Je prépare une piste…', 'Je vérifie la réponse…'];
-    for (const stage of stages) {
-      updateDashboardMessage(assistantMessageId, stage, true);
-      await demoDelay(520);
-    }
-    updateDashboardMessage(assistantMessageId, getDemoAssistantReply(prompt), false);
-    dashboardAssistantBusy = false;
-    return;
-  }
   let verified = await getVerifiedSession({ allowRefresh: true });
   if (!verified?.session?.access_token) verified = await refreshVerifiedSession();
   if (!verified?.session?.access_token) {
-    updateDashboardMessage(assistantMessageId, 'Ta session a expirÃ©. Reconnecte-toi pour continuer.', false);
+    const message = dashboardChatMessages.find(item => item.id === assistantMessageId);
+    if (message?.view) {
+      message.view.status = 'failed';
+      message.view.error = 'Session expirée. Reconnectez-vous pour continuer.';
+      scheduleDashboardAgentRender(assistantMessageId);
+    } else {
+      updateDashboardMessage(assistantMessageId, 'Session expirée. Reconnectez-vous pour continuer.', false);
+    }
     window.location.href = `/auth.html?redirect=${encodeURIComponent('/dashboard.html')}`;
     dashboardAssistantBusy = false;
     return;
   }
-  try {
-    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
+  const message = dashboardChatMessages.find(item => item.id === assistantMessageId);
+  if (!message?.view) {
+    dashboardAssistantBusy = false;
+    return;
+  }
+  const handle = openHuggyStream({
+    url: '/api/assistant/chat/stream',
+    init: {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${verified.session.access_token}` },
       body: JSON.stringify({
         prompt,
+        requestedMode,
         modelId: dashboardSelectedModel(),
         messages: recentDashboardConversationForAssistant(),
       }),
-    });
-    if (payload?.success === false) throw new Error(payload.message || payload.error || 'Huggy could not answer right now.');
-    const content = String(payload?.text || payload?.message || '').trim();
-    updateDashboardMessage(
-      assistantMessageId,
-      content.trim() || 'Je suis prÃªt. Donne-moi simplement ce que tu veux construire ou clarifier.',
-      false,
-    );
+    },
+    maxRetries: 0,
+    idleTimeoutMs: 45_000,
+    onProtocolEvent: (event: HuggyStreamEvent) => {
+      const current = dashboardChatMessages.find(item => item.id === assistantMessageId);
+      if (!current?.view) return;
+      current.view = applyAgentStreamEvent(current.view, event);
+      if (event.type === 'assistant_delta') current.content = current.view.assistantText;
+      if (event.type === 'done') current.streaming = false;
+      scheduleDashboardAgentRender(assistantMessageId);
+    },
+    onEvent: (_type, data) => {
+      if (!isHuggyStreamEvent(data)) return;
+      if (data.type === 'error') {
+        const current = dashboardChatMessages.find(item => item.id === assistantMessageId);
+        if (current?.view) current.view.error = data.message;
+      }
+    },
+  });
+  dashboardStreamHandles.set(assistantMessageId, handle);
+  try {
+    await handle.done;
+    const current = dashboardChatMessages.find(item => item.id === assistantMessageId);
+    if (current?.view && !current.view.hasFinal && !handle.isCancelled()) {
+      current.view.status = 'incomplete';
+      current.view.error = 'Le flux s’est interrompu avant sa fin.';
+    }
+    if (current) current.streaming = false;
+    scheduleDashboardAgentRender(assistantMessageId);
   } catch (error) {
-    const message = error instanceof Error && error.message.trim()
-      ? error.message.trim()
-      : 'Huggy nâ€™a pas pu rÃ©pondre pour le moment. RÃ©essaie dans un instant.';
-    updateDashboardMessage(assistantMessageId, message, false);
+    const current = dashboardChatMessages.find(item => item.id === assistantMessageId);
+    if (current?.view) {
+      current.view.status = handle.isCancelled() ? 'cancelled' : 'failed';
+      current.view.error = error instanceof Error && error.message.trim() ? error.message.trim() : 'Le flux IA a échoué.';
+      current.streaming = false;
+      scheduleDashboardAgentRender(assistantMessageId);
+    }
   } finally {
+    dashboardStreamHandles.delete(assistantMessageId);
     dashboardAssistantBusy = false;
   }
 }
 
-function bindDashboardPromptCreation() {
-  const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+type DashboardDecisionResponse = {
+  success: boolean;
+  request_id?: string;
+  requested_mode?: AgentMode;
+  resolved_action?: string;
+  requires_project?: boolean;
+  requires_confirmation?: boolean;
+  objective?: AgentRunViewModel['objective'];
+  clarification?: { question: string; options?: string[] };
+  error?: string;
+  message?: string;
+};
+
+async function requestDashboardDecision(prompt: string, requestedMode: AgentMode) {
+  return apiFetch<DashboardDecisionResponse>('/api/assistant/decision', {
+    method: 'POST',
+    body: JSON.stringify({
+      prompt,
+      requestedMode,
+      modelId: dashboardSelectedModel(),
+      messages: recentDashboardConversationForAssistant(),
+    }),
+  });
+}
+
+async function promoteDashboardPromptToBuilder(prompt: string, mode: AgentMode) {
   const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
-  if (!textarea || !submit || submit.dataset.huggyCreateFlowBound === 'true') return;
-  submit.dataset.huggyCreateFlowBound = 'true';
-  submit.addEventListener('click', event => {
-    const prompt = textarea.value.trim();
-    if (!prompt || dashboardAssistantBusy) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    const original = submit.innerHTML;
-    const mode = selectedDashboardMode();
-    const intent = understandUserIntent({ prompt, hasFiles: false });
-    const wantsBuild = mode === 'build' || (mode !== 'plan' && (dashboardPromptRequiresBuilder(prompt, mode) || intent.allowsFileAction));
-    textarea.value = '';
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    dashboardSetChatState('conversation');
-    appendDashboardMessage('user', prompt);
-
-    if (isDemoMode()) {
-      const assistantId = appendDashboardMessage('assistant', '', true);
-      void streamDashboardConversation(prompt, assistantId);
-      return;
-    }
-
-    if (!wantsBuild) {
-      const assistantId = appendDashboardMessage('assistant', '', true);
-      void streamDashboardConversation(prompt, assistantId);
-      return;
-    }
-
-    dashboardSetChatState('promoting');
-    const statusMessageId = appendDashboardMessage('system', "J'ouvre le builder et je commence la creation du projet.", true);
-    submit.classList.add('is-loading');
-    void startCreateProjectFlow({
+  if (!submit) return;
+  const original = submit.innerHTML;
+  dashboardSetChatState('promoting');
+  const statusMessageId = appendDashboardMessage('system', '', true);
+  submit.classList.add('is-loading');
+  try {
+    await startCreateProjectFlow({
       prompt,
       mode,
       source: 'dashboard',
@@ -1845,18 +1957,62 @@ function bindDashboardPromptCreation() {
     }, {
       createProject: true,
       onStatus: status => {
-        updateDashboardMessage(statusMessageId, status, true);
-        submit.textContent = status;
+        const locale = (document.documentElement.lang || navigator.language || '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+        const label = formatCreateProjectFlowStatus(status, locale);
+        updateDashboardMessage(statusMessageId, label, true);
+        submit.textContent = label;
       },
-    }).catch(error => {
-      submit.classList.remove('is-loading');
-      submit.innerHTML = original;
-      updateDashboardMessage(
-        statusMessageId,
-        error instanceof Error ? error.message : 'Impossible de demarrer le projet pour le moment.',
-        false,
-      );
     });
+  } catch (error) {
+    updateDashboardMessage(statusMessageId, error instanceof Error ? error.message : 'Impossible de démarrer le projet pour le moment.', false);
+    submit.classList.remove('is-loading');
+    submit.innerHTML = original;
+  }
+}
+
+function bindDashboardPromptCreation() {
+  const textarea = document.getElementById('ai-textarea') as HTMLTextAreaElement | null;
+  const submit = document.getElementById('submit-btn') as HTMLButtonElement | null;
+  if (!textarea || !submit || submit.dataset.huggyCreateFlowBound === 'true') return;
+  submit.dataset.huggyCreateFlowBound = 'true';
+  submit.addEventListener('click', async event => {
+    const prompt = textarea.value.trim();
+    if (!prompt || dashboardAssistantBusy) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    const mode = selectedDashboardMode();
+    dashboardSetChatState('conversation');
+    appendDashboardMessage('user', prompt);
+    submit.classList.add('is-loading');
+    try {
+      const decision = await requestDashboardDecision(prompt, mode);
+      if (decision.success === false) throw new Error(decision.message || decision.error || 'La décision de l’agent est indisponible.');
+      textarea.value = '';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      const needsProject = Boolean(decision.requires_project) || ['build', 'edit', 'debug', 'verify'].includes(String(decision.resolved_action));
+      if (needsProject) {
+        await promoteDashboardPromptToBuilder(prompt, mode);
+        return;
+      }
+      const assistantId = appendDashboardRunMessage(prompt, mode);
+      submit.classList.remove('is-loading');
+      submit.innerHTML = 'Envoyer';
+      const message = dashboardChatMessages.find(item => item.id === assistantId);
+      if (message?.view) {
+        message.view.resolvedAction = decision.resolved_action as AgentRunViewModel['resolvedAction'];
+        message.view.objective = decision.objective;
+        message.view.clarification = decision.clarification;
+        if (decision.clarification) message.view.status = 'clarifying';
+        scheduleDashboardAgentRender(assistantId);
+      }
+      void streamDashboardConversation(prompt, assistantId, mode);
+    } catch (error) {
+      textarea.focus();
+      submit.classList.remove('is-loading');
+      submit.innerHTML = 'Envoyer';
+      appendDashboardMessage('system', error instanceof Error ? error.message : 'La demande n’a pas pu être traitée.', false);
+    }
   }, true);
 }
 type DashboardMobileTarget = 'create' | 'projects' | 'usage' | 'account';
@@ -1904,8 +2060,8 @@ function bindDashboardMobileNav() {
 function initDashboardLive() {
   if (dashboardInitialized) return;
   dashboardInitialized = true;
-  installDemoBanner();
   initDashboardChrome();
+  mountDashboardAgentModeComposer();
   if (!dashboardChatMessages.length) dashboardSetChatState('idle');
   hydrateUserIdentity((window as any).huggyAuthReady);
   bindLiveProjectCreation();

@@ -1,14 +1,12 @@
 function initBuilder() {
   // ── INITIAL THEME ───────────────────────────────────────────
-  // Default to DARK (premium dev-tool vibe). Respect a user choice first,
-  // then the OS preference on the very first visit.
+  // Huggy Forge is dark by default. Respect an explicit user choice only;
+  // the operating-system preference must not silently change the product
+  // surface for a first-time visitor.
   const stored = localStorage.getItem('huggy-theme');
-  const prefersDark = typeof matchMedia === 'function'
-    ? matchMedia('(prefers-color-scheme: dark)').matches
-    : true;
   const initialTheme = stored === 'light' || stored === 'dark'
     ? stored
-    : (prefersDark ? 'dark' : 'light');
+    : 'dark';
   document.documentElement.setAttribute('data-theme', initialTheme);
 
   // Project identity is synchronized by builder-live.ts from the backend.

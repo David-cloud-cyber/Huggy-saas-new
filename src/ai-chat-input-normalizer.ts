@@ -187,8 +187,12 @@ export function normalizeAiChatInputs(root: ParentNode = document) {
 
     const submit = wrapper.querySelector<HTMLButtonElement>('.submit-btn');
     if (submit) {
-      submit.setAttribute('aria-label', submit.getAttribute('aria-label') || 'Send prompt');
-      submit.title = submit.title || 'Send prompt';
+      const visibleLabel = submit.querySelector('span')?.textContent?.trim();
+      const accessibleLabel = submit.id === 'submit-btn'
+        ? visibleLabel || 'Créer mon application'
+        : visibleLabel || 'Send prompt';
+      submit.setAttribute('aria-label', submit.getAttribute('aria-label') || accessibleLabel);
+      submit.title = submit.title || accessibleLabel;
       if (!submit.querySelector('svg')) {
         submit.insertAdjacentHTML('beforeend', arrowIcon);
       }

@@ -1,27 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://huggy.fun/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://huggy.fun/pricing.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/features.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/documentation.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/enterprise.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/security.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/privacy.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/about.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/showcase.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/blog.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/community.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/careers.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/api-reference.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/discover.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/terms.html</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/guides/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/guides/build-saas-mvp-with-ai/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/guides/supabase-app-builder/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/tools/prompt-to-app-idea/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/tools/landing-page-score/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/built-with-huggy/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/prompt-recipes/restaurant-app/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/prompt-recipes/saas-dashboard/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://huggy.fun/prompt-recipes/marketplace/</loc><lastmod>2026-08-18</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://huggy.fun/pricing.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/features.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/documentation.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/security.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/privacy.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://huggy.fun/terms.html</loc><lastmod>2026-08-21</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
 </urlset>

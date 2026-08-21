@@ -66,9 +66,11 @@ export class ProviderGateway {
     maxAttempts?: number;
     runtimeConfig?: ProviderRequestConfig;
     runtimeConfigForModel?: (modelId: AllowedModelId) => ProviderRequestConfig | undefined;
+    allowFallback?: boolean;
+    signal?: AbortSignal;
   } = {}): Promise<ChatCompletionResult> {
     const primary = this.requireProviderModel(modelId);
-    const candidates = this.candidatesFor(primary);
+    const candidates = this.candidatesFor(primary, options.allowFallback !== false);
     const maxAttempts = Math.max(1, options.maxAttempts || 2);
     let lastError: any = null;
 
@@ -84,7 +86,7 @@ export class ProviderGateway {
         const startedAt = Date.now();
         this.noteRequest(candidate);
         try {
-          const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000, candidateRuntimeConfig);
+          const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000, candidateRuntimeConfig, options.signal);
           this.noteMetricSuccess(candidate, Date.now() - startedAt);
           this.noteSuccess(candidate);
           return result;
@@ -94,7 +96,7 @@ export class ProviderGateway {
           if (classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
             try {
               this.noteRetry(candidate);
-              const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000);
+              const result = await this.chatWithProvider(candidate, messages, options.timeoutMs || 45_000, undefined, options.signal);
               this.noteMetricSuccess(candidate, Date.now() - startedAt);
               this.noteSuccess(candidate);
               return result;
@@ -122,9 +124,11 @@ export class ProviderGateway {
     timeoutMs?: number;
     runtimeConfig?: ProviderRequestConfig;
     runtimeConfigForModel?: (modelId: AllowedModelId) => ProviderRequestConfig | undefined;
+    allowFallback?: boolean;
+    signal?: AbortSignal;
   } = {}): AsyncGenerator<StreamChatEvent> {
     const primary = this.requireProviderModel(modelId);
-    const candidates = this.candidatesFor(primary);
+    const candidates = this.candidatesFor(primary, options.allowFallback !== false);
     let lastError: any = null;
 
     for (const candidate of candidates) {
@@ -139,7 +143,7 @@ export class ProviderGateway {
       const startedAt = Date.now();
       this.noteRequest(candidate);
       try {
-        for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000, candidateRuntimeConfig)) {
+        for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000, candidateRuntimeConfig, options.signal)) {
           yieldedAnyEvent = true;
           yield event;
         }
@@ -152,7 +156,7 @@ export class ProviderGateway {
         if (!yieldedAnyEvent && classified.diagnosticCode === 'PROVIDER_UNSUPPORTED_RUNTIME_CONFIG' && candidateRuntimeConfig) {
           try {
             this.noteRetry(candidate);
-            for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000)) {
+            for await (const event of this.streamWithProvider(candidate, messages, options.timeoutMs || 90_000, undefined, options.signal)) {
               yieldedAnyEvent = true;
               yield event;
             }
@@ -210,7 +214,8 @@ export class ProviderGateway {
     return modelId;
   }
 
-  private candidatesFor(modelId: AllowedModelId): AllowedModelId[] {
+  private candidatesFor(modelId: AllowedModelId, allowFallback: boolean): AllowedModelId[] {
+    if (!allowFallback) return [modelId];
     const directAnthropicFallback = this.hasDirectAnthropic()
       ? ['anthropic/claude-sonnet-4.6' as AllowedModelId]
       : [];
@@ -244,11 +249,12 @@ export class ProviderGateway {
     messages: ChatMessage[],
     timeoutMs: number,
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ) {
     if (this.shouldUseDirectAnthropic(modelId)) {
-      return this.anthropic!.chat(modelId, messages, 1, timeoutMs, runtimeConfig);
+      return this.anthropic!.chat(modelId, messages, 1, timeoutMs, runtimeConfig, signal);
     }
-    return this.openRouter.chat(modelId, messages, 1, timeoutMs, runtimeConfig);
+    return this.openRouter.chat(modelId, messages, 1, timeoutMs, runtimeConfig, signal);
   }
 
   private streamWithProvider(
@@ -256,11 +262,12 @@ export class ProviderGateway {
     messages: ChatMessage[],
     timeoutMs: number,
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ) {
     if (this.shouldUseDirectAnthropic(modelId)) {
-      return this.anthropic!.streamChat(modelId, messages, timeoutMs, runtimeConfig);
+      return this.anthropic!.streamChat(modelId, messages, timeoutMs, runtimeConfig, signal);
     }
-    return this.openRouter.streamChat(modelId, messages, timeoutMs, runtimeConfig);
+    return this.openRouter.streamChat(modelId, messages, timeoutMs, runtimeConfig, signal);
   }
 
   private getCircuitError(modelId: AllowedModelId): ProviderGatewayError | null {

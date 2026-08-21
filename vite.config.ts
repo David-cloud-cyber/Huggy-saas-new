@@ -26,9 +26,41 @@ function discoverHtmlInputs(root: string) {
   return inputs;
 }
 
+function normalizeRoutePath(value: string) {
+  const pathname = (value.split('?')[0] || '/').replace(/\\+/g, '/');
+  if (pathname === '/') return '/';
+  return pathname.endsWith('/') ? pathname : `${pathname}/`;
+}
+
+function huggyPublicRedirects() {
+  const policyPath = path.resolve(__dirname, 'config', 'public-route-policy.json');
+  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8')) as { redirects?: Record<string, string> };
+  const redirects = new Map<string, string>();
+  for (const [source, target] of Object.entries(policy.redirects || {})) {
+    redirects.set(normalizeRoutePath(source), target);
+    redirects.set(source.replace(/\/$/, '') || '/', target);
+  }
+
+  return {
+    name: 'huggy-public-redirects',
+    configureServer(server: { middlewares: { use: (handler: (req: any, res: any, next: () => void) => void) => void } }) {
+      server.middlewares.use((req, res, next) => {
+        const target = redirects.get(normalizeRoutePath(req.url || '/'));
+        if (!target) {
+          next();
+          return;
+        }
+        res.statusCode = 301;
+        res.setHeader('Location', target);
+        res.end();
+      });
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [tailwindcss()],
+    plugins: [huggyPublicRedirects(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

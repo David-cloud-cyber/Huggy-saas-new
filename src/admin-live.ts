@@ -1,4 +1,10 @@
 import { apiFetch } from './lib/api';
+import './styles/huggy-shell.css';
+import './styles/modern-shell.css';
+import './styles/coherence.css';
+import { initHuggyNavigationTransitions } from './navigation-transitions';
+
+initHuggyNavigationTransitions();
 
 type JsonRecord = Record<string, any>;
 
@@ -228,7 +234,7 @@ function renderProjects() {
   const rows = state.projects
     .filter(project => matchesQuery(project))
     .filter(project => {
-      if (activeFilters.projects === 'preview-ready') return project.preview_status === 'ready';
+      if (activeFilters.projects === 'preview-ready') return project.preview_status === 'verified';
       if (activeFilters.projects === 'published') return Boolean(project.live_url) || /published|ready|success/i.test(String(project.publish_status || ''));
       if (activeFilters.projects === 'needs-attention') return /fail|error|blocked|unknown|not_ready/i.test(`${project.preview_status} ${project.publish_status}`);
       return true;

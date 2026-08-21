@@ -1,5 +1,5 @@
 import { getCurrentPrivatePath, getVerifiedSession, signOutCurrentDevice } from './lib/supabase-browser';
-import { isDemoMode } from './demo-mode';
+import { getLocalPreviewAuth, installLocalPreviewSurface, isLocalPreviewEnabled } from './local-preview';
 
 function redirectToAuth() {
   const redirect = encodeURIComponent(getCurrentPrivatePath());
@@ -8,14 +8,12 @@ function redirectToAuth() {
 
 async function guardPage() {
   document.documentElement.dataset.authReady = 'checking';
-  if (isDemoMode()) {
-    const demoUser = {
-      user: { id: 'demo-user', email: 'demo@huggy.local', user_metadata: { full_name: 'Demo Huggy' } },
-      session: { access_token: 'demo-preview-token' },
-    };
+  if (isLocalPreviewEnabled()) {
+    const previewAuth = getLocalPreviewAuth();
     document.documentElement.dataset.authReady = 'true';
-    (window as any).huggyAuthReady = demoUser;
-    window.dispatchEvent(new CustomEvent('huggy:auth-ready', { detail: demoUser }));
+    (window as any).huggyAuthReady = previewAuth;
+    installLocalPreviewSurface(document.body?.dataset.huggySurface || 'private');
+    window.dispatchEvent(new CustomEvent('huggy:auth-ready', { detail: previewAuth }));
     return;
   }
   const verified = await getVerifiedSession({ allowRefresh: true });
@@ -34,6 +32,10 @@ document.addEventListener('click', (event) => {
   const logoutButton = (event.target as Element | null)?.closest('[data-auth-logout]');
   if (!logoutButton) return;
   event.preventDefault();
+  if (isLocalPreviewEnabled()) {
+    window.location.href = '/auth.html';
+    return;
+  }
   void signOutCurrentDevice().then(() => {
     window.location.href = '/auth.html';
   });

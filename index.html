@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Huggy — AI App Builder for Production-Ready Web Apps</title>
+    <title>Huggy — Turn an idea into a web app with AI</title>
   <!-- HUGGY_SEO_START -->
-  <meta name="description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta name="description" content="Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification." />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://huggy.fun/" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -16,8 +16,8 @@
   <meta name="theme-color" content="#0e1116" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Huggy" />
-  <meta property="og:title" content="Huggy — AI App Builder for Production-Ready Web Apps" />
-  <meta property="og:description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta property="og:title" content="Huggy — Turn an idea into a web app with AI" />
+  <meta property="og:description" content="Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification." />
   <meta property="og:url" content="https://huggy.fun/" />
   <meta property="og:image" content="https://huggy.fun/og-huggy.svg" />
   <meta property="og:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
@@ -25,8 +25,8 @@
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Huggy — AI App Builder for Production-Ready Web Apps" />
-  <meta name="twitter:description" content="Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output." />
+  <meta name="twitter:title" content="Huggy — Turn an idea into a web app with AI" />
+  <meta name="twitter:description" content="Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification." />
   <meta name="twitter:image" content="https://huggy.fun/og-huggy.svg" />
   <meta name="twitter:image:alt" content="Huggy — AI app builder for building and publishing web apps" />
   <script type="application/ld+json">{
@@ -42,7 +42,7 @@
   "name": "Huggy",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Web",
-  "description": "Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output.",
+  "description": "Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification.",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -53,7 +53,7 @@
   "@context": "https://schema.org",
   "@type": "Product",
   "name": "Huggy AI App Builder",
-  "description": "Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output.",
+  "description": "Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification.",
   "brand": {
     "@type": "Brand",
     "name": "Huggy"
@@ -68,7 +68,7 @@
       "name": "What is Huggy?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Huggy is an AI app builder for generating production-ready web apps with database, preview, deployment and SEO-ready structure."
+        "text": "Huggy helps you turn an idea into a working web app, preview it, improve it, and publish it after verification."
       }
     },
     {
@@ -76,7 +76,7 @@
       "name": "Can Huggy generate SEO-ready apps?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Huggy guides generated apps toward semantic HTML, metadata, Open Graph, analytics and quality checks."
+        "text": "Huggy can help structure generated apps with semantic pages and metadata, then you can inspect and verify the result before publishing."
       }
     }
   ]
@@ -112,34 +112,20 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500;600&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 </head>
-<body>
+<body data-huggy-surface="marketing">
     <div id="curtain"></div>
     <div class="navbar-line"></div>
-
-    <nav class="navbar">
-        <a href="/" class="logo">
-            <div class="logo-mark">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <rect width="32" height="32" rx="8" fill="var(--text)"/>
-                    <path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/>
-                    <path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/>
-                    <path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/>
-                </svg>
-            </div>
-            <span class="logo-text">Huggy</span>
-        </a>
-        <div class="nav-links" aria-label="Main navigation" translate="no">
-            <a href="#discover" data-i18n="nav.discover">Discover</a>
-            <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
-            <a href="/showcase.html" data-i18n="nav.showcase">Showcase</a>
-        </div>
-        <div class="nav-actions">
-            <button class="theme-toggle" data-theme-toggle type="button" aria-label="Activer le thème clair" title="Activer le thème clair">
-                <span aria-hidden="true">☼</span>
-            </button>
-            <button class="sign-in-btn" data-conversion-event="sign_in_click" data-conversion-place="navbar">Sign In</button>
-        </div>
-    </nav>
+    <div id="huggy-marketing-header-root" aria-live="off"></div>
+    <noscript>
+        <nav id="landing-navbar" aria-label="Main navigation">
+            <a href="/">Huggy</a>
+            <a href="/features.html">Features</a>
+            <a href="/pricing.html">Pricing</a>
+            <a href="/documentation.html">Documentation</a>
+            <a href="/auth.html">Create my app</a>
+            <button id="landing-nav-toggle" type="button" aria-label="Open navigation">Menu</button>
+        </nav>
+    </noscript>
 
     <main id="main-content">
     <section class="hero">
@@ -150,13 +136,12 @@
                 <span class="badge-text">AI-POWERED APP BUILDER</span>
             </div>
             <h1>
-                <span class="line1"><span data-i18n="hero.line1">Build any</span> <span id="rotating-word">SaaS</span></span>
-                <span class="line2 neon-highlight neon-glow" data-i18n="hero.line2">instantly.</span>
+                <span class="neon-highlight neon-glow" data-i18n="hero.title">From idea to web app.</span>
             </h1>
-            <p class="hero-subtitle" data-i18n="hero.subtitle">Create apps and websites by chatting with AI</p>
+            <p class="hero-subtitle" data-i18n="hero.subtitle">Describe your project. Huggy builds it, verifies it, and helps you publish it.</p>
 
             <div class="input-wrapper">
-                <textarea id="ai-textarea" placeholder="Describe the app you want to build..." data-i18n-placeholder="hero.placeholder"></textarea>
+                <textarea id="ai-textarea" placeholder="Describe the app you want to create…" data-i18n-placeholder="hero.placeholder"></textarea>
                 <div class="input-actions">
                     <div class="actions-left">
                         <button class="icon-btn" id="btn-upload" data-tooltip="Upload files" data-prompt-action="upload" aria-label="Attach files" type="button">
@@ -216,8 +201,8 @@
                             </div>
                         </div>
                         <div class="submit-wrapper">
-                            <button class="submit-btn" id="submit-btn" title="Build now">
-                                <span>Build <span class="neon-glow">now</span></span>
+                            <button class="submit-btn" id="submit-btn" title="Create my app">
+                                <span data-i18n="hero.cta">Create my app</span>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <line x1="12" y1="19" x2="12" y2="5"></line>
                                     <polyline points="5 12 12 5 19 12"></polyline>
@@ -226,6 +211,16 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <p class="hero-reassurance" data-i18n="hero.reassurance">Start free. No payment is required to create your first prototype.</p>
+
+            <div class="hero-flow-rail" aria-label="Huggy workflow">
+                <span data-i18n="hero.preview">Preview the application</span>
+                <i aria-hidden="true"></i>
+                <span data-i18n="hero.refine">Refine it with the agent</span>
+                <i aria-hidden="true"></i>
+                <span data-i18n="hero.publish">Publish when verified</span>
             </div>
 
             <div class="import-row">
@@ -269,7 +264,7 @@
         </div>
     </section>
 
-    <section class="partners-section reveal" aria-label="Technologies and integrations" translate="no">
+    <template id="legacy-partner-strip" hidden>
         <p class="partners-heading" data-i18n="partners.heading">Works with the tools you already use.</p>
         <div class="partners-viewport">
             <div class="partners-track">
@@ -343,15 +338,7 @@
                 </div>
             </div>
         </div>
-    </section>
-
-    <section class="vision-section landing-manifest reveal" aria-label="Huggy manifesto" translate="no">
-        <div class="vision-content">
-            <p class="manifest-kicker" data-i18n="manifest.kicker">Our belief</p>
-            <h2 class="vision-quote" data-scroll-text-reveal data-i18n="manifest.quote">"We believe the future of software isn't just about code—it's about making creation accessible to everyone who has a story to tell."</h2>
-            <p class="manifest-attrib" data-i18n="manifest.attrib">— The Huggy team</p>
-        </div>
-    </section>
+    </template>
 
     <section class="workflow-section reveal" aria-label="How Huggy works" translate="no">
         <div class="section-header compact">
@@ -377,67 +364,6 @@
                 <h3 data-i18n="workflow.s3.title">Refine &amp; publish</h3>
                 <p data-i18n="workflow.s3.text">Ask for changes in chat &mdash; Huggy edits the project &mdash; then publish in one click.</p>
             </div>
-        </div>
-    </section>
-
-    <section id="discover" class="discover-section reveal" aria-label="Apps built with Huggy" translate="no">
-        <div class="discover-head">
-            <div>
-                <p class="section-kicker" data-i18n="discover.kicker">Discover</p>
-                <h2 data-i18n="discover.title">Web apps built with Huggy.</h2>
-                <p data-i18n="discover.desc">Short, readable, concrete previews of the kind of results Huggy can produce.</p>
-            </div>
-            <a class="discover-all" href="/discover.html" data-conversion-event="discover_view_all_click" data-i18n="discover.viewall">View all</a>
-        </div>
-        <div class="discover-grid stagger-grid">
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="task-app" data-build-prompt="Create a polished task app with add, complete, filters, empty state and local storage.">
-                <span class="discover-thumb dt-task" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.productivity">Productivity</span>
-                <h3>TodoFlow</h3>
-                <p data-i18n="discover.card.todo">Task app with add, complete, filters and local storage.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="booking" data-build-prompt="Create a booking app with availability, calendar slots, service details, customer form and confirmation flow.">
-                <span class="discover-thumb dt-booking" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.booking">Booking</span>
-                <h3>Bookly</h3>
-                <p data-i18n="discover.card.bookly">Availability, customer form, confirmation and clear states.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a polished SaaS dashboard with onboarding, billing, settings and team management.">
-                <span class="discover-thumb dt-saas" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.saas">SaaS</span>
-                <h3>Metric OS</h3>
-                <p data-i18n="discover.card.metric">Cards, charts, sidebar, onboarding and publishing flow.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="commerce" data-build-prompt="Create a commerce app with product grid, cart states, checkout feedback and responsive UI.">
-                <span class="discover-thumb dt-commerce" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.commerce">Commerce</span>
-                <h3>Cartly</h3>
-                <p data-i18n="discover.card.cartly">Product grid, cart states, checkout feedback and responsive UI.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="restaurant" data-build-prompt="Create a restaurant website with menu, specials, reservation CTA and mobile-first layout.">
-                <span class="discover-thumb dt-restaurant" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.restaurant">Restaurant</span>
-                <h3>MenuKit</h3>
-                <p data-i18n="discover.card.menukit">Menu, specials, reservation CTA and mobile-first layout.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="education" data-build-prompt="Create an education dashboard with courses, progress cards and learner-friendly states.">
-                <span class="discover-thumb dt-learning" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.education">Education</span>
-                <h3>ClassHub</h3>
-                <p data-i18n="discover.card.classhub">Course dashboard, progress cards and learner-friendly states.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="saas" data-build-prompt="Create a SaaS client portal with login, projects, invoices and a clean dashboard.">
-                <span class="discover-thumb dt-saas" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.saas">SaaS</span>
-                <h3>Client Portal</h3>
-                <p data-i18n="discover.card.portal">Login, projects, invoices and a clean dashboard layout.</p>
-            </button>
-            <button type="button" class="discover-card reveal" data-conversion-event="example_prompt_click" data-conversion-template="commerce" data-build-prompt="Create a commerce storefront with catalog, product pages, cart and checkout flow.">
-                <span class="discover-thumb dt-commerce" aria-hidden="true"></span>
-                <span class="discover-category" data-i18n="discover.cat.commerce">Commerce</span>
-                <h3>Storefront</h3>
-                <p data-i18n="discover.card.storefront">Catalog, product pages, cart and a checkout-ready flow.</p>
-            </button>
         </div>
     </section>
 
@@ -544,13 +470,13 @@
 
     </main>
 
-    <a href="/auth.html" class="sticky-cta" id="sticky-cta" data-conversion-event="start_building_click" data-conversion-place="sticky">
-        Build with Huggy
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-    </a>
+    <section class="footer-cta reveal" aria-label="Start building with Huggy">
+        <div>
+            <p class="section-kicker" data-i18n="footer.cta">Start with your idea.</p>
+            <h2 data-i18n="footer.ctaTitle">Your idea deserves a first prototype.</h2>
+        </div>
+        <a href="/auth.html" class="footer-cta-button" data-conversion-event="start_building_click" data-conversion-place="footer" data-i18n="footer.ctaButton">Create my app</a>
+    </section>
 
     <footer class="footer">
         <div class="footer-grid">
@@ -566,41 +492,54 @@
                     </div>
                     <span class="logo-text">Huggy</span>
                 </a>
-                <p>The next generation of <span class="neon-highlight neon-static">AI-native</span> software development.</p>
+                <p data-i18n="footer.tagline">From idea to verified web product.</p>
             </div>
             <div class="footer-col">
-                <h5>Product</h5>
+                <h5 data-i18n="footer.col.product">Product</h5>
                 <ul class="footer-links">
-                    <li><a href="/features.html">Features</a></li>
-                    <li><a href="/showcase.html">Showcase</a></li>
-                    <li><a href="/pricing.html">Pricing</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
+                    <li><a href="/features.html" data-i18n="footer.link.features">Features</a></li>
+                    <li><a href="/pricing.html" data-i18n="footer.link.pricing">Pricing</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Resources</h5>
+                <h5 data-i18n="footer.col.solutions">Solutions</h5>
                 <ul class="footer-links">
-                    <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/api-reference.html">API Reference</a></li>
-                    <li><a href="/blog.html">Blog</a></li>
-                    <li><a href="/community.html">Community</a></li>
+                    <li><a href="/features.html" data-i18n="footer.link.features">Features</a></li>
+                    <li><a href="/documentation.html" data-i18n="footer.link.documentation">Documentation</a></li>
+                    <li><a href="/pricing.html" data-i18n="footer.link.pricing">Pricing</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Company</h5>
+                <h5 data-i18n="footer.col.resources">Resources</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
-                    <li><a href="/privacy.html">Privacy</a></li>
-                    <li><a href="/security.html">Security</a></li>
+                    <li><a href="/documentation.html" data-i18n="footer.link.documentation">Documentation</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5 data-i18n="footer.col.company">Company</h5>
+                <ul class="footer-links">
+                    <li><a href="/security.html" data-i18n="footer.link.security">Security</a></li>
+                    <li><a href="/privacy.html" data-i18n="footer.link.privacy">Privacy</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5 data-i18n="footer.col.legal">Legal</h5>
+                <ul class="footer-links">
+                    <li><a href="/terms.html" data-i18n="footer.link.terms">Terms</a></li>
+                    <li><a href="/privacy.html#cookies" data-i18n="footer.link.cookies">Cookies</a></li>
+                    <li><a href="/security.html" data-i18n="footer.link.status">Trust &amp; safety</a></li>
+                    <li><a href="mailto:contact@huggy.fun" data-i18n="footer.link.contact">Contact</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
-            <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+            <div class="footer-bottom-actions">
+                <label for="lang-select" data-i18n="footer.lang">Language</label>
+                <select id="lang-select" aria-label="Language">
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                </select>
             </div>
         </div>
     </footer>
@@ -619,81 +558,5 @@
     <div id="toast-container"></div>
 
     <script type="module" src="/src/main.ts"></script>
-    <script>
-        // Fallback reveal activator — runs even if the TS module hasn't loaded yet
-        function activateReveals() {
-            document.querySelectorAll('.reveal').forEach(function(el) {
-                var rect = el.getBoundingClientRect();
-                if (rect.top < window.innerHeight && rect.bottom > 0) {
-                    el.classList.add('active');
-                }
-            });
-        }
-        // Run on DOMContentLoaded
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', activateReveals);
-        } else {
-            activateReveals();
-        }
-        // Also run on scroll for sections below the fold
-        var revealFrame = 0;
-        window.addEventListener('scroll', function() {
-            if (revealFrame) return;
-            revealFrame = requestAnimationFrame(function() {
-                revealFrame = 0;
-                activateReveals();
-            });
-        }, { passive: true });
-
-        // Sticky nav: opacify background slightly once the page is scrolled.
-        (function() {
-            var nav = document.querySelector('.navbar');
-            if (!nav) return;
-             var navFrame = 0;
-             var onScroll = function() {
-                 if (navFrame) return;
-                 navFrame = requestAnimationFrame(function() {
-                     navFrame = 0;
-                     nav.classList.toggle('scrolled', window.scrollY > 8);
-                 });
-             };
-            onScroll();
-            window.addEventListener('scroll', onScroll, { passive: true });
-        })();
-    </script>
-    <script>
-        // Global navigation helper using standardized curtain
-        function navigate(url) {
-            const curtain = document.getElementById('curtain');
-            if (curtain) {
-                curtain.classList.remove('rising');
-                curtain.classList.add('falling');
-                setTimeout(() => {
-                    window.location.href = url;
-                }, 600);
-            } else {
-                window.location.href = url;
-            }
-        }
-
-        // Rising curtain on load
-        window.addEventListener('load', () => {
-            const curtain = document.getElementById('curtain');
-            if (curtain) curtain.classList.add('rising');
-        });
-
-        // Intercept links for smooth exit
-        document.addEventListener('click', (e) => {
-            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-            const link = e.target.closest('a');
-            if (link && link.href && link.origin === window.location.origin && !link.hasAttribute('download') && link.target !== '_blank') {
-                const href = link.getAttribute('href') || '';
-                // In-page anchors (#discover, #pricing…) must scroll, not drop the curtain.
-                if (href.startsWith('#') || (link.pathname === window.location.pathname && link.hash)) return;
-                e.preventDefault();
-                navigate(link.href);
-            }
-        });
-    </script>
 </body>
 </html>

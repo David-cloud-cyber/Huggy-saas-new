@@ -1,4 +1,7 @@
 @import "../design-system.css";
+@import "./motion-tokens.css";
+@import "./legacy-bridge.css";
+@import "../components/ui/motion.css";
 
 /* Shared Huggy shell language. Values come from design-system.css; the Builder remains the visual reference. */
 :root {

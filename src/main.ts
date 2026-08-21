@@ -1,16 +1,19 @@
 // @ts-ignore
 import './index.css';
+import './styles/modern-shell.css';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
 import { initHuggyMotion } from './huggy-motion';
 import { initProviderModelSelectors } from './model-selector-ui';
 import { initPromptInputActions, storePendingPromptAttachments, type PendingPromptAttachment } from './prompt-input-actions';
-import { startCreateProjectFlow } from './services/create-project-flow';
+import { formatCreateProjectFlowStatus, startCreateProjectFlow } from './services/create-project-flow';
 import { buildImportContext, type HuggyImportSource } from './services/import-intelligence';
 import { installPublicPageEnhancements } from './public-page-enhancements';
 import { initLandingI18n, getLandingLang } from './landing-i18n';
 import { initPublicPricingFlow } from './public-pricing-flow';
 import { initThemeController } from './theme-controller';
 import { initHuggyNavigationTransitions } from './navigation-transitions';
+import { getProductPositioning, type ProductLocale } from './product-positioning';
+import { mountMarketingReactShell } from './surface-react';
 
 // Helper to handle potential null elements gracefully
 function getElement<T extends HTMLElement | SVGElement>(id: string): T | null {
@@ -22,19 +25,31 @@ function isHomeLanding(): boolean {
     return path === '/' || path === '/index.html';
 }
 
+function syncLandingPositioningMetadata(locale: ProductLocale) {
+    if (!isHomeLanding()) return;
+    const copy = getProductPositioning(locale);
+    document.title = copy.seoTitle;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', copy.seoDescription);
+    document.querySelector('meta[property="og:title"]')?.setAttribute('content', copy.seoTitle);
+    document.querySelector('meta[property="og:description"]')?.setAttribute('content', copy.seoDescription);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute('content', copy.seoTitle);
+    document.querySelector('meta[name="twitter:description"]')?.setAttribute('content', copy.seoDescription);
+}
+
 function init() {
     initHuggyMotion();
     initHuggyNavigationTransitions();
     // Manual French i18n for the landing. Runs before scroll-text-reveal so the
     // manifesto is split from already-translated text.
-    initLandingI18n();
+    const landingLocale = initLandingI18n();
+    syncLandingPositioningMetadata(landingLocale);
     initPublicPricingFlow();
+    mountMarketingReactShell();
     initThemeController();
     normalizeAiChatInputs();
 
     const themeBtn = getElement<HTMLButtonElement>('theme-btn');
     const curtain = getElement<HTMLDivElement>('curtain');
-    const rotatingWord = getElement<HTMLSpanElement>('rotating-word');
     const moonIcon = getElement<SVGElement>('moon-icon');
     const sunIcon = getElement<SVGElement>('sun-icon');
 
@@ -172,41 +187,7 @@ function init() {
             textarea.addEventListener('focus', () => {
                 if (trackedFocus) return;
                 trackedFocus = true;
-                trackConversionEvent('input_focus', {
-                    place: textarea.closest('.marketing-prompt-section') ? 'marketing_prompt' : 'hero',
-                });
-            });
-        });
-    }
-
-    function installProductProofToggle() {
-        const toggle = document.querySelector<HTMLButtonElement>('[data-product-proof-toggle]');
-        const extraCards = Array.from(document.querySelectorAll<HTMLElement>('.product-proof-card.proof-extra, .discover-card.proof-extra'));
-        if (!toggle || extraCards.length === 0) return;
-
-        let expanded = false;
-        toggle.addEventListener('click', () => {
-            expanded = !expanded;
-            toggle.setAttribute('aria-expanded', String(expanded));
-            const fr = getLandingLang() === 'fr';
-            toggle.textContent = expanded
-                ? (fr ? 'R\u00e9duire' : 'Show less')
-                : (fr ? 'Voir tout' : 'View all');
-
-            extraCards.forEach((card, index) => {
-                if (expanded) {
-                    card.hidden = false;
-                    card.style.animationDelay = `${index * 45}ms`;
-                    card.classList.add('proof-revealed');
-                } else {
-                    card.classList.remove('proof-revealed');
-                    card.hidden = true;
-                    card.style.animationDelay = '';
-                }
-            });
-
-            trackConversionEvent(expanded ? 'discover_expanded' : 'discover_collapsed', {
-                examples_visible: expanded ? String(4 + extraCards.length) : '4',
+                trackConversionEvent('input_focus', { place: 'hero' });
             });
         });
     }
@@ -297,111 +278,14 @@ function init() {
         const isProductShell = /\/(builder|dashboard|auth)\.html$/.test(path);
         if (isProductShell) return;
 
-        const navbar = document.querySelector('.navbar');
-        const navbarLine = document.querySelector('.navbar-line');
-        if (navbar) {
-            const updateNavbarSurface = () => {
-                const transparent = window.scrollY <= 10;
-                navbar.classList.toggle('navbar-transparent-on-scroll', transparent);
-                navbarLine?.classList.toggle('navbar-transparent-on-scroll', transparent);
-            };
-            updateNavbarSurface();
-            window.addEventListener('scroll', updateNavbarSurface, { passive: true });
-        }
-
-        const pageContent = document.querySelector('.page-content');
-        if (pageContent && !document.querySelector('.page-proof-grid')) {
-            const title = document.querySelector('.page-hero h1')?.textContent?.trim() || 'Huggy';
-            const proof = document.createElement('section');
-            proof.className = 'page-proof-grid reveal';
-            proof.innerHTML = `
-                <article>
-                    <span>01</span>
-                    <h3>Clear next step</h3>
-                    <p>${title} is designed to help visitors understand what Huggy does and where to go next without hunting through the page.</p>
-                </article>
-                <article>
-                    <span>02</span>
-                    <h3>Builder-first path</h3>
-                    <p>Every public page now leads back to the same core action: describe an app, open the builder and keep momentum.</p>
-                </article>
-                <article>
-                    <span>03</span>
-                    <h3>Trust before action</h3>
-                    <p>Visitors see the product promise, the workflow and the launch path before being asked to sign in or upgrade.</p>
-                </article>
-            `;
-            pageContent.insertAdjacentElement('afterend', proof);
-        }
-
-        const footer = document.querySelector('.footer');
-        const alreadyHasPrompt = document.querySelector('.marketing-prompt-section, .cta-prompt-section');
-        // The landing has its own curated flow (hero prompt, pricing, FAQ); the
-        // generic marketing "final CTA" prompt is only injected on other pages.
-        if (footer && !alreadyHasPrompt && !isHomeLanding()) {
-            const prompt = document.createElement('section');
-            prompt.className = 'marketing-prompt-section reveal';
-            prompt.innerHTML = `
-                <div class="marketing-prompt-copy">
-                    <span class="marketing-kicker">Start from a prompt</span>
-                    <h2>Turn the next idea into a working app.</h2>
-                    <p>Describe the product, workflow or landing page you want. Huggy will open a builder workspace and keep your draft moving from idea to preview.</p>
-                </div>
-                <div class="input-wrapper marketing-prompt-card">
-                    <textarea rows="3" placeholder="Example: Build a client portal with login, projects, invoices and a clean dashboard."></textarea>
-                    <div class="input-actions">
-                        <div class="actions-left">
-                            <button class="icon-btn" data-tooltip="Attach files" data-prompt-action="upload" aria-label="Attach files" type="button">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                            </button>
-                            <button class="icon-btn" data-tooltip="Voice input" data-prompt-action="voice" aria-label="Voice input" type="button">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                                </svg>
-                            </button>
-                        </div>
-                        <div class="actions-right">
-                            <div class="prompt-mode" data-prompt-mode="auto">
-                                <button class="prompt-mode-btn" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan">
-                                    <span class="prompt-mode-label">Auto</span>
-                                    <svg class="prompt-mode-chevron" aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                                </button>
-                                <div class="prompt-mode-menu" role="menu">
-                                    <button type="button" data-prompt-mode-option="auto" role="menuitem" class="active"><span>Auto</span><small>Let Huggy decide</small></button>
-                                    <button type="button" data-prompt-mode-option="build" role="menuitem"><span>Build</span><small>Create or edit the app</small></button>
-                                    <button type="button" data-prompt-mode-option="plan" role="menuitem"><span>Plan</span><small>Think first</small></button>
-                                </div>
-                            </div>
-                            <button class="submit-btn" title="Open builder" type="button">
-                                <span>Open builder</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="12" y1="19" x2="12" y2="5"></line>
-                                    <polyline points="5 12 12 5 19 12"></polyline>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            footer.insertAdjacentElement('beforebegin', prompt);
-        }
-
         installScrollTextReveal();
     }
 
     installMarketingEnhancements();
-    // Landing and pricing ship curated French FAQs in their HTML. Keep the shared
-    // FAQ enhancement for the other marketing pages without duplicating these sections.
-    const hasCuratedFaq = isHomeLanding() || /\/pricing\.html$/.test(window.location.pathname);
-    installPublicPageEnhancements(hasCuratedFaq ? { faq: false } : {});
+    // FAQ is authored per page. Do not inject a generic FAQ into public surfaces:
+    // duplicated questions dilute the page intent and create competing landmarks.
+    installPublicPageEnhancements({ faq: false });
     installLandingConversionTracking();
-    installProductProofToggle();
     initPromptInputActions({ persistForBuilder: true });
     normalizeAiChatInputs();
 
@@ -418,28 +302,17 @@ function init() {
     function setPublicAuthCtaState(state: PublicAuthState) {
         const signedIn = state === 'signed-in';
         const fr = getLandingLang() === 'fr';
+        const positioning = getProductPositioning(fr ? 'fr' : 'en');
         document.querySelectorAll<HTMLElement>('.sign-in-btn').forEach(button => {
             button.setAttribute('translate', 'no');
             button.textContent = signedIn
                 ? (fr ? 'Tableau de bord' : 'Dashboard')
-                : (fr ? 'Se connecter' : 'Sign In');
+                : positioning.primaryCta;
             button.dataset.authState = state;
-            button.setAttribute('aria-label', signedIn ? 'Open your Huggy dashboard' : 'Sign in to Huggy');
+            button.setAttribute('aria-label', signedIn ? 'Open your Huggy dashboard' : positioning.primaryCta);
             button.classList.toggle('is-authenticated', signedIn);
         });
 
-        const stickyCta = document.getElementById('sticky-cta') as HTMLAnchorElement | null;
-        if (stickyCta) {
-            stickyCta.setAttribute('translate', 'no');
-            stickyCta.href = signedIn ? '/dashboard.html' : '/auth.html';
-            const textNode = Array.from(stickyCta.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
-            if (textNode) {
-                textNode.textContent = signedIn
-                    ? (fr ? 'Continuer dans Huggy ' : 'Continue in Huggy ')
-                    : (fr ? 'Créer avec Huggy ' : 'Build with Huggy ');
-            }
-            stickyCta.setAttribute('aria-label', signedIn ? 'Continue in Huggy dashboard' : 'Build with Huggy');
-        }
     }
 
     async function resolvePublicAuthState(force = false): Promise<PublicAuthState> {
@@ -479,16 +352,10 @@ function init() {
     }
 
     function navigateWithCurtain(url: string) {
-        if (curtain && !curtainBusy) {
-            curtainBusy = true;
-            curtain.style.transformOrigin = 'top';
-            curtain.classList.add('falling');
-            setTimeout(() => {
-                window.location.href = url;
-            }, 600);
-        } else {
-            window.location.href = url;
-        }
+        if (curtainBusy) return;
+        curtainBusy = true;
+        document.documentElement.dataset.navigationState = 'leaving';
+        window.location.assign(url);
     }
 
     void resolvePublicAuthState();
@@ -602,7 +469,7 @@ function init() {
             submitBtn.disabled = true;
             const btnSpan = submitBtn.querySelector('span');
             const originalBtnHtml = btnSpan?.innerHTML || '';
-            if (btnSpan) btnSpan.textContent = 'Preparing workspace...';
+            if (btnSpan) btnSpan.textContent = formatCreateProjectFlowStatus('preparing', getLandingLang());
             textarea.disabled = true;
             textarea.style.opacity = '0.5';
 
@@ -615,7 +482,7 @@ function init() {
                 }, {
                     createProject: true,
                     onStatus: status => {
-                        if (btnSpan) btnSpan.textContent = status;
+                        if (btnSpan) btnSpan.textContent = formatCreateProjectFlowStatus(status, getLandingLang());
                     },
                 });
             } catch (error) {
@@ -623,7 +490,7 @@ function init() {
                 textarea.disabled = false;
                 textarea.style.opacity = '1';
                 if (btnSpan) btnSpan.innerHTML = originalBtnHtml;
-                showToast(error instanceof Error ? error.message : 'Unable to prepare your workspace.');
+                showToast(error instanceof Error ? error.message : formatCreateProjectFlowStatus('failed', getLandingLang()));
             }
         }
 
@@ -773,9 +640,6 @@ function init() {
     initProviderModelSelectors();
     normalizeAiChatInputs();
 
-    // 3. Keep the hero title stable for stronger landing-page recall.
-    if (rotatingWord) rotatingWord.textContent = 'SaaS';
-
     // 7. FAQ Toggle — single answer open at a time, with aria-expanded kept in sync.
     const faqItems = document.querySelectorAll('.faq-item');
     faqItems.forEach(item => {
@@ -795,15 +659,8 @@ function init() {
 
     // Global navigation helper
     (window as any).navigate = (url: string) => {
-        if (curtain) {
-            curtain.style.transformOrigin = 'top';
-            curtain.classList.add('falling');
-            setTimeout(() => {
-                window.location.href = url;
-            }, 600);
-        } else {
-            window.location.href = url;
-        }
+        document.documentElement.dataset.navigationState = 'leaving';
+        window.location.assign(url);
     };
 
     // 9. Scroll reveal with a throttled fallback for browsers where the
@@ -833,9 +690,10 @@ function init() {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('active');
+                revealObserver.unobserve(entry.target);
             }
         });
-    }, { threshold: 0.01, rootMargin: '0px 0px 150px 0px' });
+    }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
 
     document.querySelectorAll('.reveal').forEach(el => {
         revealObserver.observe(el);
@@ -851,13 +709,6 @@ function init() {
     setTimeout(checkReveals, 150);
     setTimeout(checkReveals, 350);
     setTimeout(checkReveals, 700);
-
-    // Guaranteed safety timeout to unveil all elements shortly after page starts
-    setTimeout(() => {
-        document.querySelectorAll('.reveal:not(.active)').forEach(el => {
-            el.classList.add('active');
-        });
-    }, 400);
 
     // Iframe or Sandboxed environment compliance to guarantee visible content
     try {
@@ -951,7 +802,7 @@ function init() {
                 await storePendingPromptAttachments([await readImportFile(input.file)]);
             }
             closeModal();
-            showToast('Preparing your workspace...');
+            showToast(formatCreateProjectFlowStatus('preparing', getLandingLang()));
             await startCreateProjectFlow({
                 prompt: shortPromptBySource[source],
                 mode: context.mode === 'research_site' ? 'auto' : 'build',
@@ -960,7 +811,7 @@ function init() {
                 projectName: `${source} import`,
             }, {
                 createProject: true,
-                onStatus: showToast,
+                onStatus: status => showToast(formatCreateProjectFlowStatus(status, getLandingLang())),
             });
         };
         void go().catch(error => showToast(error instanceof Error ? error.message : 'Unable to start import.'));
@@ -1065,21 +916,6 @@ function init() {
         }, { capture: true });
     });
 
-    // Sticky CTA Visibility
-    const stickyCta = getElement<HTMLElement>('sticky-cta');
-    let stickyCtaFrame = 0;
-    const updateStickyCta = () => {
-        stickyCtaFrame = 0;
-        if (!stickyCta) return;
-        const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-        if (scrollHeight <= 0) return;
-        const scrollPercentage = (window.scrollY / scrollHeight) * 100;
-        stickyCta.classList.toggle('visible', scrollPercentage > 50);
-    };
-    window.addEventListener('scroll', () => {
-        if (!stickyCtaFrame) stickyCtaFrame = window.requestAnimationFrame(updateStickyCta);
-    }, { passive: true });
-    updateStickyCta();
 }
 
 // Start initialization

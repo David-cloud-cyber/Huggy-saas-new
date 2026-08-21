@@ -110,14 +110,15 @@
     </style>
 </head>
 <body>
-    <nav class="topbar">
+    <div id="huggy-marketing-header-root" aria-live="off"></div>
+    <nav class="topbar" hidden aria-hidden="true">
         <a class="brand" href="/">
-            <span class="logo-mark">H</span>
+            <span class="logo-mark" data-huggy-logo aria-hidden="true"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="var(--text)"/><path d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z" fill="var(--bg)"/><path d="M7 16.5V24.5L11.5 22V14L7 16.5Z" fill="var(--bg)"/><path d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z" fill="var(--bg)"/></svg></span>
             <span>Huggy</span>
         </a>
         <div class="nav-links">
-            <a href="/guides/">Guides</a>
-            <a href="/built-with-huggy/">Showcase</a>
+            <a href="/documentation.html">Documentation</a>
+            <a href="/features.html">Features</a>
             <a href="/pricing.html" class="nav-cta">Pricing</a>
         </div>
     </nav>
@@ -170,37 +171,31 @@
                 <h5>Product</h5>
                 <ul class="footer-links">
                     <li><a href="/features.html">Features</a></li>
-                    <li><a href="/showcase.html">Showcase</a></li>
                     <li><a href="/pricing.html">Pricing</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Resources</h5>
                 <ul class="footer-links">
                     <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/api-reference.html">API Reference</a></li>
-                    <li><a href="/blog.html">Blog</a></li>
-                    <li><a href="/community.html">Community</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Company</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
                     <li><a href="/privacy.html">Privacy</a></li>
                     <li><a href="/security.html">Security</a></li>
+                    <li><a href="/terms.html">Terms</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
-            <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+            <div style="display:flex;gap:20px;" aria-label="Social links">
+                <span style="color:inherit;opacity:.7;">Social profiles coming soon</span>
             </div>
         </div>
     </footer>
+    <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

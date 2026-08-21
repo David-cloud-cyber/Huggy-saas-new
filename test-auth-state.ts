@@ -58,6 +58,12 @@ assert(
 );
 
 assert(
+  browserAuthSource.includes("searchParams.delete('demo')") &&
+    browserAuthSource.includes("searchParams.delete('demoMode')"),
+  'disabled demo flags must be stripped from private redirects',
+);
+
+assert(
   serverSource.includes('normalizeMalformedAbsolutePath') &&
     serverSource.includes("res.redirect(302, normalizedPath)"),
   'server must repair malformed absolute Huggy paths before static routing',
@@ -95,7 +101,8 @@ assert(
 );
 
 assert(
-  authPageSource.includes('data-provider="google"') && authPageSource.includes('Continue with Google'),
+  authPageSource.includes('data-provider="google"') &&
+    (authPageSource.includes('Continuer avec Google') || authPageSource.includes('Continue with Google')),
   'auth page must include the Google sign-in control',
 );
 
@@ -110,6 +117,14 @@ assert(
     authPageSource.includes('aria-live="polite"'),
   'auth page must expose an accessible #auth-status region for src/auth.ts',
 );
+
+assert(!authPageSource.includes('auth-showcase'), 'auth page must not keep the removed decorative showcase');
+assert(!authPageSource.includes('auth-progress'), 'auth page must not keep the removed decorative progress indicator');
+assert(authPageSource.includes('id="forgot-password-link"'), 'auth page must expose a password recovery action');
+assert(authPageSource.includes('id="toggle-password"'), 'auth page must expose an accessible password visibility control');
+assert(authPageSource.includes('id="password-confirm-field"'), 'auth page must expose the reset password confirmation field');
+assert(authPageSource.includes('data-huggy-logo'), 'auth page must expose the canonical Huggy logo marker');
+assert(authPageSource.includes('id="theme-btn"'), 'auth page must expose the shared theme control');
 
 assert(
   authPageSource.includes('type="module" src="/src/auth.ts"'),

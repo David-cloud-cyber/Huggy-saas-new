@@ -1,4 +1,5 @@
 import { getVerifiedSession, refreshVerifiedSession } from './supabase-browser';
+import { getLocalPreviewApiResult, isLocalPreviewEnabled } from '../local-preview';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -49,6 +50,15 @@ function redirectToAuth() {
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (isLocalPreviewEnabled()) {
+    const previewResult = getLocalPreviewApiResult(path, options.method || 'GET');
+    if (previewResult.handled) {
+      if (previewResult.blocked) {
+        throw new ApiError('Cette action est désactivée dans l’aperçu local.', 403, { local_preview: true });
+      }
+      return previewResult.payload as T;
+    }
+  }
   let verified = await getVerifiedSession();
   if (!verified?.session?.access_token) {
     verified = await refreshVerifiedSession();

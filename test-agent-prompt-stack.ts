@@ -95,7 +95,7 @@ assert.ok(generationPrompt.includes('Senior agent voice'), 'generation prompt mu
 assert.ok(generationPrompt.toLowerCase().includes('return a complete modern react project structure'), 'generation prompt must prefer modern React app output');
 assert.ok(generationPrompt.includes('Never assume a global supabase variable'), 'generation prompt must forbid global Supabase auth clients');
 assert.ok(generationPrompt.includes('never call supabase.auth unless supabase is imported or created'), 'generation prompt must require an explicit auth client');
-assert.ok(generationPrompt.includes('show a safe demo/auth-unavailable state instead of crashing'), 'generation prompt must keep auth previews safe when config is missing');
+assert.ok(generationPrompt.includes('show a safe unavailable/auth-unavailable state instead of crashing'), 'generation prompt must keep auth previews safe when config is missing');
 assert.ok(generationPrompt.includes('Generation stack v2 is mandatory'), 'generation prompt must include the strict generation stack v2 policy');
 assert.ok(generationPrompt.includes('React 18'), 'generation prompt must require React 18');
 assert.ok(generationPrompt.includes('lucide-react'), 'generation prompt must require lucide-react icons');

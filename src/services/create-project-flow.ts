@@ -4,6 +4,12 @@ import { deriveProjectName } from './project-naming';
 
 export type CreateProjectFlowMode = 'auto' | 'build' | 'plan';
 export type CreateProjectFlowSource = 'landing' | 'dashboard' | 'builder' | 'import' | 'modal' | 'template';
+export type CreateProjectFlowStatus =
+  | 'preparing'
+  | 'opening_auth'
+  | 'creating_project'
+  | 'opening_builder'
+  | 'failed';
 
 export type CreateProjectFlowInput = {
   prompt?: string;
@@ -27,6 +33,29 @@ type ProjectCreateResponse = {
 };
 
 const FLOW_STORAGE_KEY = 'huggy-create-project-flow';
+
+export function formatCreateProjectFlowStatus(
+  status: CreateProjectFlowStatus,
+  locale: 'fr' | 'en' = 'en',
+) {
+  const labels = {
+    fr: {
+      preparing: 'Préparation de votre espace…',
+      opening_auth: 'Ouverture de la connexion sécurisée…',
+      creating_project: 'Création du projet…',
+      opening_builder: 'Ouverture du Builder…',
+      failed: 'Le démarrage du projet a échoué.',
+    },
+    en: {
+      preparing: 'Preparing your workspace…',
+      opening_auth: 'Opening secure sign in…',
+      creating_project: 'Creating the project…',
+      opening_builder: 'Opening the Builder…',
+      failed: 'The project could not be started.',
+    },
+  } as const;
+  return labels[locale][status];
+}
 
 function normalizeMode(mode: unknown): CreateProjectFlowMode {
   return mode === 'plan' ? 'plan' : mode === 'build' ? 'build' : 'auto';
@@ -109,7 +138,7 @@ export function redirectToBuilder(projectId?: string, input: CreateProjectFlowIn
 
 export async function startCreateProjectFlow(input: CreateProjectFlowInput, options: {
   createProject?: boolean;
-  onStatus?: (status: string) => void;
+  onStatus?: (status: CreateProjectFlowStatus) => void;
 } = {}) {
   const flow: CreateProjectFlowInput = {
     ...input,
@@ -118,36 +147,44 @@ export async function startCreateProjectFlow(input: CreateProjectFlowInput, opti
     source: input.source || 'landing',
   };
   persistCreateProjectFlow(flow);
-  options.onStatus?.('Preparing your workspace...');
+  options.onStatus?.('preparing');
 
-  const verified = await getVerifiedSession({ allowRefresh: true }) || await refreshVerifiedSession();
-  if (!verified?.session?.access_token) {
-    options.onStatus?.('Opening secure sign in...');
-    const redirect = encodeURIComponent(builderUrlForProject(undefined, flow));
-    window.location.href = `/auth.html?redirect=${redirect}`;
-    return;
+  try {
+    const verified = await getVerifiedSession({ allowRefresh: true }) || await refreshVerifiedSession();
+    if (!verified?.session?.access_token) {
+      options.onStatus?.('opening_auth');
+      const redirect = encodeURIComponent(builderUrlForProject(undefined, flow));
+      window.location.href = `/auth.html?redirect=${redirect}`;
+      return;
+    }
+
+    if (options.createProject !== false) {
+      options.onStatus?.('creating_project');
+      const prompt = flow.prompt || 'Create a polished responsive web application.';
+      const response = await apiFetch<ProjectCreateResponse>('/api/projects', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: cleanText(flow.projectName) || projectNameFromPrompt(prompt),
+          template: flow.template || 'custom',
+          theme: flow.theme || 'light',
+          model: flow.model || 'auto',
+          prompt,
+          features: flow.features || [],
+          source: flow.source || 'landing',
+        }),
+      });
+      if (!response?.success || !response.project?.id) {
+        throw new Error('The project could not be verified after creation. Please try again.');
+      }
+      options.onStatus?.('opening_builder');
+      redirectToBuilder(response.project.id, flow);
+      return;
+    }
+
+    options.onStatus?.('opening_builder');
+    redirectToBuilder(undefined, flow);
+  } catch (error) {
+    options.onStatus?.('failed');
+    throw error;
   }
-
-  if (options.createProject !== false) {
-    options.onStatus?.('Creating the project...');
-    const prompt = flow.prompt || 'Create a polished responsive web application.';
-    const response = await apiFetch<ProjectCreateResponse>('/api/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: cleanText(flow.projectName) || projectNameFromPrompt(prompt),
-        template: flow.template || 'custom',
-        theme: flow.theme || 'light',
-        model: flow.model || 'auto',
-        prompt,
-        features: flow.features || [],
-        source: flow.source || 'landing',
-      }),
-    });
-    options.onStatus?.('Opening the builder...');
-    redirectToBuilder(response.project.id, flow);
-    return;
-  }
-
-  options.onStatus?.('Opening the builder...');
-  redirectToBuilder(undefined, flow);
 }

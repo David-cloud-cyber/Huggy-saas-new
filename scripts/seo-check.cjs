@@ -2,13 +2,10 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const publicPages = [
-  'index.html', 'pricing.html', 'features.html', 'documentation.html',
-  'enterprise.html', 'security.html', 'privacy.html', 'about.html',
-  'showcase.html', 'blog.html', 'community.html', 'careers.html',
-  'api-reference.html', 'discover.html', 'terms.html',
-];
-const privatePages = ['auth.html', 'dashboard.html', 'builder.html', 'checkout.html', 'admin.html'];
+const routePolicy = JSON.parse(fs.readFileSync(path.join(root, 'config', 'public-route-policy.json'), 'utf8'));
+const routeToFile = route => route === '/' ? 'index.html' : route.replace(/^\//, '');
+const publicPages = routePolicy.canonicalPublic.map(routeToFile);
+const privatePages = routePolicy.private.map(routeToFile);
 const failures = [];
 
 function read(file) {
@@ -38,6 +35,7 @@ for (const file of publicPages) {
   assert(file, /index\s*,\s*follow/i.test(robots), 'public page must be indexable');
   assert(file, h1Count === 1, `expected exactly one h1 (got ${h1Count})`);
   assert(file, /property=["']og:image["']/i.test(html), 'missing og:image');
+  assert(file, /data-huggy-logo|huggy-logo-mark|M16 8L25 13\.5/i.test(html), 'visible Huggy logo icon is missing');
 }
 
 for (const file of privatePages) {
@@ -52,6 +50,47 @@ assert('public/robots.txt', /Sitemap:\s*https:\/\/huggy\.fun\/sitemap\.xml/i.tes
 const sitemap = read('public/sitemap.xml');
 assert('public/sitemap.xml', /<urlset[\s>]/i.test(sitemap), 'invalid sitemap root');
 assert('public/sitemap.xml', !/<loc>https:\/\/huggy\.fun\/(auth|dashboard|builder|checkout|admin)\.html<\/loc>/i.test(sitemap), 'private page must not be in sitemap');
+for (const route of routePolicy.canonicalPublic) {
+  assert('public/sitemap.xml', sitemap.includes(`<loc>https://huggy.fun${route}</loc>`), `canonical route ${route} is missing from sitemap`);
+}
+for (const route of Object.keys(routePolicy.redirects)) {
+  const target = routePolicy.redirects[route];
+  const expected = `${route} ${target} 301`;
+  const redirects = read('public/_redirects');
+  assert('public/_redirects', redirects.split(/\r?\n/).includes(expected), `missing permanent redirect ${expected}`);
+  assert('public/sitemap.xml', !sitemap.includes(`<loc>https://huggy.fun${route}</loc>`), `removed route ${route} must not be in sitemap`);
+
+  // Redirect-only pages must not remain as build inputs. The dynamic
+  // /built-with-huggy/:projectId server route is intentionally not a file.
+  if (!route.includes(':')) {
+    const sourceFile = route.endsWith('/')
+      ? path.join(root, route.slice(1), 'index.html')
+      : path.join(root, route.slice(1));
+    assert(route, !fs.existsSync(sourceFile), 'redirect-only source file must be removed');
+  }
+}
+
+for (const file of [...publicPages, ...privatePages]) {
+  const html = read(file);
+  for (const match of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
+    const href = match[1].trim();
+    if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || /^https?:\/\//i.test(href)) continue;
+    const route = (href.split(/[?#]/)[0] || '/').replace(/\\/g, '/');
+    if (routePolicy.redirects[route]) {
+      failures.push(`${file}: navigation points to removed route ${route}; use ${routePolicy.redirects[route]}`);
+    }
+  }
+}
+
+const shells = read('src/components/shells.tsx');
+assert('src/components/shells.tsx', /HuggyBrand/.test(shells), 'React marketing shell must use the canonical Huggy logo');
+assert('src/components/shells.tsx', !/huggy-react-brand-mark[^\n]*>H</.test(shells), 'React marketing shell must not render a text-only H brand mark');
+
+for (const file of publicPages) {
+  const html = read(file);
+  assert(file, /huggy-marketing-header-root/.test(html), 'public page must expose the canonical marketing header mount');
+  assert(file, !/marketing-prompt-section|page-proof-grid|seo-panel|Start from a prompt/i.test(html), 'generic injected marketing block must not remain on a canonical page');
+}
 
 if (failures.length) {
   console.error(`SEO check failed with ${failures.length} issue(s):`);

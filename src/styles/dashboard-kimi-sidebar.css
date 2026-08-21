@@ -9,6 +9,21 @@
   --dashboard-sidebar-ease: cubic-bezier(.22, 1, .36, 1);
 }
 
+/* The Kimi layout remains, but its visual source is now the Huggy Forge
+   semantic palette instead of a second neutral system. */
+:root[data-theme="dark"] {
+  --kimi-sidebar: var(--bg-panel, #11161e);
+  --kimi-surface: var(--bg-surface, #151a22);
+  --kimi-surface-raised: var(--bg-elevated, #1b2230);
+  --kimi-text: var(--text, #f8fafc);
+  --kimi-muted: var(--text-muted, #aab4c3);
+  --kimi-sub: var(--text-sub, #8d98a8);
+  --kimi-border: var(--border, #263244);
+  --kimi-border-strong: var(--border-mid, #3a4a60);
+  --kimi-blue: var(--accent-blue, #4f8cff);
+  --kimi-blue-soft: var(--accent-blue-soft, rgba(79,140,255,.14));
+}
+
 .sidebar {
   position: relative;
   z-index: 250;

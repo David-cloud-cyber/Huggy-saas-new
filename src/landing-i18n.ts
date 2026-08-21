@@ -11,22 +11,35 @@
  * never mangles the copy on top of our own translations.
  */
 
+import { getProductPositioning } from './product-positioning';
+
 type Lang = 'en' | 'fr';
 
 const STORAGE_KEY = 'huggy-lang';
 
 /** Hand-written French copy, keyed by `data-i18n`. Premium tone, not word-for-word. */
+const FR_POSITIONING = getProductPositioning('fr');
+
 const FR: Record<string, string> = {
   // Navigation
   'nav.discover': 'Découvrir',
+  'nav.features': 'Fonctionnalités',
+  'nav.documentation': 'Documentation',
   'nav.pricing': 'Tarifs',
   'nav.showcase': 'Showcase',
+  'nav.cta': 'Créer mon application',
+  'nav.open': 'Ouvrir la navigation',
+  'nav.close': 'Fermer la navigation',
 
   // Hero
-  'hero.line1': 'Transformez votre idée',
-  'hero.line2': 'en vraie application.',
-  'hero.subtitle': 'Décrivez votre produit, prévisualisez-le, améliorez-le avec l’IA et publiez-le quand il est prêt.',
-  'hero.placeholder': 'Décrivez l’application que vous voulez créer…',
+  'hero.title': FR_POSITIONING.heroTitle,
+  'hero.subtitle': FR_POSITIONING.heroSubtitle,
+  'hero.placeholder': FR_POSITIONING.promptPlaceholder,
+  'hero.cta': FR_POSITIONING.primaryCta,
+  'hero.reassurance': 'Commencez gratuitement. Aucun paiement requis pour créer votre premier prototype.',
+  'hero.preview': FR_POSITIONING.previewLabel,
+  'hero.refine': FR_POSITIONING.refineLabel,
+  'hero.publish': FR_POSITIONING.publishLabel,
   'hero.import': 'ou importez depuis',
 
   // Partners / integrations strip
@@ -122,7 +135,10 @@ const FR: Record<string, string> = {
   'faq.a5': 'Les clés des fournisseurs et les jetons privés n’apparaissent jamais dans le code frontend généré. Les secrets côté serveur restent dans des environnements sécurisés, et les actions sensibles restent confirmées et protégées côté serveur.',
 
   // Footer
-  'footer.tagline': 'La nouvelle génération du développement logiciel <span class="neon-highlight neon-static">nativement IA</span>.',
+  'footer.tagline': 'De l’idée au produit web vérifié.',
+  'footer.cta': 'Commencez par votre idée.',
+  'footer.ctaTitle': 'Votre idée mérite un premier prototype.',
+  'footer.ctaButton': 'Créer mon application',
   'footer.col.company': 'Entreprise',
   'footer.link.about': 'À propos',
   'footer.link.careers': 'Carrières',
@@ -131,6 +147,11 @@ const FR: Record<string, string> = {
   'footer.link.features': 'Fonctionnalités',
   'footer.link.showcase': 'Showcase',
   'footer.link.pricing': 'Tarifs',
+  'footer.col.solutions': 'Solutions',
+  'footer.link.templates': 'Modèles',
+  'footer.link.guides': 'Guides',
+  'footer.link.teams': 'Pour les équipes',
+  'footer.link.agencies': 'Pour les agences',
   'footer.col.resources': 'Ressources',
   'footer.link.documentation': 'Documentation',
   'footer.link.api': 'Référence API',
@@ -139,9 +160,11 @@ const FR: Record<string, string> = {
   'footer.link.privacy': 'Confidentialité',
   'footer.link.security': 'Sécurité',
   'footer.link.terms': 'Conditions',
+  'footer.link.cookies': 'Cookies',
+  'footer.link.status': 'Confiance et sécurité',
+  'footer.link.contact': 'Contact',
   'footer.col.community': 'Communauté',
   'footer.link.community': 'Communauté',
-  'footer.link.guides': 'Guides',
   'footer.lang': 'Langue',
 };
 
@@ -211,6 +234,17 @@ export function initLandingI18n(): Lang {
       if (!key) return;
       const en = placeholderSource.get(key) ?? '';
       node.placeholder = lang === 'fr' ? FR[key] ?? en : en;
+    });
+    document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]').forEach((node) => {
+      const key = node.dataset.i18nAriaLabel;
+      if (!key) return;
+      const englishAria: Record<string, string> = {
+        'nav.open': 'Open navigation',
+        'nav.close': 'Close navigation',
+      };
+      const value = lang === 'fr' ? FR[key] ?? key : englishAria[key] ?? source.get(key) ?? key;
+      node.setAttribute('aria-label', value);
+      node.setAttribute('title', value);
     });
     document.documentElement.lang = lang;
     document.documentElement.dataset.lang = lang;

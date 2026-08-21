@@ -1,18 +1,12 @@
 import { trackFunnelEvent } from './conversion-events';
 import { initThemeController } from './theme-controller';
+import { formatUsd, getPublicPlan, type BillingInterval, type PublicPlanKey } from './config/pricing-plans';
 
-export type PublicPlanKey = 'free' | 'pro' | 'scale';
-export type BillingInterval = 'monthly' | 'annual';
+export type { BillingInterval, PublicPlanKey } from './config/pricing-plans';
 
 type PricingSelection = {
   plan: PublicPlanKey;
   billing: BillingInterval;
-};
-
-const FALLBACK_PRICING: Record<PublicPlanKey, { monthly: number; annual: number; annualTotal: number; annualSaving: number }> = {
-  free: { monthly: 0, annual: 0, annualTotal: 0, annualSaving: 0 },
-  pro: { monthly: 25, annual: 20, annualTotal: 240, annualSaving: 60 },
-  scale: { monthly: 200, annual: 160, annualTotal: 1920, annualSaving: 480 },
 };
 
 function normalizePlan(value: string | null | undefined): PublicPlanKey {
@@ -39,13 +33,9 @@ export function buildCheckoutUrl(plan: Exclude<PublicPlanKey, 'free'>, billing: 
   return `/checkout.html?plan=${encodeURIComponent(plan)}&billing=${encodeURIComponent(billing)}`;
 }
 
-function formatUsd(value: number) {
-  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-}
-
 function updatePricingCopy(selection: PricingSelection) {
   (['pro', 'scale'] as const).forEach((plan) => {
-    const pricing = FALLBACK_PRICING[plan];
+    const pricing = getPublicPlan(plan);
     const price = document.getElementById(`price-${plan}`);
     const note = document.getElementById(`note-${plan}`);
 
@@ -85,7 +75,7 @@ function updateCtas(selection: PricingSelection) {
     const stickyPlan = selection.plan === 'free' ? 'pro' : selection.plan;
     sticky.href = buildAuthUrl(stickyPlan, selection.billing);
     const priceKey = selection.billing === 'annual' ? 'annual' : 'monthly';
-    stickyLabel && (stickyLabel.textContent = `${stickyPlan === 'pro' ? 'Pro' : 'Scale'} · ${formatUsd(FALLBACK_PRICING[stickyPlan][priceKey])}/mois`);
+    stickyLabel && (stickyLabel.textContent = `${getPublicPlan(stickyPlan).name} · ${formatUsd(getPublicPlan(stickyPlan)[priceKey])}/mois`);
   }
 }
 

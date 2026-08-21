@@ -24,6 +24,17 @@ export type VerifiedSession = {
 export function safeRedirectTarget(candidate?: string | null): string {
   const fallback = '/dashboard.html';
   const value = String(candidate || '').trim();
+  const removeDisabledDemoFlag = (target: string) => {
+    try {
+      const parsed = new URL(target, 'https://huggy.invalid');
+      parsed.searchParams.delete('demo');
+      parsed.searchParams.delete('demoMode');
+      const query = parsed.searchParams.toString();
+      return `${parsed.pathname}${query ? `?${query}` : ''}${parsed.hash}`;
+    } catch {
+      return target;
+    }
+  };
   if (!value) return fallback;
 
   const isSafeInternalPath = (target: string) => {
@@ -36,11 +47,11 @@ export function safeRedirectTarget(candidate?: string | null): string {
   try {
     const decoded = decodeURIComponent(value);
     if (isSafeInternalPath(decoded)) {
-      return decoded;
+      return removeDisabledDemoFlag(decoded);
     }
   } catch {
     if (isSafeInternalPath(value)) {
-      return value;
+      return removeDisabledDemoFlag(value);
     }
   }
 

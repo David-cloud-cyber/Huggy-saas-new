@@ -392,12 +392,7 @@ export function installSharedFaq(options: PublicEnhancementOptions = {}) {
     </div>
   `;
 
-  const promptSection = document.querySelector('.marketing-prompt-section, .cta-prompt-section');
-  if (promptSection?.parentElement) {
-    promptSection.parentElement.insertBefore(section, promptSection);
-  } else {
-    footer.parentElement?.insertBefore(section, footer);
-  }
+  footer.parentElement?.insertBefore(section, footer);
 
   section.querySelectorAll<HTMLButtonElement>('.huggy-shared-faq-question').forEach(button => {
     button.addEventListener('click', () => {
@@ -434,5 +429,4 @@ export function installPublicPageEnhancements(options: PublicEnhancementOptions 
   }
   initThemeController();
   installSmartBackNavigation(options);
-  installSharedFaq(options);
 }

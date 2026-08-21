@@ -10,63 +10,24 @@
  * Accent: Kimi blue (#3b82f6). Loaded after dashboard-polish.css so it wins.
  */
 
-/* ── Kimi palette (scoped to the dashboard via :root override) ───────────── */
-:root[data-theme='dark'],
+/* ── Dashboard alias layer ────────────────────────────────────────────────
+   The Kimi layout is preserved, but its palette is no longer a second
+   design system. Every value resolves to the canonical Huggy Forge tokens. */
 :root {
-  --kimi-bg: #0a0a0a;
-  --kimi-sidebar: #0f0f0f;
-  --kimi-surface: #161616;
-  --kimi-surface-raised: #1e1e1e;
-  --kimi-border: rgba(255, 255, 255, 0.07);
-  --kimi-border-strong: rgba(255, 255, 255, 0.12);
-  --kimi-text: #f5f5f5;
-  --kimi-muted: #a0a0a0;
-  --kimi-sub: #6e6e6e;
-  --kimi-blue: #3b82f6;
-  --kimi-blue-soft: rgba(59, 130, 246, 0.14);
-  --kimi-blue-hover: rgba(59, 130, 246, 0.22);
-  --kimi-ease: cubic-bezier(.22, 1, .36, 1);
-
-  /* Re-point the Huggy tokens the dashboard uses to the Kimi palette. */
-  --bg: var(--kimi-bg);
-  --bg-surface: var(--kimi-surface);
-  --bg-panel: var(--kimi-sidebar);
-  --bg-input: var(--kimi-surface);
-  --bg-elevated: var(--kimi-surface-raised);
-  --border: var(--kimi-border);
-  --border-mid: var(--kimi-border-strong);
-  --border-focus: rgba(59, 130, 246, 0.5);
-  --accent: var(--kimi-blue);
-  --accent-blue: var(--kimi-blue);
-  --accent-blue-deep: #60a5fa;
-  --accent-blue-soft: var(--kimi-blue-soft);
-  --accent-blue-hover: var(--kimi-blue-hover);
-  --accent-spark: var(--kimi-blue);
-  --text: var(--kimi-text);
-  --text-muted: var(--kimi-muted);
-  --text-sub: var(--kimi-sub);
-}
-
-:root[data-theme='light'] {
-  --kimi-bg: #ffffff;
-  --kimi-sidebar: #f7f7f8;
-  --kimi-surface: #ffffff;
-  --kimi-surface-raised: #ffffff;
-  --kimi-border: rgba(0, 0, 0, 0.08);
-  --kimi-border-strong: rgba(0, 0, 0, 0.14);
-  --kimi-text: #0d0d0d;
-  --kimi-muted: #5a5a5a;
-  --kimi-sub: #8a8a8a;
-  --bg: var(--kimi-bg);
-  --bg-surface: var(--kimi-surface);
-  --bg-panel: var(--kimi-sidebar);
-  --bg-input: var(--kimi-surface);
-  --bg-elevated: var(--kimi-surface-raised);
-  --border: var(--kimi-border);
-  --border-mid: var(--kimi-border-strong);
-  --text: var(--kimi-text);
-  --text-muted: var(--kimi-muted);
-  --text-sub: var(--kimi-sub);
+  --kimi-bg: var(--bg);
+  --kimi-sidebar: var(--bg-panel);
+  --kimi-surface: var(--bg-surface);
+  --kimi-surface-raised: var(--bg-elevated);
+  --kimi-border: var(--border);
+  --kimi-border-strong: var(--border-mid, var(--border));
+  --kimi-text: var(--text);
+  --kimi-muted: var(--text-muted);
+  --kimi-sub: var(--text-sub);
+  --kimi-blue: var(--accent-blue);
+  --kimi-blue-soft: var(--accent-blue-soft);
+  --kimi-blue-hover: var(--accent-blue-hover);
+  --kimi-ease: var(--huggy-ease, cubic-bezier(.16, 1, .3, 1));
+  --accent-spark: var(--accent-blue);
 }
 
 body { background: var(--kimi-bg); }

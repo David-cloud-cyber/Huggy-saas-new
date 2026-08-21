@@ -16,9 +16,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Response } from "./components/ui/response";
 import type { HuggyStreamEvent } from "./lib/stream-protocol";
+import { applyAgentStreamEvent, createAgentRunViewModel, type AgentRunViewModel } from "./services/agent-run-store";
+import type { AgentMode } from "./services/agent-run-contract";
+import { AgentRunPanel } from "./components/agent/agent-run-panel";
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "./components/ai-elements/tool";
-import { Reasoning, ReasoningTrigger, ReasoningContent } from "./components/ai-elements/reasoning";
 import { Sources, SourcesTrigger, SourcesContent, Source } from "./components/ai-elements/sources";
+import "./styles/agent-surface.css";
 
 hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("css", css);
@@ -63,7 +66,6 @@ type LiveRunState = {
   activeText: string;
   summary: string;
   assistantText: string;
-  reasoningText: string;
   tools: ToolEntry[];
   sources: SourceEntry[];
   attachments: AttachmentEntry[];
@@ -71,6 +73,7 @@ type LiveRunState = {
   skillId?: string;
   skillVersion?: string;
   lines: LiveRunLine[];
+  view?: AgentRunViewModel;
 };
 
 export type HuggyConversationMessage = {
@@ -91,7 +94,7 @@ export type HuggyConversationApi = {
   clearWorking: (id: string) => void;
   setBlock: (id: string, block: unknown | null) => void;
   setFlow: (id: string, flow: unknown) => void;
-  startLiveRun: (id: string, meta?: { intent?: string; activeText?: string }) => void;
+  startLiveRun: (id: string, meta?: { intent?: string; activeText?: string; mode?: AgentMode; model?: string; runId?: string }) => void;
   applyStreamEvent: (id: string, event: HuggyStreamEvent) => void;
   appendAssistantDelta: (id: string, text: string) => void;
   finishLiveRun: (id: string, summary?: string) => void;
@@ -237,6 +240,18 @@ function cloneMessages(messages: HuggyConversationMessage[]) {
       ? {
         ...message.liveRun,
         lines: [...message.liveRun.lines],
+        view: message.liveRun.view
+          ? {
+            ...message.liveRun.view,
+            activities: message.liveRun.view.activities.map((item) => ({ ...item })),
+            files: [...message.liveRun.view.files],
+            checks: message.liveRun.view.checks.map((item) => ({ ...item })),
+            warnings: [...message.liveRun.view.warnings],
+            objective: message.liveRun.view.objective ? { ...message.liveRun.view.objective } : undefined,
+            plan: message.liveRun.view.plan ? { ...message.liveRun.view.plan, steps: message.liveRun.view.plan.steps.map((step) => ({ ...step })) } : undefined,
+            verification: message.liveRun.view.verification ? { ...message.liveRun.view.verification, checks: message.liveRun.view.verification.checks.map((item) => ({ ...item })) } : undefined,
+          }
+          : undefined,
       }
       : undefined,
   }));
@@ -282,7 +297,9 @@ function createStore() {
         pendingDeltas.delete(id);
         continue;
       }
-      const step = instant ? pending.length : Math.max(2, Math.min(24, Math.ceil(pending.length / 12)));
+      // Network deltas are already the model's units of meaning. Flush them in
+      // animation-frame batches instead of simulating a typewriter effect.
+      const step = instant ? pending.length : Math.min(pending.length, 4096);
       message.content += pending.slice(0, step);
       const rest = pending.slice(step);
       if (rest) pendingDeltas.set(id, rest);
@@ -313,7 +330,7 @@ function createStore() {
     pendingDeltas.delete(id);
   };
 
-  const ensureLiveRun = (message: HuggyConversationMessage, meta: { intent?: string; activeText?: string } = {}): LiveRunState => {
+  const ensureLiveRun = (message: HuggyConversationMessage, meta: { intent?: string; activeText?: string; mode?: AgentMode; model?: string; runId?: string } = {}): LiveRunState => {
     if (!message.liveRun) {
       message.liveRun = {
         status: "active",
@@ -321,12 +338,18 @@ function createStore() {
         activeText: meta.activeText || "",
         summary: "",
         assistantText: "",
-        reasoningText: "",
         tools: [],
         sources: [],
         attachments: [],
         startedAt: Date.now(),
         lines: [],
+        view: createAgentRunViewModel({
+          runId: meta.runId || `${message.id}:run`,
+          prompt: meta.intent || '',
+          requestedMode: meta.mode || 'auto',
+          status: 'submitting',
+          model: meta.model || 'unknown',
+        }),
       };
     }
     if (meta.intent) message.liveRun.intentText = meta.intent;
@@ -387,6 +410,11 @@ function createStore() {
         if (message.liveRun && text) {
           message.liveRun.summary = text;
           message.liveRun.status = message.liveRun.status === "failed" ? "failed" : "done";
+          if (message.liveRun.view) {
+            message.liveRun.view.assistantText = text;
+            message.liveRun.view.hasFinal = true;
+            if (message.liveRun.view.status !== 'failed' && message.liveRun.view.status !== 'needs_fix') message.liveRun.view.status = 'completed';
+          }
         }
         message.working = false;
       });
@@ -395,8 +423,7 @@ function createStore() {
       mutate(() => {
         const message = find(id);
         if (!message) return;
-        message.working = true;
-        if (label) message.content = label;
+        ensureLiveRun(message, { activeText: label });
       });
     },
     clearWorking(id) {
@@ -452,6 +479,7 @@ function createStore() {
         const message = find(id);
         if (!message) return;
         const run = ensureLiveRun(message);
+        if (run.view) run.view = applyAgentStreamEvent(run.view, event);
         switch (event.type) {
           case "status":
             run.activeText = event.message;
@@ -487,23 +515,19 @@ function createStore() {
           case "plan_step":
             addLine(run, event.stepId, event.state === "failed" ? "failed" : event.state === "active" ? "active" : "done");
             break;
-          case "reasoning_delta":
-            run.activeText = event.text;
-            run.reasoningText += event.text;
-            break;
           case "assistant_delta":
             run.assistantText += event.text;
             enqueueAssistantDelta(message, event.text);
             break;
           case "file_start":
-            run.activeText = `Je modifie ${event.path}.`;
+            run.activeText = event.path;
             addLine(run, run.activeText, "active");
             break;
           case "file_delta":
-            run.activeText = `Je continue ${event.path}.`;
+            run.activeText = event.path;
             break;
           case "file_done":
-            addLine(run, formatFileDoneLine(event), "done");
+            addLine(run, event.path, "done");
             break;
           case "check":
             addLine(
@@ -618,6 +642,10 @@ function createStore() {
         const message = find(id);
         if (!message) return;
         if (message.liveRun) message.liveRun.assistantText += text;
+        if (message.liveRun?.view) {
+          message.liveRun.view.assistantText += text;
+          if (['submitting', 'understanding', 'planning'].includes(message.liveRun.view.status)) message.liveRun.view.status = 'executing';
+        }
         enqueueAssistantDelta(message, text);
       });
     },
@@ -628,6 +656,10 @@ function createStore() {
         const run = ensureLiveRun(message);
         run.status = run.status === "failed" ? "failed" : "done";
         run.summary = summary || run.summary;
+        if (run.view) {
+          run.view.hasFinal = Boolean(summary || run.view.assistantText);
+          if (run.view.status !== 'failed' && run.view.status !== 'needs_fix') run.view.status = 'completed';
+        }
         message.working = false;
         if (!message.content && !pendingDeltas.has(id) && run.summary) message.content = run.summary;
       });
@@ -751,37 +783,22 @@ function ensureConversationStyles() {
       animation: huggy-pulse 1.25s ease-in-out infinite;
     }
 
-    .huggy-typing-indicator {
-      position: sticky;
-      bottom: 0;
+    .huggy-agent-pending {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--accent, #3b82f6) 10%, transparent);
+      gap: 5px;
+      min-height: 18px;
       color: var(--text-sub);
-      font-size: 12px;
-      width: fit-content;
     }
-    .huggy-typing-dot {
+    .huggy-agent-pending > span {
       width: 5px;
       height: 5px;
       border-radius: 999px;
       background: var(--accent, #3b82f6);
       animation: huggy-typing-bounce 1s ease-in-out infinite;
     }
-    .huggy-typing-dot:nth-child(2) { animation-delay: 0.15s; }
-    .huggy-typing-dot:nth-child(3) { animation-delay: 0.3s; }
-    .huggy-typing-label {
-      margin-left: 4px;
-      font-size: 0;
-    }
-    .huggy-typing-label::after {
-      content: "Huggy prépare ta réponse…";
-      font-size: 12px;
-    }
+    .huggy-agent-pending > span:nth-child(2) { animation-delay: 0.15s; }
+    .huggy-agent-pending > span:nth-child(3) { animation-delay: 0.3s; }
     @keyframes huggy-typing-bounce {
       0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
       40% { transform: translateY(-3px); opacity: 1; }
@@ -1087,71 +1104,40 @@ function RichResponse({ content }: { content: string }) {
   return <div className="huggy-rich-response" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-function ShimmeringText({ text }: { text: string }) {
-  return <span className="huggy-shimmer-text">{text}</span>;
-}
-
-function CyclingShimmer({ initialLabel }: { initialLabel?: string }) {
-  return (
-    <span className="huggy-cycling-shimmer" aria-live="polite" aria-label={initialLabel || "Assistant response pending"}>
-      {initialLabel ? <ShimmeringText text={initialLabel} /> : <span className="huggy-shimmer-dots" aria-hidden="true">•••</span>}
-    </span>
-  );
-}
-
-function formatElapsed(startedAt: number) {
-  const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}m ${seconds}s`;
-}
-
-function LiveRunView({ run }: { run: LiveRunState }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (run.status !== "active") return undefined;
-    const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, [run.status]);
-
-  const headline = run.activeText || run.intentText || run.summary || "Huggy travaille...";
-  const dotClass = run.status === "done" ? "is-done" : run.status === "failed" ? "is-failed" : "";
-
-  return (
-    <div className="huggy-live-run" aria-live="polite">
-      <div className="huggy-live-head">
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span className={`huggy-live-dot ${dotClass}`} />
-          {run.skillId ? <span className="huggy-skill-chip">{run.skillId}{run.skillVersion ? ` · ${run.skillVersion}` : ""}</span> : null}
-          {run.status === "active" ? <ShimmeringText text={headline} /> : <span>{run.summary || headline}</span>}
-        </span>
-        <span className="huggy-live-time">{formatElapsed(run.startedAt)}</span>
-      </div>
-      {run.lines.length > 0 ? (
-        <ul className="huggy-live-lines">
-          {run.lines.slice(-6).map((line) => (
-            <li className={`huggy-live-line is-${line.status}`} key={line.id}>
-              <span />
-              <strong>{line.text}</strong>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {run.status !== "active" && run.summary ? <div className="huggy-live-summary">{run.summary}</div> : null}
-    </div>
-  );
-}
-
 function MessageView({ message }: { message: HuggyConversationMessage }) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
   const hasStreamedText = isAssistant && message.content.trim().length > 0;
   const showThinking = isAssistant && message.working;
   const run = message.liveRun;
-  const reasoningText = run?.reasoningText || "";
   const tools = run?.tools || [];
   const sources = run?.sources || [];
   const attachments = run?.attachments || [];
+
+  if (isAssistant && run?.view) {
+    const retryAction = message.actions?.find((action) => /r[ée]essayer|retry/i.test(action.label));
+    const buildPlanAction = message.actions?.find((action) => /construire.*plan|build.*plan|planifier la construction/i.test(action.label));
+    return (
+      <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
+        <AgentRunPanel
+          view={run.view}
+          streamText={message.content}
+          onRetry={retryAction?.onClick}
+          onBuildPlan={buildPlanAction?.onClick}
+          tools={tools}
+          sources={sources}
+          attachments={attachments}
+        />
+        {message.actions?.length ? (
+          <div className="huggy-chat-actions">
+            {message.actions.map((action) => (
+              <button key={action.id} type="button" onClick={action.onClick}>{action.label}</button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (isUser) {
     return (
@@ -1175,14 +1161,10 @@ function MessageView({ message }: { message: HuggyConversationMessage }) {
   return (
     <div className={`huggy-chat-message ${message.role}${message.working ? " is-working" : ""}`} data-message-id={message.id}>
       <div className="huggy-chat-bubble">
-        {showThinking && !hasStreamedText ? <CyclingShimmer initialLabel={run?.activeText} /> : null}
-        {isAssistant && reasoningText ? (
-          <Reasoning isStreaming={message.working} defaultOpen={false}>
-            <ReasoningTrigger label={message.working ? "Réflexion en cours…" : "Réflexion"} />
-            <ReasoningContent>
-              <Response>{reasoningText}</Response>
-            </ReasoningContent>
-          </Reasoning>
+        {showThinking && !hasStreamedText ? (
+          <span className="huggy-agent-pending" aria-hidden="true">
+            <span /><span /><span />
+          </span>
         ) : null}
         {isAssistant && tools.length > 0 ? (
           <div className="huggy-tools-stack">
@@ -1216,10 +1198,17 @@ function MessageView({ message }: { message: HuggyConversationMessage }) {
         {isAssistant && attachments.length > 0 ? (
           <div className="huggy-attachments">
             {attachments.map((a) => (
-              <a key={a.id} className="huggy-attachment" href={a.url || "#"} target="_blank" rel="noreferrer">
-                <span className="huggy-attachment-name">{a.name}</span>
-                {a.mediaType ? <span className="huggy-attachment-meta">{a.mediaType}</span> : null}
-              </a>
+              a.url ? (
+                <a key={a.id} className="huggy-attachment" href={a.url} target="_blank" rel="noreferrer">
+                  <span className="huggy-attachment-name">{a.name}</span>
+                  {a.mediaType ? <span className="huggy-attachment-meta">{a.mediaType}</span> : null}
+                </a>
+              ) : (
+                <span key={a.id} className="huggy-attachment">
+                  <span className="huggy-attachment-name">{a.name}</span>
+                  {a.mediaType ? <span className="huggy-attachment-meta">{a.mediaType}</span> : null}
+                </span>
+              )
             ))}
           </div>
         ) : null}
@@ -1284,14 +1273,6 @@ function ConversationApp({ store, host }: { store: ReturnType<typeof createStore
           <p>Les messages apparaitront ici pendant que Huggy repond, planifie ou construit.</p>
         </div>
       )}
-      {isStreaming ? (
-        <div className="huggy-typing-indicator" aria-live="polite">
-          <span className="huggy-typing-dot" />
-          <span className="huggy-typing-dot" />
-          <span className="huggy-typing-dot" />
-          <span className="huggy-typing-label">Huggy est en train d’écrire…</span>
-        </div>
-      ) : null}
     </div>
   );
 }

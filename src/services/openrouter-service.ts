@@ -111,6 +111,7 @@ export class OpenRouterService {
     retryAttempts = 3,
     timeoutMs = 45000,
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ): Promise<ChatCompletionResult> {
     // 1. Validate models against strict allowlist
     validateAllowedModel(modelId);
@@ -134,7 +135,7 @@ export class OpenRouterService {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: this.buildHeaders(),
-          signal: controller.signal as any,
+          signal: (signal || controller.signal) as any,
           body: JSON.stringify(payload)
         });
 
@@ -214,6 +215,7 @@ export class OpenRouterService {
     messages: ChatMessage[],
     timeoutMs = 120_000,  // increased from 90s — long code generations can take 2-3min
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamChatEvent> {
     validateAllowedModel(modelId);
 
@@ -229,7 +231,7 @@ export class OpenRouterService {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: this.buildHeaders(),
-        signal: controller.signal as any,
+        signal: (signal || controller.signal) as any,
         body: JSON.stringify({
           ...this.buildChatPayload(modelId, messages, runtimeConfig),
           stream: true,

@@ -3,26 +3,26 @@
    Cool neutral whites, no warm yellow; Linear-style raised-by-light dark. */
 :root {
   /* Surfaces — cool neutral whites (Zinc 50/100). */
-  --huggy-bg: #fafafa;
-  --huggy-bg-warm: #f4f4f5;
+  --huggy-bg: #f7f9fc;
+  --huggy-bg-warm: #f1f5f9;
   --huggy-surface: #ffffff;
   --huggy-surface-raised: #ffffff;
-  --huggy-text: #09090b;
-  --huggy-muted: #52525b;
-  --huggy-subtle: #71717a;
-  --huggy-panel: #f4f4f5;
+  --huggy-text: #111827;
+  --huggy-muted: #64748b;
+  --huggy-subtle: #64748b;
+  --huggy-panel: #f1f5f9;
   --huggy-input: #ffffff;
-  --huggy-border: rgba(9, 9, 11, 0.08);
-  --huggy-border-strong: rgba(9, 9, 11, 0.14);
+  --huggy-border: #e2e8f0;
+  --huggy-border-strong: #cbd5e1;
 
   /* Signature accent — Indigo 500. */
-  --huggy-blue: #3b82f6;
+  --huggy-blue: #2563eb;
   --huggy-blue-deep: #1d4ed8;
   --huggy-blue-ink: #1e3a8a;
-  --huggy-blue-soft: rgba(59, 130, 246, 0.10);
-  --huggy-blue-hover: rgba(59, 130, 246, 0.16);
-  --huggy-blue-active: rgba(59, 130, 246, 0.22);
-  --huggy-focus: rgba(59, 130, 246, 0.40);
+  --huggy-blue-soft: rgba(37, 99, 235, 0.10);
+  --huggy-blue-hover: rgba(37, 99, 235, 0.16);
+  --huggy-blue-active: rgba(37, 99, 235, 0.22);
+  --huggy-focus: #2563eb;
 
   --accent-blue: var(--huggy-blue);
   --accent-blue-deep: var(--huggy-blue-deep);
@@ -33,19 +33,19 @@
   --blue-dim: var(--huggy-blue-soft);
 
   --huggy-radius-sm: 8px;
-  --huggy-radius-md: 14px;
-  --huggy-radius-lg: 22px;
-  --huggy-radius-xl: 30px;
+  --huggy-radius-md: 10px;
+  --huggy-radius-lg: 14px;
+  --huggy-radius-xl: 18px;
 
   /* Soft, low-contrast elevation that feels like paper. */
   --huggy-shadow-soft: 0 4px 12px rgba(9, 9, 11, 0.06), 0 1px 2px rgba(9, 9, 11, 0.04);
   --huggy-shadow-card: 0 20px 48px rgba(9, 9, 11, 0.10), 0 1px 2px rgba(9, 9, 11, 0.04);
 
   --huggy-gradient-blue: linear-gradient(135deg, #3b82f6 0%, #2563eb 48%, #1d4ed8 100%);
-  --huggy-motion-fast: 120ms;
+  --huggy-motion-fast: 160ms;
   --huggy-motion-normal: 180ms;
-  --huggy-motion-panel: 260ms;
-  --huggy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --huggy-motion-panel: 280ms;
+  --huggy-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Semantic aliases shared by marketing, application and Builder surfaces. */
   --background: var(--huggy-bg);
@@ -115,26 +115,26 @@
 
 :root[data-theme="dark"] {
   /* Surfaces — Zinc 950 → 800 (Linear raised-by-light). */
-  --huggy-bg: #09090b;
-  --huggy-bg-warm: #131316;
-  --huggy-surface: #18181b;
-  --huggy-surface-raised: #27272a;
-  --huggy-text: #fafafa;
-  --huggy-muted: #a1a1aa;
-  --huggy-subtle: #71717a;
-  --huggy-panel: #13151a;
-  --huggy-input: #181b21;
-  --huggy-border: rgba(255, 255, 255, 0.06);
-  --huggy-border-strong: rgba(255, 255, 255, 0.12);
+  --huggy-bg: #0e1116;
+  --huggy-bg-warm: #11161e;
+  --huggy-surface: #151a22;
+  --huggy-surface-raised: #1b2230;
+  --huggy-text: #f8fafc;
+  --huggy-muted: #aab4c3;
+  --huggy-subtle: #8d98a8;
+  --huggy-panel: #11161e;
+  --huggy-input: #121923;
+  --huggy-border: #263244;
+  --huggy-border-strong: #3a4a60;
 
   /* Same Indigo 500 signature. */
-  --huggy-blue: #3b82f6;
-  --huggy-blue-deep: #93c5fd;
-  --huggy-blue-ink: #c7d2fe;
-  --huggy-blue-soft: rgba(59, 130, 246, 0.14);
-  --huggy-blue-hover: rgba(59, 130, 246, 0.22);
-  --huggy-blue-active: rgba(59, 130, 246, 0.30);
-  --huggy-focus: rgba(59, 130, 246, 0.50);
+  --huggy-blue: #4f8cff;
+  --huggy-blue-deep: #6b9bff;
+  --huggy-blue-ink: #bbd4ff;
+  --huggy-blue-soft: rgba(79, 140, 255, 0.14);
+  --huggy-blue-hover: rgba(79, 140, 255, 0.22);
+  --huggy-blue-active: rgba(79, 140, 255, 0.30);
+  --huggy-focus: #8fb7ff;
 
   /* Elevation — soft shadow + faint top highlight (Linear trick). */
   --huggy-shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 6px 16px rgba(0, 0, 0, 0.45);

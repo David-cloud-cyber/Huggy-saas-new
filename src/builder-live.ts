@@ -1,9 +1,12 @@
 import './styles/huggy-light-theme.css';
 import './styles/huggy-shell.css';
+import './styles/modern-shell.css';
+import './styles/coherence.css';
 import { initThemeController } from './theme-controller';
 import './conversion-events';
 import { apiFetch } from './lib/api';
 import { HuggyStreamHttpError, HuggyStreamIncompleteError, openHuggyStream } from './lib/stream-client';
+import { isHuggyStreamEvent } from './lib/stream-protocol';
 import { getVerifiedSession, refreshVerifiedSession } from './lib/supabase-browser';
 import { setVisualEditMode, isVisualEditModeActive, type VisualEditTarget } from './visual-edit-mode';
 import { normalizeAiChatInputs } from './ai-chat-input-normalizer';
@@ -18,11 +21,11 @@ import {
 import { MODEL_REGISTRY, PROVIDER_META } from './config/ai-models';
 import { providerIconSvg } from './model-provider-icons';
 import { mountBuilderConversation, type HuggyConversationApi } from './builder-conversation-island';
+import { mountAgentModeComposer } from './components/agent/agent-mode-composer';
 import { openConnectorsPanel } from './connectors-panel';
 import { redactSecretPayload, redactSecrets } from './services/secret-redaction';
 import { clearCreateProjectFlow, readCreateProjectFlow } from './services/create-project-flow';
 import { deriveProjectName } from './services/project-naming';
-import { demoDelay, getDemoAssistantReply, getDemoBuilderPayload, installDemoBanner, isDemoMode } from './demo-mode';
 import { buildExecutionContract } from './services/execution-contract';
 
 initThemeController();
@@ -1092,18 +1095,11 @@ function isUsablePreviewHtml(html: unknown) {
   return true;
 }
 
-function previewLoaderLetters(label: string) {
-  return Array.from(label).map((letter, index) => {
-    const safeLetter = letter === ' ' ? '&nbsp;' : escapeHtml(letter);
-    return `<span class="loader-letter" style="animation-delay:${(index * 0.1).toFixed(1)}s">${safeLetter}</span>`;
-  }).join('');
-}
-
 function centeredPreviewLoaderHtml(mode: EmptyPreviewMode, label = '') {
   const isWorking = mode === 'working';
-  const rawStatus = label || (isWorking ? 'Generating' : 'Ready when you are');
+  const rawStatus = label || (isWorking ? 'Vérification en cours' : 'Preview non vérifiée');
   const status = escapeHtml(rawStatus);
-  const letters = previewLoaderLetters(rawStatus);
+  const letters = escapeHtml(rawStatus);
   const stateClass = isWorking ? 'working' : 'idle';
   const previewTheme = getBuilderPreviewTheme();
   return `<!DOCTYPE html>
@@ -1289,7 +1285,7 @@ function setEmptyPreviewState(mode: EmptyPreviewMode = 'idle', label = '') {
   if (isUsablePreviewHtml(currentPreviewHtml)) return;
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   if (!frame) return;
-  const resolvedLabel = label || (mode === 'working' ? 'Assembling preview' : 'Ready when you are');
+  const resolvedLabel = label || (mode === 'working' ? 'Vérification en cours' : 'Preview non vérifiée');
   if (emptyPreviewMode === mode && emptyPreviewLabel === resolvedLabel && frame.dataset.emptyPreview === 'true') return;
   emptyPreviewMode = mode;
   emptyPreviewLabel = resolvedLabel;
@@ -1454,10 +1450,10 @@ function syncWorkshopPreview() {
     frame.removeAttribute('data-media-preview');
     frame.removeAttribute('data-design-preview');
     if (currentPreviewHtml.trim()) {
-      setPreview(currentPreviewHtml, 'ready');
+      setPreview(currentPreviewHtml, currentPreviewStatus);
     } else {
       frame.srcdoc = '';
-      setEmptyPreviewState('idle', 'Ready when you are');
+      setEmptyPreviewState('idle', 'Preview non vérifiée');
     }
   }
 }
@@ -1661,7 +1657,7 @@ function syncPreviewAddress(label?: string | null) {
 function hasReadyAppPreview() {
   const frame = document.getElementById('preview-iframe-element') as HTMLIFrameElement | null;
   return currentBuilderView === 'preview'
-    && currentPreviewStatus === 'ready'
+    && currentPreviewStatus === 'verified'
     && emptyPreviewMode === 'ready'
     && isUsablePreviewHtml(currentPreviewHtml)
     && frame?.dataset.emptyPreview !== 'true'
@@ -1746,7 +1742,6 @@ function bindPreviewDeviceToggle() {
 
 function scheduleWorkspaceSave(patch: Partial<WorkspaceState> = {}, immediate = false) {
   if (workspaceSaveTimer !== null) window.clearTimeout(workspaceSaveTimer);
-  if (isDemoMode()) return;
   const save = async () => {
     const input = document.getElementById('chat-textarea-box') as HTMLTextAreaElement | null;
     const body = {
@@ -1928,7 +1923,7 @@ function clearInlineBlocks() {
   if (host) host.innerHTML = '';
 }
 
-function startLiveRun(card: HTMLElement | null, meta: { intent?: string; activeText?: string } = {}) {
+function startLiveRun(card: HTMLElement | null, meta: { intent?: string; activeText?: string; mode?: ChatMode; model?: string; runId?: string } = {}) {
   const id = messageHandleId(card);
   if (id && conversationApi?.startLiveRun) conversationApi.startLiveRun(id, meta);
 }
@@ -2160,7 +2155,7 @@ function streamEntryBody(entry: HuggyStreamEntry) {
 function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | null {
   if (entry.kind === 'divider') return null;
   if (entry.kind === 'thinking') {
-    const text = professionalStreamNarration(entry.detail || entry.text, true);
+    const text = sanitizeModelStreamText(entry.detail || entry.text);
     if (!text) return null;
     return {
       id: entry.id,
@@ -2198,9 +2193,9 @@ function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | n
     };
   }
   if (entry.kind === 'group') {
-    const name = professionalStreamNarration(entry.text, true) || entry.text;
+    const name = sanitizeModelStreamText(entry.text) || entry.text;
     const items = (entry.items || [])
-      .map(item => professionalStreamNarration(item, true))
+      .map(item => sanitizeModelStreamText(item))
       .filter(Boolean);
     return {
       id: entry.id,
@@ -2211,8 +2206,8 @@ function streamEntryToMessagePart(entry: HuggyStreamEntry): HuggyMessagePart | n
       result: items.join('\n'),
     };
   }
-  const text = professionalStreamNarration(entry.text, true);
-  const detail = professionalStreamNarration(entry.detail || '', true);
+  const text = sanitizeModelStreamText(entry.text);
+  const detail = sanitizeModelStreamText(entry.detail || '');
   if (!text && !detail) return null;
   return {
     id: entry.id,
@@ -2226,7 +2221,7 @@ function streamStateToMessageParts(state: HuggyStreamPartsState | null): HuggyMe
   const parts: HuggyMessagePart[] = [];
   const seen = new Set<string>();
   const hasActiveReasoning = state.entries.some(entry => entry.kind === 'thinking' && entry.status === 'active');
-  const activeText = professionalStreamNarration(state.activeText || '', true);
+  const activeText = sanitizeModelStreamText(state.activeText || '');
   if (state.status === 'active' && activeText && !hasActiveReasoning) {
     seen.add(semanticJournalKey(activeText));
     parts.push({
@@ -2246,7 +2241,7 @@ function streamStateToMessageParts(state: HuggyStreamPartsState | null): HuggyMe
     parts.push(part);
   }
   if (state.finalText) {
-    const finalText = professionalStreamNarration(state.finalText, true);
+    const finalText = sanitizeModelStreamText(state.finalText);
     const normalizedFinal = semanticJournalKey(finalText);
     const alreadyVisible = parts.some(part => semanticJournalKey(String(part.text || part.result || '')) === normalizedFinal);
     if (finalText && !alreadyVisible) parts.push({ id: 'stream_final_text', type: 'text', text: finalText });
@@ -2387,58 +2382,6 @@ function classifyPromptUiContext(value: string, mode: ChatMode): PromptUiContext
   return 'project_mission';
 }
 
-function buildSimpleConversationReply(prompt: string, speaksFrench: boolean) {
-  const normalized = normalizePromptIntentText(prompt);
-  const isGreeting = /^(bonjour|bonsoir|salut|coucou|hello|hi|hey|comment ca va|comment tu vas|how are you)\b/i.test(normalized);
-  const asksCapabilities = /\b(que peux tu faire|que peux-tu faire|que sais tu faire|que sais-tu faire|what can you do|tu peux faire quoi|comment tu peux m aider|comment tu peux m'aider)\b/i.test(normalized);
-  const asksLovable = /\b(lovable|lovable dev|lovable\.dev)\b/i.test(normalized);
-  const wantsChat = /\b(juste discuter|je veux discuter|parlons|lets chat|let s chat)\b/i.test(normalized);
-
-  if (speaksFrench) {
-    if (isGreeting) return 'Salut ! Je suis là. Tu peux me parler simplement, me demander un conseil, ou me demander de créer/modifier quelque chose quand tu veux.';
-    if (wantsChat) return 'Bien sûr. On peut juste discuter. Pose-moi ta question ou explique-moi ce que tu as en tête, sans que je lance de génération.';
-    if (asksCapabilities) return 'Je peux discuter, expliquer une idée, te conseiller, faire un plan, créer une app, corriger un bug, améliorer une interface, gérer le publish et t’aider à itérer sans casser ton projet. Si tu veux juste parler, je réponds simplement. Si tu me demandes une vraie action projet, je passe en mode mission.';
-    if (asksLovable) return 'Lovable.dev est un AI app builder : tu décris une idée en langage naturel, puis l’outil génère une interface/app avec preview et itérations par chat. Sa force est l’expérience fluide : comprendre vite, générer, montrer la preview, puis permettre de corriger par petites demandes. Pour Huggy, l’objectif est de garder cette simplicité, mais avec plus de contrôle, de fiabilité, de publish et de qualité agent.';
-    return 'Oui, je te réponds simplement ici. Dis-moi ce que tu veux comprendre, comparer ou décider, et je ne lance aucune génération tant que tu ne demandes pas une vraie action sur le projet.';
-  }
-
-  if (isGreeting) return 'Hi! I’m here. You can talk normally, ask for advice, or ask me to create/fix something whenever you want.';
-  if (wantsChat) return 'Of course. We can just chat. Ask your question or share what you’re thinking, and I won’t start a build.';
-  if (asksCapabilities) return 'I can chat, explain ideas, advise you, plan, build an app, fix bugs, improve UI, help publish, and iterate safely. Simple conversation stays simple. Real project work becomes a mission.';
-  if (asksLovable) return 'Lovable.dev is an AI app builder: you describe an idea, it generates an app-like preview, then you iterate through chat. Its strength is the smooth product loop. Huggy should keep that simplicity while adding stronger reliability, publish control, and agent quality.';
-  return 'Yes, I’ll answer normally here. Tell me what you want to understand, compare, or decide, and I won’t start a generation unless you ask for real project work.';
-}
-
-function buildPlanningOnlyReply(prompt: string, speaksFrench: boolean) {
-  const goal = redactSecrets(prompt).trim();
-  const shortGoal = goal.length > 120 ? `${goal.slice(0, 117)}...` : goal;
-  return speaksFrench
-    ? [`Plan court, sans modifier les fichiers :`, '', `Objectif : ${shortGoal}`, 'Prochaine action : dis-moi quoi appliquer exactement, et je l execute.'].join('\n')
-    : [`Short plan, without changing files:`, '', `Goal: ${shortGoal}`, 'Next action: tell me exactly what to apply, and I will execute it.'].join('\n');
-}
-
-function buildClarificationOnlyReply(prompt: string, speaksFrench: boolean) {
-  const normalized = normalizePromptIntentText(prompt);
-  const wantsGenerate = /^(genere|generer|g[ée]n[èe]re|cree|creer|cr[ée]e|create|build|make|construis|fabrique)\b/i.test(normalized);
-  const wantsFix = /^(corrige|fix|debug|repare|répare)\b/i.test(normalized);
-  if (speaksFrench) {
-    if (wantsGenerate) {
-      return 'Que veux-tu générer exactement ? Donne-moi le type d’app et 2 ou 3 fonctions clés. Exemple : “crée une todo app avec ajout, suppression, filtres et design responsive”.';
-    }
-    if (wantsFix) {
-      return 'Qu’est-ce que tu veux que je corrige exactement ? Indique l’écran, le bouton, l’erreur ou le comportement qui ne marche pas.';
-    }
-    return 'Je peux le faire, mais il me manque la cible exacte. Dis-moi quoi modifier ou construire, en une phrase simple.';
-  }
-  if (wantsGenerate) {
-    return 'What exactly should I generate? Give me the app type and 2 or 3 key features. Example: “create a todo app with add, delete, filters and responsive design”.';
-  }
-  if (wantsFix) {
-    return 'What exactly should I fix? Name the screen, button, error or behavior that is not working.';
-  }
-  return 'I can do that, but I need the exact target. Tell me what to change or build in one simple sentence.';
-}
-
 function showAssistantBubble(card: HTMLElement | null, text: string) {
   const safeText = redactSecrets(text);
   updateMessage(card, safeText);
@@ -2481,17 +2424,11 @@ function looksLikeGeneratedSourceDump(value: unknown) {
   return signals >= 2;
 }
 
-function generatedCodeBlockedText(speaksFrench: boolean) {
-  return speaksFrench
-    ? 'Je ne vais pas coller le code brut dans le chat. Une vraie génération doit écrire les fichiers du projet, rafraîchir la preview, puis afficher un résumé court.'
-    : 'I will not paste raw generated code into chat. A real generation must write project files, refresh the preview, then show a short summary.';
-}
-
 function looksLikeInternalRecoveryText(value: string) {
   return /\b(draft recuperable|draft récupérable|recoverable draft|huggy stopped before saving|blocking issue|blocking issues|points bloquants|blocage restant|forced runtime failure marker|preview contains a known forced runtime failure marker|task app must support|commerce app must include|technical build score|changes:\s*0 created|verification:\s*huggy stopped)\b/i.test(value);
 }
 
-function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallback = '') {
+function safeAssistantDisplayText(value: unknown, _speaksFrench = false) {
   const text = repairTextEncoding(redactSecrets(String(value || '').trim()));
   if (!text) return '';
   const unfenced = text
@@ -2500,19 +2437,16 @@ function safeAssistantDisplayText(value: unknown, speaksFrench: boolean, fallbac
     .trim();
   if (looksLikeInternalRecoveryText(unfenced)) return '';
   if (/^[\[{]/.test(unfenced) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(unfenced)) {
-    if (!fallback) return '';
-    return fallback || (speaksFrench
-      ? 'J’ai préparé le travail dans le projet. La preview et les fichiers doivent rester la source de vérité.'
-      : 'I prepared the work in the project. The preview and files should stay the source of truth.');
+    return '';
   }
   if (looksLikeGeneratedSourceDump(text)) return '';
   return text.replace(/\n\s*[-*]\s*$/gm, '').trim();
 }
 
-async function streamSimpleConversation(card: HTMLElement | null, prompt: string, speaksFrench: boolean): Promise<boolean> {
+async function streamSimpleConversation(card: HTMLElement | null, prompt: string, speaksFrench: boolean, requestedMode: ChatMode = 'auto'): Promise<boolean> {
   const session = await getVerifiedSession({ allowRefresh: true });
   const accessToken = session?.session?.access_token;
-  if (!accessToken) return false;
+  if (!accessToken) throw new Error('An authenticated session is required to request a real AI response.');
   const messageId = messageHandleId(card);
   let streamedText = '';
   let finalPayload: any = null;
@@ -2523,6 +2457,7 @@ async function streamSimpleConversation(card: HTMLElement | null, prompt: string
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({
         prompt,
+        requestedMode,
         modelId: selectedModel(),
         projectId: currentProjectId || undefined,
         messages: recentConversationForAssistant(prompt),
@@ -2531,17 +2466,18 @@ async function streamSimpleConversation(card: HTMLElement | null, prompt: string
     },
     signal: activeAbort?.signal,
     onEvent: (type, data) => {
+      const id = messageId;
+      if (id && conversationApi && isHuggyStreamEvent(data)) conversationApi.applyStreamEvent(id, data);
       if (type === 'assistant_delta') {
         const delta = String(data?.text || data?.content || '');
         if (!delta) return;
         streamedText += delta;
-        if (messageId && conversationApi) conversationApi.appendAssistantDelta(messageId, delta);
-        else updateMessage(card, streamedText);
+        if (!id || !conversationApi) updateMessage(card, streamedText);
       } else if (type === 'done') {
         finalPayload = data?.payload || data;
       }
     },
-    maxRetries: 1,
+    maxRetries: 0,
   });
   activeStreamHandle = stream;
   try {
@@ -2553,6 +2489,7 @@ async function streamSimpleConversation(card: HTMLElement | null, prompt: string
   const content = String(finalPayload?.text || streamedText || '').trim();
   if (!content) throw new Error('The selected AI model returned an empty response.');
   const safeContent = safeAssistantDisplayText(content, speaksFrench);
+  if (!safeContent) throw new Error('The selected AI model returned a response that failed the output safety checks.');
   if (messageId && conversationApi) conversationApi.updateMessage(messageId, safeContent);
   else updateMessage(card, safeContent);
   clearMessageShimmer(card);
@@ -2568,7 +2505,7 @@ async function streamProjectGeneration(
   // Compatibility fallback contract: /api/projects/${encodeURIComponent(currentProjectId)}/generate
   const session = await getVerifiedSession({ allowRefresh: true });
   const accessToken = session?.session?.access_token;
-  if (!accessToken) return apiFetch<any>(`/api/projects/${encodeURIComponent(projectId)}/generate`, { method: 'POST', body: JSON.stringify(requestBody) });
+  if (!accessToken) throw new Error('An authenticated session is required to start a real generation run.');
 
   let finalPayload: any = null;
   let streamObserved = false;
@@ -2586,7 +2523,7 @@ async function streamProjectGeneration(
       if (type === 'done') finalPayload = data?.payload || data;
       onEvent(type, data);
     },
-    maxRetries: 1,
+    maxRetries: 0,
   });
   activeStreamHandle = stream;
   try {
@@ -2594,9 +2531,7 @@ async function streamProjectGeneration(
   } catch (error) {
     if (signal?.aborted || stream.isCancelled()) throw new DOMException('The generation was cancelled.', 'AbortError');
     if (!finalPayload && !streamObserved && error instanceof HuggyStreamHttpError && [404, 405, 501].includes(error.status)) {
-      // Compatibility fallback is allowed only before the streaming endpoint
-      // accepted or emitted anything, so it cannot duplicate a live run.
-      return apiFetch<any>(`/api/projects/${encodeURIComponent(projectId)}/generate`, { method: 'POST', body: JSON.stringify(requestBody) });
+      throw new Error('The Huggy Stream v2 endpoint is unavailable. Retry the same run or choose another model.');
     }
     throw error;
   } finally {
@@ -2606,42 +2541,18 @@ async function streamProjectGeneration(
   return finalPayload;
 }
 
-async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean) {
+async function answerSimpleConversationFromProvider(card: HTMLElement | null, prompt: string, speaksFrench: boolean, requestedMode: ChatMode = 'auto') {
   setBusy(true);
+  startLiveRun(card, { mode: requestedMode, model: selectedModel(), intent: prompt });
   try {
-    // Non-streaming: request the full assistant reply and render it at once.
-    const id = messageHandleId(card);
-    if (await streamSimpleConversation(card, prompt, speaksFrench)) return;
-    if (id && conversationApi) conversationApi.setWorking(id, speaksFrench ? 'Je réfléchis…' : 'Thinking…');
-    const payload = await apiFetch<{ success?: boolean; text?: string; message?: string; error?: string }>('/api/assistant/chat', {
-      method: 'POST',
-      body: JSON.stringify({
-        prompt,
-        modelId: selectedModel(),
-        projectId: currentProjectId || undefined,
-        messages: recentConversationForAssistant(prompt),
-      }),
-    });
-    if (payload?.success === false) throw new Error(payload.message || payload.error || 'The selected AI model did not return a response.');
-    const content = String(payload?.text || payload?.message || '').trim();
-    if (!content.trim()) throw new Error('Assistant response was empty.');
-    updateMessage(card, safeAssistantDisplayText(content, speaksFrench));
-    clearMessageShimmer(card);
+    // There is one production transport: the selected model's SSE stream.
+    // A failed stream must remain an honest failure, never a hidden second run.
+    await streamSimpleConversation(card, prompt, speaksFrench, requestedMode);
   } catch (error) {
-    console.warn('[huggy] simple provider chat fallback', error);
-    if (selectedModel() !== 'auto') {
-      const message = error instanceof Error && error.message.trim()
-        ? error.message.trim()
-        : (speaksFrench
-          ? 'Le modèle choisi n’a pas répondu. Réessaie ou repasse en Auto.'
-          : 'The selected model did not answer. Retry or switch back to Auto.');
-      updateMessage(card, message);
-      clearMessageShimmer(card);
-      return;
-    }
-    updateMessage(card, error instanceof Error && error.message.trim()
+    const message = error instanceof Error && error.message.trim()
       ? error.message.trim()
-      : 'The selected AI model did not return a usable response.');
+      : 'The selected AI model did not return a usable response.';
+    updateMessage(card, message);
   } finally {
     setBusy(false);
     // Safety net: if the stream ended, was cancelled, or failed before any
@@ -2752,13 +2663,6 @@ function closeProjectMenu() {
 async function loadProjectMenuCredits() {
   const status = document.getElementById('project-menu-credit-status');
   const fill = document.getElementById('project-menu-credit-fill') as HTMLElement | null;
-  if (isDemoMode()) {
-    lastWalletBalance = 742;
-    syncBuilderPlanBadges('pro');
-    if (status) status.textContent = '742 credits · Pro plan';
-    if (fill) fill.style.width = '88%';
-    return;
-  }
   try {
     const wallet = await apiFetch<BillingWalletResponse>('/api/billing/wallet');
     const balance = Number(wallet.balance ?? 0);
@@ -2928,13 +2832,13 @@ async function tryBootWebContainerPreview(frame: HTMLIFrameElement, files: Gener
   }
 }
 
-function setPreview(html: string, status = 'ready') {
+function setPreview(html: string, status = 'unknown') {
   const normalizedStatus = String(status || '').trim().toLowerCase() || 'idle';
-  if (!isUsablePreviewHtml(html)) {
+  if (normalizedStatus !== 'verified' || !isUsablePreviewHtml(html)) {
     currentPreviewHtml = '';
     currentPreviewStatus = normalizedStatus;
     emptyPreviewMode = normalizedStatus === 'building' ? 'working' : 'idle';
-    setEmptyPreviewState(emptyPreviewMode, normalizedStatus === 'building' ? 'Generating' : 'Ready when you are');
+    setEmptyPreviewState(emptyPreviewMode, normalizedStatus === 'building' ? 'Generating' : normalizedStatus === 'needs_fix' ? 'Preview needs verification' : 'Preview not verified');
     syncProjectReadinessClass();
     syncPreviewToolbarControls();
     return;
@@ -3315,14 +3219,6 @@ async function openPublishPanel() {
   }
   publishPanelMode = 'main';
   renderPublishPanel(null);
-  if (isDemoMode()) {
-    renderPublishPanel({
-      success: true,
-      publish: { state: 'published', public_url: 'https://pulseboard.demo.huggy.local', custom_domain: null, latest_published_at: '2026-08-10T08:42:00.000Z', project_updated_at: '2026-08-10T08:42:00.000Z', badge_required: false, checks: [], can_publish: true, has_unpublished_changes: false },
-      deployment: { status: 'ready' },
-    } as unknown as PublishApiPayload);
-    return;
-  }
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
     renderPublishPanel(payload);
@@ -3354,12 +3250,6 @@ async function shareProjectLink(button: HTMLButtonElement) {
     return;
   }
 
-  if (isDemoMode()) {
-    await navigator.clipboard?.writeText('https://pulseboard.demo.huggy.local');
-    flash('Lien copié', true);
-    return;
-  }
-
   button.disabled = true;
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish/status`);
@@ -3379,26 +3269,18 @@ async function shareProjectLink(button: HTMLButtonElement) {
 
 async function publishCurrentProject(previousPayload: PublishApiPayload | null) {
   if (!currentProjectId) return;
+  const action = previousPayload?.publish?.state === 'published' || previousPayload?.publish?.state === 'changes_unpublished'
+    ? 'mettre à jour la version publique'
+    : 'publier cette application en ligne';
+  if (!window.confirm(`Confirmer : ${action} ?`)) return;
   publishPanelMode = 'main';
   renderPublishPanel(previousPayload, true);
-  if (isDemoMode()) {
-    await demoDelay(700);
-    const payload = {
-      success: true,
-      publish: { state: 'published', public_url: 'https://pulseboard.demo.huggy.local', custom_domain: null, latest_published_at: new Date().toISOString(), project_updated_at: new Date().toISOString(), badge_required: false, checks: [], can_publish: true, has_unpublished_changes: false },
-      deployment: { status: 'ready' },
-    } as unknown as PublishApiPayload;
-    renderPublishPanel(payload);
-    appendMessage('assistant', 'Publication démo terminée. Ton app est disponible sur https://pulseboard.demo.huggy.local');
-    return;
-  }
   try {
     const payload = await apiFetch<PublishApiPayload>(`/api/projects/${encodeURIComponent(currentProjectId)}/publish`, {
       method: 'POST',
-      body: JSON.stringify({ branch: 'main' }),
+      body: JSON.stringify({ branch: 'main', confirmed: true }),
     });
     renderPublishPanel(payload);
-    if (payload.publish?.public_url) appendMessage('assistant', `Published. Your live app is available here:\n${payload.publish.public_url}`);
   } catch (error) {
     renderPublishPanel(previousPayload, false, error instanceof Error ? error.message : 'Publish failed.');
   }
@@ -3513,10 +3395,9 @@ async function rollbackToVersion(versionId: string) {
       body: JSON.stringify({ source: 'history_panel' }),
     });
     renderFiles(payload.files || []);
-    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status || 'ready');
+    if (payload.preview?.html) setPreview(payload.preview.html, payload.preview.status || 'unknown');
     if (payload.project?.name) setProjectNameDisplay(payload.project.name);
     closeHistoryPanel();
-    appendMessage('assistant', 'Rollback complete. The preview now shows the restored version.');
   } catch (error) {
     renderHistoryPanel([], [], false, error instanceof Error ? error.message : 'Rollback failed.');
   }
@@ -4216,7 +4097,6 @@ async function ensureModelSelector() {
     if (hydrateModelsPromise) return hydrateModelsPromise;
     hydrateModelsPromise = (async () => {
       try {
-        if (isDemoMode()) return;
         const payload = await apiFetch<{ models: AiModel[]; providers?: AiModelProviderGroup[] }>('/api/ai/models');
         const models = (payload.models || []).filter(model => model.id !== 'auto');
         providerGroups = (payload.providers && payload.providers.length)
@@ -4287,35 +4167,40 @@ async function ensureModelSelector() {
     if (label) label.textContent = target.dataset.modelName || 'Auto';
     setActiveOption();
     close();
-    if (!isDemoMode()) {
-      await apiFetch('/api/users/me/ai-preferences', {
-        method: 'PATCH',
-        body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
-      }).catch(() => null);
-    }
+    await apiFetch('/api/users/me/ai-preferences', {
+      method: 'PATCH',
+      body: JSON.stringify({ default_routing_mode: selectedModelId === 'auto' ? 'Auto' : 'Custom' }),
+    }).catch(() => null);
   });
   document.addEventListener('click', close);
 }
 
 function ensurePlanBuildControls() {
   const submitWrapper = document.querySelector('.submit-wrapper');
-  if (!submitWrapper || document.getElementById('btn-chat-mode')) return;
-  submitWrapper.insertAdjacentHTML('beforebegin', `
-    <div id="chat-mode-wrapper" style="position:relative;display:flex;align-items:center;flex:0 0 auto;">
-      <button id="btn-chat-mode" type="button" aria-haspopup="menu" aria-expanded="false" title="Choose Auto, Build or Plan" style="height:24px;min-width:64px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:5px;padding:0 9px;font-size:10px;font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;">
-        <span id="chat-mode-label">Auto</span><span style="font-size:10px;opacity:.62;">v</span>
-      </button>
-      <div id="chat-mode-menu" role="menu" style="position:absolute;right:0;bottom:calc(100% + 8px);width:218px;border:1px solid var(--border);background:var(--bg-surface);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.22);display:none;z-index:1000;">
-        <button type="button" data-chat-mode="auto" role="menuitem" style="width:100%;text-align:left;border:0;background:var(--accent-hover, rgba(9,9,11,.08));color:var(--text);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Auto <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Let Huggy choose the right action</span></button>
-        <button type="button" data-chat-mode="build" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Build <span style="display:block;color:var(--text-muted);font-weight:500;font-size:10px;margin-top:2px;">Generate or edit the app</span></button>
-        <button type="button" data-chat-mode="plan" role="menuitem" style="width:100%;text-align:left;border:0;background:transparent;color:var(--text-muted);border-radius:8px;padding:9px;font-size:11px;font-weight:750;cursor:pointer;">Plan <span style="display:block;color:var(--text-sub);font-weight:500;font-size:10px;margin-top:2px;">Think without changing files</span></button>
-      </div>
-    </div>
-  `);
+  if (!submitWrapper) return;
+  let wrapper = document.getElementById('chat-mode-wrapper');
+  if (!wrapper) {
+    wrapper = document.createElement('div');
+    wrapper.id = 'chat-mode-wrapper';
+    submitWrapper.insertAdjacentElement('beforebegin', wrapper);
+  }
+  if (wrapper.dataset.huggyAgentModeMounted === 'true') return;
+  wrapper.dataset.huggyAgentModeMounted = 'true';
+  wrapper.innerHTML = '';
+  mountAgentModeComposer(wrapper, {
+    mode: selectedChatMode,
+    locale: (document.documentElement.lang || '').toLowerCase().startsWith('fr') ? 'fr' : 'en',
+    triggerId: 'btn-chat-mode',
+    onModeChange: (mode) => {
+      selectedChatMode = mode;
+      scheduleWorkspaceSave({ selected_mode: mode });
+    },
+  });
 }
 
 function setChatMode(mode: ChatMode) {
   selectedChatMode = mode === 'plan' ? 'plan' : mode === 'build' ? 'build' : 'auto';
+  window.dispatchEvent(new CustomEvent('huggy-agent-mode-sync', { detail: { mode: selectedChatMode } }));
   const label = document.getElementById('chat-mode-label');
   const button = document.getElementById('btn-chat-mode') as HTMLButtonElement | null;
   const menu = document.getElementById('chat-mode-menu');
@@ -4634,21 +4519,6 @@ async function loadProject() {
   if (scroll) delete scroll.dataset.restored;
   const projectName = document.getElementById('project-name');
   const loading = showTransientNotice('Loading project files, timeline and preview...', 0);
-  if (isDemoMode()) {
-    const projectId = new URLSearchParams(window.location.search).get('project') || 'demo-pulseboard';
-    const payload = getDemoBuilderPayload(projectId);
-    currentProjectId = payload.project.id;
-    setCurrentBuilderProjectId(currentProjectId);
-    setProjectNameDisplay(payload.project.name);
-    renderFiles(payload.files);
-    applyWorkspaceState(payload.workspace_state as WorkspaceState);
-    setPreview(payload.preview.html, payload.preview.status);
-    restoreMessages(payload as ProjectPayload);
-    syncProjectReadinessClass();
-    syncWorkshopPreview();
-    removeMessage(loading);
-    return;
-  }
   try {
     const payload = await ensureProject();
     if (isRealProjectId(payload.project?.id || currentProjectId)) {
@@ -4691,7 +4561,7 @@ async function loadProject() {
     syncWorkshopPreview();
     removeMessage(loading);
     if (!payload.messages?.length) {
-      showTransientNotice('Ready when you are.', 1600);
+      showTransientNotice('Projet chargé.', 1600);
     }
   } catch (error) {
     updateMessage(loading, error instanceof Error ? error.message : 'Unable to load project.');
@@ -4779,7 +4649,9 @@ function buildStreamPartsFromSteps(steps: AgentRunStep[], run?: AgentRunSummary)
         ? 'done'
         : 'active';
   journal.elapsed = run?.duration_ms ? formatWorkingDuration(Number(run.duration_ms || 0)) : undefined;
-  journal.activeText = journal.status === 'active' ? 'Huggy reprend le travail' : '';
+  // A restored run has no local narration. The server event stream is the only
+  // source for visible assistant activity.
+  journal.activeText = '';
   const fileEntries = new Map<string, HuggyStreamEntry>();
   const commandItems: string[] = [];
   const checkItems: string[] = [];
@@ -4789,12 +4661,12 @@ function buildStreamPartsFromSteps(steps: AgentRunStep[], run?: AgentRunSummary)
     const payload = redactInternalModelFields(step.public_payload || {});
     const message = redactSecrets(String(step.message || '')).trim();
     if (step.event_type === 'narration') {
-      const text = cleanPublicJournalText(payload.text || message || '', true);
+      const text = sanitizeModelStreamText(payload.text || message || '');
       if (text) journal.entries.push({ id: journalEntryId('narration'), kind: 'narration', text, status: 'done' });
       return;
     }
     if (step.event_type === 'thinking' && journal.status === 'active') {
-      const text = cleanPublicJournalText(payload.text || message || 'En réflexion', true);
+      const text = sanitizeModelStreamText(payload.text || message || '');
       if (text) journal.entries.push({ id: journalEntryId('thinking'), kind: 'thinking', text, status: 'muted' });
       return;
     }
@@ -4836,15 +4708,15 @@ function buildStreamPartsFromSteps(steps: AgentRunStep[], run?: AgentRunSummary)
       return;
     }
     if (step.event_type === 'final_summary') {
-      finalText = cleanPublicJournalText(payload.text || message || '', true);
+      finalText = sanitizeModelStreamText(payload.text || message || '');
       return;
     }
     if (step.event_type === 'error') {
-      journal.entries.push({ id: journalEntryId('error'), kind: 'update', text: cleanPublicJournalText(message || 'Le run a échoué.', true), status: 'failed' });
+      journal.entries.push({ id: journalEntryId('error'), kind: 'update', text: sanitizeModelStreamText(message || ''), status: 'failed' });
       return;
     }
     if (step.event_type === 'cancelled') {
-      journal.entries.push({ id: journalEntryId('cancelled'), kind: 'update', text: cleanPublicJournalText(message || 'Travail annulé.', true), status: 'cancelled' });
+      journal.entries.push({ id: journalEntryId('cancelled'), kind: 'update', text: sanitizeModelStreamText(message || ''), status: 'cancelled' });
     }
   });
 
@@ -4934,6 +4806,19 @@ function journalTextKey(value: string) {
     .slice(0, 140);
 }
 
+/**
+ * Browser-side stream hygiene only. The model/server owns all assistant copy;
+ * this helper redacts secrets and removes transport noise without translating,
+ * completing, or inventing a status.
+ */
+function sanitizeModelStreamText(value: unknown): string {
+  return repairTextEncoding(redactSecrets(String(value || '')))
+    .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+    .slice(0, 520);
+}
+
 function semanticJournalKey(value: string) {
   const key = journalTextKey(value);
   if (!key) return '';
@@ -4997,210 +4882,15 @@ function semanticJournalKey(value: string) {
   return key;
 }
 
-function professionalStreamNarration(value: unknown, speaksFrench: boolean, fallback = ''): string {
-  const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).replace(/\s+/g, ' ').trim();
-  if (!raw) return '';
-  const fr: Record<string, string> = {
-    goal_framed: 'Je commence par cadrer le résultat attendu avant de toucher au projet.',
-    project_influence_scan: 'Je repère les parties du projet qui peuvent influencer ce changement.',
-    specialist_context_checked: 'Les points de vigilance sont clairs, je passe à la génération.',
-    project_context_loaded: 'Je récupère le contexte utile pour rester cohérent avec le projet.',
-    visual_style_aligned: 'J’aligne les couleurs, l’espacement et la typographie avec l’existant.',
-    brief_made_concrete: 'Je précise le brief pour construire quelque chose de concret.',
-    first_version_generated: 'Je produis une première version complète de l’application.',
-    corrected_version_generated: 'J’intègre la correction et je régénère la partie concernée.',
-    quality_checked: 'Je vérifie maintenant que la version peut vraiment s’afficher.',
-    structure_validated: 'La structure passe les contrôles principaux, je prépare la preview.',
-  };
-  const en: Record<string, string> = {
-    goal_framed: 'I am framing the expected result before touching the project.',
-    project_influence_scan: 'I am finding the project areas that can affect this change.',
-    specialist_context_checked: 'The important risks are clear, so I am moving into generation.',
-    project_context_loaded: 'I am pulling the useful context to stay consistent with the project.',
-    visual_style_aligned: 'I am aligning color, spacing, and typography with the existing app.',
-    brief_made_concrete: 'I am tightening the brief into something concrete to build.',
-    first_version_generated: 'I am producing a complete first version of the app.',
-    corrected_version_generated: 'I am applying the fix and regenerating the affected part.',
-    quality_checked: 'I am checking that this version can actually render.',
-    structure_validated: 'The main structure checks passed, so I am preparing the preview.',
-  };
-  const dictionary = speaksFrench ? fr : en;
-  if (/\b(demande re[cç]ue|request received)\b/i.test(raw)) return dictionary.goal_framed;
-  if (/\b(je pr[ée]pare le travail|huggy pr[ée]pare le travail|preparing the work)\b/i.test(raw)) return dictionary.goal_framed;
-  if (/\b(analyse des d[ée]pendances|dependencies)\b/i.test(raw) && /\bAST\b/i.test(raw)) return dictionary.project_influence_scan;
-  if (/\bagents?\s+sp[ée]cialis[ée]s?\s+en\s+parall[èe]le\b/i.test(raw) || /\bspecialized agents in parallel\b/i.test(raw)) return dictionary.specialist_context_checked;
-  if (/^\s*\d+\s*\/\s*\d+\s+agents?\b/i.test(raw)) return dictionary.specialist_context_checked;
-  if (/\b(extraction de la m[ée]moire|architectural memory)\b/i.test(raw) && /\bRAG\b/i.test(raw)) return dictionary.project_context_loaded;
-  if (/\b(chargement des (tokens|jetons) design|loading design tokens)\b/i.test(raw)) return dictionary.visual_style_aligned;
-  if (/^(brief|bref)\s+affin[ée]\.?$/i.test(raw) || /^brief refined\.?$/i.test(raw)) return dictionary.brief_made_concrete;
-  if (/^premi[èe]re version g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^first version generated\.?$/i.test(raw)) return dictionary.first_version_generated;
-  if (/^version corrig[ée]e g[ée]n[ée]r[ée]e\.?$/i.test(raw) || /^corrected version generated\.?$/i.test(raw)) return dictionary.corrected_version_generated;
-  if (/^qualit[ée] v[ée]rifi[ée]e\.?$/i.test(raw) || /^quality checked\.?$/i.test(raw)) return dictionary.quality_checked;
-  if (/^code valid[ée]\.?$/i.test(raw) || /^code validated\.?$/i.test(raw)) return dictionary.structure_validated;
-  if (/\b(AST|RAG|embeddings?|vector store|tokens?|jetons|sub-?agents?|model names?|pipeline)\b/i.test(raw)) return '';
-  if (/^\s*(done|working|processing|loading|analyzing|termin[ée]|travail termin[ée])\.?\s*$/i.test(raw)) return '';
-  if (/^\s*\d+\s*\/\s*\d+\b/.test(raw)) return '';
-  return raw;
-}
-
-function cleanPublicJournalText(value: unknown, speaksFrench: boolean, fallback = ''): string {
+function sanitizeProviderStreamText(value: unknown, _speaksFrench = false, fallback = '') {
   const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).trim();
   if (!raw) return '';
-  const withoutFence = raw
-    .replace(/^```(?:json|ts|tsx|html|css|javascript|typescript)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-  if (!withoutFence) return '';
-  if (/^[\[{]/.test(withoutFence) && /["']?(status|plan|steps|target_files|next_action|files)["']?\s*:/.test(withoutFence)) {
-    return speaksFrench
-      ? 'J’ai gardé le résultat structuré dans le projet.'
-      : 'I kept the structured result in the project.';
-  }
-  const chunks = withoutFence
-    .split(/\n{2,}|\r?\n(?=(?:I |Je |J[’' ]ai|Huggy|Preview|Blocage|Draft|Recoverable|Work complete|Done|Task app|Commerce app))/)
-    .map(chunk => chunk.trim())
-    .filter(Boolean);
-  if (chunks.length > 1) {
-    const seen = new Set<string>();
-    const cleanChunks: string[] = chunks
-      .map((chunk): string => cleanPublicJournalText(chunk, speaksFrench))
-      .filter(Boolean)
-      .filter(chunk => {
-        const key = semanticJournalKey(chunk);
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    const joined: string = cleanChunks.join('\n\n').trim();
-    return joined.length > 520 ? `${joined.slice(0, 517).trimEnd()}...` : joined;
-  }
-  const compact = withoutFence.replace(/\s+/g, ' ').trim();
-  const professional = professionalStreamNarration(compact, speaksFrench);
-  if (!professional) return '';
-  if (professional !== compact) return professional;
-  if (looksLikeInternalRecoveryText(compact)) return '';
-  if ((/\bdraft\s+r[ée]cup[ée]rable\b/i.test(compact) || /\brecoverable\s+draft\b/i.test(compact)) && /preview/i.test(compact) && (/\bbloquant/i.test(compact) || /\bblock/i.test(compact))) {
-    return '';
-  }
-  if (/^i keep the work recoverable without claiming a false ready preview\.?$/i.test(compact)) {
-    return '';
-  }
-  if (/preview contains a known forced runtime failure marker/i.test(compact)) {
-    return '';
-  }
-  if (/huggy stopped before saving because the generated app still has/i.test(compact)) {
-    return '';
-  }
-  if (/task app must support adding, completing, and deleting tasks/i.test(compact)) {
-    return '';
-  }
-  if (/commerce app must include cart state/i.test(compact)) {
-    return '';
-  }
-  const replacements: Array<{ pattern: RegExp; fr: string; en: string }> = [
-    { pattern: /^analyzing the request\.?$/i, fr: 'Je comprends la demande.', en: 'I understand the request.' },
-    { pattern: /^i am deciding whether to answer, plan, edit, or generate\.?$/i, fr: 'Je choisis l’action juste.', en: 'I am choosing the right action.' },
-    { pattern: /^i am starting the file work\.?$/i, fr: 'Je prépare les fichiers.', en: 'I am preparing the files.' },
-    { pattern: /^i am asking for a modern app with react\/vite structure, interactions, and ui states\.?$/i, fr: 'Je demande une vraie app React/Vite avec interactions et états UI.', en: 'I am asking for a real React/Vite app with interactions and UI states.' },
-    { pattern: /^normalizing generated files and building preview\.?$/i, fr: 'Je prépare une preview utilisable.', en: 'I am preparing a usable preview.' },
-    { pattern: /^i am turning the output into a usable project before display\.?$/i, fr: 'Je transforme la génération en projet utilisable.', en: 'I am turning the generation into a usable project.' },
-    { pattern: /^i am keeping what already works and preparing a readable diff\.?$/i, fr: 'Je garde ce qui fonctionne et je prépare un diff lisible.', en: 'I am keeping what works and preparing a readable diff.' },
-    { pattern: /^previewing\s+(.+?)\.?$/i, fr: 'Aperçu du fichier concerné.', en: 'Previewing the changed file.' },
-    { pattern: /^redacted public preview from the real generated file\.?$/i, fr: 'Aperçu public nettoyé depuis le vrai fichier généré.', en: 'Redacted public preview from the real generated file.' },
-    { pattern: /^backend huggy cloud detected\.?$/i, fr: 'Backend Huggy Cloud détecté.', en: 'Huggy Cloud backend detected.' },
-    { pattern: /^i am preparing the preview\.?$/i, fr: 'Je prépare la preview.', en: 'I am preparing the preview.' },
-    { pattern: /^i am rebuilding the preview\.?$/i, fr: 'Je reconstruis la preview.', en: 'I am rebuilding the preview.' },
-    { pattern: /^i am rebuilding the preview before delivering anything\.?$/i, fr: 'Je vérifie la preview avant de livrer.', en: 'I am checking the preview before delivery.' },
-    { pattern: /^i show a work state only during the real preview build\.?$/i, fr: 'Je montre l’attente seulement pendant la vraie construction.', en: 'I show waiting only during the real build.' },
-    { pattern: /^the published version stays unchanged until you click publish\.?$/i, fr: 'La version publiée reste inchangée jusqu’à Publish.', en: 'The published version stays unchanged until Publish.' },
-    { pattern: /^huggy is moving\.?$/i, fr: 'Huggy avance.', en: 'Huggy is moving.' },
-    { pattern: /^work complete\.?$/i, fr: 'Travail terminé.', en: 'Work complete.' },
-    { pattern: /^done\.?$/i, fr: 'Terminé.', en: 'Done.' },
-  ];
-  const found = replacements.find(item => item.pattern.test(compact));
-  const normalized = found ? (speaksFrench ? found.fr : found.en) : compact;
-  return normalized.length > 360 ? `${normalized.slice(0, 357).trimEnd()}...` : normalized;
+  return raw.replace(/\s+/g, ' ').slice(0, 520).trim();
 }
-
-function journalEventText(eventType: string, rawMessage: string, payload: Record<string, any>, speaksFrench: boolean) {
-  const fallback = cleanPublicJournalText(rawMessage || payload.step_label || payload.step_detail || '', speaksFrench);
-  const fr: Record<string, string> = {
-    run_started: 'Je prends la demande.',
-    context_loaded: 'Je lis le projet et l’historique utile.',
-    codebase_indexed: 'Je repère les fichiers importants.',
-    task_decomposed: 'Je découpe le travail en petites étapes sûres.',
-    policy_checked: 'Je vérifie les garde-fous avant de modifier.',
-    queued: 'Je prépare une session de travail annulable.',
-    routing: 'Je rassemble le contexte nécessaire.',
-    planning: 'Je prépare le chemin le plus sûr.',
-    plan_ready: 'Le plan est prêt.',
-    research_started: 'Je vérifie les informations externes utiles.',
-    research_result: 'J’ai trouvé le contexte externe nécessaire.',
-    research_skipped: 'Je continue sans recherche externe.',
-    model_started: 'Je commence à produire les fichiers.',
-    diff_ready: 'Le diff est prêt.',
-    files_changed: 'Les fichiers sont intégrés au projet.',
-    preview_skeleton_started: 'Je prépare la preview.',
-    preview_building: 'Je reconstruis la preview.',
-    error_detected: 'J’ai détecté un blocage.',
-    auto_fix_started: 'Je corrige automatiquement.',
-    patch_applied: 'Patch appliqué.',
-    retest_started: 'Je reteste après correction.',
-    auto_fix_succeeded: 'La correction tient.',
-    auto_fix_failed: 'La correction automatique n’a pas tout résolu.',
-    runner_started: 'Je lance les checks techniques.',
-    runner_passed: 'Les checks bloquants passent.',
-    runner_failed: 'Les checks ont trouvé un problème.',
-    visual_inspection_started: 'Je vérifie les interactions visibles.',
-    visual_inspection_passed: 'Les interactions essentielles répondent.',
-    visual_inspection_failed: 'J’ai trouvé une interaction à corriger.',
-    quality_gate_started: 'Je lance le contrôle qualité final.',
-    quality_checked: 'Le contrôle qualité est terminé.',
-    preview_ready: 'La preview est prête.',
-    memory_updated: 'Je mémorise les décisions utiles.',
-    done: 'Travail terminé.',
-    error: 'Le run s’est arrêté sur une erreur.',
-    cancelled: 'Travail annulé proprement.',
-  };
-  const en: Record<string, string> = {
-    run_started: 'I received the request.',
-    context_loaded: 'I am reading the project and useful history.',
-    codebase_indexed: 'I am locating the important files.',
-    task_decomposed: 'I am splitting the work into safe steps.',
-    policy_checked: 'I am checking guardrails before changing anything.',
-    queued: 'I am preparing a cancellable work session.',
-    routing: 'I am gathering the needed context.',
-    planning: 'I am preparing the safest path.',
-    plan_ready: 'The plan is ready.',
-    research_started: 'I am checking useful external context.',
-    research_result: 'I found the external context I needed.',
-    research_skipped: 'I am continuing without external research.',
-    model_started: 'I am starting the file work.',
-    diff_ready: 'The diff is ready.',
-    files_changed: 'The files are merged into the project.',
-    preview_skeleton_started: 'I am preparing the preview.',
-    preview_building: 'I am rebuilding the preview.',
-    error_detected: 'I found a blocker.',
-    auto_fix_started: 'I am fixing it automatically.',
-    patch_applied: 'Patch applied.',
-    retest_started: 'I am retesting after the fix.',
-    auto_fix_succeeded: 'The fix holds.',
-    auto_fix_failed: 'The automatic fix did not resolve everything.',
-    runner_started: 'I am running technical checks.',
-    runner_passed: 'Blocking checks passed.',
-    runner_failed: 'Checks found an issue.',
-    visual_inspection_started: 'I am checking visible interactions.',
-    visual_inspection_passed: 'Essential interactions respond.',
-    visual_inspection_failed: 'I found an interaction to fix.',
-    quality_gate_started: 'I am running the final quality gate.',
-    quality_checked: 'The final quality gate is complete.',
-    preview_ready: 'The preview is ready.',
-    memory_updated: 'I am saving useful project decisions.',
-    done: 'Work complete.',
-    error: 'The run stopped on an error.',
-    cancelled: 'Work cancelled cleanly.',
-  };
-  return (speaksFrench ? fr[eventType] : en[eventType]) || fallback;
+function sanitizeProviderJournalText(value: unknown, _speaksFrench = false, fallback = '') {
+  const raw = repairTextEncoding(redactSecrets(String(value || fallback || ''))).trim();
+  if (!raw) return '';
+  return raw.replace(/\s+/g, ' ').slice(0, 520).trim();
 }
 
 function journalDetailFromPayload(payload: Record<string, any>, rawMessage = '') {
@@ -5263,19 +4953,6 @@ function commandSummaryItem(payload: Record<string, any>, rawMessage = '') {
   return [command, summary].filter(Boolean).join(' — ');
 }
 
-function localizeJournalStatus(value: string, speaksFrench: boolean) {
-  const text = repairTextEncoding(redactSecrets(String(value || ''))).trim();
-  if (!speaksFrench || !text) return text;
-  return text
-    .replace(/\bpassed\b/gi, 'OK')
-    .replace(/\bsuccess\b/gi, 'OK')
-    .replace(/\bfailed\b/gi, 'échec')
-    .replace(/\brunning\b/gi, 'en cours')
-    .replace(/\bwarning\b/gi, 'avertissement')
-    .replace(/\bblocked\b/gi, 'bloqué')
-    .replace(/\bcheck\b/gi, 'vérification');
-}
-
 // ── Chat-to-Build: 3-state layout machine ────────────────────────────────────
 // data-layout on .workspace-body: "chat-rest" (centered landing composer) ->
 // "chat" (full-screen conversation, composer docked) -> "workspace" (IDE).
@@ -5334,35 +5011,6 @@ function applyInitialBuilderLayout() {
   body.dataset.layout = 'workspace';
 }
 
-async function runDemoConversation(prompt: string, requestedMode: ChatMode) {
-  const card = appendMessage('assistant', '', { working: true });
-  const stages = [
-    'Je lis ta demande…',
-    'Je prépare une réponse utile…',
-    'Je vérifie la cohérence avec ton projet…',
-    'Je finalise la réponse…',
-  ];
-  for (const stage of stages) {
-    setMessageShimmer(card, stage, false);
-    await demoDelay(520);
-  }
-  const shouldUpdatePreview = requestedMode === 'build' || /crée|creer|construis|build|ajoute|modifie|corrige|fix|preview|app|site|page/i.test(prompt);
-  if (shouldUpdatePreview) {
-    const demo = getDemoBuilderPayload(currentProjectId);
-    renderFiles(demo.files);
-    setPreview(demo.preview.html, 'ready');
-  }
-  const reply = getDemoAssistantReply(prompt);
-  const id = messageHandleId(card);
-  if (id && conversationApi) {
-    card?.removeAttribute('aria-busy');
-    conversationApi.appendAssistantDelta(id, reply);
-  } else {
-    clearMessageShimmer(card);
-    updateMessage(card, reply);
-  }
-}
-
 async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLastPlan = false, extra: Record<string, unknown> = {}, displayText = prompt) {
   const safePrompt = repairTextEncoding(redactSecrets(prompt)).trim();
   const safeDisplayText = repairTextEncoding(redactSecrets(displayText));
@@ -5381,17 +5029,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   clearInlineBlocks();
   appendMessage('user', safeDisplayText);
 
-  if (isDemoMode()) {
-    await runDemoConversation(safePrompt, requestedMode);
-    return;
-  }
-
   if (promptUiContext === 'chat_simple' || promptUiContext === 'clarification_only' || promptUiContext === 'planning_only') {
     activeAbort = new AbortController();
     const card = appendMessage('assistant', '', { working: true });
     setMessageShimmer(card, '', false);
     try {
-      await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench);
+      await answerSimpleConversationFromProvider(card, safePrompt, speaksFrench, requestedMode);
     } finally {
       activeAbort = null;
     }
@@ -5543,9 +5186,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   // Map of step key → journal entry, so finishAgentStep can flip active→done.
   const activeStepEntries = new Map<string, HuggyStreamEntry>();
   const addJournalLine = (text: string, detail = '', key = '', entryStatus: HuggyStreamEntry['status'] = 'done') => {
-    const clean = professionalStreamNarration(cleanPublicJournalText(text, speaksFrench), speaksFrench);
+    const clean = sanitizeProviderStreamText(sanitizeProviderJournalText(text, speaksFrench), speaksFrench);
     if (!clean) return;
-    const cleanDetail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench);
+    const cleanDetail = sanitizeProviderStreamText(sanitizeProviderJournalText(detail, speaksFrench), speaksFrench);
     const contentKey = semanticJournalKey(clean);
     const dedupeKey = key ? `${key}:${contentKey}` : contentKey;
     if (seenJournalKeys.has(dedupeKey)) return;
@@ -5571,7 +5214,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     scheduleJournal();
   };
   const upsertJournalGroup = (id: string, label: string, item: string, entryStatus: HuggyStreamEntry['status'] = 'done') => {
-    const cleanItem = localizeJournalStatus(cleanPublicJournalText(item, speaksFrench) || redactSecrets(item).trim(), speaksFrench);
+    // Keep provider/server event text intact. Local code may redact and bound
+    // the payload, but it must not translate or rewrite an agent claim.
+    const cleanItem = sanitizeProviderJournalText(item, speaksFrench) || redactSecrets(item).trim();
     if (!cleanItem) return;
     const itemKey = semanticJournalKey(cleanItem);
     let group = journalGroups.get(id);
@@ -5639,7 +5284,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     if (item) upsertJournalGroup('commands', speaksFrench ? 'commandes exécutées' : 'commands executed', item, payload.status === 'failed' ? 'failed' : 'done');
   };
   const setJournalActive = (label: string, urgent = false) => {
-    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
+    const clean = sanitizeProviderStreamText(sanitizeProviderJournalText(label, speaksFrench), speaksFrench);
     if (!clean || journal.activeText === clean) return;
     const now = Date.now();
     if (!urgent && now - lastActiveTextAt < 900) return;
@@ -5649,7 +5294,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   };
   const markAgentStep = (key: string, label: string, headline = label, detail?: string) => {
     setJournalActive(headline);
-    const clean = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench);
+    const clean = sanitizeProviderStreamText(sanitizeProviderJournalText(label, speaksFrench), speaksFrench);
     if (clean) {
       // Mark any previous active step as done before adding the new one.
       for (const [, entry] of activeStepEntries) {
@@ -5666,7 +5311,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
           id: journalEntryId('line'),
           kind: 'update',
           text: clean,
-          detail: detail ? professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined : undefined,
+          detail: detail ? sanitizeProviderStreamText(sanitizeProviderJournalText(detail, speaksFrench), speaksFrench) || undefined : undefined,
           status: 'active',
         };
         activeStepEntries.set(key, entry);
@@ -5686,8 +5331,8 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     const existing = activeStepEntries.get(key);
     if (existing) {
       existing.status = 'done';
-      if (label) existing.text = professionalStreamNarration(cleanPublicJournalText(label, speaksFrench), speaksFrench) || existing.text;
-      if (detail) existing.detail = professionalStreamNarration(cleanPublicJournalText(detail, speaksFrench), speaksFrench) || undefined;
+      if (label) existing.text = sanitizeProviderStreamText(sanitizeProviderJournalText(label, speaksFrench), speaksFrench) || existing.text;
+      if (detail) existing.detail = sanitizeProviderStreamText(sanitizeProviderJournalText(detail, speaksFrench), speaksFrench) || undefined;
       activeStepEntries.delete(key);
       scheduleJournal();
     } else if (label) {
@@ -5713,8 +5358,9 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     return responseCard;
   };
   const commitAssistantText = (content: unknown, fallback = '', traceLabel = say('Terminé', 'Completed')) => {
+    void fallback;
     void traceLabel;
-    const text = String(content || '').trim() || fallback;
+    const text = String(content || '').trim();
     if (!text) throw new Error('The selected AI model did not return a usable final response.');
     const target = ensureResponseCard(traceLabel);
     streamedText = text;
@@ -5740,20 +5386,6 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
   startBuildStream();
   try {
     await ensureProjectForPrompt(safePrompt);
-    if (isDemoMode()) {
-      const demo = getDemoBuilderPayload(currentProjectId);
-      const stages = ['Je comprends ton idée…', 'Je prépare la structure…', 'Je mets les fichiers en place…', 'Je vérifie la preview…'];
-      for (const stage of stages) {
-        setMessageShimmer(status, stage);
-        await demoDelay(430);
-      }
-      renderFiles(demo.files);
-      setPreview(demo.preview.html, 'ready');
-      const reply = getDemoAssistantReply(safePrompt);
-      clearMessageShimmer(status);
-      commitAssistantText(`${reply}\n\nPreview prête — ouvre l’onglet Code ou Database pour continuer à explorer.`, 'Preview prête.');
-      return;
-    }
     if (activeWorkshop === 'media') {
       generationTouchesPreview = true;
       activeGenerationTouchesPreview = true;
@@ -5817,13 +5449,14 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
 
     // Stream generation events into the React Response surface, then use the
     // authoritative done payload to refresh files and preview atomically.
-    startLiveRun(status);
+    startLiveRun(status, { mode: requestedMode, model: selectedModel(), intent: safePrompt });
     let payload: any = await streamProjectGeneration(currentProjectId, requestBody, (type, data) => {
-      if (type === 'assistant_delta') {
+      const id = messageHandleId(status);
+      if (id && conversationApi && isHuggyStreamEvent(data)) {
+        conversationApi.applyStreamEvent(id, data);
+      } else if (type === 'assistant_delta') {
         const delta = String(data?.text || data?.content || '');
-        if (!delta) return;
-        const id = messageHandleId(status);
-        if (id && conversationApi) conversationApi.appendAssistantDelta(id, delta);
+        if (id && conversationApi && delta) conversationApi.appendAssistantDelta(id, delta);
       }
     }, activeAbort?.signal);
     {
@@ -5860,18 +5493,12 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
 
     const previewHtml = String(responsePayload.preview?.html || responsePayload.project?.preview_html || '').trim();
-    const previewStatus = String(responsePayload.preview?.status || responsePayload.project?.preview_status || 'ready');
+    const previewStatus = String(responsePayload.preview?.status || responsePayload.project?.preview_status || 'unknown');
     if (previewHtml) {
       generationTouchesPreview = true;
       activeGenerationTouchesPreview = true;
       activateBuilderView('preview');
       setPreview(previewHtml, previewStatus);
-      addJournalLine(
-        speaksFrench ? 'La preview est affichée.' : 'The preview is displayed.',
-        '',
-        'preview_ready',
-        'done',
-      );
     }
 
     if (responsePayload.plan?.title || responsePayload.plan?.steps) {
@@ -5879,18 +5506,15 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
 
     const hasNeedsFix = Boolean(responsePayload.needs_fix);
-    const diffSummary = hasNeedsFix ? '' : String(responsePayload.diff?.summary || '').trim();
-    const verificationMessage = hasNeedsFix ? '' : String(responsePayload.reliability_summary?.message || responsePayload.verification?.message || '').trim();
     const rawText = String(responsePayload.summary || responsePayload.text || responsePayload.message || '').trim();
     const finalText = safeAssistantDisplayText(rawText, speaksFrench);
     if (!finalText) throw new Error('The selected AI model did not return a usable final summary.');
 
     clearMessageShimmer(status);
-    const finalJoined = [
-      finalText,
-      diffSummary ? `${speaksFrench ? 'Changements' : 'Changes'}: ${diffSummary}.` : '',
-      verificationMessage ? `${speaksFrench ? 'Verification' : 'Checks'}: ${verificationMessage}` : '',
-    ].filter(Boolean).join('\n');
+    // The final assistant response is produced by the selected model. Facts
+    // and checks travel separately so the browser never manufactures a second
+    // completion from local copy.
+    const finalJoined = finalText;
     if (useAgentFlow) {
       flowStatus = hasNeedsFix ? 'failed' : 'done';
       flowIsStreaming = false;
@@ -5901,7 +5525,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       flushFlow();
       updateMessage(status, finalJoined);
     }
-    const target = commitAssistantText(finalJoined, '', previewHtml ? say('Preview prete', 'Preview ready') : say('Termine', 'Completed'));
+    const target = commitAssistantText(finalJoined, '', '');
     if (hasNeedsFix && target === status) {
       journal.status = 'failed';
       journal.activeText = '';
@@ -5921,7 +5545,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
     }
 
     if (Array.isArray(responsePayload.errors) && responsePayload.errors.length) showFixBugBox(responsePayload.errors);
-    if (generationTouchesPreview && !previewHtml) setEmptyPreviewState('idle', 'Ready when you are');
+    if (generationTouchesPreview && !previewHtml) setEmptyPreviewState('idle', 'Preview non vérifiée');
     return;
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
@@ -5957,7 +5581,7 @@ async function generateFromPrompt(prompt: string, requestedMode: ChatMode, useLa
       journal.activeText = '';
       journal.finalText = errorText;
       scheduleJournal(true);
-      if (generationTouchesPreview) setEmptyPreviewState('idle', 'Ready when you are');
+      if (generationTouchesPreview) setEmptyPreviewState('idle', 'Preview non vérifiée');
     }
   } finally {
     if (journalTimer !== null) window.clearInterval(journalTimer);
@@ -6191,14 +5815,6 @@ function renderDatabaseSection3(db: any): string {
 async function loadDatabase() {
   const target = document.getElementById('database-content');
   if (!target) return;
-  if (isDemoMode()) {
-    target.innerHTML = `
-      <section class="db-card"><span class="db-card-label">Connexion cloud</span><div class="db-card-value">${dbBadge('success', 'Provisionné')}</div><p class="db-row-meta">Huggy Cloud · Europe West · synchronisé il y a 2 min</p></section>
-      <section class="db-card"><span class="db-card-label">Tables applicatives</span><div class="db-card-value">4 tables</div><div class="db-table-chips"><button class="db-table-chip active" type="button">profiles</button><button class="db-table-chip" type="button">projects</button><button class="db-table-chip" type="button">activity_events</button><button class="db-table-chip" type="button">subscriptions</button></div><div class="db-table-scroll"><table class="db-data-table"><thead><tr><th>id</th><th>email</th><th>role</th><th>status</th></tr></thead><tbody><tr><td>usr_1024</td><td>alex@demo.local</td><td>admin</td><td>active</td></tr><tr><td>usr_1025</td><td>sam@demo.local</td><td>editor</td><td>active</td></tr><tr><td>usr_1026</td><td>lea@demo.local</td><td>member</td><td>pending</td></tr></tbody></table></div></section>
-      <section class="db-card"><span class="db-card-label">Authentification</span><div class="db-card-value">3 utilisateurs fictifs</div><p class="db-row-meta">Email/password · rôles admin, editor et member · mode lecture démo</p></section>
-    `;
-    return;
-  }
   if (!currentProjectId) {
     target.innerHTML = `<div class="db-state">Ouvrez ou créez un projet pour consulter l'état réel de son backend cloud.</div>`;
     return;
@@ -6692,19 +6308,6 @@ async function loadAnalysis(silent = false) {
   if (!target) return;
   if (!currentProjectId) {
     target.innerHTML = '<div class="analysis-empty"><strong style="display:block;color:var(--text);font-size:14px;margin-bottom:6px;">No project selected</strong><span style="font-size:12px;">Open or create a project before viewing analysis.</span></div>';
-    return;
-  }
-  if (isDemoMode()) {
-    renderAnalysis({
-      current_visitors: 24,
-      metrics: { visitors: 1840, pageviews: 6420, views_per_visit: 3.49, visit_duration_seconds: 186, bounce_rate: 28 },
-      timeseries: Array.from({ length: 14 }, (_, index) => ({ time: `${index + 1}`, visitors: 80 + ((index * 17) % 90), pageviews: 150 + ((index * 31) % 120) })),
-      sources: [{ source: 'Direct', visitors: 720 }, { source: 'Google', visitors: 540 }, { source: 'Product Hunt', visitors: 310 }],
-      pages: [{ page: '/', visitors: 1160 }, { page: '/pricing', visitors: 420 }, { page: '/docs', visitors: 260 }],
-      countries: [{ country_code: 'FR', country_name: 'France', visitors: 620 }, { country_code: 'US', country_name: 'United States', visitors: 510 }, { country_code: 'DE', country_name: 'Germany', visitors: 240 }],
-      devices: [{ device: 'Desktop', visitors: 1180, percentage: 64 }, { device: 'Mobile', visitors: 560, percentage: 30 }, { device: 'Tablet', visitors: 100, percentage: 6 }],
-      seo: { score: 92, checks: [{ key: 'title', label: 'Title & description', status: 'pass', detail: 'Clear and descriptive' }, { key: 'schema', label: 'Structured data', status: 'pass', detail: 'Product schema detected' }, { key: 'alt', label: 'Image alt text', status: 'warn', detail: '1 image needs a label' }], recommendations: ['Add one more descriptive alt text'] },
-    });
     return;
   }
   if (!silent) {
@@ -7205,7 +6808,6 @@ function bindGlobalKeyboardShortcuts() {
 function init() {
 initHuggyMotion();
 initHuggyNavigationTransitions();
-  installDemoBanner();
   bindGlobalKeyboardShortcuts();
   void ensureSettingsPanelLazy();
   ensureConversationApi();

@@ -6,21 +6,16 @@ import { buildAuthUrl, readPricingSelection, type BillingInterval, type PublicPl
 import { trackFunnelEvent } from './conversion-events';
 import { initHuggyMotion } from './huggy-motion';
 import { initHuggyNavigationTransitions } from './navigation-transitions';
+import { formatUsd, getPublicPlan, type PublicPlanDetails } from './config/pricing-plans';
+import './styles/modern-shell.css';
+import './styles/coherence.css';
 
 initHuggyMotion();
 initHuggyNavigationTransitions();
 initThemeController();
 
-type PlanDetails = { name: string; monthly: number; annual: number; annualTotal: number; annualSaving: number; credits: string; cloud: string; bestFor: string };
-
-const FALLBACK_PLANS: Record<Exclude<PublicPlanKey, 'free'>, PlanDetails> = {
-  pro: { name: 'Pro', monthly: 25, annual: 20, annualTotal: 240, annualSaving: 60, credits: '1 000 crédits pour construire et améliorer vos applications', cloud: '10 $ d’hébergement inclus pour vos applications publiées', bestFor: 'Fondateurs et freelances qui publient leurs premières applications' },
-  scale: { name: 'Scale', monthly: 200, annual: 160, annualTotal: 1920, annualSaving: 480, credits: '10 000 crédits pour construire et améliorer vos applications', cloud: '75 $ d’hébergement inclus pour vos applications publiées', bestFor: 'Équipes qui livrent plusieurs applications en production' },
-};
-
 let selection = readPricingSelection();
-const formatUsd = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-const detailsFor = (plan: PublicPlanKey) => FALLBACK_PLANS[plan === 'scale' ? 'scale' : 'pro'];
+const detailsFor = (plan: PublicPlanKey): PublicPlanDetails => getPublicPlan(plan === 'scale' ? 'scale' : 'pro');
 
 function checkoutUrl() {
   const current = new URL(window.location.href);

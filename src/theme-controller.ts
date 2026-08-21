@@ -42,7 +42,12 @@ export function toggleTheme(): HuggyTheme {
   const current = document.documentElement.getAttribute('data-theme');
   const next: HuggyTheme = current === 'dark' ? 'light' : 'dark';
   try { localStorage.setItem(HUGGY_THEME_KEY, next); } catch { /* theme remains applied for this session */ }
-  applyTheme(next);
+  const transition = (document as Document & { startViewTransition?: (callback: () => void) => unknown }).startViewTransition;
+  if (typeof transition === 'function' && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    transition(() => applyTheme(next));
+  } else {
+    applyTheme(next);
+  }
   return next;
 }
 

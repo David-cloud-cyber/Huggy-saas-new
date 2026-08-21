@@ -68,9 +68,10 @@ export class AnthropicService {
     _retryAttempts = 1,
     timeoutMs = 60_000,
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ): Promise<ChatCompletionResult> {
     const directModelId = this.requireModel(modelId);
-    const response = await this.request(directModelId, messages, runtimeConfig, timeoutMs, false);
+    const response = await this.request(directModelId, messages, runtimeConfig, timeoutMs, false, signal);
     const data: any = await response.json();
     const text = extractText(data?.content);
     const tool_calls = extractToolCalls(data?.content);
@@ -89,9 +90,10 @@ export class AnthropicService {
     messages: ChatMessage[],
     timeoutMs = 120_000,
     runtimeConfig?: ProviderRequestConfig,
+    signal?: AbortSignal,
   ): AsyncGenerator<StreamChatEvent> {
     const directModelId = this.requireModel(modelId);
-    const response = await this.request(directModelId, messages, runtimeConfig, timeoutMs, true);
+    const response = await this.request(directModelId, messages, runtimeConfig, timeoutMs, true, signal);
     if (!response.body) throw new Error('Anthropic streaming response body is empty');
 
     let buffer = '';
@@ -153,6 +155,7 @@ export class AnthropicService {
     runtimeConfig: ProviderRequestConfig | undefined,
     timeoutMs: number,
     stream: boolean,
+    signal?: AbortSignal,
   ) {
     const apiKey = resolveAnthropicApiKey(process.env, this.config.apiKey);
     if (!apiKey) throw new Error('Anthropic API key is not configured.');
@@ -161,7 +164,7 @@ export class AnthropicService {
     try {
       const response = await fetch(this.config.apiUrl, {
         method: 'POST',
-        signal: controller.signal as any,
+        signal: (signal || controller.signal) as any,
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': this.config.version,

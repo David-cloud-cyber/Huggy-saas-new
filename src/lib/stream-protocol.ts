@@ -70,6 +70,8 @@ export type HuggyPlanStep = {
 };
 
 export type HuggyStreamEventType =
+  | 'mode_requested'
+  | 'mode_resolved'
   | 'status'
   | 'milestone'
   | 'phase'
@@ -100,6 +102,8 @@ export type HuggyStreamEventType =
   | 'verification_completed';
 
 const EVENT_TYPES: readonly HuggyStreamEventType[] = [
+  'mode_requested',
+  'mode_resolved',
   'status',
   'milestone',
   'phase',
@@ -132,8 +136,12 @@ const EVENT_TYPES: readonly HuggyStreamEventType[] = [
 
 interface HuggyStreamEventBase {
   v: typeof HUGGY_STREAM_PROTOCOL_VERSION;
+  /** Stable run identity when the server persists/replays events. */
+  runId?: string;
   /** Monotonic sequence number, mirrored in the SSE `id:` field. */
   id: number;
+  /** v2 name for the same monotonic sequence. Kept alongside id during migration. */
+  sequence?: number;
   /** Epoch milliseconds at emission time. */
   ts: number;
   type: HuggyStreamEventType;
@@ -198,6 +206,12 @@ export interface HuggyClarificationEvent extends HuggyStreamEventBase {
 export interface HuggyPlanEvent extends HuggyStreamEventBase {
   type: 'plan';
   steps: HuggyPlanStep[];
+  planId?: string;
+  title?: string;
+  objective?: string;
+  files?: string[];
+  risks?: string[];
+  acceptanceCriteria?: string[];
 }
 
 /** A plan step changing state (the live checklist tick). */
@@ -312,6 +326,18 @@ export interface HuggyAttachmentEvent extends HuggyStreamEventBase {
   size?: number;
 }
 
+export interface HuggyModeRequestedEvent extends HuggyStreamEventBase {
+  type: 'mode_requested';
+  mode: 'auto' | 'build' | 'plan';
+}
+
+export interface HuggyModeResolvedEvent extends HuggyStreamEventBase {
+  type: 'mode_resolved';
+  mode: 'auto' | 'build' | 'plan';
+  action: string;
+  confidence?: number;
+}
+
 export interface HuggySkillResolvedEvent extends HuggyStreamEventBase {
   type: 'skill_resolved';
   skill_id: string;
@@ -350,6 +376,8 @@ export interface HuggyVerificationCompletedEvent extends HuggyStreamEventBase {
 }
 
 export type HuggyStreamEvent =
+  | HuggyModeRequestedEvent
+  | HuggyModeResolvedEvent
   | HuggyStatusEvent
   | HuggyMilestoneEvent
   | HuggyPhaseEvent
@@ -416,6 +444,7 @@ export interface HuggyStreamEmitter {
 export function createHuggyStreamEmitter(
   write: (chunk: string) => void,
   startId = 0,
+  runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
 ): HuggyStreamEmitter {
   let sequence = startId;
   return {
@@ -423,7 +452,9 @@ export function createHuggyStreamEmitter(
       sequence += 1;
       const event = {
         v: HUGGY_STREAM_PROTOCOL_VERSION,
+        runId,
         id: sequence,
+        sequence,
         ts: Date.now(),
         type,
         ...body,

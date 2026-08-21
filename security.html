@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -45,8 +45,9 @@
 <body>
     <div id="curtain"></div>
     <div class="navbar-line"></div>
+    <div id="huggy-marketing-header-root" aria-live="off"></div>
 
-    <nav class="navbar">
+    <nav class="navbar" hidden aria-hidden="true">
         <a href="/" class="logo">
             <div class="logo-mark">
                 <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -120,35 +121,28 @@
                 <h5>Product</h5>
                 <ul class="footer-links">
                     <li><a href="/features.html">Features</a></li>
-                    <li><a href="/showcase.html">Showcase</a></li>
                     <li><a href="/pricing.html">Pricing</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Resources</h5>
                 <ul class="footer-links">
                     <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/api-reference.html">API Reference</a></li>
-                    <li><a href="/blog.html">Blog</a></li>
-                    <li><a href="/community.html">Community</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Company</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
                     <li><a href="/privacy.html">Privacy</a></li>
                     <li><a href="/security.html">Security</a></li>
+                    <li><a href="/terms.html">Terms</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
-            <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+            <div style="display:flex;gap:20px;" aria-label="Social links">
+                <span style="color:inherit;opacity:.7;">Social profiles coming soon</span>
             </div>
         </div>
     </footer>

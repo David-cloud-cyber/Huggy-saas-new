@@ -4,27 +4,20 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const siteUrl = 'https://huggy.fun';
 const now = new Date().toISOString().slice(0, 10);
+const routePolicy = JSON.parse(fs.readFileSync(path.join(root, 'config', 'public-route-policy.json'), 'utf8'));
 
 const existingPages = [
-  { file: 'index.html', path: '/', title: 'Huggy — AI App Builder for Production-Ready Web Apps', description: 'Generate premium web apps with real database, responsive preview, deployment, analytics and SEO-ready output.' },
-  { file: 'pricing.html', path: '/pricing.html', title: 'Huggy Pricing — Build, Preview and Deploy AI Apps', description: 'Choose the Huggy plan for AI app generation, premium models, custom domains, export and deployment workflows.' },
+  { file: 'index.html', path: '/', title: 'Huggy — Turn an idea into a web app with AI', description: 'Describe your idea, create a working web app with AI, preview it, improve it, and publish it after verification.' },
+  { file: 'pricing.html', path: '/pricing.html', title: 'Huggy Pricing — Build, preview and publish web apps', description: 'Choose a Huggy plan to turn ideas into web apps, preview changes, improve projects and publish verified applications.' },
   { file: 'features.html', path: '/features.html', title: 'Huggy Features — Plan, Build, Database, Preview and Deploy', description: 'Explore Huggy features for AI-native app building: Plan/Build chat, Supabase-ready database, responsive preview, analytics and deployment.' },
   { file: 'documentation.html', path: '/documentation.html', title: 'Huggy Documentation — Build Production Apps With AI', description: 'Learn how to use Huggy to plan, generate, preview, fix, export and deploy AI-built web apps.' },
-  { file: 'enterprise.html', path: '/enterprise.html', title: 'Huggy Enterprise — AI App Builder for Product Teams', description: 'Huggy Enterprise gives product teams governed AI app generation with billing, collaboration, domains and production workflows.' },
   { file: 'security.html', path: '/security.html', title: 'Huggy Security — Safer AI App Generation', description: 'Security practices for Huggy projects, generated apps, secrets, billing and deployment workflows.' },
   { file: 'privacy.html', path: '/privacy.html', title: 'Huggy Privacy — Data and Project Privacy', description: 'How Huggy handles prompts, project files, assets, analytics and workspace data.' },
-  { file: 'about.html', path: '/about.html', title: 'About Huggy — Production-Ready AI App Builder', description: 'Huggy helps founders, product teams and agencies generate polished apps that can be previewed, connected to data and deployed.' },
-  { file: 'showcase.html', path: '/showcase.html', title: 'Huggy Showcase — Apps Built With Huggy', description: 'Explore published app ideas, launch stories and product workflows generated with Huggy.' },
-  { file: 'blog.html', path: '/blog.html', title: 'Huggy Blog — AI App Builder Guides', description: 'Guides, prompts and product lessons for building production-ready apps with AI.' },
-  { file: 'community.html', path: '/community.html', title: 'Huggy Community — AI Builders and Product Teams', description: 'Join builders using Huggy to create apps, landing pages, dashboards and internal tools with AI.' },
-  { file: 'careers.html', path: '/careers.html', title: 'Huggy Careers — Build the Future of AI App Creation', description: 'Work on Huggy, an AI-native app builder for production-ready web applications.' },
-  { file: 'api-reference.html', path: '/api-reference.html', title: 'Huggy API Reference — Projects, Builds, Analytics and Deployments', description: 'Reference for Huggy project, generation, analytics, database and deployment APIs.' },
-  { file: 'discover.html', path: '/discover.html', title: 'Discover Apps Built With Huggy', description: 'Explore app ideas, templates and public examples built with Huggy across SaaS, productivity, commerce, booking and education.' },
   { file: 'terms.html', path: '/terms.html', title: 'Huggy Terms - Product Terms and Usage Rules', description: 'Terms for using Huggy to generate, preview, iterate and publish web apps.' },
 ];
 
 const noindexPages = [
-  { file: 'auth.html', path: '/auth.html', title: 'Huggy — Sign In', description: 'Sign in to Huggy.' },
+  { file: 'auth.html', path: '/auth.html', title: 'Huggy — Continue building your web app', description: 'Sign in to Huggy to continue turning your idea into a working web app, preview changes and publish verified projects.' },
   { file: 'dashboard.html', path: '/dashboard.html', title: 'Huggy — Workspace Dashboard', description: 'Your private Huggy workspace.' },
   { file: 'builder.html', path: '/builder.html', title: 'Huggy — Builder Workspace', description: 'Your private Huggy builder workspace.' },
   { file: 'checkout.html', path: '/checkout.html', title: 'Huggy — Secure Checkout', description: 'Review your Huggy plan before secure payment.' },
@@ -124,7 +117,7 @@ const existingPageCopy = {
   }
 };
 
-const generatedPages = [
+const generatedPageCatalog = [
   {
     slug: 'guides',
     title: 'Huggy Guides — AI App Builder Playbooks',
@@ -207,6 +200,8 @@ const generatedPages = [
     faq: ['Can Huggy add payments?', 'Yes, but it will ask for Stripe keys or continue with safe placeholders depending on your choice.'],
   },
 ];
+
+const generatedPages = generatedPageCatalog.filter(page => !routePolicy.redirects[`/${page.slug.replace(/\/?$/, '/')}`]);
 
 function esc(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -380,35 +375,28 @@ function sharedPublicFooter(className = 'footer') {
                 <h5>Product</h5>
                 <ul class="footer-links">
                     <li><a href="/features.html">Features</a></li>
-                    <li><a href="/showcase.html">Showcase</a></li>
                     <li><a href="/pricing.html">Pricing</a></li>
-                    <li><a href="/enterprise.html">Enterprise</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Resources</h5>
                 <ul class="footer-links">
                     <li><a href="/documentation.html">Documentation</a></li>
-                    <li><a href="/api-reference.html">API Reference</a></li>
-                    <li><a href="/blog.html">Blog</a></li>
-                    <li><a href="/community.html">Community</a></li>
                 </ul>
             </div>
             <div class="footer-col">
                 <h5>Company</h5>
                 <ul class="footer-links">
-                    <li><a href="/about.html">About</a></li>
-                    <li><a href="/careers.html">Careers</a></li>
                     <li><a href="/privacy.html">Privacy</a></li>
                     <li><a href="/security.html">Security</a></li>
+                    <li><a href="/terms.html">Terms</a></li>
                 </ul>
             </div>
         </div>
         <div class="footer-bottom">
             <span>© 2026 Huggy Inc.</span>
-            <div style="display:flex;gap:20px;">
-                <a href="#" style="color:inherit;text-decoration:none;">X / Twitter</a>
-                <a href="#" style="color:inherit;text-decoration:none;">LinkedIn</a>
+            <div style="display:flex;gap:20px;" aria-label="Social links">
+                <span style="color:inherit;opacity:.7;">Social profiles coming soon</span>
             </div>
         </div>
     </footer>`;
@@ -443,11 +431,11 @@ function sharedPublicFooter(className = 'footer') {
             <div class="${colClass}">
                 <h5>Navigation</h5>
                 <ul class="${linksClass}">
-                    <li><a href="/about.html">À propos</a></li>
                     <li><a href="/pricing.html">Tarifs</a></li>
-                    <li><a href="/guides/">Guides</a></li>
                     <li><a href="/documentation.html">Documentation</a></li>
                     <li><a href="/security.html">Sécurité</a></li>
+                    <li><a href="/privacy.html">Confidentialité</a></li>
+                    <li><a href="/terms.html">Conditions</a></li>
                     <li><a href="mailto:contact@huggy.fun">Contact</a></li>
                 </ul>
             </div>
@@ -478,13 +466,13 @@ function renderPage(page) {
 <head>
 ${baseHead(page, url, breadcrumbs)}
 </head>
-<body>
+<body data-huggy-surface="marketing">
   <div class="seo-shell">
     <nav class="seo-nav" aria-label="Main navigation">
-      <a class="seo-brand" href="/"><span class="seo-brand-mark">H</span><span>Huggy</span></a>
+      <a class="seo-brand" href="/"><span class="seo-brand-mark" data-huggy-logo><img src="/favicon.svg" alt="" /></span><span>Huggy</span></a>
       <div class="seo-nav-links">
-        <a href="/guides/">Guides</a>
-        <a href="/built-with-huggy/">Showcase</a>
+        <a href="/features.html">Features</a>
+        <a href="/documentation.html">Documentation</a>
         <a class="seo-pill" href="/pricing.html">Pricing</a>
       </div>
     </nav>
@@ -538,7 +526,6 @@ ${baseHead(page, url, breadcrumbs)}
     </main>
 ${sharedPublicFooter('seo-footer')}
   </div>
-  <script type="module" src="/src/seo-pages.ts"></script>
 </body>
 </html>
 `;
@@ -587,8 +574,8 @@ function injectHeadMeta(page) {
         '@context': 'https://schema.org',
         '@type': 'FAQPage',
         mainEntity: [
-          { '@type': 'Question', name: 'What is Huggy?', acceptedAnswer: { '@type': 'Answer', text: 'Huggy is an AI app builder for generating production-ready web apps with database, preview, deployment and SEO-ready structure.' } },
-          { '@type': 'Question', name: 'Can Huggy generate SEO-ready apps?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. Huggy guides generated apps toward semantic HTML, metadata, Open Graph, analytics and quality checks.' } },
+          { '@type': 'Question', name: 'What is Huggy?', acceptedAnswer: { '@type': 'Answer', text: 'Huggy helps you turn an idea into a working web app, preview it, improve it, and publish it after verification.' } },
+          { '@type': 'Question', name: 'Can Huggy generate SEO-ready apps?', acceptedAnswer: { '@type': 'Answer', text: 'Huggy can help structure generated apps with semantic pages and metadata, then you can inspect and verify the result before publishing.' } },
         ],
       },
     ]
@@ -631,6 +618,9 @@ ${faviconHead()}
 }
 
 function updateExistingFooter(page) {
+  // The landing page owns its richer conversion footer and i18n contract.
+  // Keep the shared SEO footer for secondary public pages only.
+  if (page.file === 'index.html') return;
   const full = path.join(root, page.file);
   if (!fs.existsSync(full)) return;
   let html = fs.readFileSync(full, 'utf8');
@@ -661,8 +651,9 @@ ${copy.sections.map(([title, body]) => `        <h2>${esc(title)}</h2>
 
 function generatePublicAssets(urls) {
   write('public/robots.txt', `User-agent: *\nAllow: /\nDisallow: /auth.html\nDisallow: /dashboard.html\nDisallow: /builder.html\nDisallow: /checkout.html\nDisallow: /admin.html\nSitemap: ${siteUrl}/sitemap.xml\n`);
-  write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Guides: ${siteUrl}/guides/\n- Showcase: ${siteUrl}/built-with-huggy/\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
+  write('public/llms.txt', `# Huggy\n\nHuggy is an AI app builder for creating, previewing, iterating and publishing production-ready web apps.\n\n## Important pages\n- Home: ${siteUrl}/\n- Pricing: ${siteUrl}/pricing.html\n- Features: ${siteUrl}/features.html\n- Documentation: ${siteUrl}/documentation.html\n- Security: ${siteUrl}/security.html\n\n## Product facts\n- Huggy supports prompt-to-app generation, project preview, database visibility, publishing workflows and model selection.\n- Huggy is designed for founders, agencies, product teams and non-technical builders.\n- Private app routes such as auth, dashboard and builder are not intended for indexing.\n`);
   write('public/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(url => `  <url><loc>${url}</loc><lastmod>${now}</lastmod><changefreq>weekly</changefreq><priority>${url === siteUrl + '/' ? '1.0' : '0.8'}</priority></url>`).join('\n')}\n</urlset>\n`);
+  write('public/_redirects', `${Object.entries(routePolicy.redirects).map(([from, to]) => `${from} ${to} 301`).join('\n')}\n`);
   write('public/favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>.icon-bg{fill:#09090b}.icon-fill{fill:#ffffff}@media (prefers-color-scheme:dark){.icon-bg{fill:#ffffff}.icon-fill{fill:#09090b}}</style><rect class="icon-bg" width="32" height="32" rx="8"/><path class="icon-fill" d="M16 8L25 13.5V14.5L16 9.5L7 14.5V13.5L16 8Z"/><path class="icon-fill" d="M7 16.5V24.5L11.5 22V14L7 16.5Z"/><path class="icon-fill" d="M25 16.5V24.5L16 24.5V22H20.5V14L25 16.5Z"/></svg>\n`);
   write('public/og-huggy.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#ffffff"/><circle cx="1040" cy="100" r="260" fill="#09090b" opacity=".05"/><circle cx="150" cy="540" r="300" fill="#3b7a8c" opacity=".10"/><rect x="84" y="82" width="1032" height="466" rx="42" fill="#ffffff" stroke="#09090b" stroke-opacity=".12"/><text x="138" y="220" font-family="Arial, sans-serif" font-size="64" font-weight="800" fill="#09090b">Huggy</text><text x="138" y="310" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="#09090b">Build apps people can use and find.</text><text x="138" y="386" font-family="Arial, sans-serif" font-size="28" fill="#52525b">AI app builder with database, preview, deploy and SEO-ready output.</text></svg>\n`);
 }

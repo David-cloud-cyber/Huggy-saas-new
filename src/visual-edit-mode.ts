@@ -117,7 +117,7 @@ export function setVisualEditMode(enabled: boolean, options: VisualEditOptions):
         border-radius: 6px;
         background: rgba(47, 109, 246, 0.08);
         box-shadow: 0 0 0 2px rgba(47, 109, 246, 0.18);
-        transition: all 60ms ease-out;
+        transition: color 60ms ease-out, background-color 60ms ease-out, border-color 60ms ease-out, box-shadow 60ms ease-out, opacity 60ms ease-out, transform 60ms ease-out, filter 60ms ease-out;
         opacity: 0;
       }
       html[data-huggy-visual-edit="on"] * { cursor: crosshair !important; }
